@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "next": "^15.3.6"
+  }
+}

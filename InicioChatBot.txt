@@ -1,0 +1,29 @@
+Terminal 1
+cd "E:\Onmicanal\backend-v2"
+npm.cmd install
+npx prisma generate
+npx prisma db push
+npm.cmd run seed
+npm.cmd run dev    
+
+Terminal 2
+cd "E:\Onmicanal\frontend"
+npm.cmd install
+npm.cmd run dev     
+
+LIMPIAR DEPENDENCIAS SI HAY ERRORES
+Remove-Item -Recurse -Force node_modules
+Remove-Item package-lock.json
+
+Index Login
+http://localhost:3001/login
+
+admin@platform.local
+Admin123*
+
+git add .
+git commit -m "Update "
+git remote add origin https://github.com/maximo-evolum/Onmicanal.git
+git push -u origin main
+
+admin@platform.local / Admin123*
