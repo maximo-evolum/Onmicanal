@@ -18,12 +18,12 @@ Remove-Item package-lock.json
 Index Login
 http://localhost:3001/login
 
-admin@platform.local
-Admin123*
 
 git add .
-git commit -m "Update "
-git remote add origin https://github.com/maximo-evolum/Onmicanal.git
+git commit -m "debug de meta "
 git push -u origin main
+git remote add origin https://github.com/maximo-evolum/Onmicanal.git
 
 admin@platform.local / Admin123*
+
+maximo.jara@evolum.cl / Bendo2026

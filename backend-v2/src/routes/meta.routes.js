@@ -25,6 +25,9 @@ metaRouter.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 
   try {
+    console.log("META RAW PAYLOAD:");
+    console.log(JSON.stringify(req.body, null, 2));
+
     const incoming = normalizeMetaWebhook(req.body);
     if (!incoming) return;
 
