@@ -40,7 +40,6 @@ app.get("/", (_req, res) => {
   res.send("Backend v2 funcionando");
 });
 
-app.use("/", metaRouter);
 app.use("/meta", metaRouter);
 app.use("/api", authRouter);
 app.use("/api", workspaceUsersRouter); // demo login helper
