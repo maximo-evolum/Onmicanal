@@ -38,12 +38,31 @@ export async function resolveOutboundChannelConfig({ tenant, tenantId, channel }
 }
 
 export async function findTenantByInboundMetaIds({ whatsappPhoneNumberId, instagramBusinessAccountId }) {
+  console.log("[TENANT_CONFIG_LOOKUP] inbound ids", {
+    whatsappPhoneNumberId: whatsappPhoneNumberId ? String(whatsappPhoneNumberId) : null,
+    instagramBusinessAccountId: instagramBusinessAccountId ? String(instagramBusinessAccountId) : null
+  });
+
   if (whatsappPhoneNumberId) {
     const config = await prisma.tenantChannelConfig.findFirst({
       where: { channel: "whatsapp", phoneNumberId: String(whatsappPhoneNumberId), isActive: true },
       include: { tenant: true }
     });
-    if (config?.tenant) return { tenant: config.tenant, source: "tenant_channel_config_whatsapp", config };
+    if (config?.tenant) {
+      console.log("[TENANT_CONFIG_LOOKUP] whatsapp config match", {
+        tenantId: config.tenantId,
+        tenantSlug: config.tenant?.slug,
+        phoneNumberId: config.phoneNumberId
+      });
+      return { tenant: config.tenant, source: "tenant_channel_config_whatsapp", config };
+    }
+
+    const candidates = await prisma.tenantChannelConfig.findMany({
+      where: { channel: "whatsapp", isActive: true },
+      select: { tenantId: true, phoneNumberId: true, label: true },
+      take: 10
+    }).catch(() => []);
+    console.log("[TENANT_CONFIG_LOOKUP] no whatsapp config match. Active candidates:", candidates);
   }
 
   if (instagramBusinessAccountId) {
@@ -51,7 +70,21 @@ export async function findTenantByInboundMetaIds({ whatsappPhoneNumberId, instag
       where: { channel: "instagram", externalAccountId: String(instagramBusinessAccountId), isActive: true },
       include: { tenant: true }
     });
-    if (config?.tenant) return { tenant: config.tenant, source: "tenant_channel_config_instagram", config };
+    if (config?.tenant) {
+      console.log("[TENANT_CONFIG_LOOKUP] instagram config match", {
+        tenantId: config.tenantId,
+        tenantSlug: config.tenant?.slug,
+        externalAccountId: config.externalAccountId
+      });
+      return { tenant: config.tenant, source: "tenant_channel_config_instagram", config };
+    }
+
+    const candidates = await prisma.tenantChannelConfig.findMany({
+      where: { channel: "instagram", isActive: true },
+      select: { tenantId: true, externalAccountId: true, businessAccountId: true, label: true },
+      take: 10
+    }).catch(() => []);
+    console.log("[TENANT_CONFIG_LOOKUP] no instagram config match. Active candidates:", candidates);
   }
 
   return { tenant: null, source: "not_found", config: null };

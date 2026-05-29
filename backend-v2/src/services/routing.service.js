@@ -1,6 +1,7 @@
 import { prisma } from "../lib/db.js";
 import { sendWhatsAppText } from "./whatsapp.service.js";
 import { sendInstagramText } from "./instagram.service.js";
+import { traceStep } from "../lib/trace.js";
 
 async function resolveTenant({ tenant, tenantId }) {
   if (tenant) return tenant;
@@ -8,8 +9,14 @@ async function resolveTenant({ tenant, tenantId }) {
   return prisma.tenant.findUnique({ where: { id: tenantId } });
 }
 
-export async function sendChannelMessage({ channel, to, message, tenant = null, tenantId = null }) {
+export async function sendChannelMessage({ channel, to, message, tenant = null, tenantId = null, trace = null }) {
   const resolvedTenant = await resolveTenant({ tenant, tenantId });
+  traceStep(trace, "ROUTING_RESOLVED_TENANT", {
+    channel,
+    to,
+    tenantId: resolvedTenant?.id || tenantId || null,
+    tenantSlug: resolvedTenant?.slug || null
+  });
 
   if (channel === "whatsapp") {
     return sendWhatsAppText({
@@ -17,7 +24,8 @@ export async function sendChannelMessage({ channel, to, message, tenant = null, 
       message,
       tenant: resolvedTenant,
       tenantId: resolvedTenant?.id || tenantId,
-      phoneNumberId: resolvedTenant?.whatsappPhoneNumberId || undefined
+      phoneNumberId: resolvedTenant?.whatsappPhoneNumberId || undefined,
+      trace
     });
   }
 
@@ -27,7 +35,8 @@ export async function sendChannelMessage({ channel, to, message, tenant = null, 
       message,
       tenant: resolvedTenant,
       tenantId: resolvedTenant?.id || tenantId,
-      instagramBusinessAccountId: resolvedTenant?.instagramBusinessAccountId || undefined
+      instagramBusinessAccountId: resolvedTenant?.instagramBusinessAccountId || undefined,
+      trace
     });
   }
 

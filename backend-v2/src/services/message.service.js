@@ -16,6 +16,7 @@ import { runActionOrchestrator } from "./ai-action-orchestrator.service.js";
 import { captureLearningSignal } from "./ai-performance-learning.service.js";
 import { buildAutonomousFollowUpPlan } from "./autonomous-followup-strategy.service.js";
 import { recordUsageEvent } from "./saas-commercial.service.js";
+import { traceError, traceStep } from "../lib/trace.js";
 
 function mapMessageType(type) {
   switch ((type || "").toLowerCase()) {
@@ -53,15 +54,21 @@ export async function persistInboundMessage({
   content,
   externalMessageId,
   type,
-  rawPayload
+  rawPayload,
+  trace = null
 }) {
+  traceStep(trace, "7A_DUPLICATE_CHECK_START", { channel, externalMessageId });
   const existing = externalMessageId
     ? await prisma.message.findFirst({ where: { channel, externalMessageId } })
     : null;
 
-  if (existing) return { message: existing, isDuplicate: true };
+  if (existing) {
+    traceStep(trace, "7A_DUPLICATE_FOUND", { messageId: existing.id });
+    return { message: existing, isDuplicate: true };
+  }
 
   const normalizedContent = normalizeText(content);
+  traceStep(trace, "7B_CREATE_INBOUND_MESSAGE_START", { tenantId, conversationId, contactId, channel, type, normalizedContent });
 
   const message = await prisma.message.create({
     data: {
@@ -78,6 +85,7 @@ export async function persistInboundMessage({
     }
   });
 
+  traceStep(trace, "7B_CREATE_INBOUND_MESSAGE_OK", { messageId: message.id });
   await recordUsageEvent({ tenantId, type: "MESSAGE_IN", metadata: { channel } });
 
   await prisma.conversation.update({
@@ -87,6 +95,7 @@ export async function persistInboundMessage({
 
   const contact = await prisma.contact.findUnique({ where: { id: contactId } });
 
+  traceStep(trace, "7C_AI_SIDE_EFFECTS_START");
   const intent = await detectIntent({ message: normalizedContent });
   const entities = await extractEntities({ message: normalizedContent });
   const memory = await updateConversationMemory({
@@ -117,19 +126,28 @@ export async function persistInboundMessage({
   });
 
   // 🧠 IA EXPERTA
-  const analysis = await generateExpertAnalysis({
-    tenantId,
-    conversationId,
-    message: normalizedContent
-  });
+  let analysis = null;
+  try {
+    traceStep(trace, "7D_EXPERT_ANALYSIS_START");
+    analysis = await generateExpertAnalysis({
+      tenantId,
+      conversationId,
+      message: normalizedContent
+    });
+    traceStep(trace, "7D_EXPERT_ANALYSIS_OK", analysis);
+  } catch (error) {
+    traceError(trace, "7D_EXPERT_ANALYSIS_ERROR", error);
+  }
 
-  await updateConversationAI({ conversationId, analysis });
+  if (analysis) await updateConversationAI({ conversationId, analysis });
   const leadForDecision = await refreshLeadPrediction({ conversationId });
   await updateAIDecision({ conversationId, memory, lead: leadForDecision, message: normalizedContent });
 
   const io = getIo();
+  traceStep(trace, "7E_SOCKET_EMIT_INBOUND_START", { conversationId });
   io.to(`conversation:${conversationId}`).emit("message:new", message);
   await emitConversationUpdate(conversationId);
+  traceStep(trace, "7E_SOCKET_EMIT_INBOUND_OK");
 
   return { message, isDuplicate: false };
 }
@@ -182,14 +200,26 @@ export async function processIncomingText({
   conversation,
   contact,
   channel,
-  userMessage
+  userMessage,
+  trace = null
 }) {
   userMessage = normalizeText(userMessage);
+  traceStep(trace, "8A_PROCESS_START", {
+    tenantId: tenant.id,
+    tenantSlug: tenant.slug,
+    conversationId: conversation.id,
+    contactId: contact.id,
+    channel,
+    userMessage,
+    conversationMode: conversation.mode
+  });
 
   if (conversation.mode === "HUMAN") {
+    traceStep(trace, "8A_STOP_HUMAN_MODE");
     return { skipped: true, reason: "conversation_in_human_mode" };
   }
 
+  traceStep(trace, "8B_INTENT_MEMORY_START");
   const intent = await detectIntent({ message: userMessage });
   const memory = await updateConversationMemory({
     tenantId: tenant.id,
@@ -198,12 +228,19 @@ export async function processIncomingText({
     intent
   });
 
+  traceStep(trace, "8B_INTENT_MEMORY_OK", { intent, memory });
+  traceStep(trace, "8C_ACTION_ORCHESTRATOR_START");
   const actionPlan = await runActionOrchestrator({
     tenant,
     conversation,
     contact,
     userMessage,
     memory
+  });
+
+  traceStep(trace, "8C_ACTION_ORCHESTRATOR_OK", {
+    hasActionPlan: Boolean(actionPlan),
+    recommendedAction: actionPlan?.sales?.recommendedAction || null
   });
 
   let reply;
@@ -214,14 +251,17 @@ export async function processIncomingText({
     // dejamos que la IA use la información oficial completa en vez de devolver
     // una regla rígida que podría sonar robótica o incompleta.
     const preferKnowledgeAI = isAltaBrasaTenant(tenant);
+    traceStep(trace, "8D_RULE_REPLY_START", { preferKnowledgeAI });
     reply = preferKnowledgeAI ? null : await getRuleReply({
       tenantId: tenant.id,
       channel,
       message: userMessage
     });
 
+    traceStep(trace, "8D_RULE_REPLY_RESULT", { hasRuleReply: Boolean(reply), reply });
     // 2) Si no hay regla, usa IA comercial con productos/servicios y modo cierre.
     if (!reply) {
+      traceStep(trace, "8E_OPENAI_SALES_REPLY_START");
       reply = await generateSalesReply({
         tenantId: tenant.id,
         tenantName: tenant.name,
@@ -231,6 +271,7 @@ export async function processIncomingText({
         tenant,
         actionContext: actionPlan?.contextText || ""
       });
+      traceStep(trace, "8E_OPENAI_SALES_REPLY_OK", { reply });
     }
 
     // 3) Ejecuta análisis experto para mantener resumen/sugerencia/score actualizados.
@@ -246,6 +287,7 @@ export async function processIncomingText({
 
   } catch (error) {
     console.error("Error IA:", error);
+    traceError(trace, "8E_AI_PROCESSING_ERROR", error);
     reply = "Hola 👋 ¿en qué puedo ayudarte?";
   }
 
@@ -254,16 +296,21 @@ export async function processIncomingText({
 
   // ⚠️ importante para simulador
   try {
+    traceStep(trace, "8F_SEND_CHANNEL_MESSAGE_START", { channel, to: contact.externalId, tenantId: tenant.id });
     await sendChannelMessage({
       channel,
       to: contact.externalId,
       message: reply,
-      tenant
+      tenant,
+      trace
     });
+    traceStep(trace, "8F_SEND_CHANNEL_MESSAGE_OK");
   } catch (e) {
     console.log("Simulador sin canal real:", e.message);
+    traceError(trace, "8F_SEND_CHANNEL_MESSAGE_ERROR", e);
   }
 
+  traceStep(trace, "8G_PERSIST_OUTBOUND_START");
   await persistOutboundMessage({
     tenantId: tenant.id,
     conversationId: conversation.id,
@@ -271,6 +318,7 @@ export async function processIncomingText({
     channel,
     content: reply
   });
+  traceStep(trace, "8G_PERSIST_OUTBOUND_OK");
 
   // Programamos follow-up después de que el bot responde.
   // Fase 3.5: el seguimiento ahora usa reasoning + señales comerciales.

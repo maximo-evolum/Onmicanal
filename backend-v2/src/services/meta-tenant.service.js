@@ -29,23 +29,57 @@ export function extractMetaRoutingIds(body = {}) {
 
 export async function resolveTenantFromMetaWebhook(body = {}) {
   const ids = extractMetaRoutingIds(body);
+  console.log("[META_TENANT] extracted ids", ids);
 
   const byConfig = await findTenantByInboundMetaIds(ids);
-  if (byConfig.tenant) return { tenant: byConfig.tenant, source: byConfig.source, ids };
+  if (byConfig.tenant) {
+    console.log("[META_TENANT] tenant found by channel config", {
+      source: byConfig.source,
+      tenantId: byConfig.tenant.id,
+      tenantSlug: byConfig.tenant.slug
+    });
+    return { tenant: byConfig.tenant, source: byConfig.source, ids };
+  }
 
   // Compatibilidad con la configuración anterior guardada directo en Tenant.
   if (ids.whatsappPhoneNumberId) {
     const tenant = await prisma.tenant.findFirst({
       where: { whatsappPhoneNumberId: ids.whatsappPhoneNumberId }
     });
-    if (tenant) return { tenant, source: "tenant_legacy_whatsapp_phone_number_id", ids };
+    if (tenant) {
+      console.log("[META_TENANT] tenant found by legacy whatsappPhoneNumberId", {
+        tenantId: tenant.id,
+        tenantSlug: tenant.slug,
+        whatsappPhoneNumberId: ids.whatsappPhoneNumberId
+      });
+      return { tenant, source: "tenant_legacy_whatsapp_phone_number_id", ids };
+    }
+    const legacyCandidates = await prisma.tenant.findMany({
+      where: { whatsappPhoneNumberId: { not: null } },
+      select: { id: true, slug: true, name: true, whatsappPhoneNumberId: true },
+      take: 10
+    }).catch(() => []);
+    console.log("[META_TENANT] no legacy whatsapp tenant match. Candidates:", legacyCandidates);
   }
 
   if (ids.instagramBusinessAccountId) {
     const tenant = await prisma.tenant.findFirst({
       where: { instagramBusinessAccountId: ids.instagramBusinessAccountId }
     });
-    if (tenant) return { tenant, source: "tenant_legacy_instagram_business_account_id", ids };
+    if (tenant) {
+      console.log("[META_TENANT] tenant found by legacy instagramBusinessAccountId", {
+        tenantId: tenant.id,
+        tenantSlug: tenant.slug,
+        instagramBusinessAccountId: ids.instagramBusinessAccountId
+      });
+      return { tenant, source: "tenant_legacy_instagram_business_account_id", ids };
+    }
+    const instagramCandidates = await prisma.tenant.findMany({
+      where: { instagramBusinessAccountId: { not: null } },
+      select: { id: true, slug: true, name: true, instagramBusinessAccountId: true },
+      take: 10
+    }).catch(() => []);
+    console.log("[META_TENANT] no legacy instagram tenant match. Candidates:", instagramCandidates);
   }
 
   // Fallback controlado solo para desarrollo/local. En producción debe existir mapeo.
@@ -54,5 +88,6 @@ export async function resolveTenantFromMetaWebhook(body = {}) {
     return { tenant, source: "default_tenant_dev_fallback", ids };
   }
 
+  console.log("[META_TENANT] tenant not found for ids", ids);
   return { tenant: null, source: "not_found", ids };
 }

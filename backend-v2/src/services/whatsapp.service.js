@@ -1,10 +1,18 @@
 import { env } from "../lib/env.js";
 import { resolveOutboundChannelConfig } from "./tenant-channel-config.service.js";
+import { traceError, traceStep } from "../lib/trace.js";
 
-export async function sendWhatsAppText({ to, message, phoneNumberId, accessToken, tenant = null, tenantId = null }) {
+export async function sendWhatsAppText({ to, message, phoneNumberId, accessToken, tenant = null, tenantId = null, trace = null }) {
   const resolved = await resolveOutboundChannelConfig({ tenant, tenantId, channel: "whatsapp" });
   const effectivePhoneNumberId = phoneNumberId || resolved.phoneNumberId;
   const token = accessToken || resolved.accessToken || env.whatsappToken;
+
+  traceStep(trace, "WHATSAPP_SEND_CONFIG", {
+    to,
+    effectivePhoneNumberId,
+    hasToken: Boolean(token),
+    tenantId: tenant?.id || tenantId || null
+  });
 
   if (!effectivePhoneNumberId || !token) {
     throw new Error("WhatsApp no está configurado para este cliente/tenant");
@@ -27,9 +35,17 @@ export async function sendWhatsAppText({ to, message, phoneNumberId, accessToken
   });
 
   const data = await response.json();
+  traceStep(trace, "WHATSAPP_SEND_RESPONSE", {
+    ok: response.ok,
+    status: response.status,
+    data
+  });
+
   if (!response.ok) {
     console.error("WhatsApp send error:", data);
-    throw new Error(data?.error?.message || "Error enviando mensaje a WhatsApp");
+    const error = new Error(data?.error?.message || "Error enviando mensaje a WhatsApp");
+    traceError(trace, "WHATSAPP_SEND_ERROR", error);
+    throw error;
   }
 
   return data;
