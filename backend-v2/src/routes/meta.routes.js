@@ -32,6 +32,11 @@ metaRouter.post("/webhook", async (req, res) => {
     if (!incoming) return;
 
     const { tenant, source, ids } = await resolveTenantFromMetaWebhook(req.body);
+    console.log("META IDS:");
+    console.log(ids);
+    console.log("TENANT ENCONTRADO:");
+    console.log(tenant);
+    
     if (!tenant) {
       console.warn("Meta webhook sin tenant asociado", {
         channel: incoming.channel,
