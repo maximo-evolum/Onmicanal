@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithEmail } from "./api";
 import { AgentSession } from "./types";
-import { SESSION_COOKIE, TOKEN_COOKIE } from "./constants";
+import { SESSION_COOKIE, TOKEN_COOKIE, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from "./constants";
 
 function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=604800; samesite=lax`;
@@ -12,17 +12,42 @@ function setCookie(name: string, value: string) {
 
 function getCookie(name: string) {
   if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
-  return match ? decodeURIComponent(match[2]) : null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
 }
 
 function clearCookie(name: string) {
   document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
 }
 
+function setStoredAuth(session: AgentSession, token: string) {
+  const serializedSession = JSON.stringify(session);
+  setCookie(SESSION_COOKIE, serializedSession);
+  setCookie(TOKEN_COOKIE, token);
+
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  }
+}
+
+function clearStoredAuth() {
+  clearCookie(SESSION_COOKIE);
+  clearCookie(TOKEN_COOKIE);
+
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  }
+}
+
 export function getStoredSession(): AgentSession | null {
-  const raw = getCookie(SESSION_COOKIE);
+  const raw =
+    getCookie(SESSION_COOKIE) ||
+    (typeof window !== "undefined" ? window.localStorage.getItem(SESSION_STORAGE_KEY) : null);
+
   if (!raw) return null;
+
   try {
     return JSON.parse(raw) as AgentSession;
   } catch {
@@ -52,8 +77,7 @@ export function LoginPage() {
       setSubmitting(true);
       setError(null);
       const data = await loginWithEmail(email, password || undefined);
-      setCookie(SESSION_COOKIE, JSON.stringify(data.user));
-      setCookie(TOKEN_COOKIE, data.token);
+      setStoredAuth(data.user, data.token);
       router.push(data.user.role === "SUPER_ADMIN" ? "/admin" : "/dashboard");
       router.refresh();
     } catch (err) {
@@ -97,8 +121,7 @@ export function LoginPage() {
 export function LogoutButton() {
   const router = useRouter();
   function handleLogout() {
-    clearCookie(SESSION_COOKIE);
-    clearCookie(TOKEN_COOKIE);
+    clearStoredAuth();
     router.push("/login");
     router.refresh();
   }

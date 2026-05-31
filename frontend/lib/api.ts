@@ -1,21 +1,32 @@
 import { AgentSession, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
-import { API_BASE_URL, TOKEN_COOKIE } from "./constants";
+import { API_BASE_URL, TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "./constants";
 
 function getCookie(name: string) {
   if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(^| )${name}=([^;]+)`));
-  return match ? decodeURIComponent(match[2]) : null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getAuthToken() {
+  return (
+    getCookie(TOKEN_COOKIE) ||
+    (typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null)
+  );
+}
+
+function buildHeaders(init?: RequestInit) {
+  const token = getAuthToken();
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(init?.headers || {})
+  };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = getCookie(TOKEN_COOKIE);
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers || {})
-    },
+    headers: buildHeaders(init),
     cache: "no-store"
   });
 
@@ -31,8 +42,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       } catch {}
     }
 
+    if (response.status === 401) {
+      message = message || "Tu sesión expiró. Cierra sesión e inicia nuevamente.";
+    }
+
     if (response.status === 403) {
-      message = message || "No tienes acceso a este módulo con tu plan actual";
+      message = message || "No tienes acceso o tu sesión no está enviando autorización.";
     }
 
     throw new Error(message);
@@ -563,7 +578,7 @@ export async function saveOnboardingProfile(input: Record<string, string>): Prom
 }
 
 export async function uploadOnboardingFiles(input: { files: File[]; businessName?: string; industry?: string; description?: string; tone?: string; objective?: string; restrictions?: string }): Promise<{ importId: string; extraction: OnboardingExtraction }> {
-  const token = getCookie(TOKEN_COOKIE);
+  const token = getAuthToken();
   const form = new FormData();
   for (const file of input.files) form.append("files", file);
   for (const [key, value] of Object.entries(input)) {
@@ -602,7 +617,7 @@ export async function uploadAdminTenantOnboardingFiles(input: {
   objective?: string;
   restrictions?: string;
 }): Promise<{ importId: string; extraction: OnboardingExtraction }> {
-  const token = getCookie(TOKEN_COOKIE);
+  const token = getAuthToken();
   const form = new FormData();
   for (const file of input.files) form.append("files", file);
   for (const [key, value] of Object.entries(input)) {

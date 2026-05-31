@@ -14,7 +14,7 @@ import {
   updateLeadApi,
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
-import { socket } from "@/lib/socket";
+import { getSocketToken, socket } from "@/lib/socket";
 import { Conversation, Lead, Message } from "@/lib/types";
 import { Topbar } from "./topbar";
 import { FiltersBar } from "./filters-bar";
@@ -113,6 +113,7 @@ export function InboxShell() {
   }
 
   useEffect(() => {
+    socket.auth = { token: getSocketToken() };
     socket.connect();
     if (agent?.tenantId) {
       socket.emit("join:tenant", agent.tenantId);
