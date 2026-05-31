@@ -1,6 +1,6 @@
 Terminal 1
 cd "E:\Onmicanal\backend-v2"
-npm.cmd install
+npm install
 npx prisma generate
 npx prisma db push
 npm.cmd run seed
@@ -8,8 +8,8 @@ npm.cmd run dev
 
 Terminal 2
 cd "E:\Onmicanal\frontend"
-npm.cmd install
-npm.cmd run dev     
+npm install
+npm run build    
 
 LIMPIAR DEPENDENCIAS SI HAY ERRORES
 Remove-Item -Recurse -Force node_modules

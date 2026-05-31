@@ -54,7 +54,7 @@ export async function tenantContext(req, res, next) {
 export function requireModule(module) {
   return async (req, res, next) => {
     try {
-      if (req.user?.role === "SUPER_ADMIN") return next();
+      if (["SUPER_ADMIN","OWNER","ADMIN"].includes(req.user?.role)) return next();
 
       const tenantId = req.tenantId || req.user?.tenantId;
       if (!tenantId) return res.status(401).json({ error: "Tenant requerido" });
