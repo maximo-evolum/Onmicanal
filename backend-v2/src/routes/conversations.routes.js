@@ -5,15 +5,90 @@ import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 
 export const conversationsRouter = Router();
 
+function channelDisplayNumber(config) {
+  if (!config?.metadata || typeof config.metadata !== "object") return null;
+  return config.metadata.displayNumber || config.metadata.whatsappDisplayNumber || null;
+}
+
+async function enrichConversation(conversation) {
+  if (!conversation) return conversation;
+
+  const channelConfig = await prisma.tenantChannelConfig.findFirst({
+    where: {
+      tenantId: conversation.tenantId,
+      channel: conversation.contact?.channel || undefined,
+      isActive: true
+    },
+    orderBy: { updatedAt: "desc" }
+  });
+
+  const lastMessage = await prisma.message.findFirst({
+    where: { tenantId: conversation.tenantId, conversationId: conversation.id },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      direction: true,
+      content: true,
+      status: true,
+      channel: true,
+      createdAt: true
+    }
+  });
+
+  const messageCount = await prisma.message.count({
+    where: { tenantId: conversation.tenantId, conversationId: conversation.id }
+  });
+
+  return {
+    ...conversation,
+    channelConfig: channelConfig
+      ? {
+          id: channelConfig.id,
+          channel: channelConfig.channel,
+          label: channelConfig.label,
+          phoneNumberId: channelConfig.phoneNumberId,
+          businessAccountId: channelConfig.businessAccountId,
+          externalAccountId: channelConfig.externalAccountId,
+          displayNumber: channelDisplayNumber(channelConfig),
+          isActive: channelConfig.isActive
+        }
+      : null,
+    lastMessage,
+    messageCount
+  };
+}
+
+function conversationWhere(req) {
+  const where = {};
+  const requestedTenantId = req.query?.tenantId ? String(req.query.tenantId) : null;
+
+  if (req.user?.role === "SUPER_ADMIN" && requestedTenantId) {
+    where.tenantId = requestedTenantId;
+  } else if (req.user?.role === "SUPER_ADMIN") {
+    // El super admin puede auditar todas las conversaciones desde el inbox.
+    // Los usuarios normales siguen aislados por tenant.
+  } else {
+    where.tenantId = req.tenantId;
+  }
+
+  if (req.query?.channel && req.query.channel !== "all") {
+    where.contact = { channel: String(req.query.channel) };
+  }
+
+  return where;
+}
+
 conversationsRouter.get("/conversations", async (req, res) => {
   try {
     const conversations = await prisma.conversation.findMany({
-      where: { tenantId: req.tenantId },
-      include: { contact: true, assignedTo: true, lead: true },
-      orderBy: [{ priorityScore: "desc" }, { lastMessageAt: "desc" }]
+      where: conversationWhere(req),
+      include: { contact: true, assignedTo: true, lead: true, tenant: true },
+      orderBy: [{ priorityScore: "desc" }, { lastMessageAt: "desc" }],
+      take: 200
     });
 
-    res.json(conversations);
+    const enriched = await Promise.all(conversations.map(enrichConversation));
+    res.json(enriched);
   } catch (error) {
     console.error("List conversations error:", error);
     res.status(500).json({ error: "No se pudieron obtener las conversaciones" });

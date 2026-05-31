@@ -9,6 +9,11 @@ function getInitials(label: string) {
     .join("");
 }
 
+function truncate(value: string, max = 82) {
+  if (!value) return "";
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
 function getPriority(conversation: Conversation): "high" | "medium" | "low" {
   const value = (conversation.priorityLabel || "medium").toString().toLowerCase();
   if (conversation.aiHandoffRequired || conversation.aiNextActionCode === "READY_TO_CLOSE") return "high";
@@ -72,7 +77,11 @@ export function ConversationList({
                   <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {label}
                   </strong>
-                  <div className="meta-line">{conversation.contact.externalId}</div>
+                  <div className="meta-line">
+                    {conversation.channelConfig?.displayNumber
+                      ? `Bot ${conversation.channelConfig.displayNumber} · Cliente ${conversation.contact.externalId}`
+                      : conversation.contact.externalId}
+                  </div>
                 </div>
               </div>
 
@@ -80,6 +89,12 @@ export function ConversationList({
                 {conversation.contact.channel}
               </span>
             </div>
+
+            {conversation.lastMessage ? (
+              <div className="meta-line" style={{ marginTop: 8 }}>
+                {conversation.lastMessage.direction === "INBOUND" ? "Cliente" : "IA"}: {truncate(conversation.lastMessage.content)}
+              </div>
+            ) : null}
 
             <div className="badges" style={{ marginTop: 10 }}>
               <span className={`badge priority-${priority}`}>
@@ -89,6 +104,7 @@ export function ConversationList({
                 {conversation.mode === "BOT" ? "IA" : conversation.mode === "HUMAN" ? "Humano" : "Híbrido"}
               </span>
               <span className="badge">{conversation.status}</span>
+              {typeof conversation.messageCount === "number" ? <span className="badge">{conversation.messageCount} msg</span> : null}
               {conversation.assignedTo ? <span className="badge">{conversation.assignedTo.name}</span> : null}
               {signal ? <span className={`badge ${signal.className}`}>{signal.label}</span> : null}
             </div>

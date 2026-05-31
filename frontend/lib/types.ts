@@ -45,6 +45,26 @@ export type Conversation = {
     email: string;
   } | null;
   lead?: Lead | null;
+  tenant?: TenantSession | null;
+  channelConfig?: {
+    id?: string;
+    channel?: string;
+    label?: string | null;
+    phoneNumberId?: string | null;
+    businessAccountId?: string | null;
+    externalAccountId?: string | null;
+    displayNumber?: string | null;
+    isActive?: boolean;
+  } | null;
+  lastMessage?: {
+    id: string;
+    direction: "INBOUND" | "OUTBOUND";
+    content: string;
+    status: string;
+    channel: string;
+    createdAt: string;
+  } | null;
+  messageCount?: number;
 };
 
 export type Message = {

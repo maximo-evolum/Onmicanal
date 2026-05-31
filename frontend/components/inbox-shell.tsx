@@ -91,6 +91,14 @@ export function InboxShell() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setInterval(() => {
+      loadConversations(selectedId);
+    }, 12000);
+
+    return () => window.clearInterval(timer);
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!selectedId) return;
     loadMessages(selectedId);
     loadLead(selectedId);
@@ -106,6 +114,9 @@ export function InboxShell() {
 
   useEffect(() => {
     socket.connect();
+    if (agent?.tenantId) {
+      socket.emit("join:tenant", agent.tenantId);
+    }
 
     const onConversationCreated = (conversation: Conversation) => {
       setConversations((prev) => {
@@ -134,9 +145,12 @@ export function InboxShell() {
     return () => {
       socket.off("inbox:conversation-created", onConversationCreated);
       socket.off("inbox:conversation-updated", onConversationUpdated);
+      if (agent?.tenantId) {
+        socket.emit("leave:tenant", agent.tenantId);
+      }
       socket.disconnect();
     };
-  }, []);
+  }, [agent?.tenantId]);
 
   useEffect(() => {
     if (!selectedId) return;

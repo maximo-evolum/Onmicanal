@@ -142,6 +142,7 @@ adminRouter.post("/admin/tenants", async (req, res) => {
       ownerPassword,
       whatsappPhoneNumberId,
       whatsappBusinessAccountId,
+      whatsappDisplayNumber,
       metaAccessToken,
       metaAppSecret,
       verifyToken,
@@ -217,7 +218,10 @@ adminRouter.post("/admin/tenants", async (req, res) => {
             businessAccountId: cleanOptionalUnique(whatsappBusinessAccountId),
             accessToken: cleanText(metaAccessToken),
             verifyToken: cleanText(verifyToken),
-            metadata: cleanText(metaAppSecret) ? { metaAppSecret: cleanText(metaAppSecret) } : null,
+            metadata: {
+              ...(cleanText(metaAppSecret) ? { metaAppSecret: cleanText(metaAppSecret) } : {}),
+              ...(cleanText(whatsappDisplayNumber) ? { displayNumber: cleanText(whatsappDisplayNumber) } : {})
+            },
             isActive: true
           }
         });
@@ -359,6 +363,7 @@ adminRouter.put("/admin/tenants/:tenantId/channel-configs/:channel", async (req,
       phoneNumberId,
       businessAccountId,
       externalAccountId,
+      displayNumber,
       accessToken,
       verifyToken,
       metadata = null,
@@ -368,6 +373,22 @@ adminRouter.put("/admin/tenants/:tenantId/channel-configs/:channel", async (req,
     const tenantExists = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
     if (!tenantExists) return res.status(404).json({ error: "Cliente no encontrado" });
 
+    const existingConfig = await prisma.tenantChannelConfig.findUnique({
+      where: { tenantId_channel: { tenantId, channel: normalizedChannel } }
+    });
+
+    const existingMetadata = existingConfig?.metadata && typeof existingConfig.metadata === "object"
+      ? existingConfig.metadata
+      : {};
+
+    const nextMetadata = {
+      ...existingMetadata,
+      ...(metadata && typeof metadata === "object" ? metadata : {}),
+      ...(normalizedChannel === "whatsapp" && cleanText(displayNumber)
+        ? { displayNumber: cleanText(displayNumber), whatsappDisplayNumber: cleanText(displayNumber) }
+        : {})
+    };
+
     const data = {
       label: cleanText(label) || `${normalizedChannel} principal`,
       phoneNumberId: cleanOptionalUnique(phoneNumberId),
@@ -375,7 +396,7 @@ adminRouter.put("/admin/tenants/:tenantId/channel-configs/:channel", async (req,
       externalAccountId: cleanOptionalUnique(externalAccountId),
       accessToken: cleanText(accessToken),
       verifyToken: cleanText(verifyToken),
-      metadata,
+      metadata: Object.keys(nextMetadata).length ? nextMetadata : null,
       isActive: Boolean(isActive)
     };
 

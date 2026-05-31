@@ -93,7 +93,8 @@ export function ChatPanel({
             <div>
               <h2 className="chat-title">{displayName}</h2>
               <div className="meta-line">
-                {conversation.contact.channel} · {conversation.contact.externalId}
+                {conversation.contact.channel} · Cliente {conversation.contact.externalId}
+                {conversation.channelConfig?.displayNumber ? ` · Bot ${conversation.channelConfig.displayNumber}` : ""}
               </div>
             </div>
           </div>

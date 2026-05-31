@@ -17,6 +17,7 @@ async function emitConversation(conversationId) {
   if (!conversation) return;
 
   io.to(`conversation:${conversationId}`).emit("conversation:updated", conversation);
+  io.to(`tenant:${conversation.tenantId}`).emit("inbox:conversation-updated", conversation);
   io.emit("inbox:conversation-updated", conversation);
 }
 
@@ -123,7 +124,9 @@ export async function getOrCreateOpenConversation({ tenantId, contactId }) {
     include: { contact: true, assignedTo: true, lead: true }
   });
 
-  getIo().emit("inbox:conversation-created", conversation);
+  const io = getIo();
+  io.to(`tenant:${tenantId}`).emit("inbox:conversation-created", conversation);
+  io.emit("inbox:conversation-created", conversation);
   return conversation;
 }
 

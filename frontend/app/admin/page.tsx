@@ -46,6 +46,7 @@ const emptyClient = {
   ownerPassword: "",
   whatsappPhoneNumberId: "",
   whatsappBusinessAccountId: "",
+  whatsappDisplayNumber: "",
   metaAccessToken: "",
   metaAppSecret: "",
   verifyToken: "",
@@ -64,6 +65,7 @@ const emptyWhatsAppConfig = {
   label: "WhatsApp principal",
   phoneNumberId: "",
   businessAccountId: "",
+  displayNumber: "",
   accessToken: "",
   verifyToken: "",
   isActive: true,
@@ -171,10 +173,15 @@ export default function AdminPage() {
     const instagram = selectedTenant.channelConfigs?.find((item) => item.channel === "instagram");
     const profile = selectedTenant.aiProfiles?.find((item) => item.code === "default") || selectedTenant.aiProfiles?.[0];
 
+    const whatsappMetadata = typeof whatsapp?.metadata === "object" && whatsapp?.metadata
+      ? whatsapp.metadata as Record<string, unknown>
+      : {};
+
     setWhatsappForm({
       label: whatsapp?.label || "WhatsApp principal",
       phoneNumberId: whatsapp?.phoneNumberId || selectedTenant.whatsappPhoneNumberId || "",
       businessAccountId: whatsapp?.businessAccountId || "",
+      displayNumber: String(whatsappMetadata.displayNumber || whatsappMetadata.whatsappDisplayNumber || ""),
       accessToken: whatsapp?.accessToken || "",
       verifyToken: whatsapp?.verifyToken || "",
       isActive: whatsapp?.isActive ?? true,
@@ -291,6 +298,7 @@ export default function AdminPage() {
             label: whatsappForm.label,
             phoneNumberId: whatsappForm.phoneNumberId,
             businessAccountId: whatsappForm.businessAccountId,
+            displayNumber: whatsappForm.displayNumber,
             accessToken: whatsappForm.accessToken,
             verifyToken: whatsappForm.verifyToken,
             isActive: whatsappForm.isActive,
@@ -551,6 +559,7 @@ export default function AdminPage() {
               <div className="admin-form-row">
                 <input value={clientForm.whatsappPhoneNumberId} onChange={(e) => setClientForm({ ...clientForm, whatsappPhoneNumberId: e.target.value })} placeholder="WhatsApp Phone Number ID" />
                 <input value={clientForm.whatsappBusinessAccountId} onChange={(e) => setClientForm({ ...clientForm, whatsappBusinessAccountId: e.target.value })} placeholder="WhatsApp Business Account ID" />
+                <input value={clientForm.whatsappDisplayNumber} onChange={(e) => setClientForm({ ...clientForm, whatsappDisplayNumber: e.target.value })} placeholder="WhatsApp Display Number. Ej: 56962002398" />
               </div>
               <div className="admin-form-row">
                 <input value={clientForm.instagramBusinessAccountId} onChange={(e) => setClientForm({ ...clientForm, instagramBusinessAccountId: e.target.value })} placeholder="Instagram Business Account ID" />
@@ -642,6 +651,10 @@ export default function AdminPage() {
                     <label>
                       <span className="meta-line">WhatsApp Business Account ID</span>
                       <input value={whatsappForm.businessAccountId} onChange={(e) => setWhatsappForm({ ...whatsappForm, businessAccountId: e.target.value })} placeholder="WABA ID" />
+                    </label>
+                    <label>
+                      <span className="meta-line">WhatsApp Display Number</span>
+                      <input value={whatsappForm.displayNumber} onChange={(e) => setWhatsappForm({ ...whatsappForm, displayNumber: e.target.value })} placeholder="Ej: 56962002398" />
                     </label>
                     <label>
                       <span className="meta-line">WhatsApp Verify Token</span>

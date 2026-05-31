@@ -338,6 +338,7 @@ export type CreateAdminTenantInput = {
   metaAppSecret?: string;
   verifyToken?: string;
   whatsappBusinessAccountId?: string;
+  whatsappDisplayNumber?: string;
   instagramPageId?: string;
 };
 
@@ -369,6 +370,7 @@ export async function updateAdminTenantChannelConfig(
     phoneNumberId?: string;
     businessAccountId?: string;
     externalAccountId?: string;
+    displayNumber?: string;
     accessToken?: string;
     verifyToken?: string;
     metadata?: Record<string, unknown> | null;

@@ -92,6 +92,11 @@ io.on("connection", (socket) => {
     socket.join(`tenant:${tenantId}`);
   });
 
+  socket.on("leave:tenant", (tenantId) => {
+    if (!tenantId) return;
+    socket.leave(`tenant:${tenantId}`);
+  });
+
   socket.on("join:conversation", (conversationId) => {
     if (!conversationId) return;
     socket.join(`conversation:${conversationId}`);

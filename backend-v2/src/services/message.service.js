@@ -40,6 +40,7 @@ async function emitConversationUpdate(conversationId) {
   if (!conversation) return;
 
   io.to(`conversation:${conversationId}`).emit("conversation:updated", conversation);
+  io.to(`tenant:${conversation.tenantId}`).emit("inbox:conversation-updated", conversation);
   io.emit("inbox:conversation-updated", conversation);
 }
 
@@ -146,6 +147,7 @@ export async function persistInboundMessage({
   const io = getIo();
   traceStep(trace, "7E_SOCKET_EMIT_INBOUND_START", { conversationId });
   io.to(`conversation:${conversationId}`).emit("message:new", message);
+  io.to(`tenant:${tenantId}`).emit("message:new", message);
   await emitConversationUpdate(conversationId);
   traceStep(trace, "7E_SOCKET_EMIT_INBOUND_OK");
 
@@ -187,6 +189,7 @@ export async function persistOutboundMessage({
 
   const io = getIo();
   io.to(`conversation:${conversationId}`).emit("message:new", message);
+  io.to(`tenant:${tenantId}`).emit("message:new", message);
   await emitConversationUpdate(conversationId);
 
   return message;
