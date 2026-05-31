@@ -1,5 +1,5 @@
 import { AgentSession, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
-import { API_BASE_URL, TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "./constants";
+import { API_BASE_URL, TOKEN_COOKIE, TOKEN_STORAGE_KEY, SESSION_STORAGE_KEY } from "./constants";
 
 function getCookie(name: string) {
   if (typeof document === "undefined") return null;
@@ -7,11 +7,28 @@ function getCookie(name: string) {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-function getAuthToken() {
+export function getAuthToken() {
+  if (typeof window === "undefined") return getCookie(TOKEN_COOKIE);
+
   return (
     getCookie(TOKEN_COOKIE) ||
-    (typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null)
+    window.localStorage.getItem(TOKEN_STORAGE_KEY) ||
+    window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ||
+    window.localStorage.getItem("token") ||
+    window.localStorage.getItem("auth_token") ||
+    window.localStorage.getItem("jwt")
   );
+}
+
+export function getStoredApiSession() {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 function buildHeaders(init?: RequestInit) {
@@ -47,7 +64,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
 
     if (response.status === 403) {
+      const token = getAuthToken();
+      const session = getStoredApiSession();
       message = message || "No tienes acceso o tu sesión no está enviando autorización.";
+      console.warn("[API_403]", {
+        path,
+        hasToken: Boolean(token),
+        tokenPreview: token ? `${token.slice(0, 12)}...` : null,
+        sessionRole: session?.role,
+        tenantId: session?.tenantId
+      });
     }
 
     throw new Error(message);

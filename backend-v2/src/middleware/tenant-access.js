@@ -1,5 +1,5 @@
 import { prisma } from "../lib/db.js";
-import { hasTenantModule } from "../services/tenant-modules.service.js";
+import { hasTenantModule, ensureTenantSubscriptionAndModules } from "../services/tenant-modules.service.js";
 
 export const ROLE_GROUPS = Object.freeze({
   STAFF: ["SUPER_ADMIN", "OWNER", "ADMIN", "AGENT", "SELLER"],
@@ -59,8 +59,24 @@ export function requireModule(module) {
       const tenantId = req.tenantId || req.user?.tenantId;
       if (!tenantId) return res.status(401).json({ error: "Tenant requerido" });
 
-      const ok = await hasTenantModule(tenantId, module);
+      let ok = await hasTenantModule(tenantId, module);
+
       if (!ok) {
+        // Autoreparación: algunos tenants antiguos no tienen módulos sincronizados aunque su plan sí los incluya.
+        const tenant = req.tenant || await prisma.tenant.findUnique({ where: { id: tenantId } });
+        if (tenant) {
+          await ensureTenantSubscriptionAndModules({ tenantId, planCode: tenant.plan || "STARTER" });
+          ok = await hasTenantModule(tenantId, module);
+        }
+      }
+
+      if (!ok) {
+        console.warn("[AUTH_MODULE_FORBIDDEN]", {
+          userId: req.user?.id,
+          tenantId,
+          role: req.user?.role,
+          module
+        });
         return res.status(403).json({
           error: `Módulo no habilitado: ${module}`,
           module

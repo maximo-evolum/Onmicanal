@@ -10,9 +10,15 @@ function getCookie(name: string) {
 }
 
 export function getSocketToken() {
+  if (typeof window === "undefined") return getCookie(TOKEN_COOKIE);
+
   return (
     getCookie(TOKEN_COOKIE) ||
-    (typeof window !== "undefined" ? window.localStorage.getItem(TOKEN_STORAGE_KEY) : null)
+    window.localStorage.getItem(TOKEN_STORAGE_KEY) ||
+    window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ||
+    window.localStorage.getItem("token") ||
+    window.localStorage.getItem("auth_token") ||
+    window.localStorage.getItem("jwt")
   );
 }
 

@@ -82,7 +82,7 @@ export async function loginUser({ email, password }) {
   if (!user || !user.isActive) throw new Error("Credenciales inválidas");
 
   if (user.passwordHash) {
-    const ok = verifyPassword(password || "", user.passwordHash);
+    const ok = await verifyPassword(password || "", user.passwordHash);
     if (!ok) throw new Error("Credenciales inválidas");
   } else if (password) {
     throw new Error("Credenciales inválidas");

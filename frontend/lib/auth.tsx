@@ -28,6 +28,12 @@ function setStoredAuth(session: AgentSession, token: string) {
   if (typeof window !== "undefined") {
     window.localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
     window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
+    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+
+    // Compatibilidad con versiones anteriores del frontend que buscaban otras claves.
+    window.localStorage.setItem("token", token);
+    window.localStorage.setItem("auth_token", token);
+    window.localStorage.setItem("jwt", token);
   }
 }
 
@@ -38,6 +44,10 @@ function clearStoredAuth() {
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem("token");
+    window.localStorage.removeItem("auth_token");
+    window.localStorage.removeItem("jwt");
   }
 }
 
