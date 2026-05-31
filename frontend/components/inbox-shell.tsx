@@ -39,6 +39,27 @@ export function InboxShell() {
   const [mode, setMode] = useState("all");
   const [status, setStatus] = useState("all");
 
+  function getInboxCacheKey() {
+    return `inbox_conversations_${agent?.tenantId || agent?.id || "global"}`;
+  }
+
+  function saveInboxCache(items: Conversation[]) {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(getInboxCacheKey(), JSON.stringify(items));
+    } catch {}
+  }
+
+  function readInboxCache(): Conversation[] {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = window.localStorage.getItem(getInboxCacheKey());
+      return raw ? (JSON.parse(raw) as Conversation[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
   function mergeConversationsById(current: Conversation[], incoming: Conversation[]) {
     const map = new Map<string, Conversation>();
     [...current, ...incoming].forEach((conversation) => {
@@ -56,23 +77,29 @@ export function InboxShell() {
     try {
       setLoading(true);
       const data = await getConversations();
-      setConversations((prev) => mergeConversationsById(prev, data));
+      const merged = mergeConversationsById(conversations, data);
+      setConversations(merged);
+      saveInboxCache(merged);
 
       const conversationFromUrl =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("conversation")
           : null;
-      const targetId =
-        preferredConversationId || conversationFromUrl || selectedId;
-      const targetExists =
-        targetId && (data.some((item) => item.id === targetId) || conversations.some((item) => item.id === targetId));
+      const targetId = preferredConversationId || conversationFromUrl || selectedId;
+      const targetExists = targetId && merged.some((item) => item.id === targetId);
 
       if (targetExists) {
         setSelectedId(targetId);
-      } else if (!selectedId && data.length > 0) {
-        setSelectedId(data[0].id);
+      } else if (!selectedId && merged.length > 0) {
+        setSelectedId(merged[0].id);
       }
+      setError(null);
     } catch (err) {
+      const cached = readInboxCache();
+      if (cached.length && conversations.length === 0) {
+        setConversations(cached);
+        if (!selectedId) setSelectedId(cached[0].id);
+      }
       setError(
         err instanceof Error
           ? err.message
@@ -100,8 +127,20 @@ export function InboxShell() {
   }
 
   useEffect(() => {
+    const cached = readInboxCache();
+    if (cached.length) {
+      setConversations(cached);
+      if (!selectedId) setSelectedId(cached[0].id);
+      setLoading(false);
+    }
     loadConversations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (conversations.length) saveInboxCache(conversations);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -246,7 +285,16 @@ export function InboxShell() {
     if (!selectedConversation || !content.trim()) return;
     try {
       setSending(true);
-      await sendManualMessage(selectedConversation.id, content);
+      const saved = await sendManualMessage(selectedConversation.id, content);
+      setMessages((prev) => {
+        if (prev.some((item) => item.id === saved.id)) return prev;
+        return [...prev, saved];
+      });
+      await Promise.all([
+        loadMessages(selectedConversation.id),
+        loadConversations(selectedConversation.id)
+      ]);
+      setError(null);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "No se pudo enviar el mensaje",

@@ -194,17 +194,20 @@ conversationsRouter.delete("/conversations/:id", requireRole(ROLE_GROUPS.MANAGER
     const conversation = await findAccessibleConversation(req, req.params.id);
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
-    await prisma.message.deleteMany({
-      where: { conversationId: req.params.id, tenantId: conversation.tenantId }
-    });
-
-    await prisma.conversation.delete({
-      where: { id: req.params.id }
+    // No borramos mensajes de forma física para evitar pérdida accidental del historial.
+    // La conversación queda cerrada y permanece auditable en la base de datos.
+    await prisma.conversation.update({
+      where: { id: req.params.id },
+      data: {
+        status: "CLOSED",
+        mode: "HUMAN",
+        lastMessageAt: new Date()
+      }
     });
 
     res.json({ ok: true });
   } catch (error) {
     console.error("Delete conversation error:", error);
-    res.status(500).json({ error: "No se pudo eliminar la conversación" });
+    res.status(500).json({ error: "No se pudo cerrar la conversación" });
   }
 });

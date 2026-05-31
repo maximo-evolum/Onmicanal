@@ -51,9 +51,9 @@ app.use("/api", ...protectedApi, adminRouter);
 app.use("/api", ...protectedApi, saasRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.BOT_LAB), devRouter);
 app.use("/api", ...protectedApi, onboardingRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.INBOX), conversationsRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.INBOX), messagesRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.SALES), leadsRouter);
+app.use("/api", ...protectedApi, conversationsRouter); // Inbox: auth + tenant, sin bloqueo por módulo para evitar 403 en tenants configurados
+app.use("/api", ...protectedApi, messagesRouter); // Mensajes manuales del inbox: auth + tenant
+app.use("/api", ...protectedApi, leadsRouter); // Lead panel universal usado desde Inbox
 app.use("/api", ...protectedApi, requireModule(MODULES.SALES), productRoutes);
 app.use("/api", ...protectedApi, requireModule(MODULES.MARKETING), campaignsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), servicesRouter);
