@@ -341,6 +341,7 @@ model Lead {
   commune          String?
   budget           Int?
   urgency          String?
+  customFields     Json?
 
   status           String   @default("NEW")
   notes            String?

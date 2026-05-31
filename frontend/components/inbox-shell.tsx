@@ -39,11 +39,24 @@ export function InboxShell() {
   const [mode, setMode] = useState("all");
   const [status, setStatus] = useState("all");
 
+  function mergeConversationsById(current: Conversation[], incoming: Conversation[]) {
+    const map = new Map<string, Conversation>();
+    [...current, ...incoming].forEach((conversation) => {
+      map.set(conversation.id, {
+        ...(map.get(conversation.id) || {}),
+        ...conversation,
+      });
+    });
+    return Array.from(map.values()).sort(
+      (a, b) => +new Date(b.lastMessageAt || b.updatedAt || b.createdAt) - +new Date(a.lastMessageAt || a.updatedAt || a.createdAt),
+    );
+  }
+
   async function loadConversations(preferredConversationId?: string | null) {
     try {
       setLoading(true);
       const data = await getConversations();
-      setConversations(data);
+      setConversations((prev) => mergeConversationsById(prev, data));
 
       const conversationFromUrl =
         typeof window !== "undefined"
@@ -52,7 +65,7 @@ export function InboxShell() {
       const targetId =
         preferredConversationId || conversationFromUrl || selectedId;
       const targetExists =
-        targetId && data.some((item) => item.id === targetId);
+        targetId && (data.some((item) => item.id === targetId) || conversations.some((item) => item.id === targetId));
 
       if (targetExists) {
         setSelectedId(targetId);
@@ -120,24 +133,11 @@ export function InboxShell() {
     }
 
     const onConversationCreated = (conversation: Conversation) => {
-      setConversations((prev) => {
-        const exists = prev.some((item) => item.id === conversation.id);
-        if (exists) return prev;
-        return [conversation, ...prev];
-      });
+      setConversations((prev) => mergeConversationsById(prev, [conversation]));
     };
 
     const onConversationUpdated = (conversation: Conversation) => {
-      setConversations((prev) => {
-        const index = prev.findIndex((item) => item.id === conversation.id);
-        if (index === -1) return [conversation, ...prev];
-        const copy = [...prev];
-        copy[index] = conversation;
-        copy.sort(
-          (a, b) => +new Date(b.lastMessageAt) - +new Date(a.lastMessageAt),
-        );
-        return copy;
-      });
+      setConversations((prev) => mergeConversationsById(prev, [conversation]));
     };
 
     socket.on("inbox:conversation-created", onConversationCreated);
@@ -256,7 +256,7 @@ export function InboxShell() {
     }
   }
 
-  function handleLeadChange(field: keyof Lead, value: string | number | null) {
+  function handleLeadChange(field: keyof Lead, value: string | number | null | Record<string, string | number | boolean | null>) {
     setLead((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 

@@ -78,6 +78,22 @@ function conversationWhere(req) {
   return where;
 }
 
+async function findAccessibleConversation(req, conversationId) {
+  const where = { id: conversationId };
+  if (req.user?.role !== "SUPER_ADMIN") {
+    where.tenantId = req.tenantId;
+  }
+
+  return prisma.conversation.findFirst({
+    where,
+    include: { contact: true, assignedTo: true, lead: true, tenant: true }
+  });
+}
+
+function effectiveTenantId(req, conversation) {
+  return req.user?.role === "SUPER_ADMIN" ? conversation?.tenantId : req.tenantId;
+}
+
 conversationsRouter.get("/conversations", async (req, res) => {
   try {
     const conversations = await prisma.conversation.findMany({
@@ -97,14 +113,12 @@ conversationsRouter.get("/conversations", async (req, res) => {
 
 conversationsRouter.get("/conversations/:id/messages", async (req, res) => {
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId }
-    });
+    const conversation = await findAccessibleConversation(req, req.params.id);
 
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
     const messages = await prisma.message.findMany({
-      where: { conversationId: req.params.id, tenantId: req.tenantId },
+      where: { conversationId: req.params.id, tenantId: conversation.tenantId },
       orderBy: { createdAt: "asc" }
     });
 
@@ -120,13 +134,12 @@ conversationsRouter.post("/conversations/:id/take", requireRole(ROLE_GROUPS.STAF
     const { agentId } = req.body;
     if (!agentId) return res.status(400).json({ error: "agentId es requerido" });
 
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId }
-    });
+    const conversation = await findAccessibleConversation(req, req.params.id);
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
+    const tenantId = effectiveTenantId(req, conversation);
     const agent = await prisma.workspaceUser.findFirst({
-      where: { id: agentId, tenantId: req.tenantId, isActive: true }
+      where: { id: agentId, tenantId, isActive: true }
     });
     if (!agent) return res.status(400).json({ error: "Agente no válido para este tenant" });
 
@@ -140,9 +153,7 @@ conversationsRouter.post("/conversations/:id/take", requireRole(ROLE_GROUPS.STAF
 
 conversationsRouter.post("/conversations/:id/release", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId }
-    });
+    const conversation = await findAccessibleConversation(req, req.params.id);
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
     const updated = await releaseConversation({ conversationId: req.params.id });
@@ -155,9 +166,7 @@ conversationsRouter.post("/conversations/:id/release", requireRole(ROLE_GROUPS.S
 
 conversationsRouter.post("/conversations/:id/resolve", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId }
-    });
+    const conversation = await findAccessibleConversation(req, req.params.id);
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
     const updated = await prisma.conversation.update({
@@ -182,13 +191,11 @@ conversationsRouter.post("/conversations/:id/resolve", requireRole(ROLE_GROUPS.S
 
 conversationsRouter.delete("/conversations/:id", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId }
-    });
+    const conversation = await findAccessibleConversation(req, req.params.id);
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
     await prisma.message.deleteMany({
-      where: { conversationId: req.params.id, tenantId: req.tenantId }
+      where: { conversationId: req.params.id, tenantId: conversation.tenantId }
     });
 
     await prisma.conversation.delete({

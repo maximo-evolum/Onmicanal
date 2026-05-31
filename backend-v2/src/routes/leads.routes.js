@@ -6,7 +6,19 @@ import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 export const leadsRouter = Router();
 
 function tenantWhere(req) {
+  if (req.user?.role === "SUPER_ADMIN" && req.query?.tenantId) {
+    return { tenantId: String(req.query.tenantId) };
+  }
+  if (req.user?.role === "SUPER_ADMIN") {
+    return {};
+  }
   return { tenantId: req.tenantId };
+}
+
+async function findAccessibleConversation(req, conversationId) {
+  const where = { id: conversationId };
+  if (req.user?.role !== "SUPER_ADMIN") where.tenantId = req.tenantId;
+  return prisma.conversation.findFirst({ where, include: { lead: true } });
 }
 
 leadsRouter.get("/leads/metrics", async (req, res) => {
@@ -74,10 +86,7 @@ leadsRouter.get("/leads", async (req, res) => {
 
 leadsRouter.get("/leads/:conversationId", async (req, res) => {
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.conversationId, tenantId: req.tenantId },
-      include: { lead: true }
-    });
+    const conversation = await findAccessibleConversation(req, req.params.conversationId);
 
     if (!conversation?.lead) return res.status(404).json({ error: "Lead no encontrado" });
     res.json(conversation.lead);
@@ -89,9 +98,7 @@ leadsRouter.get("/leads/:conversationId", async (req, res) => {
 
 leadsRouter.patch("/leads/:conversationId", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: req.params.conversationId, tenantId: req.tenantId }
-    });
+    const conversation = await findAccessibleConversation(req, req.params.conversationId);
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
     const updated = await updateLead({ conversationId: req.params.conversationId, data: req.body });

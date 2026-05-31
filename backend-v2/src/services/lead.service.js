@@ -18,6 +18,7 @@ export async function getOrCreateLead({ tenantId, conversationId, contact }) {
       name: contact?.name || null,
       phone: contact?.externalId || null,
       status: "NEW",
+      customFields: {},
       nextFollowUpAt: new Date(Date.now() + 2 * 60 * 60 * 1000)
     }
   });
@@ -42,6 +43,7 @@ export async function upsertLeadFromConversation({
     budget: entities?.budget ?? existing?.budget ?? null,
     urgency: entities?.urgency || existing?.urgency || null,
     status: existing?.status || mapIntent(intent),
+    customFields: existing?.customFields || {},
     nextFollowUpAt: existing?.nextFollowUpAt || new Date(Date.now() + 2 * 60 * 60 * 1000)
   };
 
@@ -54,8 +56,14 @@ export async function upsertLeadFromConversation({
 }
 
 export async function updateLead({ conversationId, data }) {
-  const allowed = ["name", "phone", "interest", "propertyType", "commune", "budget", "urgency", "status", "notes", "nextFollowUpAt"];
+  const allowed = ["name", "phone", "interest", "propertyType", "commune", "budget", "urgency", "status", "notes", "nextFollowUpAt", "customFields"];
   const clean = Object.fromEntries(Object.entries(data || {}).filter(([key]) => allowed.includes(key)));
+  if (clean.customFields !== undefined) {
+    clean.customFields =
+      clean.customFields && typeof clean.customFields === "object" && !Array.isArray(clean.customFields)
+        ? clean.customFields
+        : {};
+  }
 
   const previous = await prisma.lead.findUnique({ where: { conversationId } });
   const updated = await prisma.lead.update({ where: { conversationId }, data: clean });

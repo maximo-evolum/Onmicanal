@@ -96,6 +96,7 @@ export type Lead = {
   commune: string | null;
   budget: number | null;
   urgency: string | null;
+  customFields?: Record<string, string | number | boolean | null> | null;
   status: string;
   notes?: string | null;
   closeProbability?: number | null;
