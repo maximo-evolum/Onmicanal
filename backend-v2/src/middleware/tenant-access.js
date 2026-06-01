@@ -18,9 +18,23 @@ export function requireRole(...roles) {
 
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: "No autorizado" });
-    if (req.user.role === "SUPER_ADMIN") return next();
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const role = req.user.role;
+
+    // SUPER_ADMIN siempre tiene acceso global.
+    if (role === "SUPER_ADMIN") return next();
+
+    // OWNER y ADMIN tienen acceso total dentro de su tenant,
+    // excepto rutas explícitamente exclusivas del SaaS global.
+    const superAdminOnly =
+      allowedRoles.length === 1 &&
+      allowedRoles.includes("SUPER_ADMIN");
+
+    if (!superAdminOnly && ["OWNER", "ADMIN"].includes(role)) {
+      return next();
+    }
+
+    if (!allowedRoles.includes(role)) {
       console.warn("[AUTH_ROLE_FORBIDDEN]", {
         userId: req.user?.id,
         tenantId: req.tenantId,
