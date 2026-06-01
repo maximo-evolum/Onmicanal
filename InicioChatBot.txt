@@ -20,7 +20,7 @@ http://localhost:3001/login
 
 
 git add .
-git commit -m "debug de meta "
+git commit -m "debug de usuarios y msj "
 git push -u origin main
 git remote add origin https://github.com/maximo-evolum/Onmicanal.git
 
