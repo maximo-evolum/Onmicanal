@@ -46,6 +46,23 @@ app.use("/api", workspaceUsersRouter); // demo login helper
 
 const protectedApi = [authMiddleware, tenantContext];
 
+app.get("/api/debug/session", ...protectedApi, async (req, res) => {
+  res.json({
+    ok: true,
+    fixVersion: "permissions-inbox-2026-05-31",
+    user: req.user,
+    tenantId: req.tenantId,
+    tenant: req.tenant
+      ? {
+          id: req.tenant.id,
+          slug: req.tenant.slug,
+          name: req.tenant.name,
+          plan: req.tenant.plan
+        }
+      : null
+  });
+});
+
 app.use("/api", ...protectedApi, modulesRouter);
 app.use("/api", ...protectedApi, adminRouter);
 app.use("/api", ...protectedApi, saasRouter);
@@ -114,6 +131,7 @@ async function bootstrap() {
   server.listen(env.port, "0.0.0.0", () => {
     console.log(`Servidor corriendo en http://0.0.0.0:${env.port}`);
     console.log(`Webhook GET/POST: http://0.0.0.0:${env.port}/meta/webhook`);
+    console.log("FIX_VERSION permissions-inbox-2026-05-31");
   });
 }
 

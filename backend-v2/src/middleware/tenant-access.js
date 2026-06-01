@@ -1,5 +1,5 @@
 import { prisma } from "../lib/db.js";
-import { hasTenantModule, ensureTenantSubscriptionAndModules } from "../services/tenant-modules.service.js";
+import { hasTenantModule, ensureTenantSubscriptionAndModules, getTenantModules } from "../services/tenant-modules.service.js";
 
 export const ROLE_GROUPS = Object.freeze({
   STAFF: ["SUPER_ADMIN", "OWNER", "ADMIN", "AGENT", "SELLER"],
@@ -21,6 +21,12 @@ export function requireRole(...roles) {
     if (req.user.role === "SUPER_ADMIN") return next();
 
     if (!allowedRoles.includes(req.user.role)) {
+      console.warn("[AUTH_ROLE_FORBIDDEN]", {
+        userId: req.user?.id,
+        tenantId: req.tenantId,
+        role: req.user?.role,
+        allowedRoles
+      });
       return res.status(403).json({ error: "No tienes permiso para esta acción" });
     }
 
@@ -51,10 +57,22 @@ export async function tenantContext(req, res, next) {
   }
 }
 
+/**
+ * Control de módulos por tenant.
+ *
+ * Regla SaaS:
+ * - SUPER_ADMIN, OWNER y ADMIN nunca deben quedar bloqueados por un falso negativo de módulos.
+ * - AGENT/SELLER sí dependen de que el módulo esté habilitado para el tenant.
+ * - Si el tenant no tiene módulos sincronizados, se autorepara con el plan activo.
+ */
 export function requireModule(module) {
   return async (req, res, next) => {
     try {
-      if (["SUPER_ADMIN","OWNER","ADMIN"].includes(req.user?.role)) return next();
+      const role = req.user?.role;
+
+      if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) {
+        return next();
+      }
 
       const tenantId = req.tenantId || req.user?.tenantId;
       if (!tenantId) return res.status(401).json({ error: "Tenant requerido" });
@@ -62,7 +80,6 @@ export function requireModule(module) {
       let ok = await hasTenantModule(tenantId, module);
 
       if (!ok) {
-        // Autoreparación: algunos tenants antiguos no tienen módulos sincronizados aunque su plan sí los incluya.
         const tenant = req.tenant || await prisma.tenant.findUnique({ where: { id: tenantId } });
         if (tenant) {
           await ensureTenantSubscriptionAndModules({ tenantId, planCode: tenant.plan || "STARTER" });
@@ -71,15 +88,18 @@ export function requireModule(module) {
       }
 
       if (!ok) {
+        const modules = await getTenantModules(tenantId).catch(() => []);
         console.warn("[AUTH_MODULE_FORBIDDEN]", {
           userId: req.user?.id,
           tenantId,
-          role: req.user?.role,
-          module
+          role,
+          module,
+          availableModules: modules
         });
         return res.status(403).json({
           error: `Módulo no habilitado: ${module}`,
-          module
+          module,
+          availableModules: modules
         });
       }
 
