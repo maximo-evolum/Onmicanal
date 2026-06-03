@@ -131,7 +131,7 @@ async function bootstrap() {
   server.listen(env.port, "0.0.0.0", () => {
     console.log(`Servidor corriendo en http://0.0.0.0:${env.port}`);
     console.log(`Webhook GET/POST: http://0.0.0.0:${env.port}/meta/webhook`);
-    console.log("FIX_VERSION permissions-inbox-2026-05-31");
+    console.log("FIX_VERSION admin-router-scoped-2026-06-01");
   });
 }
 

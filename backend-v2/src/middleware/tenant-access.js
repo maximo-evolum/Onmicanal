@@ -1,12 +1,27 @@
 import { prisma } from "../lib/db.js";
 import { hasTenantModule, ensureTenantSubscriptionAndModules, getTenantModules } from "../services/tenant-modules.service.js";
 
-export const ROLE_GROUPS = Object.freeze({
-  STAFF: ["SUPER_ADMIN", "OWNER", "ADMIN", "AGENT", "SELLER"],
-  MANAGERS: ["SUPER_ADMIN", "OWNER", "ADMIN"],
-  OWNERS: ["SUPER_ADMIN", "OWNER"],
-  SUPER_ADMIN: ["SUPER_ADMIN"]
-});
+export const ROLE_GROUPS = {
+  STAFF: [
+    "OWNER",
+    "ADMIN",
+    "AGENT",
+    "SELLER"
+  ],
+
+  MANAGERS: [
+    "OWNER",
+    "ADMIN"
+  ],
+
+  VIEWERS: [
+    "OWNER",
+    "ADMIN",
+    "AGENT",
+    "SELLER",
+    "VIEWER"
+  ]
+};
 
 function normalizeRoles(roles) {
   if (roles.length === 1 && Array.isArray(roles[0])) return roles[0];

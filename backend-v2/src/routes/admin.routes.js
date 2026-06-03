@@ -9,7 +9,12 @@ import { extractOnboardingKnowledge } from "../services/onboarding-intelligence.
 
 export const adminRouter = Router();
 
-adminRouter.use(requireRole("SUPER_ADMIN"));
+// IMPORTANTE:
+ // Este middleware debe aplicarse SOLO a rutas /admin.
+ // Si se monta sobre todo el router sin path, Express lo ejecuta también para
+ // /api/conversations, /api/leads, /api/messages, etc. y genera falsos 403
+ // para OWNER/ADMIN/AGENT del tenant.
+adminRouter.use("/admin", requireRole("SUPER_ADMIN"));
 
 function makeSlug(value) {
   return String(value || "workspace")
