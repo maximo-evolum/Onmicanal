@@ -145,10 +145,19 @@ export async function deleteConversation(conversationId: string): Promise<{ ok: 
 }
 
 export async function sendManualMessage(conversationId: string, content: string): Promise<Message> {
-  return request<Message>(`/messages/send`, {
-    method: "POST",
-    body: JSON.stringify({ conversationId, content })
-  });
+  // Endpoint principal nuevo: queda ligado a la conversación y evita 404 por rutas legacy.
+  try {
+    return await request<Message>(`/conversations/${conversationId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content })
+    });
+  } catch (error) {
+    // Fallback para deployments antiguos que todavía tengan la ruta legacy.
+    return request<Message>(`/messages/send`, {
+      method: "POST",
+      body: JSON.stringify({ conversationId, content })
+    });
+  }
 }
 
 export type SimulateLeadResult = { conversationId?: string; conversation?: Conversation; ok?: boolean };
