@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export function BackToInbox() {
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginTop: 18, marginBottom: 24, paddingInline: 12 }}>
       <Link href="/inbox" className="ghost-btn">
         ← Volver al Inbox
       </Link>

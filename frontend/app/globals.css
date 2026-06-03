@@ -143,7 +143,7 @@ a {
 }
 
 .inbox-layout {
-  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr) minmax(320px, 360px);
+  grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) minmax(360px, 420px);
 }
 
 .sidebar {
@@ -173,6 +173,37 @@ a {
 .onboarding-page {
   overflow: auto;
 }
+
+
+.inbox-layout .sidebar {
+  min-width: 360px;
+}
+
+.inbox-layout .main {
+  min-width: 0;
+}
+
+.topbar {
+  padding-inline: 24px;
+}
+
+.ghost-btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 1400px) {
+  .inbox-layout {
+    grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+  }
+
+  .inbox-layout > :last-child {
+    display: none;
+  }
+}
+
 
 /* =========================
    Topbar / headers

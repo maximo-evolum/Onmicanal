@@ -466,9 +466,7 @@ export default function OnboardingPage() {
             <article><strong>{existing?.rules?.length || 0}</strong><span>Reglas / FAQs en BD</span></article>
           </div>
           <div className="header-actions">
-            <Link className="primary-btn" href="/dev/bot-lab">Probar IA</Link>
             <Link className="ghost-btn" href="/inbox">Ir al Inbox</Link>
-            <Link className="ghost-btn" href="/settings/ai">Ver configuración IA</Link>
             <button className="ghost-btn" onClick={resetWizard}>Nuevo onboarding</button>
           </div>
         </section>
