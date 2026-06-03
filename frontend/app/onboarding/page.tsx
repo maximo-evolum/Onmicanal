@@ -96,6 +96,15 @@ export default function OnboardingPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
+    document.documentElement.style.overflowY = "auto";
+    document.body.style.overflowY = "auto";
+    return () => {
+      document.documentElement.style.overflowY = "";
+      document.body.style.overflowY = "";
+    };
+  }, []);
+
+  useEffect(() => {
     let mounted = true;
     getOnboardingKnowledge()
       .then((data) => {
@@ -243,16 +252,14 @@ export default function OnboardingPage() {
       <section className="onboarding-pro-hero">
         <div>
           <span className="badge accent">Wizard Onboarding IA</span>
-          <h1>Entrena la IA del cliente</h1>
+          <h1>Entrena tu IA</h1>
           <p>
             Configura el perfil comercial del tenant, sube documentos y aplica conocimiento para que Bot Lab, Inbox y respuestas automáticas usen datos reales del negocio.
           </p>
         </div>
         <div className="onboarding-hero-actions">
           <Link className="ghost-btn" href="/inbox">Ir al Inbox</Link>
-          <Link className="ghost-btn" href="/dev/bot-lab">Probar Bot Lab</Link>
-          <Link className="ghost-btn" href="/settings/ai">Config IA</Link>
-        </div>
+                  </div>
       </section>
 
       <section className="onboarding-status-panel">

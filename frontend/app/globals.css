@@ -415,6 +415,7 @@ button.primary-btn {
 
 .sidebar-list {
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   overflow-x: hidden;
   padding: 10px;
   display: flex;
@@ -2476,7 +2477,7 @@ body {
   height: auto;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 32px clamp(18px, 4vw, 56px) 72px;
+  padding: 32px clamp(18px, 4vw, 56px) 160px;
   display: block;
 }
 
