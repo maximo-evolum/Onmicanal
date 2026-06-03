@@ -126,6 +126,7 @@ export default function AdminPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moduleCatalog, setModuleCatalog] = useState<string[]>([]);
+  const [pendingModules, setPendingModules] = useState<string[]>([]);
   const [clientForm, setClientForm] = useState(emptyClient);
   const [userForm, setUserForm] = useState(emptyUser);
   const [whatsappForm, setWhatsappForm] = useState(emptyWhatsAppConfig);
@@ -168,6 +169,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!selectedTenant) return;
+
+    setPendingModules(enabledModulesOf(selectedTenant));
 
     const whatsapp = selectedTenant.channelConfigs?.find((item) => item.channel === "whatsapp");
     const instagram = selectedTenant.channelConfigs?.find((item) => item.channel === "instagram");
@@ -234,6 +237,13 @@ export default function AdminPage() {
     const business = tenants.filter((tenant) => tenant.plan === "BUSINESS" || tenant.plan === "ENTERPRISE").length;
     return { users, activeModules, business };
   }, [tenants]);
+
+  const moduleDirty = useMemo(() => {
+    if (!selectedTenant) return false;
+    const saved = [...enabledModulesOf(selectedTenant)].sort().join("|");
+    const pending = [...pendingModules].sort().join("|");
+    return saved !== pending;
+  }, [selectedTenant, pendingModules]);
 
   function updateTenantLocal(updated: AdminTenant) {
     setTenants((items) => items.map((item) => (item.id === updated.id ? updated : item)));
@@ -395,19 +405,31 @@ export default function AdminPage() {
     }
   }
 
-  async function handleModuleToggle(module: string) {
+  function handleModuleToggle(module: string) {
+    setPendingModules((current) => {
+      const next = new Set(current);
+      if (next.has(module)) next.delete(module);
+      else next.add(module);
+      return Array.from(next);
+    });
+    setSuccess(null);
+    setError(null);
+  }
+
+  async function handleSaveModules() {
     if (!selectedTenant) return;
     try {
       setSavingId(`modules-${selectedTenant.id}`);
       setError(null);
-      const current = new Set(enabledModulesOf(selectedTenant));
-      if (current.has(module)) current.delete(module);
-      else current.add(module);
-      const result = await updateAdminTenantModules(selectedTenant.id, Array.from(current));
-      if (result.tenant) updateTenantLocal(result.tenant);
-      setSuccess("Módulos actualizados.");
+      setSuccess(null);
+      const result = await updateAdminTenantModules(selectedTenant.id, pendingModules);
+      if (result.tenant) {
+        updateTenantLocal(result.tenant);
+        setPendingModules(enabledModulesOf(result.tenant as AdminTenant));
+      }
+      setSuccess("Módulos guardados en la base de datos. Los usuarios del cliente verán el cambio al recargar o volver a iniciar sesión.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron actualizar módulos");
+      setError(err instanceof Error ? err.message : "No se pudieron guardar los módulos");
     } finally {
       setSavingId(null);
     }
@@ -814,17 +836,31 @@ export default function AdminPage() {
                   <div className="admin-panel-header slim">
                     <div>
                       <strong>Servicios / módulos habilitados</strong>
-                      <div className="meta-line">Activa solo lo que este cliente paga o necesita.</div>
+                      <div className="meta-line">
+                        Activa solo lo que este cliente paga o necesita. Los cambios quedan pendientes hasta presionar "Guardar módulos".
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      {moduleDirty ? <span className="meta-line">Cambios sin guardar</span> : <span className="meta-line">Módulos sincronizados</span>}
+                      <button
+                        className="primary-btn"
+                        type="button"
+                        onClick={handleSaveModules}
+                        disabled={!moduleDirty || savingId === `modules-${selectedTenant.id}`}
+                      >
+                        {savingId === `modules-${selectedTenant.id}` ? "Guardando..." : "Guardar módulos"}
+                      </button>
                       <button className="ghost-btn danger" type="button" onClick={() => handleDeleteTenant(selectedTenant.id)} disabled={savingId === `delete-tenant-${selectedTenant.id}`}>Eliminar</button>
                     </div>
                   </div>
                   <div className="module-toggle-grid">
                     {(moduleCatalog.length ? moduleCatalog : ["inbox", "sales", "marketing", "bookings", "payments", "followups", "analytics", "bot_lab"]).map((module) => {
-                      const active = enabledModulesOf(selectedTenant).includes(module);
+                      const active = pendingModules.includes(module);
+                      const saved = enabledModulesOf(selectedTenant).includes(module);
                       return (
                         <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => handleModuleToggle(module)}>
                           <span>{MODULE_LABELS[module] || module}</span>
-                          <small>{active ? "Activo" : "Bloqueado"}</small>
+                          <small>{active ? "Activo" : "Bloqueado"}{active !== saved ? " · pendiente" : ""}</small>
                         </button>
                       );
                     })}

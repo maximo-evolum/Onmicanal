@@ -29,14 +29,14 @@ export async function syncPlans() {
   }
 }
 
-export async function ensureTenantSubscriptionAndModules({ tenantId, planCode = "STARTER" }) {
+export async function ensureTenantSubscriptionAndModules({ tenantId, planCode = "STARTER", forcePlanSync = false } = {}) {
   const normalized = normalizePlanCode(planCode);
   await syncPlans();
   const plan = await prisma.plan.findUnique({ where: { code: normalized } });
 
   await prisma.subscription.upsert({
     where: { id: `${tenantId}:${normalized}` },
-    update: {},
+    update: { status: "ACTIVE", planId: plan?.id },
     create: {
       id: `${tenantId}:${normalized}`,
       tenantId,
@@ -51,7 +51,27 @@ export async function ensureTenantSubscriptionAndModules({ tenantId, planCode = 
     }
   });
 
+  const existingModules = await prisma.tenantModule.findMany({ where: { tenantId } });
+  const hasManualConfiguration = existingModules.some((item) => item.source === "MANUAL");
+
+  // Importante:
+  // Si el SUPER_ADMIN ya configuró módulos manualmente para este cliente,
+  // NO debemos volver a activar automáticamente los módulos del plan.
+  // Antes, /api/modules/me llamaba esta función y reactivaba servicios bloqueados.
+  if (hasManualConfiguration && !forcePlanSync) {
+    return getTenantModules(tenantId);
+  }
+
   const modules = getModulesForPlan(normalized);
+
+  // En sincronización forzada de plan, el plan vuelve a ser la fuente de verdad.
+  if (forcePlanSync) {
+    await prisma.tenantModule.updateMany({
+      where: { tenantId },
+      data: { enabled: false, source: "PLAN" }
+    });
+  }
+
   for (const module of modules) {
     await prisma.tenantModule.upsert({
       where: { tenantId_module: { tenantId, module } },

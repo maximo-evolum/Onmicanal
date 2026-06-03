@@ -569,7 +569,7 @@ adminRouter.patch("/admin/tenants/:tenantId/plan", async (req, res) => {
     const { tenantId } = req.params;
     const planCode = normalizePlanCode(req.body.plan || "STARTER");
     await prisma.tenant.update({ where: { id: tenantId }, data: { plan: planCode } });
-    const modules = await ensureTenantSubscriptionAndModules({ tenantId, planCode });
+    const modules = await ensureTenantSubscriptionAndModules({ tenantId, planCode, forcePlanSync: true });
     const tenant = await getFullTenant(tenantId);
     res.json({ tenant, modules });
   } catch (error) {
