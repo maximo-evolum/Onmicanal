@@ -38,9 +38,10 @@ export function Topbar({ agent }: { agent?: AgentSession | null }) {
         setModules(data.modules || []);
         setPlan(data.plan || "");
       })
-      .catch(() => {
-        // Si el backend aún no tiene módulos migrados, mostramos el menú completo como fallback.
-        setModules(MENU_ITEMS.map((item) => item.module));
+.catch(() => {
+        // Fallback seguro SaaS:
+        // nunca mostrar módulos bloqueados si falla la carga.
+        setModules([]);
       });
   }, [agent]);
 
@@ -52,7 +53,9 @@ export function Topbar({ agent }: { agent?: AgentSession | null }) {
       return MENU_ITEMS.filter((item) => ["/inbox", "/dashboard", "/pipeline", "/campaigns"].includes(item.href));
     }
 
-    if (!modules.length) return MENU_ITEMS;
+    // Evita mostrar módulos bloqueados si aún no cargan.
+    if (!modules.length) return [];
+
     return MENU_ITEMS.filter((item) => modules.includes(item.module));
   }, [modules, session?.role]);
 

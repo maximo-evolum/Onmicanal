@@ -902,7 +902,9 @@ button.primary-btn {
 }
 
 .app-menu-portal {
-  width: 240px;
+  width: min(240px, calc(100vw - 24px));
+  max-height: 80vh;
+  overflow-y: auto;
   background: rgba(26, 19, 43, 0.97);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(124, 58, 237, 0.26);
