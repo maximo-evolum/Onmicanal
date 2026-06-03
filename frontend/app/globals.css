@@ -2466,3 +2466,293 @@ body {
 .table-wrap th { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 .check-row { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 13px; margin-top: 8px; }
 @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr; } }
+
+/* =========================
+   Onboarding IA Pro Wizard Fix
+   ========================= */
+.onboarding-pro-page {
+  width: 100%;
+  min-height: 100vh;
+  height: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 32px clamp(18px, 4vw, 56px) 72px;
+  display: block;
+}
+
+.onboarding-pro-hero,
+.onboarding-status-panel,
+.onboarding-steps,
+.onboarding-workspace-grid,
+.onboarding-main-card,
+.onboarding-status-message {
+  width: min(100%, 1320px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.onboarding-pro-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 22px;
+  margin-bottom: 22px;
+}
+
+.onboarding-pro-hero h1 {
+  font-size: clamp(30px, 4vw, 52px);
+  line-height: 1.05;
+  margin: 12px 0 14px;
+}
+
+.onboarding-pro-hero p {
+  color: var(--text-muted);
+  max-width: 880px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.onboarding-hero-actions,
+.onboarding-footer-actions,
+.section-heading-row,
+.quick-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.onboarding-hero-actions {
+  justify-content: flex-end;
+  min-width: 320px;
+}
+
+.onboarding-status-panel {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.onboarding-status-panel.compact {
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 16px 0;
+}
+
+.onboarding-status-panel article {
+  border: 1px solid var(--border);
+  background: rgba(31, 21, 51, .72);
+  border-radius: 18px;
+  padding: 16px;
+  min-height: 96px;
+}
+
+.onboarding-status-panel strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.onboarding-status-panel span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.onboarding-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.onboarding-step {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 17px;
+  background: rgba(20, 13, 34, .78);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 7px;
+}
+
+.onboarding-step span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, .18);
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.onboarding-step strong { font-size: 18px; }
+.onboarding-step small { color: var(--text-muted); }
+.onboarding-step.active {
+  border-color: rgba(139, 92, 246, .85);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, .18), 0 22px 60px rgba(76, 29, 149, .22);
+}
+.onboarding-step.done { opacity: .9; }
+
+.onboarding-workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 18px;
+  align-items: start;
+}
+
+.onboarding-main-card,
+.onboarding-side-card {
+  padding: clamp(20px, 3vw, 32px);
+  border-radius: 24px;
+}
+
+.onboarding-side-card {
+  position: sticky;
+  top: 18px;
+}
+
+.section-heading-row {
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.section-heading-row.compact-row {
+  margin-bottom: 10px;
+}
+.section-heading-row h2,
+.section-heading-row h3 { margin: 0; }
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  margin: 0 0 6px;
+}
+
+.onboarding-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.quick-chip-row {
+  margin: 16px 0;
+}
+
+.chip-button {
+  border: 1px solid var(--border);
+  background: rgba(124, 58, 237, .10);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.block-label { display: grid; gap: 8px; margin-top: 14px; }
+
+.onboarding-checklist {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.upload-zone {
+  border: 1px dashed rgba(139, 92, 246, .75);
+  border-radius: 22px;
+  background: rgba(124, 58, 237, .10);
+  min-height: 170px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 24px;
+  cursor: pointer;
+  margin: 18px 0;
+}
+.upload-zone strong { font-size: 22px; }
+.upload-zone span { color: var(--text-muted); }
+.upload-zone input { display: none; }
+
+.file-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.file-list-grid article {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 13px;
+  background: rgba(31, 21, 51, .62);
+}
+.file-list-grid span { display: block; color: var(--text-muted); font-size: 12px; margin-top: 4px; }
+
+.review-summary-box,
+.apply-options-box,
+.review-section {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(31, 21, 51, .46);
+  margin-top: 16px;
+}
+.review-summary-box p { color: var(--text-muted); line-height: 1.65; }
+
+.onboarding-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+.onboarding-table-scroll table { width: 100%; min-width: 920px; border-collapse: collapse; }
+.onboarding-table-scroll th,
+.onboarding-table-scroll td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.onboarding-table-scroll input,
+.faq-edit-list input,
+.faq-edit-list textarea,
+.review-section textarea {
+  width: 100%;
+}
+.onboarding-table-scroll small { display: block; color: var(--text-muted); margin-top: 4px; }
+
+.two-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.faq-edit-list {
+  display: grid;
+  gap: 12px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.finish-card {
+  text-align: left;
+}
+.finish-card h2 { font-size: clamp(28px, 4vw, 44px); }
+
+@media (max-width: 1100px) {
+  .onboarding-workspace-grid,
+  .two-columns { grid-template-columns: 1fr; }
+  .onboarding-side-card { position: static; }
+  .onboarding-status-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .onboarding-pro-page { padding: 22px 14px 80px; }
+  .onboarding-pro-hero { display: grid; }
+  .onboarding-hero-actions { justify-content: flex-start; min-width: 0; }
+  .onboarding-steps { grid-template-columns: 1fr; }
+  .onboarding-status-panel,
+  .onboarding-status-panel.compact,
+  .onboarding-form-grid { grid-template-columns: 1fr; }
+  .section-heading-row { display: grid; }
+}
