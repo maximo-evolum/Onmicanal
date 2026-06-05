@@ -242,23 +242,61 @@ export async function createCampaign(input: { name: string; segment?: string; te
 }
 
 
+export type CampaignPlatform = "instagram" | "facebook" | "whatsapp";
+
+export type CampaignVariant = {
+  id?: string;
+  title: string;
+  caption: string;
+  text?: string;
+  hashtags: string;
+  cta?: string;
+  image: string;
+  imageUrl?: string;
+  imagePrompt?: string;
+  platforms?: CampaignPlatform[];
+};
+
 export type CampaignProResult = {
-  variants: Array<{
-    text: string;
-    hashtags: string;
-    image: string;
-  }>;
+  status?: string;
+  platforms?: CampaignPlatform[];
+  campaign?: Campaign;
+  variants: CampaignVariant[];
 };
 
 export async function generateCampaignPro(input: {
   product: string;
+  idea?: string;
+  visualTitle?: string;
+  caption?: string;
+  cta?: string;
+  platforms?: CampaignPlatform[];
   platform?: string;
   price?: string;
   target?: string;
   description?: string;
   category?: string;
+  tone?: string;
 }): Promise<CampaignProResult> {
   return request<CampaignProResult>("/campaigns/generate-pro", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function publishCampaign(input: {
+  campaignId?: string;
+  product?: string;
+  idea?: string;
+  visualTitle?: string;
+  caption?: string;
+  cta?: string;
+  platforms: CampaignPlatform[];
+  selectedVariant: CampaignVariant;
+  variants?: CampaignVariant[];
+  whatsappRecipients?: string[];
+}): Promise<{ campaign: Campaign; results: Array<{ platform: string; status: string; note?: string; error?: string; data?: unknown }> }> {
+  return request<{ campaign: Campaign; results: Array<{ platform: string; status: string; note?: string; error?: string; data?: unknown }> }>("/campaigns/publish", {
     method: "POST",
     body: JSON.stringify(input)
   });
