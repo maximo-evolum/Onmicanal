@@ -13,6 +13,12 @@ function safeJsonParse(text) {
   }
 }
 
+function clampVariantCount(value, fallback = 2) {
+  const n = Number(value || fallback);
+  if ([1, 2, 4, 8].includes(n)) return n;
+  return Math.min(8, Math.max(1, Number.isFinite(n) ? n : fallback));
+}
+
 function detectCategory(product = "", idea = "") {
   const p = `${product} ${idea}`.toLowerCase();
   if (p.includes("casa") || p.includes("departamento") || p.includes("propiedad")) return "inmobiliaria";
@@ -30,7 +36,7 @@ function normalizePlatforms(platforms) {
   return ["instagram"];
 }
 
-function buildSystemPrompt({ category, platforms }) {
+function buildSystemPrompt({ category, platforms, variantCount }) {
   return `
 Eres un estratega senior de marketing digital para un SaaS omnicanal.
 
@@ -59,7 +65,7 @@ Devuelve SOLO JSON válido:
 }
 
 Reglas:
-- crea 2 variantes
+- crea exactamente ${variantCount} variantes
 - títulos visuales cortos y legibles
 - captions no robóticos
 - si WhatsApp está seleccionado, el caption debe servir como mensaje promocional
@@ -69,46 +75,94 @@ Categoría: ${category}
 `;
 }
 
-function fallbackVariants(input) {
+function fallbackVariants(input, count = 2) {
   const title = input.visualTitle || input.product || "Campaña destacada";
   const idea = input.idea || input.description || `Promoción para ${input.product || "tu negocio"}`;
+  const cta = input.cta || "Escríbenos para más información";
+
+  const base = [
+    {
+      title,
+      caption: `${idea}\n\n${cta}. 🙌`,
+      hashtags: "#promo #servicios #negocio",
+      cta,
+      imagePrompt: `Imagen publicitaria profesional para ${title}. ${idea}`
+    },
+    {
+      title: title.length > 34 ? title.slice(0, 34) : title,
+      caption: `✨ ${input.product || "Nueva campaña"}\n\nTenemos una solución pensada para ti. Consulta disponibilidad y detalles hoy.`,
+      hashtags: "#oferta #marketing #clientes",
+      cta: input.cta || "Cotiza ahora",
+      imagePrompt: `Anuncio moderno y premium para ${input.product || title}. Estilo profesional, alto impacto visual.`
+    },
+    {
+      title: `Descubre ${title}`.slice(0, 42),
+      caption: `Una propuesta pensada para quienes buscan calidad, confianza y una experiencia simple.\n\n${cta}.`,
+      hashtags: "#calidad #experiencia #clientesfelices",
+      cta,
+      imagePrompt: `Diseño publicitario elegante para ${title}, colores premium, composición limpia, alto impacto comercial.`
+    },
+    {
+      title: `Oferta especial`.slice(0, 42),
+      caption: `Aprovecha esta oportunidad y recibe atención personalizada para elegir la mejor alternativa.\n\n${cta}.`,
+      hashtags: "#oportunidad #promocion #ventas",
+      cta,
+      imagePrompt: `Pieza visual de campaña promocional para ${title}, estilo moderno para redes sociales, enfoque en conversión.`
+    }
+  ];
+
+  while (base.length < count) {
+    base.push({
+      title: `${title} ${base.length + 1}`.slice(0, 42),
+      caption: `${idea}\n\n${cta}.`,
+      hashtags: "#campaña #marketing #negocio",
+      cta,
+      imagePrompt: `Imagen publicitaria profesional variante ${base.length + 1} para ${title}. ${idea}`
+    });
+  }
+
+  return { variants: base.slice(0, count) };
+}
+
+function normalizeVariant(variant, input, index) {
+  const title = input.visualTitle || variant.title || input.product || `Campaña ${index + 1}`;
   return {
-    variants: [
-      {
-        title,
-        caption: `${idea}\n\nEscríbenos y te ayudamos a elegir la mejor opción. 🙌`,
-        hashtags: "#promo #servicios #negocio",
-        cta: input.cta || "Escríbenos para más información",
-        imagePrompt: `Imagen publicitaria profesional para ${title}. ${idea}`
-      },
-      {
-        title: title.length > 34 ? title.slice(0, 34) : title,
-        caption: `✨ ${input.product || "Nueva campaña"}\n\nTenemos una solución pensada para ti. Consulta disponibilidad y detalles hoy.`,
-        hashtags: "#oferta #marketing #clientes",
-        cta: input.cta || "Cotiza ahora",
-        imagePrompt: `Anuncio moderno y premium para ${input.product || title}. Estilo profesional, alto impacto visual.`
-      }
-    ]
+    id: variant.id || `copy-${Date.now()}-${index}`,
+    title,
+    caption: input.description || input.caption || variant.caption || variant.text || "",
+    text: input.description || input.caption || variant.caption || variant.text || "",
+    hashtags: variant.hashtags || "",
+    cta: input.cta || variant.cta || "Más información",
+    imagePrompt: variant.imagePrompt || input.idea || input.product || title,
+    platforms: normalizePlatforms(input.platforms || input.platform),
+    generationStage: "copy"
   };
 }
 
 async function generateTextVariants(input) {
   const platforms = normalizePlatforms(input.platforms || input.platform);
+  const variantCount = clampVariantCount(input.variantCount, input.quickMode ? 1 : 2);
   const category = input.category || detectCategory(input.product, input.idea);
-  const system = buildSystemPrompt({ category, platforms });
+  const system = buildSystemPrompt({ category, platforms, variantCount });
 
   const user = `
 Producto o servicio: ${input.product || ""}
 Idea de campaña: ${input.idea || ""}
 Título visual solicitado: ${input.visualTitle || ""}
-Descripción/caption base: ${input.description || ""}
+Descripción/caption base: ${input.description || input.caption || ""}
 CTA: ${input.cta || ""}
 Público: ${input.target || "general"}
 Tono: ${input.tone || "cercano y profesional"}
 Plataformas: ${platforms.join(", ")}
+Cantidad de variantes: ${variantCount}
 `;
 
-  if (!process.env.OPENAI_API_KEY) return fallbackVariants(input);
+  if (!process.env.OPENAI_API_KEY) {
+    const fallback = fallbackVariants(input, variantCount);
+    return {
+      variants: fallback.variants.map((variant, index) => normalizeVariant(variant, input, index))
+    };
+  }
 
   const res = await fetch(`${OPENAI_URL}/chat/completions`, {
     method: "POST",
@@ -117,7 +171,7 @@ Plataformas: ${platforms.join(", ")}
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: input.textModel || "gpt-4o-mini",
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
@@ -130,18 +184,26 @@ Plataformas: ${platforms.join(", ")}
   const data = await res.json();
   if (!res.ok) {
     console.error("Campaign text generation error:", data);
-    return fallbackVariants(input);
+    const fallback = fallbackVariants(input, variantCount);
+    return {
+      variants: fallback.variants.map((variant, index) => normalizeVariant(variant, input, index))
+    };
   }
 
   const content = data?.choices?.[0]?.message?.content || "";
   const parsed = safeJsonParse(content);
 
-  if (!parsed?.variants?.length) return fallbackVariants(input);
-  return parsed;
+  const rawVariants = parsed?.variants?.length
+    ? parsed.variants.slice(0, variantCount)
+    : fallbackVariants(input, variantCount).variants;
+
+  return {
+    variants: rawVariants.map((variant, index) => normalizeVariant(variant, input, index))
+  };
 }
 
-async function generateImage(prompt, visualTitle = "") {
-  if (!process.env.OPENAI_API_KEY) {
+async function generateImage(prompt, visualTitle = "", options = {}) {
+  if (!process.env.OPENAI_API_KEY || options.skipRealImage) {
     const encoded = encodeURIComponent(visualTitle || "Campaña IA");
     return `https://placehold.co/1080x1350/21183a/ede9fe/png?text=${encoded}`;
   }
@@ -161,9 +223,9 @@ Evita logos de marcas reales no solicitadas. No agregues texto pequeño ilegible
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "gpt-image-1",
+      model: options.imageModel || "gpt-image-1",
       prompt: fullPrompt,
-      size: "1024x1536"
+      size: options.size || "1024x1536"
     })
   });
 
@@ -182,27 +244,51 @@ Evita logos de marcas reales no solicitadas. No agregues texto pequeño ilegible
   return `https://placehold.co/1080x1350/21183a/ede9fe/png?text=${encoded}`;
 }
 
-export async function generateCampaignPro(input = {}) {
+export async function generateCampaignCopy(input = {}) {
   const platforms = normalizePlatforms(input.platforms || input.platform);
-  const textData = await generateTextVariants({ ...input, platforms });
+  const variantCount = clampVariantCount(input.variantCount, input.quickMode ? 1 : 2);
+  const textData = await generateTextVariants({ ...input, platforms, variantCount });
+
+  return {
+    status: "COPY_READY",
+    platforms,
+    variantCount,
+    quickMode: Boolean(input.quickMode),
+    variants: (textData.variants || []).slice(0, variantCount)
+  };
+}
+
+export async function generateCampaignImages(input = {}) {
+  const platforms = normalizePlatforms(input.platforms || input.platform);
+  const variantCount = clampVariantCount(input.variantCount, input.quickMode ? 1 : 2);
+  const baseVariants = Array.isArray(input.variants) && input.variants.length
+    ? input.variants
+    : (await generateTextVariants({ ...input, platforms, variantCount })).variants;
 
   const variants = await Promise.all(
-    (textData.variants || []).slice(0, 4).map(async (variant, index) => {
-      const title = input.visualTitle || variant.title || input.product || `Campaña ${index + 1}`;
-      const imagePrompt = variant.imagePrompt || input.idea || input.product || title;
-      const image = await generateImage(imagePrompt, title);
+    baseVariants.slice(0, variantCount).map(async (variant, index) => {
+      const normalized = normalizeVariant(variant, input, index);
+      if (normalized.image || normalized.imageUrl) {
+        return {
+          ...normalized,
+          image: normalized.image || normalized.imageUrl,
+          imageUrl: normalized.imageUrl || normalized.image,
+          generationStage: "complete"
+        };
+      }
+
+      const image = await generateImage(normalized.imagePrompt, normalized.title, {
+        skipRealImage: Boolean(input.previewOnly),
+        imageModel: input.imageModel,
+        size: input.imageSize
+      });
 
       return {
-        id: `variant-${Date.now()}-${index}`,
-        title,
-        caption: input.description || variant.caption || variant.text || "",
-        text: input.description || variant.caption || variant.text || "",
-        hashtags: variant.hashtags || "",
-        cta: input.cta || variant.cta || "Más información",
+        ...normalized,
+        id: variant.id || `variant-${Date.now()}-${index}`,
         image,
         imageUrl: image,
-        imagePrompt,
-        platforms
+        generationStage: "complete"
       };
     })
   );
@@ -210,7 +296,29 @@ export async function generateCampaignPro(input = {}) {
   return {
     status: "READY",
     platforms,
+    variantCount,
+    quickMode: Boolean(input.quickMode),
     variants
+  };
+}
+
+export async function generateCampaignPro(input = {}) {
+  const quickMode = Boolean(input.quickMode);
+  const variantCount = clampVariantCount(input.variantCount, quickMode ? 1 : 2);
+  const copy = await generateCampaignCopy({ ...input, variantCount, quickMode });
+  const images = await generateCampaignImages({
+    ...input,
+    variantCount,
+    quickMode,
+    variants: copy.variants
+  });
+
+  return {
+    status: "READY",
+    platforms: images.platforms,
+    variantCount,
+    quickMode,
+    variants: images.variants
   };
 }
 

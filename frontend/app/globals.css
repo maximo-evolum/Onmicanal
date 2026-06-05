@@ -3145,3 +3145,112 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Campañas IA — optimización por etapas y UX de generación */
+.campaign-optimization-panel {
+  border: 1px solid rgba(167, 139, 250, 0.18);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  background: rgba(124, 58, 237, 0.08);
+  display: grid;
+  gap: 12px;
+}
+
+.campaign-optimization-panel > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.campaign-optimization-panel span {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.campaign-optimization-panel small {
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.campaign-option-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.campaign-inline-check {
+  display: inline-flex !important;
+  grid-template-columns: unset !important;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px !important;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.campaign-inline-check input {
+  width: auto;
+}
+
+.campaign-variant-select {
+  min-width: 220px;
+}
+
+.campaign-variant-select select {
+  min-height: 42px;
+}
+
+.campaign-loading-panel {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(167, 139, 250, 0.26);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.16), rgba(15, 11, 26, 0.72));
+  display: grid;
+  gap: 4px;
+}
+
+.campaign-loading-panel strong {
+  color: var(--text-strong);
+}
+
+.campaign-loading-panel span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.campaign-image-placeholder {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--text-muted);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(167, 139, 250, 0.18), transparent 24%),
+    linear-gradient(135deg, rgba(255,255,255,0.04), rgba(124,58,237,0.08));
+}
+
+.campaign-image-placeholder span {
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.campaign-image-placeholder small {
+  max-width: 220px;
+  line-height: 1.35;
+}
+
+@media (max-width: 768px) {
+  .campaign-option-row {
+    align-items: stretch;
+  }
+
+  .campaign-inline-check,
+  .campaign-variant-select {
+    width: 100%;
+  }
+}

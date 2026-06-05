@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
-import { generateCampaignPro, publishCampaignToPlatforms } from "../services/campaign-ai.service.js";
+import { generateCampaignPro, generateCampaignCopy, generateCampaignImages, publishCampaignToPlatforms } from "../services/campaign-ai.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 
 export const campaignsRouter = Router();
@@ -85,6 +85,95 @@ campaignsRouter.post("/campaigns", requireRole(ROLE_GROUPS.MANAGERS), async (req
   }
 });
 
+
+campaignsRouter.post("/campaigns/generate-copy", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const result = await generateCampaignCopy(req.body);
+
+    const campaign = await prisma.campaign.create({
+      data: {
+        tenantId: req.tenantId,
+        name: req.body.visualTitle || req.body.product || "Campaña IA",
+        segment: "manual",
+        template: JSON.stringify({
+          ...req.body,
+          variants: result.variants,
+          platforms: result.platforms,
+          variantCount: result.variantCount,
+          quickMode: result.quickMode,
+          generationMode: "copy-only"
+        }),
+        status: "DRAFT"
+      }
+    }).catch((error) => {
+      console.warn("Campaign copy draft save skipped:", error.message);
+      return null;
+    });
+
+    return res.json({
+      ...result,
+      campaign: campaign ? serializeCampaign(campaign) : null
+    });
+  } catch (e) {
+    console.error("Generate campaign copy error:", e);
+    return res.status(500).json({ error: "Error generando copy de campaña" });
+  }
+});
+
+campaignsRouter.post("/campaigns/generate-images", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const result = await generateCampaignImages(req.body);
+
+    let campaign = null;
+    if (req.body.campaignId) {
+      campaign = await prisma.campaign.findFirst({
+        where: { id: req.body.campaignId, tenantId: req.tenantId }
+      });
+    }
+
+    const templateData = {
+      ...req.body,
+      variants: result.variants,
+      platforms: result.platforms,
+      generationMode: "images"
+    };
+
+    if (campaign) {
+      campaign = await prisma.campaign.update({
+        where: { id: campaign.id },
+        data: {
+          template: JSON.stringify({
+            ...safeJsonParse(campaign.template, {}),
+            ...templateData
+          }),
+          status: "READY"
+        }
+      });
+    } else {
+      campaign = await prisma.campaign.create({
+        data: {
+          tenantId: req.tenantId,
+          name: req.body.visualTitle || req.body.product || "Campaña IA",
+          segment: "manual",
+          template: JSON.stringify(templateData),
+          status: "READY"
+        }
+      }).catch((error) => {
+        console.warn("Campaign image draft save skipped:", error.message);
+        return null;
+      });
+    }
+
+    return res.json({
+      ...result,
+      campaign: campaign ? serializeCampaign(campaign) : null
+    });
+  } catch (e) {
+    console.error("Generate campaign images error:", e);
+    return res.status(500).json({ error: "Error generando imágenes de campaña" });
+  }
+});
+
 campaignsRouter.post("/campaigns/generate-pro", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     const result = await generateCampaignPro(req.body);
@@ -98,7 +187,9 @@ campaignsRouter.post("/campaigns/generate-pro", requireRole(ROLE_GROUPS.STAFF), 
         template: JSON.stringify({
           ...req.body,
           variants: result.variants,
-          platforms: result.platforms
+          platforms: result.platforms,
+          variantCount: result.variantCount,
+          quickMode: result.quickMode
         }),
         status: "READY"
       }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { generateCampaignPro, publishCampaign, CampaignPlatform, CampaignVariant } from "@/lib/api";
+import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, publishCampaign, CampaignPlatform, CampaignVariant } from "@/lib/api";
 import { BackToInbox } from "@/components/BackToInbox";
 import { Topbar } from "@/components/topbar";
 import { getStoredSession } from "@/lib/auth";
@@ -33,10 +33,14 @@ export default function CampaignsPage() {
   const [caption, setCaption] = useState("");
   const [cta, setCta] = useState("");
   const [platforms, setPlatforms] = useState<CampaignPlatform[]>(["instagram"]);
+  const [variantCount, setVariantCount] = useState<number>(2);
+  const [quickMode, setQuickMode] = useState<boolean>(false);
   const [variants, setVariants] = useState<CampaignVariant[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [campaignId, setCampaignId] = useState<string | undefined>();
-  const [loading, setLoading] = useState(false);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [fullLoading, setFullLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [publishResults, setPublishResults] = useState<Array<{ platform: string; status: string; note?: string; error?: string }> | null>(null);
@@ -48,30 +52,94 @@ export default function CampaignsPage() {
     return `${caption || selectedVariant.caption || selectedVariant.text || ""}${selectedVariant.hashtags ? `\n\n${selectedVariant.hashtags}` : ""}`;
   }, [caption, selectedVariant]);
 
-  async function generate() {
+  function buildPayload() {
+    return {
+      product,
+      idea,
+      visualTitle,
+      caption,
+      cta,
+      platforms,
+      variantCount: quickMode ? 1 : variantCount,
+      quickMode
+    };
+  }
+
+  function validateCampaignInput() {
     if (!product.trim() && !idea.trim()) {
       setError("Escribe el producto/servicio o la idea de campaña.");
-      return;
+      return false;
     }
 
     if (platforms.length === 0) {
       setError("Selecciona al menos una plataforma.");
-      return;
+      return false;
     }
 
+    return true;
+  }
+
+  async function generateCopyOnly() {
+    if (!validateCampaignInput()) return;
+
     try {
-      setLoading(true);
+      setCopyLoading(true);
       setError(null);
       setPublishResults(null);
 
-      const data = await generateCampaignPro({
-        product,
-        idea,
-        visualTitle,
-        caption,
-        cta,
-        platforms
+      const data = await generateCampaignCopy(buildPayload());
+      const nextVariants = data.variants || [];
+      setVariants(nextVariants);
+      setSelectedIndex(0);
+      setCampaignId(data.campaign?.id);
+      if (!visualTitle && nextVariants[0]?.title) setVisualTitle(nextVariants[0].title);
+      if (!caption && nextVariants[0]?.caption) setCaption(nextVariants[0].caption);
+      if (!cta && nextVariants[0]?.cta) setCta(nextVariants[0].cta || "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo generar el copy de campaña");
+    } finally {
+      setCopyLoading(false);
+    }
+  }
+
+  async function generateImagesOnly() {
+    if (!validateCampaignInput()) return;
+
+    try {
+      setImageLoading(true);
+      setError(null);
+      setPublishResults(null);
+
+      const baseVariants = variants.length ? variants : undefined;
+      const data = await generateCampaignImages({
+        ...buildPayload(),
+        campaignId,
+        variants: baseVariants
       });
+
+      const nextVariants = data.variants || [];
+      setVariants(nextVariants);
+      setSelectedIndex(0);
+      setCampaignId(data.campaign?.id || campaignId);
+      if (!visualTitle && nextVariants[0]?.title) setVisualTitle(nextVariants[0].title);
+      if (!caption && nextVariants[0]?.caption) setCaption(nextVariants[0].caption);
+      if (!cta && nextVariants[0]?.cta) setCta(nextVariants[0].cta || "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron generar imágenes");
+    } finally {
+      setImageLoading(false);
+    }
+  }
+
+  async function generate() {
+    if (!validateCampaignInput()) return;
+
+    try {
+      setFullLoading(true);
+      setError(null);
+      setPublishResults(null);
+
+      const data = await generateCampaignPro(buildPayload());
 
       const nextVariants = data.variants || [];
       setVariants(nextVariants);
@@ -83,7 +151,7 @@ export default function CampaignsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo generar la campaña");
     } finally {
-      setLoading(false);
+      setFullLoading(false);
     }
   }
 
@@ -139,7 +207,7 @@ export default function CampaignsPage() {
             <div className="meta-line">Crea imágenes, títulos y textos listos para publicar en los canales del cliente.</div>
           </div>
           <div className="campaign-status-pill">
-            {variants.length ? `${variants.length} variantes listas` : "Borrador"}
+            {variants.length ? `${variants.length} variantes ${variants.some((v) => v.image || v.imageUrl) ? "con imagen" : "de copy"}` : "Borrador"}
           </div>
         </section>
 
@@ -212,18 +280,66 @@ export default function CampaignsPage() {
                   })}
                 </div>
               </div>
+
+              <div className="campaign-optimization-panel campaign-full">
+                <div>
+                  <span>Optimización de generación</span>
+                  <small>Primero puedes generar solo el texto y luego las imágenes para ahorrar tiempo y costo.</small>
+                </div>
+
+                <div className="campaign-option-row">
+                  <label className="campaign-inline-check">
+                    <input
+                      type="checkbox"
+                      checked={quickMode}
+                      onChange={(e) => {
+                        setQuickMode(e.target.checked);
+                        if (e.target.checked) setVariantCount(1);
+                      }}
+                    />
+                    <span>Modo rápido low-cost</span>
+                  </label>
+
+                  <label className="campaign-variant-select">
+                    <span>Cantidad de variantes</span>
+                    <select
+                      value={quickMode ? 1 : variantCount}
+                      disabled={quickMode}
+                      onChange={(e) => setVariantCount(Number(e.target.value))}
+                    >
+                      <option value={1}>1 imagen rápida</option>
+                      <option value={2}>2 variantes</option>
+                      <option value={4}>4 variantes</option>
+                      <option value={8}>8 variantes</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
             </div>
 
             {error ? <div className="campaign-alert error">{error}</div> : null}
 
             <div className="campaign-actions">
-              <button className="primary-btn" onClick={generate} disabled={loading}>
-                {loading ? "Generando campaña..." : "Generar campaña"}
+              <button className="ghost-btn" onClick={generateCopyOnly} disabled={copyLoading || imageLoading || fullLoading}>
+                {copyLoading ? "Generando copy..." : "1. Generar copy"}
               </button>
-              <button className="ghost-btn" onClick={publish} disabled={publishing || !selectedVariant}>
+              <button className="primary-btn" onClick={generateImagesOnly} disabled={copyLoading || imageLoading || fullLoading}>
+                {imageLoading ? "Generando imágenes..." : variants.length ? "2. Generar imágenes" : "Generar imágenes"}
+              </button>
+              <button className="ghost-btn" onClick={generate} disabled={copyLoading || imageLoading || fullLoading}>
+                {fullLoading ? "Generando todo..." : "Generar todo"}
+              </button>
+              <button className="ghost-btn" onClick={publish} disabled={publishing || !selectedVariant || !(selectedVariant.imageUrl || selectedVariant.image)}>
                 {publishing ? "Publicando..." : "Publicar campaña"}
               </button>
             </div>
+
+            {(copyLoading || imageLoading || fullLoading) ? (
+              <div className="campaign-loading-panel">
+                <strong>{imageLoading || fullLoading ? "Generando imágenes IA" : "Generando textos de campaña"}</strong>
+                <span>{imageLoading || fullLoading ? "Esto puede tardar más según la cantidad de variantes seleccionadas." : "Esto normalmente tarda pocos segundos."}</span>
+              </div>
+            ) : null}
 
             {publishResults ? (
               <div className="campaign-publish-results">
@@ -250,9 +366,16 @@ export default function CampaignsPage() {
 
             {selectedVariant ? (
               <div className="campaign-selected-preview">
-                <div className="campaign-image-frame">
-                  <img src={selectedVariant.imageUrl || selectedVariant.image} alt={visualTitle || selectedVariant.title} />
-                </div>
+                {(selectedVariant.imageUrl || selectedVariant.image) ? (
+                  <div className="campaign-image-frame">
+                    <img src={selectedVariant.imageUrl || selectedVariant.image} alt={visualTitle || selectedVariant.title} />
+                  </div>
+                ) : (
+                  <div className="campaign-image-frame campaign-image-placeholder">
+                    <span>Copy listo</span>
+                    <small>Genera imágenes cuando apruebes el texto.</small>
+                  </div>
+                )}
                 <div className="campaign-copy-preview">
                   <h3>{visualTitle || selectedVariant.title}</h3>
                   <p>{previewCaption}</p>
@@ -283,9 +406,16 @@ export default function CampaignsPage() {
                   className={index === selectedIndex ? "campaign-preview-card-v2 selected" : "campaign-preview-card-v2"}
                 >
                   <button type="button" className="campaign-card-select" onClick={() => setSelectedIndex(index)}>
-                    <div className="campaign-image-frame small">
-                      <img src={variant.imageUrl || variant.image} alt={`Campaña ${index + 1}`} />
-                    </div>
+                    {(variant.imageUrl || variant.image) ? (
+                      <div className="campaign-image-frame small">
+                        <img src={variant.imageUrl || variant.image} alt={`Campaña ${index + 1}`} />
+                      </div>
+                    ) : (
+                      <div className="campaign-image-frame small campaign-image-placeholder">
+                        <span>Copy</span>
+                        <small>Sin imagen aún</small>
+                      </div>
+                    )}
                     <div className="campaign-card-body">
                       <span className="badge">Variante {index + 1}</span>
                       <h3>{variant.title}</h3>

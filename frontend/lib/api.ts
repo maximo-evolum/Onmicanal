@@ -251,10 +251,11 @@ export type CampaignVariant = {
   text?: string;
   hashtags: string;
   cta?: string;
-  image: string;
+  image?: string;
   imageUrl?: string;
   imagePrompt?: string;
   platforms?: CampaignPlatform[];
+  generationStage?: "copy" | "complete";
 };
 
 export type CampaignProResult = {
@@ -263,6 +264,49 @@ export type CampaignProResult = {
   campaign?: Campaign;
   variants: CampaignVariant[];
 };
+
+
+export async function generateCampaignCopy(input: {
+  product: string;
+  idea?: string;
+  visualTitle?: string;
+  caption?: string;
+  cta?: string;
+  platforms?: CampaignPlatform[];
+  platform?: string;
+  price?: string;
+  target?: string;
+  description?: string;
+  category?: string;
+  tone?: string;
+  variantCount?: number;
+  quickMode?: boolean;
+}): Promise<CampaignProResult> {
+  return request<CampaignProResult>("/campaigns/generate-copy", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function generateCampaignImages(input: {
+  campaignId?: string;
+  product: string;
+  idea?: string;
+  visualTitle?: string;
+  caption?: string;
+  cta?: string;
+  platforms?: CampaignPlatform[];
+  platform?: string;
+  variants?: CampaignVariant[];
+  variantCount?: number;
+  quickMode?: boolean;
+  previewOnly?: boolean;
+}): Promise<CampaignProResult> {
+  return request<CampaignProResult>("/campaigns/generate-images", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
 
 export async function generateCampaignPro(input: {
   product: string;
@@ -277,6 +321,8 @@ export async function generateCampaignPro(input: {
   description?: string;
   category?: string;
   tone?: string;
+  variantCount?: number;
+  quickMode?: boolean;
 }): Promise<CampaignProResult> {
   return request<CampaignProResult>("/campaigns/generate-pro", {
     method: "POST",
