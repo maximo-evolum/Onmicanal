@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, publishCampaign, CampaignPlatform, CampaignVariant } from "@/lib/api";
+import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
 import { BackToInbox } from "@/components/BackToInbox";
 import { Topbar } from "@/components/topbar";
 import { getStoredSession } from "@/lib/auth";
@@ -42,6 +42,9 @@ export default function CampaignsPage() {
   const [imageLoading, setImageLoading] = useState(false);
   const [fullLoading, setFullLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [campaignJobId, setCampaignJobId] = useState<string | null>(null);
+  const [campaignJobProgress, setCampaignJobProgress] = useState<number>(0);
+  const [campaignJobMessage, setCampaignJobMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [publishResults, setPublishResults] = useState<Array<{ platform: string; status: string; note?: string; error?: string }> | null>(null);
 
@@ -102,6 +105,41 @@ export default function CampaignsPage() {
     }
   }
 
+  function applyCampaignResult(data: CampaignProResult) {
+    const nextVariants = data.variants || [];
+    setVariants(nextVariants);
+    setSelectedIndex(0);
+    setCampaignId(data.campaign?.id || campaignId);
+    if (!visualTitle && nextVariants[0]?.title) setVisualTitle(nextVariants[0].title);
+    if (!caption && nextVariants[0]?.caption) setCaption(nextVariants[0].caption);
+    if (!cta && nextVariants[0]?.cta) setCta(nextVariants[0].cta || "");
+  }
+
+  async function waitForCampaignJob(jobId: string) {
+    setCampaignJobId(jobId);
+    setCampaignJobProgress(5);
+    setCampaignJobMessage("Generando imágenes en segundo plano...");
+
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const job = await getCampaignJob(jobId);
+      setCampaignJobProgress(job.progress || 0);
+      setCampaignJobMessage(job.message || null);
+
+      if (job.status === "COMPLETED") {
+        if (job.result) applyCampaignResult(job.result);
+        setCampaignJobMessage("Campaña lista");
+        return;
+      }
+
+      if (job.status === "FAILED") {
+        throw new Error(job.error || "La generación de imágenes falló");
+      }
+    }
+
+    throw new Error("La generación sigue en proceso. Vuelve a consultar en unos segundos.");
+  }
+
   async function generateImagesOnly() {
     if (!validateCampaignInput()) return;
 
@@ -109,6 +147,8 @@ export default function CampaignsPage() {
       setImageLoading(true);
       setError(null);
       setPublishResults(null);
+      setCampaignJobProgress(0);
+      setCampaignJobMessage(null);
 
       const baseVariants = variants.length ? variants : undefined;
       const data = await generateCampaignImages({
@@ -117,13 +157,11 @@ export default function CampaignsPage() {
         variants: baseVariants
       });
 
-      const nextVariants = data.variants || [];
-      setVariants(nextVariants);
-      setSelectedIndex(0);
-      setCampaignId(data.campaign?.id || campaignId);
-      if (!visualTitle && nextVariants[0]?.title) setVisualTitle(nextVariants[0].title);
-      if (!caption && nextVariants[0]?.caption) setCaption(nextVariants[0].caption);
-      if (!cta && nextVariants[0]?.cta) setCta(nextVariants[0].cta || "");
+      if (data.async && data.jobId) {
+        await waitForCampaignJob(data.jobId);
+      } else {
+        applyCampaignResult(data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron generar imágenes");
     } finally {
@@ -138,16 +176,23 @@ export default function CampaignsPage() {
       setFullLoading(true);
       setError(null);
       setPublishResults(null);
+      setCampaignJobProgress(0);
+      setCampaignJobMessage("Generando copy...");
 
-      const data = await generateCampaignPro(buildPayload());
+      const copy = await generateCampaignCopy(buildPayload());
+      applyCampaignResult(copy);
 
-      const nextVariants = data.variants || [];
-      setVariants(nextVariants);
-      setSelectedIndex(0);
-      setCampaignId(data.campaign?.id);
-      if (!visualTitle && nextVariants[0]?.title) setVisualTitle(nextVariants[0].title);
-      if (!caption && nextVariants[0]?.caption) setCaption(nextVariants[0].caption);
-      if (!cta && nextVariants[0]?.cta) setCta(nextVariants[0].cta || "");
+      const data = await generateCampaignImages({
+        ...buildPayload(),
+        campaignId: copy.campaign?.id || campaignId,
+        variants: copy.variants
+      });
+
+      if (data.async && data.jobId) {
+        await waitForCampaignJob(data.jobId);
+      } else {
+        applyCampaignResult(data);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo generar la campaña");
     } finally {
@@ -318,6 +363,19 @@ export default function CampaignsPage() {
             </div>
 
             {error ? <div className="campaign-alert error">{error}</div> : null}
+
+            {(imageLoading || fullLoading || campaignJobId) && campaignJobMessage ? (
+              <div className="campaign-job-panel">
+                <div className="campaign-job-row">
+                  <strong>{campaignJobMessage}</strong>
+                  <span>{Math.round(campaignJobProgress)}%</span>
+                </div>
+                <div className="campaign-job-bar">
+                  <div style={{ width: `${Math.min(100, Math.max(5, campaignJobProgress))}%` }} />
+                </div>
+                <small>La generación continúa en segundo plano para evitar que la página quede congelada.</small>
+              </div>
+            ) : null}
 
             <div className="campaign-actions">
               <button className="ghost-btn" onClick={generateCopyOnly} disabled={copyLoading || imageLoading || fullLoading}>

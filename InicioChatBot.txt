@@ -3,6 +3,7 @@ cd "E:\Onmicanal\backend-v2"
 npm install
 npx prisma generate
 npx prisma db push
+npm start
 npm.cmd run seed
 npm.cmd run dev    
 
@@ -20,7 +21,7 @@ http://localhost:3001/login
 
 
 git add .
-git commit -m "debug de usuarios y msj "
+git commit -m "nueva campañas ia "
 git push -u origin main
 git remote add origin https://github.com/maximo-evolum/Onmicanal.git
 

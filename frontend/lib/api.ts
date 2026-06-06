@@ -258,8 +258,25 @@ export type CampaignVariant = {
   generationStage?: "copy" | "complete";
 };
 
+export type CampaignJobStatus = "PROCESSING" | "COMPLETED" | "FAILED";
+
+export type CampaignJob = {
+  id: string;
+  kind?: string;
+  status: CampaignJobStatus;
+  progress?: number;
+  message?: string;
+  result?: CampaignProResult | null;
+  error?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type CampaignProResult = {
   status?: string;
+  async?: boolean;
+  jobId?: string;
+  job?: CampaignJob;
   platforms?: CampaignPlatform[];
   campaign?: Campaign;
   variants: CampaignVariant[];
@@ -306,6 +323,11 @@ export async function generateCampaignImages(input: {
     method: "POST",
     body: JSON.stringify(input)
   });
+}
+
+
+export async function getCampaignJob(jobId: string): Promise<CampaignJob> {
+  return request<CampaignJob>(`/campaigns/job/${jobId}`);
 }
 
 export async function generateCampaignPro(input: {
