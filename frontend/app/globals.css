@@ -3292,3 +3292,30 @@ body {
 .campaign-job-panel small {
   color: rgba(237, 233, 254, 0.72);
 }
+
+
+/* Lead panel visibility fix */
+html, body {
+  overflow-x: hidden;
+}
+
+.lead-panel,
+.lead-sidebar,
+.inbox-layout,
+.inbox-container {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.lead-panel,
+.lead-sidebar {
+  min-width: 340px;
+  overflow-y: auto;
+}
+
+@media (max-width: 1400px) {
+  .lead-panel,
+  .lead-sidebar {
+    min-width: 280px;
+  }
+}
