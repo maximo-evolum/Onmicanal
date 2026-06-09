@@ -335,7 +335,7 @@ export function InboxShell() {
           </div>
           {error ? <div className="meta-line">{error}</div> : null}
           <div className="inbox-quick-hint">
-            <span>Prueba conversaciones sin llenar el inbox.</span>
+            <span></span>
             <Link href="/dev/bot-lab"></Link>
           </div>
         </div>
