@@ -12,7 +12,7 @@ const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
 export async function chatComplete({
   messages,
   model = "gpt-4o-mini",
-  maxTokens = 500,
+  maxTokens = 3000,
   jsonMode = false,
   retries = 3,
   temperature = 0.7,
