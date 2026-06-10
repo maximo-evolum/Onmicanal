@@ -12,6 +12,25 @@ function mergeObjection(existing, next) {
   return [...arr, next].slice(-8);
 }
 
+
+function detectQuoteState(message = "") {
+  const text = String(message || "").toLowerCase();
+  return {
+    quoteRequested: /(cotiz|precio|valor|presupuesto|total|cu[aá]nto|cuanto)/i.test(text),
+    quoteSent: /(cotizaci[oó]n final|total estimado|total final|valor final|subtotal servicio)/i.test(text),
+    wantsModifyQuote: /(modificar|cambiar|ajustar|quitar|agregar|detalle|detalles|otra opci[oó]n|alternativa|presupuesto)/i.test(text),
+    readyToReserve: /(reservar|reserva|avancemos|lo tomo|lo quiero|pagar|abono|transferencia)/i.test(text)
+  };
+}
+
+function recentPhrasesFromSummary(summary = "") {
+  return String(summary || "")
+    .split(" · ")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(-8);
+}
+
 function normalizeEventPrefs({ message = "", prefs = {}, current = null }) {
   const text = String(message || "").toLowerCase();
   const next = { ...prefs };
@@ -66,6 +85,11 @@ function buildSummary({ previous = "", message = "", prefs = {}, emotion = {}, o
   if (emotion.interestLevel >= 75) parts.push("Cliente con interés alto");
   if (emotion.urgencyLevel >= 70) parts.push("Cliente con urgencia alta");
   if (objection) parts.push(`Objeción detectada: ${objection}`);
+  const quoteState = detectQuoteState(message);
+  if (quoteState.quoteRequested) parts.push("Cliente pidió cotización o valor");
+  if (quoteState.quoteSent) parts.push("Cotización ya enviada");
+  if (quoteState.wantsModifyQuote) parts.push("Cliente evalúa modificar la cotización");
+  if (quoteState.readyToReserve) parts.push("Cliente con señal de reserva/pago");
   if (emotion.salesMode) parts.push(`Modo comercial: ${emotion.salesMode}`);
   if (Array.isArray(emotion.salesSignals) && emotion.salesSignals.length) parts.push(`Señales: ${emotion.salesSignals.join(", ")}`);
   if (!parts.length && message) parts.push(`Último mensaje: ${String(message).slice(0, 120)}`);
@@ -87,15 +111,29 @@ export async function updateConversationMemory({ tenantId, conversationId, messa
   const objection = detectObjection(message);
   const sales = analyzeSalesSignals({ message, memory: current });
 
+  const quoteState = detectQuoteState(message);
+  const previousProfile = current?.customerProfile && typeof current.customerProfile === "object" ? current.customerProfile : {};
   const customerProfile = {
     ...enrichCustomerProfile({
-      currentProfile: current?.customerProfile || {},
+      currentProfile: previousProfile,
       message,
       memory: current,
       industry: sales?.industry || "general"
     }),
     ...(selectedService ? { selectedService } : {}),
-    ...(extras.length ? { extras } : {})
+    ...(extras.length ? { extras } : {}),
+    quoteRequested: Boolean(previousProfile.quoteRequested || quoteState.quoteRequested),
+    quoteSent: Boolean(previousProfile.quoteSent || quoteState.quoteSent),
+    wantsModifyQuote: Boolean(quoteState.wantsModifyQuote),
+    readyToReserve: Boolean(previousProfile.readyToReserve || quoteState.readyToReserve),
+    lastCustomerIntent: quoteState.readyToReserve
+      ? "ready_to_reserve"
+      : quoteState.wantsModifyQuote
+        ? "modify_quote"
+        : quoteState.quoteRequested
+          ? "quote_request"
+          : previousProfile.lastCustomerIntent || null,
+    recentBotPhrases: recentPhrasesFromSummary(current?.summary)
   };
 
   const data = {

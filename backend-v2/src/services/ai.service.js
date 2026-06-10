@@ -75,7 +75,53 @@ function removeDuplicatedClosingQuestions(text = "") {
   return reply;
 }
 
-function postProcessReply(text = "") {
+function compactRepeatedSentences(text = "") {
+  const seen = new Set();
+  return String(text || "")
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => {
+      const key = sentence.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+      if (!key || key.length < 18) return true;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(" ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function hasMeaningfulClosing(text = "") {
+  return /(modificar|ajustar|reserva|reservar|avanzar|ejecutivo|contact|detalle|detalles|confirmar|disponibilidad|horario|direcci[oó]n)/i.test(String(text || ""));
+}
+
+function quoteFollowUpText() {
+  return `
+
+Para dejarlo bien cerrado, uno de nuestros ejecutivos puede revisar disponibilidad y confirmar los últimos detalles de logística.
+
+También podemos ajustar la cotización si quieres modificar cantidad de personas, agregar/quitar adicionales o adaptar la propuesta a tu presupuesto.
+
+¿Quieres que la dejemos como está para avanzar con la reserva o prefieres modificar algo? 😊`;
+}
+
+function polishCommercialReply(text = "", { quoteMode = false } = {}) {
+  let reply = compactRepeatedSentences(text);
+
+  // Evita el patrón repetitivo "Perfecto" en cada mensaje.
+  reply = reply.replace(/^(Perfecto|Buen[ií]simo|Excelente)\s*(😊|🙌)?[,!.\s]*/i, (match, word) => {
+    if (/perfecto/i.test(word)) return "Genial 🙌 ";
+    return match;
+  });
+
+  if (quoteMode && !hasMeaningfulClosing(reply)) {
+    reply += quoteFollowUpText();
+  }
+
+  return reply.trim();
+}
+
+function postProcessReply(text = "", options = {}) {
   let reply = String(text || "").trim();
   if (!reply) return "Te ayudo feliz 🙌 ¿Qué producto o servicio estás buscando?";
 
@@ -84,16 +130,19 @@ function postProcessReply(text = "") {
     .replace(/con gusto le informo que/gi, "te cuento que")
     .trim();
 
-  // Evita cierres duplicados y preguntas repetidas.
+  // Evita cierres duplicados, preguntas repetidas y frases calcadas.
   reply = removeDuplicatedClosingQuestions(reply);
+  reply = polishCommercialReply(reply, options);
 
   // No cortes respuestas comerciales normales. WhatsApp soporta mensajes largos,
   // pero mantenemos un límite alto y con corte en frase solo como protección extrema.
-  reply = trimAtSentenceBoundary(reply, 3200);
+  reply = trimAtSentenceBoundary(reply, options.quoteMode ? 3600 : 3200);
 
   // Fuerza una pregunta final útil solo si el modelo no incluyó ninguna pregunta.
   if (!reply.includes("?")) {
-    reply += "\n\n¿Quieres que avancemos con esta opción o prefieres ver una alternativa?";
+    reply += options.quoteMode
+      ? "\n\n¿Quieres que la dejemos como está para avanzar con la reserva o prefieres modificar algo?"
+      : "\n\n¿Quieres que avancemos con esta opción o prefieres ver una alternativa?";
   }
 
   return reply.trim();
@@ -273,6 +322,11 @@ Memoria del cliente:
 - Interés: ${memory?.interestLevel ?? "sin medir"}/100
 - Urgencia: ${memory?.urgencyLevel ?? "sin medir"}/100
 - Sentimiento: ${memory?.sentiment || "neutral"}
+- Cotización solicitada: ${memoryProfile.quoteRequested ? "sí" : "no"}
+- Cotización enviada previamente: ${memoryProfile.quoteSent ? "sí" : "no"}
+- Cliente quiere modificar cotización: ${memoryProfile.wantsModifyQuote ? "sí" : "no"}
+- Señal de reserva/pago: ${memoryProfile.readyToReserve ? "sí" : "no"}
+- Última intención comercial: ${memoryProfile.lastCustomerIntent || "no detectada"}
 - Objeción actual: ${objection ? objectionLabel(objection) : "ninguna"}
 ${objectionReply ? `
 Respuesta sugerida para objeción: ${objectionReply}
@@ -308,6 +362,9 @@ Reglas:
 - Si varios clientes usan la misma IA base, personaliza SIEMPRE con el contexto del tenant actual.
 - Haz una sola pregunta final para avanzar.
 - No repitas cierres comerciales. Evita cerrar dos veces con preguntas similares.
+- No repitas literalmente frases que ya aparezcan en el historial reciente.
+- Varía transiciones: no empieces siempre con "Perfecto".
+- Si la cotización ya fue enviada, no vuelvas a explicar todo desde cero salvo que el cliente lo pida; ofrece ajustar o avanzar.
 - Si ya mencionaste una opción recomendada, no agregues otra pregunta redundante al final.
 - Entrega respuestas completas, pero breves: máximo 3 bloques y lectura fácil para WhatsApp.
 - No cortes palabras ni frases. Termina siempre la idea completa.
@@ -353,6 +410,8 @@ Datos de evento detectados y memoria acumulada, si aplica:
 Instrucción crítica de memoria:
 Si Personas, Comuna/lugar o Fecha aparecen arriba como detectados, NO vuelvas a preguntarlos.
 Si el cliente pide cotización final y faltan precios oficiales, explica que el valor final depende de esos datos ya capturados y pide solo el dato faltante real: horario, dirección exacta o contacto.
+Si ya se entregó cotización, continúa desde ahí: ofrece modificar detalles, confirmar disponibilidad o derivar a ejecutivo. No reinicies el flujo.
+Evita repetir frases del historial reciente. Mantén conversación fluida y humana.
 `;
 
   const wantsQuote = /(cotiz|precio|valor\s*final|total\s*final|presupuesto|cu[aá]nto|cuanto)/i.test(userMessage || "");
@@ -386,7 +445,7 @@ Si el cliente pide cotización final y faltan precios oficiales, explica que el 
             reason: "Cotización final generada automáticamente por Pricing Engine"
           });
         }
-        return postProcessReply(quote.formatted);
+        return postProcessReply(quote.formatted, { quoteMode: true });
       }
     } catch (quoteError) {
       console.error("Quote engine error:", quoteError?.message || quoteError);

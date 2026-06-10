@@ -35,22 +35,15 @@ export async function buildEventQuote({
   eventData = {},
   memory = {}
 }) {
-  const guests =
-    Number(eventData.guests || memory.guests || 0);
-
-  const location =
-    eventData.location || memory.location || "No especificado";
-
-  const date =
-    eventData.date || memory.date || "No especificado";
-
-  const service =
-    eventData.service || memory.service || "Servicio Mixto";
-
-  const extras =
-    eventData.extras ||
-    memory.extras ||
-    [];
+  const guests = Number(eventData.guests || memory.guests || 0);
+  const location = eventData.location || memory.location || "No especificado";
+  const date = eventData.date || memory.date || "No especificado";
+  const service = eventData.service || memory.service || "Servicio Mixto";
+  const extras = Array.isArray(eventData.extras) && eventData.extras.length
+    ? eventData.extras
+    : Array.isArray(memory.extras)
+      ? memory.extras
+      : [];
 
   if (!guests || guests <= 0) {
     return {
@@ -59,8 +52,26 @@ export async function buildEventQuote({
     };
   }
 
-  const basePrice = detectBasePrice(service);
-  const serviceTotal = guests * basePrice;
+  // Primero intentamos usar precios reales cargados en BD para el tenant.
+  const dbService = tenantId ? await prisma.service.findFirst({
+    where: {
+      tenantId,
+      isActive: true,
+      OR: [
+        { name: { contains: service, mode: "insensitive" } },
+        { name: { contains: service.replace(/servicio/gi, "").trim(), mode: "insensitive" } }
+      ]
+    },
+    orderBy: [{ priority: "asc" }, { updatedAt: "desc" }]
+  }).catch(() => null) : null;
+
+  const serviceName = dbService?.name || service;
+  const dbBasePrice = Number(dbService?.basePrice || 0);
+  const dbPricePerGuest = Number(dbService?.pricePerGuest || 0);
+
+  const basePrice = dbPricePerGuest > 0 ? dbPricePerGuest : detectBasePrice(serviceName);
+  const fixedBase = dbBasePrice > 0 ? dbBasePrice : 0;
+  const serviceTotal = fixedBase + guests * basePrice;
 
   let extrasTotal = 0;
 
@@ -75,50 +86,67 @@ export async function buildEventQuote({
   });
 
   const total = serviceTotal + extrasTotal;
+  const includes = Array.isArray(dbService?.includes) ? dbService.includes : [];
 
   return {
     ready: true,
     guests,
     location,
     date,
-    service,
+    service: serviceName,
     extras,
     basePrice,
+    fixedBase,
     serviceTotal,
     extrasBreakdown,
     extrasTotal,
     total,
-    formatted: `✅ Cotización final para tu evento:
+    formatted: `✅ Cotización final para tu evento
 
-📍 Comuna/Lugar: ${location}
+📍 Lugar: ${location}
 📅 Fecha: ${date}
 👥 Personas: ${guests}
 
-🔥 Servicio contratado:
-${service}
+🔥 Servicio seleccionado:
+${serviceName}
 
 💰 Valor por persona:
-$${money(basePrice)} CLP
+$${money(basePrice)} CLP${fixedBase ? `
+
+🧾 Cargo base:
+$${money(fixedBase)} CLP` : ""}
 
 💵 Subtotal servicio:
 $${money(serviceTotal)} CLP
 
 ${extrasBreakdown.length ? `✨ Adicionales:
-${extrasBreakdown.map((e) => `- ${e.name}: $${money(e.price)}`).join("\n")}
+${extrasBreakdown.map((e) => `- ${e.name}: $${money(e.price)} CLP`).join("\n")}
 
 💸 Total adicionales:
 $${money(extrasTotal)} CLP
 ` : ""}
 
-🎯 TOTAL FINAL:
+🎯 Total estimado:
 $${money(total)} CLP
 
-Incluye:
+${includes.length ? `Incluye:
+${includes.slice(0, 6).map((item) => `- ${item}`).join("\n")}
+` : `Incluye:
 - montaje
-- personal
+- personal de servicio
 - parrilleros
-- coordinación básica
+- coordinación básica del evento
+`}
 
-¿Te gustaría avanzar con la reserva? 😊`
+Para dejarlo bien cerrado, uno de nuestros ejecutivos puede revisar disponibilidad y confirmar los últimos detalles de logística.
+
+También podemos ajustar la cotización si quieres:
+- modificar cantidad de personas
+- agregar o quitar adicionales
+- cambiar el formato del servicio
+- adaptar la propuesta a tu presupuesto
+
+¿Quieres que la dejemos como está para avanzar con la reserva o prefieres modificar algo? 😊`
   };
 }
+
