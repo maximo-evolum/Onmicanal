@@ -17,6 +17,7 @@ import { runActionOrchestrator } from "./ai-action-orchestrator.service.js";
 import { captureLearningSignal } from "./ai-performance-learning.service.js";
 import { buildAutonomousFollowUpPlan } from "./autonomous-followup-strategy.service.js";
 import { recordUsageEvent } from "./saas-commercial.service.js";
+import { registerSalesSignal } from "./sales-engine.service.js";
 import { traceError, traceStep } from "../lib/trace.js";
 
 function mapMessageType(type) {
@@ -448,6 +449,19 @@ export async function processIncomingText({
     content: reply
   });
   traceStep(trace, "8G_PERSIST_OUTBOUND_OK");
+
+  try {
+    await registerSalesSignal({
+      tenantId: tenant.id,
+      conversationId: conversation.id,
+      contact,
+      message: `${userMessage}\n${reply}`,
+      quote: null,
+      reason: "Señal evaluada después de respuesta IA"
+    });
+  } catch (salesEngineError) {
+    traceError(trace, "8H_SALES_ENGINE_ERROR", salesEngineError);
+  }
 
   // Programamos follow-up después de que el bot responde.
   // Fase 3.5: el seguimiento ahora usa reasoning + señales comerciales.

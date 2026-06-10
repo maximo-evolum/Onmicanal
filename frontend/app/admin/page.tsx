@@ -8,6 +8,7 @@ import {
   getAdminTenants,
   getModuleCatalog,
   updateAdminTenant,
+  updateAdminTenantBilling,
   updateAdminTenantAiProfile,
   updateAdminTenantChannelConfig,
   updateAdminTenantModules,
@@ -81,6 +82,16 @@ const emptyInstagramConfig = {
   isActive: true,
 };
 
+const emptyBillingForm = {
+  planCode: "STARTER",
+  planName: "Starter",
+  monthlyPrice: "0",
+  currency: "CLP",
+  description: "",
+  messagesMonthly: "",
+  users: "",
+};
+
 const emptyAiProfile = {
   name: "IA principal",
   industry: "",
@@ -110,6 +121,21 @@ function enabledModulesOf(tenant: AdminTenant) {
   return (tenant.tenantModules || []).filter((item) => item.enabled).map((item) => item.module);
 }
 
+function activeSubscriptionOf(tenant: AdminTenant | null) {
+  return tenant?.subscriptions?.[0] || null;
+}
+
+function subscriptionMetadata(tenant: AdminTenant | null) {
+  const metadata = activeSubscriptionOf(tenant)?.metadata;
+  return metadata && typeof metadata === "object" ? metadata as Record<string, unknown> : {};
+}
+
+function numberOrEmpty(value: unknown) {
+  if (value === null || value === undefined || value === "") return "";
+  return String(value);
+}
+
+
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   const [agent, setAgent] = useState<ReturnType<typeof getStoredSession>>(null);
@@ -132,6 +158,7 @@ export default function AdminPage() {
   const [whatsappForm, setWhatsappForm] = useState(emptyWhatsAppConfig);
   const [instagramForm, setInstagramForm] = useState(emptyInstagramConfig);
   const [aiForm, setAiForm] = useState(emptyAiProfile);
+  const [billingForm, setBillingForm] = useState(emptyBillingForm);
   const [importManual, setImportManual] = useState(emptyImportManual);
   const [importFiles, setImportFiles] = useState<File[]>([]);
   const [importExtraction, setImportExtraction] = useState<OnboardingExtraction | null>(null);
@@ -175,6 +202,19 @@ export default function AdminPage() {
     const whatsapp = selectedTenant.channelConfigs?.find((item) => item.channel === "whatsapp");
     const instagram = selectedTenant.channelConfigs?.find((item) => item.channel === "instagram");
     const profile = selectedTenant.aiProfiles?.find((item) => item.code === "default") || selectedTenant.aiProfiles?.[0];
+    const subscription = activeSubscriptionOf(selectedTenant);
+    const metadata = subscriptionMetadata(selectedTenant);
+    const limits = metadata.limits && typeof metadata.limits === "object" ? metadata.limits as Record<string, unknown> : {};
+
+    setBillingForm({
+      planCode: subscription?.planCode || selectedTenant.plan || "STARTER",
+      planName: String(metadata.planName || subscription?.plan?.name || selectedTenant.plan || "Starter"),
+      monthlyPrice: numberOrEmpty(metadata.monthlyPrice ?? metadata.priceMonthly ?? subscription?.plan?.priceMonthly ?? ""),
+      currency: String(metadata.currency || subscription?.plan?.currency || "CLP"),
+      description: String(metadata.description || ""),
+      messagesMonthly: numberOrEmpty(limits.messagesMonthly),
+      users: numberOrEmpty(limits.users),
+    });
 
     const whatsappMetadata = typeof whatsapp?.metadata === "object" && whatsapp?.metadata
       ? whatsapp.metadata as Record<string, unknown>
@@ -278,6 +318,30 @@ export default function AdminPage() {
       setSuccess("Plan actualizado correctamente.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo actualizar el plan");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function handleSaveBilling() {
+    if (!selectedTenant) return;
+    try {
+      setSavingId(`billing-${selectedTenant.id}`);
+      setError(null);
+      setSuccess(null);
+      const result = await updateAdminTenantBilling(selectedTenant.id, {
+        planCode: billingForm.planCode,
+        planName: billingForm.planName,
+        monthlyPrice: Number(String(billingForm.monthlyPrice || "0").replace(/[^\d.-]/g, "")) || 0,
+        currency: billingForm.currency || "CLP",
+        description: billingForm.description,
+        messagesMonthly: billingForm.messagesMonthly === "" ? null : Number(billingForm.messagesMonthly),
+        users: billingForm.users === "" ? null : Number(billingForm.users),
+      });
+      if (result.tenant) updateTenantLocal(result.tenant);
+      setSuccess("Precio mensual y límites del cliente actualizados.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar el precio mensual");
     } finally {
       setSavingId(null);
     }
@@ -651,6 +715,50 @@ export default function AdminPage() {
                     <span className="meta-line">Instagram Business Account ID</span>
                     <input defaultValue={selectedTenant.instagramBusinessAccountId || ""} onBlur={(e) => handleTenantField("instagramBusinessAccountId", e.target.value)} placeholder="ID de Instagram Business" />
                   </label>
+                </div>
+
+                <div className="admin-module-section">
+                  <div className="admin-panel-header slim">
+                    <div>
+                      <strong>Precio mensual y límites comerciales</strong>
+                      <div className="meta-line">Define manualmente el valor que verá el cliente en SaaS Center. Útil para descuentos, upgrades, downgrade o planes personalizados.</div>
+                    </div>
+                    <button className="primary-btn" type="button" onClick={handleSaveBilling} disabled={savingId === `billing-${selectedTenant.id}`}>
+                      {savingId === `billing-${selectedTenant.id}` ? "Guardando..." : "Guardar precio"}
+                    </button>
+                  </div>
+                  <div className="admin-detail-grid">
+                    <label>
+                      <span className="meta-line">Código plan</span>
+                      <select value={billingForm.planCode} onChange={(e) => setBillingForm({ ...billingForm, planCode: e.target.value })}>
+                        {PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="meta-line">Nombre visible del plan</span>
+                      <input value={billingForm.planName} onChange={(e) => setBillingForm({ ...billingForm, planName: e.target.value })} placeholder="Ej: Business personalizado" />
+                    </label>
+                    <label>
+                      <span className="meta-line">Precio mensual CLP</span>
+                      <input type="number" value={billingForm.monthlyPrice} onChange={(e) => setBillingForm({ ...billingForm, monthlyPrice: e.target.value })} placeholder="99000" />
+                    </label>
+                    <label>
+                      <span className="meta-line">Moneda</span>
+                      <input value={billingForm.currency} onChange={(e) => setBillingForm({ ...billingForm, currency: e.target.value.toUpperCase() })} placeholder="CLP" />
+                    </label>
+                    <label>
+                      <span className="meta-line">Límite mensajes mensual</span>
+                      <input type="number" value={billingForm.messagesMonthly} onChange={(e) => setBillingForm({ ...billingForm, messagesMonthly: e.target.value })} placeholder="10000, vacío = ilimitado" />
+                    </label>
+                    <label>
+                      <span className="meta-line">Límite usuarios</span>
+                      <input type="number" value={billingForm.users} onChange={(e) => setBillingForm({ ...billingForm, users: e.target.value })} placeholder="15, vacío = ilimitado" />
+                    </label>
+                    <label style={{ gridColumn: "1 / -1" }}>
+                      <span className="meta-line">Descripción comercial visible</span>
+                      <input value={billingForm.description} onChange={(e) => setBillingForm({ ...billingForm, description: e.target.value })} placeholder="Automatización completa con marketing, pagos y analítica." />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="admin-module-section">

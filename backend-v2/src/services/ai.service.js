@@ -1,4 +1,5 @@
 import { buildEventQuote } from "./quote.service.js";
+import { registerSalesSignal } from "./sales-engine.service.js";
 
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/db.js";
@@ -353,6 +354,44 @@ Instrucción crítica de memoria:
 Si Personas, Comuna/lugar o Fecha aparecen arriba como detectados, NO vuelvas a preguntarlos.
 Si el cliente pide cotización final y faltan precios oficiales, explica que el valor final depende de esos datos ya capturados y pide solo el dato faltante real: horario, dirección exacta o contacto.
 `;
+
+  const wantsQuote = /(cotiz|precio|valor\s*final|total\s*final|presupuesto|cu[aá]nto|cuanto)/i.test(userMessage || "");
+  const wantsCloseQuote = /(cotizaci[oó]n\s*final|valor\s*final|total\s*final|dame\s*la\s*cotizaci[oó]n|quiero\s*reservar|avancemos|lo\s*tomo|lo\s*quiero)/i.test(userMessage || "");
+
+  if (eventMode && (wantsQuote || wantsCloseQuote)) {
+    try {
+      const quote = await buildEventQuote({
+        tenantId,
+        eventData: {
+          guests: eventPreferences?.guests,
+          location: eventPreferences?.location,
+          date: eventPreferences?.date,
+          service: eventPreferences?.selectedService || "Servicio Mixto",
+          extras: eventPreferences?.extras || []
+        },
+        memory: {
+          ...memory,
+          service: eventPreferences?.selectedService,
+          extras: eventPreferences?.extras || []
+        }
+      });
+
+      if (quote?.ready) {
+        if (conversationId) {
+          await registerSalesSignal({
+            tenantId,
+            conversationId,
+            message: userMessage,
+            quote,
+            reason: "Cotización final generada automáticamente por Pricing Engine"
+          });
+        }
+        return postProcessReply(quote.formatted);
+      }
+    } catch (quoteError) {
+      console.error("Quote engine error:", quoteError?.message || quoteError);
+    }
+  }
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {

@@ -100,6 +100,39 @@ function cleanOptionalUnique(value) {
   return text || null;
 }
 
+function cleanNumber(value, fallback = 0) {
+  const raw = String(value ?? "").replace(/[^\d.-]/g, "");
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getSubscriptionMetadata(subscription) {
+  return subscription?.metadata && typeof subscription.metadata === "object" ? subscription.metadata : {};
+}
+
+async function getOrCreateActiveSubscription({ tenantId, planCode }) {
+  const normalized = normalizePlanCode(planCode || "STARTER");
+  await ensureTenantSubscriptionAndModules({ tenantId, planCode: normalized });
+  const current = await prisma.subscription.findFirst({
+    where: { tenantId, status: "ACTIVE" },
+    orderBy: { createdAt: "desc" },
+    include: { plan: true }
+  });
+  if (current) return current;
+
+  const plan = await prisma.plan.findUnique({ where: { code: normalized } }).catch(() => null);
+  return prisma.subscription.create({
+    data: {
+      tenantId,
+      planCode: normalized,
+      planId: plan?.id || null,
+      status: "ACTIVE",
+      metadata: {}
+    },
+    include: { plan: true }
+  });
+}
+
 function adminError(res, error, fallback = "Error en el panel de desarrollador") {
   console.error(fallback, error);
 
@@ -574,6 +607,65 @@ adminRouter.patch("/admin/tenants/:tenantId/plan", async (req, res) => {
     res.json({ tenant, modules });
   } catch (error) {
     return adminError(res, error, "No se pudo actualizar el plan");
+  }
+});
+
+
+adminRouter.patch("/admin/tenants/:tenantId/billing", async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const tenantExists = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenantExists) return res.status(404).json({ error: "Cliente no encontrado" });
+
+    const planCode = normalizePlanCode(req.body.planCode || tenantExists.plan || "STARTER");
+    const subscription = await getOrCreateActiveSubscription({ tenantId, planCode });
+    const previousMetadata = getSubscriptionMetadata(subscription);
+
+    const metadata = {
+      ...previousMetadata,
+      planName: cleanText(req.body.planName) || previousMetadata.planName || PLAN_DEFINITIONS[planCode]?.name || planCode,
+      monthlyPrice: cleanNumber(req.body.monthlyPrice, previousMetadata.monthlyPrice ?? PLAN_DEFINITIONS[planCode]?.priceMonthly ?? 0),
+      currency: cleanText(req.body.currency) || previousMetadata.currency || "CLP",
+      description: cleanText(req.body.description) || previousMetadata.description || PLAN_DEFINITIONS[planCode]?.description || "",
+      limits: {
+        ...(previousMetadata.limits && typeof previousMetadata.limits === "object" ? previousMetadata.limits : {}),
+        ...(req.body.messagesMonthly !== undefined ? { messagesMonthly: req.body.messagesMonthly === "" || req.body.messagesMonthly === null ? null : cleanNumber(req.body.messagesMonthly, null) } : {}),
+        ...(req.body.users !== undefined ? { users: req.body.users === "" || req.body.users === null ? null : cleanNumber(req.body.users, null) } : {})
+      },
+      updatedBy: req.user?.id || null,
+      updatedAt: new Date().toISOString()
+    };
+
+    const plan = await prisma.plan.findUnique({ where: { code: planCode } }).catch(() => null);
+
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        plan: planCode,
+        billingLimits: {
+          ...(tenantExists.billingLimits && typeof tenantExists.billingLimits === "object" ? tenantExists.billingLimits : {}),
+          ...(metadata.limits || {}),
+          priceMonthly: metadata.monthlyPrice,
+          currency: metadata.currency,
+          planName: metadata.planName
+        }
+      }
+    });
+
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        planCode,
+        planId: plan?.id || subscription.planId || null,
+        status: "ACTIVE",
+        metadata
+      }
+    });
+
+    const tenant = await getFullTenant(tenantId);
+    res.json({ tenant });
+  } catch (error) {
+    return adminError(res, error, "No se pudo actualizar la facturación del cliente");
   }
 });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getConversations } from "@/lib/api";
+import { getConversations, getSalesQueue } from "@/lib/api";
 import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, riskLabel } from "@/lib/ai-ops";
 import { Topbar } from "@/components/topbar";
@@ -35,7 +35,11 @@ export default function SalesQueuePage() {
     try {
       setLoading(true);
       setError(null);
-      setConversations(await getConversations());
+      try {
+        setConversations(await getSalesQueue());
+      } catch {
+        setConversations(await getConversations());
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar la cola de ventas");
     } finally {

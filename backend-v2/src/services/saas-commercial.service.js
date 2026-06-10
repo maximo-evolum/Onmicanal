@@ -10,15 +10,18 @@ export const DEFAULT_AI_SETTINGS = Object.freeze({
   businessRules: []
 });
 
-export function planLimits(planCode = "STARTER") {
+export function planLimits(planCode = "STARTER", subscription = null) {
   const plan = PLAN_DEFINITIONS[normalizePlanCode(planCode)] || PLAN_DEFINITIONS.STARTER;
+  const metadata = subscription?.metadata && typeof subscription.metadata === "object" ? subscription.metadata : {};
+  const customLimits = metadata.limits && typeof metadata.limits === "object" ? metadata.limits : {};
+
   return {
-    messagesMonthly: plan.limits?.messagesMonthly ?? null,
-    users: plan.limits?.users ?? null,
+    messagesMonthly: customLimits.messagesMonthly ?? metadata.messagesMonthly ?? plan.limits?.messagesMonthly ?? null,
+    users: customLimits.users ?? metadata.users ?? plan.limits?.users ?? null,
     modules: plan.modules || [],
-    priceMonthly: plan.priceMonthly,
-    currency: plan.currency,
-    planName: plan.name
+    priceMonthly: metadata.monthlyPrice ?? metadata.priceMonthly ?? plan.priceMonthly,
+    currency: metadata.currency || plan.currency,
+    planName: metadata.planName || plan.name
   };
 }
 
@@ -69,7 +72,12 @@ export async function getTenantUsageSummary(tenantId) {
   const aiReplies = events.find((event) => event.type === "AI_REPLY")?._sum.quantity || 0;
   const toolCalls = events.find((event) => event.type === "TOOL_CALL")?._sum.quantity || 0;
   const cost = events.reduce((sum, event) => sum + (event._sum.cost || 0), 0);
-  const limits = { ...planLimits(tenant.plan), ...(tenant.billingLimits || {}) };
+  const subscription = await prisma.subscription.findFirst({
+    where: { tenantId: tenant.id, status: "ACTIVE" },
+    orderBy: { createdAt: "desc" },
+    include: { plan: true }
+  }).catch(() => null);
+  const limits = { ...planLimits(subscription?.planCode || tenant.plan, subscription), ...(tenant.billingLimits || {}) };
   const usagePercent = limits.messagesMonthly ? Math.min(100, Math.round((messages / limits.messagesMonthly) * 100)) : 0;
 
   return { tenant, period: { start, end }, events, messages, aiReplies, toolCalls, cost, limits, usagePercent };
@@ -175,10 +183,28 @@ export async function buildSaasOverview(tenantId) {
     getCommercialAnalytics(tenantId),
     getAISettings(tenantId)
   ]);
-  const planCode = normalizePlanCode(tenant?.plan || "STARTER");
+  const activeSubscription = await prisma.subscription.findFirst({
+    where: { tenantId, status: "ACTIVE" },
+    orderBy: { createdAt: "desc" },
+    include: { plan: true }
+  }).catch(() => null);
+  const planCode = normalizePlanCode(activeSubscription?.planCode || tenant?.plan || "STARTER");
+  const basePlan = PLAN_DEFINITIONS[planCode];
+  const metadata = activeSubscription?.metadata && typeof activeSubscription.metadata === "object" ? activeSubscription.metadata : {};
+  const customLimits = metadata.limits && typeof metadata.limits === "object" ? metadata.limits : {};
+  const plan = {
+    ...basePlan,
+    name: metadata.planName || activeSubscription?.plan?.name || basePlan.name,
+    description: metadata.description || activeSubscription?.plan?.description || basePlan.description,
+    priceMonthly: metadata.monthlyPrice ?? metadata.priceMonthly ?? activeSubscription?.plan?.priceMonthly ?? basePlan.priceMonthly,
+    currency: metadata.currency || activeSubscription?.plan?.currency || basePlan.currency,
+    limits: { ...(basePlan.limits || {}), ...customLimits }
+  };
+
   return {
     tenant,
-    plan: PLAN_DEFINITIONS[planCode],
+    plan,
+    subscription: activeSubscription,
     modules: modules.map((m) => m.module),
     usage,
     onboarding,

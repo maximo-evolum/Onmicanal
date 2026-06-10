@@ -371,7 +371,7 @@ export async function publishCampaign(input: {
 }
 
 export type SalesDashboard = {
-  revenue: { total: number; month: number; week: number };
+  revenue: { total: number; month: number; week: number; estimated?: number };
   bookings: {
     total: number;
     confirmed: number;
@@ -386,12 +386,16 @@ export type SalesDashboard = {
       name?: string | null;
     }>;
   };
-  leads: { total: number; hot: number; closeRate: number };
-  ai: { hot: number; warm: number; low: number; handoffRequired: number; averageCloseScore: number };
+  leads: { total: number; hot: number; closeRate: number; readyToClose?: number; quoteSent?: number };
+  ai: { hot: number; warm: number; low: number; handoffRequired: number; averageCloseScore: number; readyToClose?: number; quoteSent?: number; outcomes?: number };
 };
 
 export async function getSalesDashboard(): Promise<SalesDashboard> {
   return request<SalesDashboard>("/dashboard/sales");
+}
+
+export async function getSalesQueue(): Promise<Conversation[]> {
+  return request<Conversation[]>("/sales/queue");
 }
 
 export type TenantModulesResponse = {
@@ -462,7 +466,7 @@ export type AdminTenant = {
   createdAt: string;
   workspaceUsers?: Array<{ id: string; name: string; email: string; role: string; isActive: boolean }>;
   tenantModules?: Array<{ id: string; module: string; enabled: boolean; source?: string }>;
-  subscriptions?: Array<{ id: string; planCode: string; status: string; startedAt: string; endsAt?: string | null }>;
+  subscriptions?: Array<{ id: string; planCode: string; status: string; startedAt: string; endsAt?: string | null; metadata?: Record<string, unknown> | null; plan?: { name?: string; priceMonthly?: number; currency?: string } | null }>;
   aiProfiles?: TenantAiProfile[];
   channelConfigs?: TenantChannelConfig[];
   onboardingImports?: TenantOnboardingImport[];
@@ -476,6 +480,24 @@ export async function updateTenantPlan(tenantId: string, plan: string): Promise<
   return request<{ tenant: AdminTenant; modules: string[] }>(`/admin/tenants/${tenantId}/plan`, {
     method: "PATCH",
     body: JSON.stringify({ plan })
+  });
+}
+
+export async function updateAdminTenantBilling(
+  tenantId: string,
+  input: {
+    planCode?: string;
+    planName?: string;
+    monthlyPrice?: number;
+    currency?: string;
+    description?: string;
+    messagesMonthly?: number | null;
+    users?: number | null;
+  }
+): Promise<{ tenant: AdminTenant }> {
+  return request<{ tenant: AdminTenant }>(`/admin/tenants/${tenantId}/billing`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
   });
 }
 
@@ -591,6 +613,7 @@ export async function updateAdminUser(
 export type SaasOverview = {
   tenant: TenantSession & { onboardingCompleted?: boolean; aiSettings?: Record<string, unknown> | null };
   plan: { code: string; name: string; description?: string; priceMonthly: number; currency: string; limits?: Record<string, unknown>; modules?: string[] };
+  subscription?: { id: string; planCode: string; status: string; metadata?: Record<string, unknown> | null } | null;
   modules: string[];
   usage: {
     messages: number;
