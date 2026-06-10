@@ -1,61 +1,72 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getConversations, getLeadMetrics, getSalesDashboard, SalesDashboard } from "@/lib/api";
-import { Conversation, LeadMetrics } from "@/lib/types";
-import { buildAiOpsProfile, isReadyToClose } from "@/lib/ai-ops";
+import { getCrmOperationalDashboard, getLeadMetrics, type CrmOperationalDashboard } from "@/lib/api";
+import { LeadMetrics } from "@/lib/types";
 import { BackToInbox } from "@/components/BackToInbox";
 import { Topbar } from "@/components/topbar";
 import { getStoredSession } from "@/lib/auth";
 
-function money(value: number) {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0
-  }).format(value || 0);
+function money(value = 0) {
+  return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(value || 0);
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("es-CL", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(value));
+function formatDate(value?: string | null) {
+  if (!value) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function stageLabel(stage = "") {
+  const map: Record<string, string> = {
+    NEW: "Nuevo",
+    CONTACTED: "Contactado",
+    QUALIFIED: "Calificado",
+    QUOTE_SENT: "Cotización enviada",
+    NEGOTIATION: "Negociación",
+    READY_TO_CLOSE: "Listo para cierre",
+    PAYMENT_PENDING: "Pago pendiente",
+    PARTIAL_PAYMENT: "Abono recibido",
+    BOOKED: "Reservado",
+    PAID: "Pagado",
+    CANCELED: "Cancelado",
+    REFUNDED: "Reembolsado"
+  };
+  return map[stage] || stage || "Sin estado";
 }
 
 export default function DashboardPage() {
   const agent = getStoredSession();
   const [metrics, setMetrics] = useState<LeadMetrics | null>(null);
-  const [sales, setSales] = useState<SalesDashboard | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [crm, setCrm] = useState<CrmOperationalDashboard | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    Promise.all([
-      getLeadMetrics().then(setMetrics),
-      getSalesDashboard().then(setSales).catch(() => setSales(null)),
-      getConversations().then(setConversations).catch(() => setConversations([]))
-    ]).catch(console.error);
-  }, []);
+  async function load() {
+    try {
+      setError(null);
+      const [leadMetrics, crmData] = await Promise.all([
+        getLeadMetrics().catch(() => null),
+        getCrmOperationalDashboard()
+      ]);
+      setMetrics(leadMetrics);
+      setCrm(crmData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cargar CRM operativo");
+    }
+  }
 
-  if (!metrics) {
+  useEffect(() => { load(); }, []);
+
+  if (!crm) {
     return (
       <div className="page page-single">
         <main className="main dashboard-page">
           <Topbar agent={agent} />
           <div className="content-toolbar"><BackToInbox /></div>
-          <div className="empty-state">Cargando dashboard...</div>
+          {error ? <div className="sales-queue-error">{error}</div> : <div className="empty-state">Cargando CRM operativo...</div>}
         </main>
       </div>
     );
   }
-
-  const aiOps = conversations.map((conversation) => ({ conversation, profile: buildAiOpsProfile(conversation, conversation.lead || null) }));
-  const aiReady = aiOps.filter(({ conversation }) => isReadyToClose(conversation, conversation.lead || null)).length;
-  const aiRisk = aiOps.filter(({ profile }) => profile.risk === "high").length;
-  const aiStrategies = aiOps.filter(({ conversation }) => conversation.aiStrategy || conversation.aiRecommendedAction).length;
-  const aiAvg = aiOps.length ? Math.round(aiOps.reduce((sum, item) => sum + item.profile.score, 0) / aiOps.length) : 0;
 
   return (
     <div className="page page-single">
@@ -63,100 +74,110 @@ export default function DashboardPage() {
         <Topbar agent={agent} />
         <div className="content-toolbar"><BackToInbox /></div>
 
-        <div className="chat-header dashboard-hero">
+        <section className="chat-header dashboard-hero">
           <div>
-            <span className="eyebrow">Centro de control</span>
-            <h1 className="chat-title">Dashboard comercial</h1>
-            <div className="meta-line">Ventas, reservas, alertas inteligentes, revenue estimado y probabilidad de cierre.</div>
+            <span className="eyebrow">CRM Operativo Real</span>
+            <h1 className="chat-title">Centro comercial vivo</h1>
+            <div className="meta-line">Revenue, reservas, pagos, pipeline, alertas, próximas acciones y actividad en tiempo real.</div>
           </div>
           <div className="dashboard-hero-actions">
-            <span className="badge signal-hot">🔥 Prioriza leads calientes</span>
-            <span className="badge signal-followup">🤖 Revisa follow-ups</span>
+            <button className="ghost-btn" onClick={load}>Actualizar</button>
+            <span className="badge signal-hot">🔥 {crm.kpis.hotLeads} leads calientes</span>
+            <span className="badge signal-followup">💰 {money(crm.forecasts.expectedRevenue || crm.revenue.estimated)}</span>
           </div>
+        </section>
+
+        {error ? <div className="sales-queue-error">{error}</div> : null}
+
+        <h2 className="section-title">Revenue y operación</h2>
+        <div className="dashboard-grid">
+          <Card title="Ingresos pagados" value={money(crm.revenue.paid)} />
+          <Card title="Ingresos del mes" value={money(crm.revenue.paidMonth)} />
+          <Card title="Pagos pendientes" value={money(crm.revenue.pending)} />
+          <Card title="Revenue estimado" value={money(crm.revenue.estimated)} />
+          <Card title="Pipeline ponderado" value={money(crm.revenue.pipeline)} />
+          <Card title="Forecast esperado" value={money(crm.forecasts.expectedRevenue)} />
         </div>
 
-        {sales && (
-          <>
-            <h2 className="section-title">Ventas y reservas</h2>
-            <div className="dashboard-grid">
-              <Card title="Ingresos totales" value={money(sales.revenue.total)} />
-              <Card title="Ingresos del mes" value={money(sales.revenue.month)} />
-              <Card title="Reservas confirmadas" value={sales.bookings.confirmed} />
-              <Card title="Reservas pendientes" value={sales.bookings.pending} />
-              <Card title="Pagos pendientes" value={money(sales.payments?.pendingTotal || 0)} />
-              <Card title="Pagos confirmados" value={money(sales.payments?.paidTotal || 0)} />
-            </div>
-
-
-            <h2 className="section-title">Decisiones IA</h2>
-            <div className="dashboard-grid">
-              <Card title="IA HOT" value={sales.ai.hot} />
-              <Card title="IA WARM" value={sales.ai.warm} />
-              <Card title="Requiere humano" value={sales.ai.handoffRequired} />
-              <Card title="Score IA promedio" value={`${sales.ai.averageCloseScore}%`} />
-            </div>
-
-            <h2 className="section-title">Próximas reservas</h2>
-            <div className="dashboard-grid dashboard-list-grid">
-              {sales.bookings.upcoming.length ? sales.bookings.upcoming.map((booking) => (
-                <div key={booking.id} className="metric-card dashboard-booking-card">
-                  <div className="meta-line">{formatDate(booking.date)} · {booking.status}</div>
-                  <strong>{booking.guests} personas</strong>
-                  <div className="meta-line">{booking.location || "Lugar por confirmar"}</div>
-                  <div className="badge" style={{ marginTop: 8 }}>{money(booking.total)}</div>
-                </div>
-              )) : (
-                <div className="empty-state" style={{ minHeight: 120 }}>Aún no hay reservas próximas.</div>
-              )}
-            </div>
-          </>
-        )}
-
-        <h2 className="section-title">Métricas comerciales</h2>
+        <h2 className="section-title">Reservas, pagos y cierre</h2>
         <div className="dashboard-grid">
-          <Card title="Leads totales" value={metrics.total} />
-          <Card title="Conversión" value={`${sales?.leads.closeRate ?? metrics.conversionRate}%`} />
-          <Card title="Revenue estimado" value={money(metrics.estimatedRevenue)} />
-          <Card title="Cierre promedio" value={`${metrics.averageCloseProbability}%`} />
+          <Card title="Reservas confirmadas" value={crm.kpis.bookingsConfirmed} />
+          <Card title="Reservas pendientes" value={crm.kpis.bookingsPending} />
+          <Card title="Pagos pendientes" value={crm.kpis.paymentPending} />
+          <Card title="Pagos confirmados" value={crm.kpis.paidCount} />
+          <Card title="Listos para cierre" value={crm.kpis.readyToClose} />
+          <Card title="Conversión" value={`${crm.kpis.conversionRate}%`} />
         </div>
 
         <h2 className="section-title">Alertas inteligentes</h2>
         <div className="dashboard-grid">
-          <Alert title="🔥 Leads calientes" value={sales?.leads.hot ?? metrics.alerts.hotLeads} />
-          <Alert title="⏱ Estancados" value={metrics.alerts.staleLeads} />
-          <Alert title="⚠️ Urgentes sin atender" value={metrics.alerts.urgentUnanswered} />
+          {crm.alerts.length ? crm.alerts.map((alert) => (
+            <div className="alert-card" key={alert.type}>
+              <div>{alert.title}</div>
+              <strong>{alert.count}</strong>
+              <small className="meta-line">{alert.message}</small>
+            </div>
+          )) : <div className="empty-state" style={{ minHeight: 120 }}>Sin alertas críticas por ahora.</div>}
         </div>
 
-        <h2 className="section-title">Inteligencia operativa Fase 3</h2>
-        <div className="dashboard-grid ai-ops-dashboard-grid">
-          <Card title="Listos para vendedor" value={aiReady} />
-          <Card title="Riesgo comercial alto" value={aiRisk} />
-          <Card title="Estrategias IA activas" value={aiStrategies} />
-          <Card title="Score IA promedio" value={`${aiAvg}%`} />
-        </div>
-
+        <h2 className="section-title">Prioridades del vendedor</h2>
         <div className="ai-ops-dashboard-strip">
-          {aiOps.slice(0, 3).map(({ conversation, profile }) => (
-            <div className="ai-ops-mini-card" key={conversation.id}>
-              <strong>{conversation.contact.name || conversation.contact.username || conversation.contact.externalId}</strong>
-              <span>{profile.label}</span>
-              <small>{conversation.aiRecommendedAction || profile.nextBestAction}</small>
+          {crm.priorities.slice(0, 6).map((item) => (
+            <button className="ai-ops-mini-card" key={item.conversationId} onClick={() => { window.location.href = `/inbox?conversation=${item.conversationId}`; }}>
+              <strong>{item.customer}</strong>
+              <span>{stageLabel(item.stage)} · {item.score}%</span>
+              <small>{item.nextAction}</small>
+              {item.amount ? <small>{money(item.amount)}</small> : null}
+            </button>
+          ))}
+        </div>
+
+        <h2 className="section-title">Pipeline CRM completo</h2>
+        <div className="dashboard-grid">
+          {crm.pipeline.map((stage) => (
+            <div className="metric-card" key={stage.stage}>
+              <div className="meta-line">{stageLabel(stage.stage)}</div>
+              <strong>{stage.count}</strong>
+              <small className="meta-line">{money(stage.value)}</small>
             </div>
           ))}
         </div>
 
-        <h2 className="section-title">Pipeline</h2>
-        <div className="dashboard-grid">
-          {Object.entries(metrics.byStatus).map(([status, count]) => (
-            <Card key={status} title={status} value={count} />
+        <h2 className="section-title">Actividad viva</h2>
+        <div className="phase5-list">
+          {crm.activity.slice(0, 12).map((item) => (
+            <button className="phase5-list-row" key={item.id} onClick={() => item.conversationId ? window.location.href = `/inbox?conversation=${item.conversationId}` : undefined}>
+              <div>
+                <strong>{item.title}</strong>
+                <div className="meta-line">{item.description}</div>
+                <small className="meta-line">{formatDate(item.createdAt)}</small>
+              </div>
+              {item.amount ? <span className="badge">{money(item.amount)}</span> : null}
+            </button>
           ))}
+          {!crm.activity.length ? <div className="empty-state">Aún no hay actividad operativa.</div> : null}
         </div>
 
-        <h2 className="section-title">Prioridad</h2>
+        <h2 className="section-title">Próximas reservas</h2>
+        <div className="dashboard-grid dashboard-list-grid">
+          {crm.upcomingBookings.length ? crm.upcomingBookings.map((booking) => (
+            <div key={booking.id} className="metric-card dashboard-booking-card">
+              <div className="meta-line">{formatDate(booking.date)} · {booking.status}</div>
+              <strong>{booking.guests} personas</strong>
+              <div className="meta-line">{booking.location || "Lugar por confirmar"}</div>
+              <div className="badge" style={{ marginTop: 8 }}>{money(booking.total)}</div>
+            </div>
+          )) : <div className="empty-state" style={{ minHeight: 120 }}>Aún no hay reservas próximas.</div>}
+        </div>
+
+        <h2 className="section-title">Resumen adicional</h2>
         <div className="dashboard-grid">
-          <Card title="Alta" value={metrics.byPriority.high || 0} />
-          <Card title="Media" value={metrics.byPriority.medium || 0} />
-          <Card title="Baja" value={metrics.byPriority.low || 0} />
+          <Card title="Leads totales" value={crm.kpis.leads || metrics?.total || 0} />
+          <Card title="Conversaciones" value={crm.kpis.conversations} />
+          <Card title="Score cierre promedio" value={`${crm.kpis.averageCloseScore}%`} />
+          <Card title="Acciones humanas" value={crm.forecasts.humanActionsRequired} />
+          <Card title="Recuperaciones" value={crm.forecasts.recoveryOpportunities} />
+          <Card title="Revenue histórico leads" value={money(metrics?.estimatedRevenue || 0)} />
         </div>
       </main>
     </div>
@@ -167,15 +188,6 @@ function Card({ title, value }: { title: string; value: string | number }) {
   return (
     <div className="metric-card">
       <div className="meta-line">{title}</div>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function Alert({ title, value }: { title: string; value: number }) {
-  return (
-    <div className="alert-card">
-      <div>{title}</div>
       <strong>{value}</strong>
     </div>
   );

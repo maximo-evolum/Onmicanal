@@ -395,6 +395,61 @@ export async function getSalesDashboard(): Promise<SalesDashboard> {
   return request<SalesDashboard>("/dashboard/sales");
 }
 
+export type CrmOperationalDashboard = {
+  kpis: {
+    leads: number;
+    hotLeads: number;
+    conversations: number;
+    readyToClose: number;
+    paymentPending: number;
+    bookingsPending: number;
+    bookingsConfirmed: number;
+    paidCount: number;
+    averageCloseScore: number;
+    conversionRate: number;
+  };
+  revenue: {
+    paid: number;
+    paidToday: number;
+    paidMonth: number;
+    pending: number;
+    estimated: number;
+    bookings: number;
+    pipeline: number;
+  };
+  pipeline: Array<{ stage: string; count: number; value: number }>;
+  priorities: Array<{
+    conversationId: string;
+    leadId?: string | null;
+    customer: string;
+    channel: string;
+    stage: string;
+    score: number;
+    amount: number;
+    risk: string;
+    nextAction: string;
+    lastMessageAt?: string | null;
+    paymentStatus?: string | null;
+    bookingStatus?: string | null;
+  }>;
+  activity: Array<{
+    id: string;
+    type: string;
+    title: string;
+    description: string;
+    createdAt: string;
+    conversationId?: string | null;
+    amount?: number;
+  }>;
+  upcomingBookings: Array<{ id: string; date: string; guests: number; location?: string | null; total: number; status: string; name?: string | null }>;
+  alerts: Array<{ type: string; title: string; count: number; message: string }>;
+  forecasts: { expectedRevenue: number; recoveryOpportunities: number; humanActionsRequired: number };
+};
+
+export async function getCrmOperationalDashboard(): Promise<CrmOperationalDashboard> {
+  return request<CrmOperationalDashboard>("/crm/operational");
+}
+
 export type Payment = {
   id: string;
   tenantId: string;

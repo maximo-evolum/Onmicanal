@@ -3,6 +3,7 @@ import { prisma } from "../lib/db.js";
 import { getSalesQueue } from "../services/sales-engine.service.js";
 import { getAiOperationsSummary } from "../services/ai-ops.service.js";
 import { getPaymentMetrics } from "../services/payment.service.js";
+import { getCrmOperationalDashboard } from "../services/crm-operational.service.js";
 
 export const dashboardRouter = Router();
 
@@ -160,5 +161,23 @@ dashboardRouter.get("/ai-ops/summary", async (req, res) => {
   } catch (error) {
     console.error("AI Ops summary error:", error);
     res.status(500).json({ error: "No se pudo obtener AI Operations" });
+  }
+});
+
+
+dashboardRouter.get("/crm/operational", async (req, res) => {
+  try {
+    const tenantId = req.user?.role === "SUPER_ADMIN" && req.query?.tenantId
+      ? String(req.query.tenantId)
+      : req.tenantId;
+
+    const dashboard = await getCrmOperationalDashboard({
+      tenantId,
+      superAdmin: req.user?.role === "SUPER_ADMIN"
+    });
+    res.json(dashboard);
+  } catch (error) {
+    console.error("CRM operational dashboard error:", error);
+    res.status(500).json({ error: "No se pudo obtener CRM operativo" });
   }
 });
