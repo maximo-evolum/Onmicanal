@@ -386,12 +386,89 @@ export type SalesDashboard = {
       name?: string | null;
     }>;
   };
+  payments?: { count: number; total: number; paid: number; paidTotal: number; pending: number; pendingTotal: number; conversionRate: number };
   leads: { total: number; hot: number; closeRate: number; readyToClose?: number; quoteSent?: number };
   ai: { hot: number; warm: number; low: number; handoffRequired: number; averageCloseScore: number; readyToClose?: number; quoteSent?: number; outcomes?: number };
 };
 
 export async function getSalesDashboard(): Promise<SalesDashboard> {
   return request<SalesDashboard>("/dashboard/sales");
+}
+
+export type Payment = {
+  id: string;
+  tenantId: string;
+  conversationId?: string | null;
+  leadId?: string | null;
+  bookingId?: string | null;
+  provider: string;
+  amount: number;
+  currency: string;
+  status: "PENDING" | "PARTIAL" | "PAID" | "FAILED" | "CANCELED" | "REFUNDED" | string;
+  description?: string | null;
+  paymentUrl?: string | null;
+  externalId?: string | null;
+  expiresAt?: string | null;
+  paidAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  conversation?: Conversation | null;
+  lead?: Lead | null;
+  booking?: {
+    id: string;
+    date: string;
+    guests: number;
+    location?: string | null;
+    total: number;
+    status: string;
+  } | null;
+};
+
+export type PaymentMetrics = {
+  count: number;
+  total: number;
+  paid: number;
+  paidTotal: number;
+  pending: number;
+  pendingTotal: number;
+  conversionRate: number;
+};
+
+export async function getPayments(status = "all"): Promise<Payment[]> {
+  return request<Payment[]>(`/payments?status=${encodeURIComponent(status)}`);
+}
+
+export async function getPaymentMetrics(): Promise<PaymentMetrics> {
+  return request<PaymentMetrics>("/payments/metrics");
+}
+
+export async function createPayment(input: {
+  conversationId?: string | null;
+  leadId?: string | null;
+  bookingId?: string | null;
+  amount: number;
+  currency?: string;
+  provider?: string;
+  description?: string;
+  expiresAt?: string | null;
+}): Promise<Payment> {
+  return request<Payment>("/payments", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function confirmPayment(paymentId: string): Promise<Payment> {
+  return request<Payment>(`/payments/${paymentId}/confirm`, {
+    method: "POST",
+    body: JSON.stringify({ status: "PAID" })
+  });
+}
+
+export async function cancelPayment(paymentId: string): Promise<Payment> {
+  return request<Payment>(`/payments/${paymentId}/cancel`, {
+    method: "POST"
+  });
 }
 
 export async function getSalesQueue(): Promise<Conversation[]> {

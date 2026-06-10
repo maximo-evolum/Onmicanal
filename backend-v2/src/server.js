@@ -17,6 +17,7 @@ import { campaignsRouter } from "./routes/campaigns.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import { servicesRouter } from "./routes/services.routes.js";
 import { bookingsRouter } from "./routes/bookings.routes.js";
+import { paymentsRouter } from "./routes/payments.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { modulesRouter } from "./routes/modules.routes.js";
@@ -107,6 +108,7 @@ app.use("/api", ...protectedApi, requireModule(MODULES.SALES), productRoutes);
 app.use("/api", ...protectedApi, requireModule(MODULES.MARKETING), campaignsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), servicesRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), bookingsRouter);
+app.use("/api", ...protectedApi, requireModule(MODULES.SALES), paymentsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), dashboardRouter);
 
 app.use((req, res) => {

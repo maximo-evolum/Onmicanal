@@ -154,7 +154,7 @@ export async function getSalesQueue({ tenantId }) {
       { aiHandoffRequired: true },
       { aiNextActionCode: { in: ["READY_TO_CLOSE", "HANDOFF_REQUIRED", "QUOTE_SENT"] } },
       { aiCloseScore: { gte: 75 } },
-      { lead: { status: { in: ["READY_TO_CLOSE", "QUOTE_SENT", "NEGOTIATION"] } } }
+      { lead: { status: { in: ["READY_TO_CLOSE", "QUOTE_SENT", "NEGOTIATION", "PAYMENT_PENDING", "PARTIAL_PAYMENT", "PAID"] } } }
     ]
   };
 

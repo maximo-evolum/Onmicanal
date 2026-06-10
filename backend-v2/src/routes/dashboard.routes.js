@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { getSalesQueue } from "../services/sales-engine.service.js";
 import { getAiOperationsSummary } from "../services/ai-ops.service.js";
+import { getPaymentMetrics } from "../services/payment.service.js";
 
 export const dashboardRouter = Router();
 
@@ -29,7 +30,7 @@ dashboardRouter.get("/dashboard/sales", async (req, res) => {
     const baseWhere = tenantWhere(req);
     const tenantId = baseWhere.tenantId || req.tenantId || null;
 
-    const [bookings, leads, conversations, outcomes] = await Promise.all([
+    const [bookings, leads, conversations, outcomes, paymentMetrics] = await Promise.all([
       prisma.booking.findMany({ where: baseWhere, orderBy: { createdAt: "desc" } }),
       prisma.lead.findMany({ where: baseWhere }),
       prisma.conversation.findMany({
@@ -40,7 +41,8 @@ dashboardRouter.get("/dashboard/sales", async (req, res) => {
         where: baseWhere,
         orderBy: { createdAt: "desc" },
         take: 200
-      }).catch(() => [])
+      }).catch(() => []),
+      getPaymentMetrics({ tenantId: tenantId || req.tenantId }).catch(() => ({ count: 0, total: 0, paid: 0, paidTotal: 0, pending: 0, pendingTotal: 0, conversionRate: 0 }))
     ]);
 
     const now = new Date();
@@ -81,6 +83,7 @@ dashboardRouter.get("/dashboard/sales", async (req, res) => {
         pending: pendingBookings,
         upcoming: bookings.filter((b) => new Date(b.date) >= now && !["CANCELED"].includes(b.status)).slice(0, 8)
       },
+      payments: paymentMetrics,
       leads: {
         total: leads.length,
         hot: hotLeads,

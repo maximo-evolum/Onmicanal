@@ -86,6 +86,7 @@ model Tenant {
   subscriptions       Subscription[]
   services            Service[]
   bookings            Booking[]
+  payments            Payment[]
   memories            ConversationMemory[]
   salesOutcomes       SalesOutcome[]
   usageEvents         UsageEvent[]
@@ -278,6 +279,7 @@ model Conversation {
   messages      Message[]
   lead          Lead?
   bookings      Booking[]
+  payments      Payment[]
   memory        ConversationMemory?
 
   @@index([tenantId, status, mode])
@@ -356,6 +358,7 @@ model Lead {
 
   tenant           Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation     Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  payments         Payment[]
 
   @@index([tenantId, status])
   @@index([tenantId, nextFollowUpAt])
@@ -436,6 +439,7 @@ model Booking {
 
   tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  payments       Payment[]
 
   @@index([tenantId, status])
   @@index([tenantId, date])
@@ -517,4 +521,40 @@ model TenantAuditLog {
 
   @@index([tenantId, action])
   @@index([tenantId, createdAt])
+}
+
+
+model Payment {
+  id             String   @id @default(cuid())
+  tenantId       String
+  conversationId String?
+  leadId         String?
+  bookingId      String?
+
+  provider       String   @default("manual") // manual | mercadopago | transbank | stripe
+  amount         Float
+  currency       String   @default("CLP")
+  status         String   @default("PENDING") // PENDING | PARTIAL | PAID | FAILED | CANCELED | REFUNDED
+
+  description    String?
+  paymentUrl     String?
+  externalId     String?
+  expiresAt      DateTime?
+  paidAt         DateTime?
+  metadata       Json?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  lead           Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  booking        Booking?      @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@index([leadId])
+  @@index([bookingId])
+  @@index([provider, externalId])
 }

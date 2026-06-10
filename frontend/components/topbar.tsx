@@ -17,6 +17,7 @@ const MENU_ITEMS = [
   { href: "/inbox", label: "Inbox", module: "inbox", description: "Conversaciones y bot" },
   { href: "/pipeline", label: "Pipeline", module: "sales", description: "Leads y ventas" },
   { href: "/sales-queue", label: "Cierres IA", module: "sales", description: "Leads listos para vendedor" },
+  { href: "/payments", label: "Pagos", module: "payments", description: "Links, estados y reservas" },
   { href: "/ai-ops", label: "AI Ops", module: "analytics", description: "Razonamiento y recomendaciones" },
   { href: "/dashboard", label: "Dashboard", module: "analytics", description: "Métricas e IA" },
   { href: "/campaigns", label: "Campañas", module: "marketing", description: "Marketing IA" },
@@ -50,7 +51,7 @@ export function Topbar({ agent }: { agent?: AgentSession | null }) {
     if (session?.role === "SUPER_ADMIN") return [ADMIN_MENU_ITEM, ...MENU_ITEMS];
 
     if (session?.role === "SELLER") {
-      return MENU_ITEMS.filter((item) => ["/inbox", "/dashboard", "/pipeline", "/campaigns"].includes(item.href));
+      return MENU_ITEMS.filter((item) => ["/inbox", "/dashboard", "/pipeline", "/campaigns", "/payments"].includes(item.href));
     }
 
     // Evita mostrar módulos bloqueados si aún no cargan.

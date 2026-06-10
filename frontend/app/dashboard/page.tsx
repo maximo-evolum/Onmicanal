@@ -83,6 +83,8 @@ export default function DashboardPage() {
               <Card title="Ingresos del mes" value={money(sales.revenue.month)} />
               <Card title="Reservas confirmadas" value={sales.bookings.confirmed} />
               <Card title="Reservas pendientes" value={sales.bookings.pending} />
+              <Card title="Pagos pendientes" value={money(sales.payments?.pendingTotal || 0)} />
+              <Card title="Pagos confirmados" value={money(sales.payments?.paidTotal || 0)} />
             </div>
 
 
