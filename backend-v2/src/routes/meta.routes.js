@@ -121,6 +121,7 @@ metaRouter.post("/webhook", async (req, res) => {
       externalMessageId: incoming.externalMessageId,
       type: incoming.type,
       rawPayload: incoming.raw,
+      metadata: incoming.interactive ? { interactive: incoming.interactive } : null,
       trace
     });
 

@@ -12,6 +12,50 @@ function mergeObjection(existing, next) {
   return [...arr, next].slice(-8);
 }
 
+function normalizeEventPrefs({ message = "", prefs = {}, current = null }) {
+  const text = String(message || "").toLowerCase();
+  const next = { ...prefs };
+
+  // Si el cliente responde solo "15", "somos 15" o "para 15", y ya estamos en contexto de evento,
+  // interpretarlo como cantidad de personas. Esto evita que la IA vuelva a preguntar.
+  if (!next.guests) {
+    const bareNumber = text.match(/^\s*(?:somos|para|ser[ií]amos|serian|serían)?\s*(\d{1,4})\s*$/i);
+    const peopleNumber = text.match(/(?:somos|para|ser[ií]amos|serian|serían|unas|unos)\s*(\d{1,4})/i);
+    const match = bareNumber || peopleNumber;
+    if (match && (current?.guests || current?.location || current?.date || /evento|personas|cotiz|reserva|parrill|opci[oó]n|servicio/i.test(text))) {
+      next.guests = Number(match[1]);
+    }
+  }
+
+  // Fechas con día + número: "sábado 13", "sabado 13", "para el sábado 13".
+  if (!next.date) {
+    const dateMatch = text.match(/\b(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\s*(\d{1,2})?\b/i);
+    if (dateMatch) {
+      next.date = `${dateMatch[1]}${dateMatch[2] ? ` ${dateMatch[2]}` : ""}`.replace("sabado", "sábado");
+    }
+  }
+
+  // Servicio elegido: "opción 3", "la 3", "servicio mixto".
+  let selectedService = current?.customerProfile?.selectedService || null;
+  if (/(opci[oó]n\s*3|la\s*3|servicio\s*mixto|mixto)/i.test(text)) selectedService = "Servicio Mixto";
+  else if (/(opci[oó]n\s*2|la\s*2|asado\s*al\s*plato)/i.test(text)) selectedService = "Asado al Plato";
+  else if (/(opci[oó]n\s*1|la\s*1|c[oó]ctel|coctel\s*parrillero)/i.test(text)) selectedService = "Cóctel Parrillero";
+
+  const extras = new Set(Array.isArray(current?.customerProfile?.extras) ? current.customerProfile.extras : []);
+  if (/bar\s*abierto/i.test(text)) extras.add("bar abierto");
+  if (/\bdj\b|m[uú]sica/i.test(text)) extras.add("DJ");
+  if (/postres?/i.test(text)) extras.add("postres");
+  if (/mobiliario|sillas|mesas/i.test(text)) extras.add("mobiliario");
+  if (/vajilla/i.test(text)) extras.add("vajilla");
+  if (/decoraci[oó]n/i.test(text)) extras.add("decoración");
+
+  return {
+    prefs: next,
+    selectedService,
+    extras: [...extras]
+  };
+}
+
 function buildSummary({ previous = "", message = "", prefs = {}, emotion = {}, objection = null }) {
   const parts = [];
   if (previous) parts.push(previous);
@@ -37,17 +81,22 @@ export async function updateConversationMemory({ tenantId, conversationId, messa
   if (!tenantId || !conversationId) return null;
 
   const current = await prisma.conversationMemory.findUnique({ where: { conversationId } });
-  const prefs = extractEventPreferences(message);
+  const rawPrefs = extractEventPreferences(message);
+  const { prefs, selectedService, extras } = normalizeEventPrefs({ message, prefs: rawPrefs, current });
   const emotion = detectEmotionSignals(message);
   const objection = detectObjection(message);
   const sales = analyzeSalesSignals({ message, memory: current });
 
-  const customerProfile = enrichCustomerProfile({
-    currentProfile: current?.customerProfile || {},
-    message,
-    memory: current,
-    industry: sales?.industry || "general"
-  });
+  const customerProfile = {
+    ...enrichCustomerProfile({
+      currentProfile: current?.customerProfile || {},
+      message,
+      memory: current,
+      industry: sales?.industry || "general"
+    }),
+    ...(selectedService ? { selectedService } : {}),
+    ...(extras.length ? { extras } : {})
+  };
 
   const data = {
     tenantId,

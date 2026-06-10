@@ -23,16 +23,25 @@ export function extractEventPreferences(message = "") {
   if (guestMatch) guests = Number(guestMatch[1]);
 
   let date = null;
+  const explicitDate = text.match(/\b(lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\s*(\d{1,2})?\b/i);
+  if (explicitDate) {
+    date = `${explicitDate[1]}${explicitDate[2] ? ` ${explicitDate[2]}` : ""}`.replace("sabado", "sábado");
+  }
+
   const dateHints = ["hoy", "mañana", "sábado", "sabado", "domingo", "viernes", "fin de semana", "próxima semana", "proxima semana"];
-  for (const hint of dateHints) {
-    if (text.includes(hint)) { date = hint; break; }
+  if (!date) {
+    for (const hint of dateHints) {
+      if (text.includes(hint)) { date = hint; break; }
+    }
   }
 
   let location = null;
   const comunas = [
     "santiago", "maipú", "maipu", "providencia", "ñuñoa", "nunoa", "la florida", "puente alto",
     "las condes", "vitacura", "lo barnechea", "san miguel", "la reina", "peñalolén", "penalolen",
-    "quilicura", "renca", "independencia", "recoleta", "huechuraba", "pudahuel"
+    "quilicura", "renca", "independencia", "recoleta", "huechuraba", "pudahuel",
+    "lampa", "colina", "chicureo", "pirque", "buin", "paine", "san bernardo", "calera de tango",
+    "talagante", "peñaflor", "penaflor", "melipilla", "puerto montt"
   ];
   for (const comuna of comunas) {
     if (text.includes(comuna)) { location = comuna; break; }

@@ -4,6 +4,7 @@ import { normalizeObjectStrings, normalizeText } from "../lib/text.js";
 import { getRuleReply } from "./rules.service.js";
 import { generateSalesReply } from "./ai.service.js";
 import { sendChannelMessage } from "./routing.service.js";
+import { interactiveSelectionToText, isFirstInboundForConversation, persistInteractiveOutbound, sendQuotePromptInteractive, sendServicesListInteractive, sendWelcomeInteractive, INTERACTIVE_IDS } from "./whatsapp-interactive.service.js";
 import { detectIntent } from "./intent.service.js";
 import { extractEntities } from "./entity-extractor.service.js";
 import { updateConversationAI, updateConversationPriority } from "./conversation.service.js";
@@ -56,6 +57,7 @@ export async function persistInboundMessage({
   externalMessageId,
   type,
   rawPayload,
+  metadata = null,
   trace = null
 }) {
   traceStep(trace, "7A_DUPLICATE_CHECK_START", { channel, externalMessageId });
@@ -82,7 +84,8 @@ export async function persistInboundMessage({
       externalMessageId,
       type: mapMessageType(type),
       status: "RECEIVED",
-      rawPayload: normalizeObjectStrings(rawPayload)
+      rawPayload: normalizeObjectStrings(rawPayload),
+      metadata: metadata ? normalizeObjectStrings(metadata) : undefined
     }
   });
 
@@ -195,6 +198,101 @@ export async function persistOutboundMessage({
   return message;
 }
 
+
+function getInteractiveFromRaw(rawPayload = null) {
+  const message = rawPayload?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+  if (!message || message.type !== "interactive") return null;
+  const button = message.interactive?.button_reply;
+  const list = message.interactive?.list_reply;
+  return {
+    id: button?.id || list?.id || null,
+    title: button?.title || list?.title || null,
+    type: message.interactive?.type || null
+  };
+}
+
+async function getConversationMessageCount(conversationId) {
+  return prisma.message.count({ where: { conversationId } });
+}
+
+async function handleInteractiveFlow({ tenant, conversation, contact, channel, userMessage, trace }) {
+  if (channel !== "whatsapp") return { handled: false };
+
+  const lastInbound = await prisma.message.findFirst({
+    where: {
+      conversationId: conversation.id,
+      direction: "INBOUND"
+    },
+    orderBy: { createdAt: "desc" }
+  });
+
+  const interactive = lastInbound?.metadata?.interactive || getInteractiveFromRaw(lastInbound?.rawPayload);
+  const id = interactive?.id;
+
+  if (!id) return { handled: false };
+
+  const selectedText = interactiveSelectionToText({
+    id,
+    title: interactive?.title || userMessage
+  });
+
+  if (id === INTERACTIVE_IDS.VIEW_SERVICES) {
+    await sendServicesListInteractive({ tenant, contact, channel, trace });
+    await persistInteractiveOutbound({
+      tenantId: tenant.id,
+      conversationId: conversation.id,
+      contactId: contact.id,
+      channel,
+      content: "Lista de servicios enviada",
+      metadata: { interactiveType: "services_list" }
+    });
+    return { handled: true, reason: "services_list_sent", reply: selectedText };
+  }
+
+  if (id === INTERACTIVE_IDS.QUOTE_EVENT) {
+    await sendQuotePromptInteractive({ tenant, contact, channel, trace });
+    await persistInteractiveOutbound({
+      tenantId: tenant.id,
+      conversationId: conversation.id,
+      contactId: contact.id,
+      channel,
+      content: "Solicitud de datos para cotización enviada",
+      metadata: { interactiveType: "quote_prompt" }
+    });
+    return { handled: true, reason: "quote_prompt_sent", reply: selectedText };
+  }
+
+  if (id === INTERACTIVE_IDS.TALK_AGENT) {
+    await prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { mode: "HUMAN" }
+    });
+
+    const reply = "Perfecto, te derivaré con un asesor humano para que pueda ayudarte de forma personalizada 🙌";
+    await sendChannelMessage({
+      channel,
+      to: contact.externalId,
+      message: reply,
+      tenant,
+      trace
+    });
+    await persistOutboundMessage({
+      tenantId: tenant.id,
+      conversationId: conversation.id,
+      contactId: contact.id,
+      channel,
+      content: reply
+    });
+    return { handled: true, reason: "handoff_to_human", reply };
+  }
+
+  return {
+    handled: false,
+    normalizedUserMessage: selectedText
+  };
+}
+
+
 // =============================
 // PROCESAMIENTO PRINCIPAL (SIMULADOR + BOT)
 // =============================
@@ -220,6 +318,34 @@ export async function processIncomingText({
   if (conversation.mode === "HUMAN") {
     traceStep(trace, "8A_STOP_HUMAN_MODE");
     return { skipped: true, reason: "conversation_in_human_mode" };
+  }
+
+  const messageCount = await getConversationMessageCount(conversation.id);
+
+  if (channel === "whatsapp" && isFirstInboundForConversation(messageCount)) {
+    try {
+      await sendWelcomeInteractive({ tenant, contact, channel, trace });
+      await persistInteractiveOutbound({
+        tenantId: tenant.id,
+        conversationId: conversation.id,
+        contactId: contact.id,
+        channel,
+        content: "Mensaje de bienvenida con servicios enviado",
+        metadata: { interactiveType: "welcome_buttons" }
+      });
+      return { skipped: false, reason: "welcome_interactive_sent" };
+    } catch (error) {
+      traceError(trace, "8A_INTERACTIVE_WELCOME_ERROR", error);
+      // Si falla interactive por permisos/configuración, continuamos con IA normal.
+    }
+  }
+
+  const interactiveFlow = await handleInteractiveFlow({ tenant, conversation, contact, channel, userMessage, trace });
+  if (interactiveFlow.handled) {
+    return { skipped: false, reason: interactiveFlow.reason, reply: interactiveFlow.reply };
+  }
+  if (interactiveFlow.normalizedUserMessage) {
+    userMessage = interactiveFlow.normalizedUserMessage;
   }
 
   traceStep(trace, "8B_INTENT_MEMORY_START");

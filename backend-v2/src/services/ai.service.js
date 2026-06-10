@@ -161,10 +161,20 @@ export async function generateSalesReply({
   const tenantProfile = tenantAiContext.tenant || tenant || { name: tenantName, businessPrompt, industry: businessPrompt, slug: "" };
   const altaBrasaMode = isAltaBrasaTenant(tenantProfile);
   const eventMode = altaBrasaMode || isEventServiceIntent(userMessage, { industry: businessPrompt, businessPrompt });
-  const eventPreferences = extractEventPreferences(userMessage);
-  const service = eventMode && tenantId ? await getPrimaryService({ tenantId, query: userMessage }) : null;
+  const currentEventPreferences = extractEventPreferences(userMessage);
   const memory = conversationId ? await getConversationMemory(conversationId) : null;
-  const history = conversationId ? await getConversationHistory(conversationId, 10) : [];
+  const memoryProfile = memory?.customerProfile && typeof memory.customerProfile === "object" ? memory.customerProfile : {};
+  const eventPreferences = {
+    guests: currentEventPreferences.guests ?? memory?.guests ?? null,
+    location: currentEventPreferences.location ?? memory?.location ?? null,
+    date: currentEventPreferences.date ?? memory?.date ?? null,
+    scenario: currentEventPreferences.scenario || memory?.scenario || "general",
+    selectedService: memoryProfile.selectedService || null,
+    extras: Array.isArray(memoryProfile.extras) ? memoryProfile.extras : []
+  };
+  const serviceQuery = [userMessage, eventPreferences.selectedService].filter(Boolean).join(" ");
+  const service = eventMode && tenantId ? await getPrimaryService({ tenantId, query: serviceQuery }) : null;
+  const history = conversationId ? await getConversationHistory(conversationId, 14) : [];
   const industry = normalizeIndustry(`${businessPrompt} ${tenantName}`);
   const effectiveIndustry = eventMode ? "parrilladas" : industry;
   const script = getIndustryScript(effectiveIndustry);
@@ -221,6 +231,9 @@ ${businessKnowledgeContext}`.trim();
 Modo parrilladas/eventos activado:
 - Tu objetivo es informar, orientar, cotizar y cerrar reservas de eventos.
 - Si el negocio es Eventos Alta Brasa, usa SIEMPRE el conocimiento oficial cargado abajo: Cóctel Parrillero, Asado al Plato, Servicio Mixto y servicios adicionales.
+- Usa la memoria acumulada como fuente de verdad. No preguntes de nuevo personas, comuna/lugar, fecha, servicio elegido o extras si ya están detectados.
+- Si ya tienes personas + comuna/lugar + fecha + servicio elegido, entrega una propuesta consolidada y pide solo dirección exacta, horario o datos de contacto.
+- No des precio final si faltan precios oficiales; puedes explicar que la cotización final depende del formato, adicionales y logística.
 - No des precio final si faltan personas, comuna/lugar o fecha; puedes explicar que el valor depende de esos datos.
 - Si ya tienes personas y servicio cargado, entrega estimación aproximada y propone reservar/agendar.
 - Pide solo los datos faltantes, no hagas interrogatorios largos.
@@ -325,11 +338,18 @@ Análisis comercial detectado:
 - Score oportunidad reasoning: ${reasoningSnapshot.opportunityScore}/100
 - Estrategia adaptativa: ${adaptiveStrategy.objective} / ${adaptiveStrategy.nextMove}
 
-Datos de evento detectados, si aplica:
+Datos de evento detectados y memoria acumulada, si aplica:
 - Personas: ${eventPreferences.guests || "no detectado"}
 - Comuna/lugar: ${eventPreferences.location || "no detectado"}
 - Fecha: ${eventPreferences.date || "no detectado"}
 - Escenario: ${eventPreferences.scenario || "general"}
+- Servicio elegido/preferido: ${eventPreferences.selectedService || "no detectado"}
+- Extras solicitados: ${eventPreferences.extras?.length ? eventPreferences.extras.join(", ") : "no detectado"}
+- Resumen memoria: ${memory?.summary || "sin memoria"}
+
+Instrucción crítica de memoria:
+Si Personas, Comuna/lugar o Fecha aparecen arriba como detectados, NO vuelvas a preguntarlos.
+Si el cliente pide cotización final y faltan precios oficiales, explica que el valor final depende de esos datos ya capturados y pide solo el dato faltante real: horario, dirección exacta o contacto.
 `;
 
   try {

@@ -101,16 +101,38 @@ export async function updateContactProfile({ contactId, profile }) {
 }
 
 export async function getOrCreateOpenConversation({ tenantId, contactId }) {
+  // FIX: No crear chats duplicados para el mismo cliente/canal/tenant.
+  // Antes solo reutilizaba OPEN/PENDING, por eso si una conversación estaba CLOSED/RESOLVED
+  // y el cliente volvía a escribir, el sistema creaba otra conversación y se perdía memoria.
   const existing = await prisma.conversation.findFirst({
     where: {
       tenantId,
-      contactId,
-      status: { in: ["OPEN", "PENDING"] }
+      contactId
     },
-    orderBy: { updatedAt: "desc" }
+    orderBy: { updatedAt: "desc" },
+    include: { contact: true, assignedTo: true, lead: true }
   });
 
-  if (existing) return existing;
+  if (existing) {
+    const shouldReopen = ["CLOSED", "RESOLVED"].includes(existing.status);
+    if (shouldReopen) {
+      const reopened = await prisma.conversation.update({
+        where: { id: existing.id },
+        data: {
+          status: "OPEN",
+          lastMessageAt: new Date()
+        },
+        include: { contact: true, assignedTo: true, lead: true }
+      });
+
+      const io = getIo();
+      io.to(`tenant:${tenantId}`).emit("inbox:conversation-updated", reopened);
+      io.emit("inbox:conversation-updated", reopened);
+      return reopened;
+    }
+
+    return existing;
+  }
 
   const conversation = await prisma.conversation.create({
     data: {
