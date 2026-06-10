@@ -67,7 +67,7 @@ async function hashPassword(password) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: getUploadLimitByPlan(plan), files: 8 },
+  limits: { fileSize: 850 * 1024 * 1024, files: 8 },
   fileFilter(_req, file, cb) {
     const allowed = [
       "text/csv",
