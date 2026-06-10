@@ -18,22 +18,82 @@ function detectClosingIntent(message = "") {
   return /(comprar|lo quiero|me interesa|cómo pago|como pago|agendar|reservar|quiero avanzar|disponible|lo tomo|lo compro)/i.test(text);
 }
 
+
+function trimAtSentenceBoundary(text = "", maxLength = 3200) {
+  const value = String(text || "").trim();
+  if (value.length <= maxLength) return value;
+
+  const limit = value.slice(0, maxLength);
+  const sentenceEnd = Math.max(
+    limit.lastIndexOf(". "),
+    limit.lastIndexOf("? "),
+    limit.lastIndexOf("! "),
+    limit.lastIndexOf("\n\n")
+  );
+
+  if (sentenceEnd > Math.floor(maxLength * 0.65)) {
+    return limit.slice(0, sentenceEnd + 1).trim();
+  }
+
+  return limit.trim();
+}
+
+function removeDuplicatedClosingQuestions(text = "") {
+  let reply = String(text || "").trim();
+
+  const genericClosings = [
+    "¿Quieres que avancemos con esta opción o prefieres ver una alternativa?",
+    "¿Quieres que avancemos con esta opción?",
+    "¿Prefieres ver una alternativa?"
+  ];
+
+  for (const closing of genericClosings) {
+    const first = reply.indexOf(closing);
+    if (first !== -1) {
+      const second = reply.indexOf(closing, first + closing.length);
+      if (second !== -1) {
+        reply = reply.slice(0, second).trim();
+      }
+    }
+  }
+
+  const questions = reply.match(/¿[^?]+\?/g) || [];
+  if (questions.length > 1) {
+    const lastQuestion = questions[questions.length - 1];
+    const duplicatedAdvance = /avancemos|alternativa|reserva|cotizaci[oó]n|coordinar/i.test(lastQuestion);
+    const previousHasAdvance = questions.slice(0, -1).some((q) => /avancemos|alternativa|reserva|cotizaci[oó]n|coordinar/i.test(q));
+
+    if (duplicatedAdvance && previousHasAdvance) {
+      const lastIndex = reply.lastIndexOf(lastQuestion);
+      reply = reply.slice(0, lastIndex).trim();
+    }
+  }
+
+  return reply;
+}
+
 function postProcessReply(text = "") {
   let reply = String(text || "").trim();
   if (!reply) return "Te ayudo feliz 🙌 ¿Qué producto o servicio estás buscando?";
 
-  // Evita respuestas demasiado largas en chat.
-  if (reply.length > 520) reply = `${reply.slice(0, 500).trim()}...`;
+  reply = reply
+    .replace(/estimado cliente[:,]?/gi, "")
+    .replace(/con gusto le informo que/gi, "te cuento que")
+    .trim();
 
-  // Fuerza una pregunta final útil si el modelo no avanzó la venta.
+  // Evita cierres duplicados y preguntas repetidas.
+  reply = removeDuplicatedClosingQuestions(reply);
+
+  // No cortes respuestas comerciales normales. WhatsApp soporta mensajes largos,
+  // pero mantenemos un límite alto y con corte en frase solo como protección extrema.
+  reply = trimAtSentenceBoundary(reply, 3200);
+
+  // Fuerza una pregunta final útil solo si el modelo no incluyó ninguna pregunta.
   if (!reply.includes("?")) {
     reply += "\n\n¿Quieres que avancemos con esta opción o prefieres ver una alternativa?";
   }
 
-  return reply
-    .replace(/estimado cliente[:,]?/gi, "")
-    .replace(/con gusto le informo que/gi, "te cuento que")
-    .trim();
+  return reply.trim();
 }
 
 function fallbackSalesReply({ userMessage, products }) {
@@ -231,6 +291,10 @@ Reglas:
 - Nunca mezcles rubros entre clientes: responde usando solo el tenant actual, sus productos, reglas, memoria y perfil IA.
 - Si varios clientes usan la misma IA base, personaliza SIEMPRE con el contexto del tenant actual.
 - Haz una sola pregunta final para avanzar.
+- No repitas cierres comerciales. Evita cerrar dos veces con preguntas similares.
+- Si ya mencionaste una opción recomendada, no agregues otra pregunta redundante al final.
+- Entrega respuestas completas, pero breves: máximo 3 bloques y lectura fácil para WhatsApp.
+- No cortes palabras ni frases. Termina siempre la idea completa.
 - Si el workflow indica READY_TO_CLOSE o mark_payment_ready, no sigas vendiendo: confirma el interés y avisa que un vendedor continuará con pago/reserva.
 - Si falta información, pregunta solo el dato clave faltante.
 - Ajusta la presión comercial según la estrategia adaptativa: baja presión para dudas/objeciones, alta solo cuando el cliente esté listo.
@@ -278,6 +342,7 @@ Datos de evento detectados, si aplica:
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0.55,
+        max_tokens: 1200,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user }
