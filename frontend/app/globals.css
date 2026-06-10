@@ -3319,3 +3319,128 @@ html, body {
     min-width: 280px;
   }
 }
+
+
+.activity-feed{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  margin-top:14px;
+}
+
+.activity-card{
+  position:relative;
+  display:flex;
+  align-items:flex-start;
+  gap:18px;
+  padding:18px;
+  border-radius:24px;
+  border:1px solid rgba(170,120,255,.15);
+  background:linear-gradient(135deg, rgba(20,10,45,.95), rgba(36,16,60,.92));
+  transition:all .25s ease;
+  overflow:hidden;
+  text-align:left;
+}
+
+.activity-card:hover{
+  transform:translateY(-2px);
+  border-color:rgba(180,130,255,.4);
+  box-shadow:0 0 25px rgba(120,60,255,.18);
+}
+
+.activity-line{
+  position:absolute;
+  left:34px;
+  top:0;
+  bottom:0;
+  width:2px;
+  background:linear-gradient(to bottom, rgba(168,85,247,.8), rgba(168,85,247,0));
+}
+
+.activity-icon{
+  position:relative;
+  z-index:2;
+  width:38px;
+  height:38px;
+  min-width:38px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(120,60,255,.18);
+  border:1px solid rgba(200,160,255,.25);
+  font-size:18px;
+  box-shadow:0 0 18px rgba(120,60,255,.2);
+}
+
+.activity-content{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.activity-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+
+.activity-header strong{
+  color:#fff;
+  font-size:15px;
+}
+
+.activity-time{
+  font-size:12px;
+  color:#b7a8db;
+}
+
+.activity-description{
+  color:#cdbdf0;
+  font-size:13px;
+  line-height:1.5;
+}
+
+.activity-footer{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:4px;
+}
+
+.activity-badge{
+  padding:6px 10px;
+  border-radius:999px;
+  background:rgba(120,60,255,.16);
+  border:1px solid rgba(180,130,255,.2);
+  color:#dccfff;
+  font-size:12px;
+}
+
+.activity-badge.success{
+  background:rgba(34,197,94,.15);
+  border-color:rgba(34,197,94,.25);
+  color:#b7ffca;
+}
+
+.activity-payment .activity-icon{
+  background:rgba(34,197,94,.18);
+}
+
+.activity-warning .activity-icon{
+  background:rgba(239,68,68,.18);
+}
+
+.activity-ai .activity-icon{
+  background:rgba(168,85,247,.22);
+}
+
+.activity-lead .activity-icon{
+  background:rgba(249,115,22,.18);
+}
+
+.activity-booking .activity-icon{
+  background:rgba(59,130,246,.18);
+}

@@ -144,15 +144,33 @@ export default function DashboardPage() {
         </div>
 
         <h2 className="section-title">Actividad viva</h2>
-        <div className="phase5-list">
-          {crm.activity.slice(0, 12).map((item) => (
-            <button className="phase5-list-row" key={item.id} onClick={() => item.conversationId ? window.location.href = `/inbox?conversation=${item.conversationId}` : undefined}>
-              <div>
-                <strong>{item.title}</strong>
-                <div className="meta-line">{item.description}</div>
-                <small className="meta-line">{formatDate(item.createdAt)}</small>
+        <div className="activity-feed">
+          {crm.activity.slice(0, 12).map((item, index) => (
+            <button
+              className={`activity-card activity-${activityType(item.title)}`}
+              key={item.id}
+              onClick={() => item.conversationId ? window.location.href = `/inbox?conversation=${item.conversationId}` : undefined}
+            >
+              <div className="activity-line" />
+              <div className="activity-icon">
+                {activityIcon(item.title)}
               </div>
-              {item.amount ? <span className="badge">{money(item.amount)}</span> : null}
+
+              <div className="activity-content">
+                <div className="activity-header">
+                  <strong>{humanizeTitle(item.title)}</strong>
+                  <span className="activity-time">{relativeTime(item.createdAt)}</span>
+                </div>
+
+                <div className="activity-description">
+                  {humanizeDescription(item.description)}
+                </div>
+
+                <div className="activity-footer">
+                  {item.amount ? <span className="activity-badge success">{money(item.amount)}</span> : null}
+                  {(item as any).stage ? <span className="activity-badge">{stageLabel((item as any).stage)}</span> : null}
+                </div>
+              </div>
             </button>
           ))}
           {!crm.activity.length ? <div className="empty-state">Aún no hay actividad operativa.</div> : null}
@@ -183,6 +201,61 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
+function activityType(title: string) {
+  const value = String(title || "").toLowerCase();
+
+  if (value.includes("pago")) return "payment";
+  if (value.includes("reserva")) return "booking";
+  if (value.includes("humana")) return "warning";
+  if (value.includes("lead")) return "lead";
+  if (value.includes("ia")) return "ai";
+
+  return "default";
+}
+
+function activityIcon(title: string) {
+  const value = String(title || "").toLowerCase();
+
+  if (value.includes("pago")) return "💰";
+  if (value.includes("reserva")) return "📅";
+  if (value.includes("humana")) return "⚠️";
+  if (value.includes("lead")) return "🔥";
+  if (value.includes("ia")) return "🤖";
+
+  return "✨";
+}
+
+function humanizeTitle(title: string) {
+  const map: Record<string, string> = {
+    "LOW_SIGNAL": "Cliente con baja intención de compra",
+    "READY_TO_CLOSE": "Lead listo para cierre",
+    "ask_need": "IA solicitó más información",
+  };
+
+  return map[title] || title;
+}
+
+function humanizeDescription(text: string) {
+  return String(text || "")
+    .replace(/LOW_SIGNAL/g, "baja intención comercial")
+    .replace(/ask_need/g, "solicitud de información")
+    .replace(/handoff_human/g, "derivación humana");
+}
+
+function relativeTime(date: string) {
+  const diff = Math.max(1, Math.floor((Date.now() - new Date(date).getTime()) / 60000));
+
+  if (diff < 60) return `Hace ${diff} min`;
+
+  const hours = Math.floor(diff / 60);
+  if (hours < 24) return `Hace ${hours}h`;
+
+  const days = Math.floor(hours / 24);
+  return `Hace ${days}d`;
+}
+
 
 function Card({ title, value }: { title: string; value: string | number }) {
   return (
