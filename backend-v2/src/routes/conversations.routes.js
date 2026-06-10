@@ -78,7 +78,7 @@ function conversationWhere(req) {
   // Por defecto no mostrar conversaciones eliminadas/cerradas en el inbox.
   if (!req.query?.includeClosed || req.query.includeClosed !== "true") {
     where.status = {
-      notIn: ["CLOSED", "DELETED"]
+      notIn: ["CLOSED"]
     };
   }
 
@@ -110,7 +110,24 @@ conversationsRouter.get("/conversations", async (req, res) => {
       take: 200
     });
 
-    const enriched = await Promise.all(conversations.map(enrichConversation));
+    const enriched = await Promise.all(
+      conversations.map(async (conversation) => {
+        try {
+          return await enrichConversation(conversation);
+        } catch (error) {
+          console.warn("Conversation enrich skipped:", {
+            conversationId: conversation.id,
+            error: error?.message || error
+          });
+          return {
+            ...conversation,
+            channelConfig: null,
+            lastMessage: null,
+            messageCount: 0
+          };
+        }
+      })
+    );
     res.json(enriched);
   } catch (error) {
     console.error("List conversations error:", error);
