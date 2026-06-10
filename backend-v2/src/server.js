@@ -24,9 +24,14 @@ import { adminRouter } from "./routes/admin.routes.js";
 import { saasRouter } from "./routes/saas.routes.js";
 import { requireModule, tenantContext } from "./middleware/tenant-access.js";
 import { MODULES } from "./lib/modules.js";
+import { basicRateLimit } from "./middleware/rate-limit.js";
+import { apiErrorHandler, requestContext } from "./middleware/request-context.js";
+import { runAutonomousSalesFollowUps } from "./services/autonomous-sales-followup.service.js";
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
+app.use(requestContext);
+app.use(basicRateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 300) }));
 app.use((req, res, next) => {
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Access-Control-Allow-Origin", env.frontendOrigin);
@@ -34,6 +39,33 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   next();
+});
+
+app.get("/health", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({
+      ok: true,
+      service: "onmicanal-backend-v2",
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({
+      ok: false,
+      error: "Database health check failed",
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get("/api/health", async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ ok: true, db: true, timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ ok: false, db: false, timestamp: new Date().toISOString() });
+  }
 });
 
 app.get("/", (_req, res) => {
@@ -81,10 +113,7 @@ app.use((req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });
 });
 
-app.use((error, _req, res, _next) => {
-  console.error("Unhandled API error:", error);
-  res.status(500).json({ error: "Error interno del servidor" });
-});
+app.use(apiErrorHandler);
 
 
 const server = http.createServer(app);
@@ -101,6 +130,11 @@ if (env.enableAutomation) {
   setInterval(() => {
     runAutomationCycle().catch((error) => console.error("Automation error:", error));
   }, 60_000);
+
+  setInterval(() => {
+    runAutonomousSalesFollowUps({ dryRun: false, limit: 100 })
+      .catch((error) => console.error("Autonomous sales follow-up error:", error));
+  }, 15 * 60_000);
 }
 
 io.on("connection", (socket) => {

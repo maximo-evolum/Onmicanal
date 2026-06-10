@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getConversations } from "@/lib/api";
+import { getAiOpsSummary, getConversations, type AiOpsSummary } from "@/lib/api";
 import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, getAiBadgeClass, getConversationState, isReadyToClose, riskLabel } from "@/lib/ai-ops";
 import { Topbar } from "@/components/topbar";
@@ -19,6 +19,7 @@ function customerName(conversation: Conversation) {
 export default function AiOpsPage() {
   const agent = getStoredSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [summary, setSummary] = useState<AiOpsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +27,14 @@ export default function AiOpsPage() {
     try {
       setLoading(true);
       setError(null);
-      setConversations(await getConversations());
+      try {
+        const data = await getAiOpsSummary();
+        setSummary(data);
+        setConversations((data.priorities || data.strategies || []).map((item) => item.conversation));
+      } catch {
+        setSummary(null);
+        setConversations(await getConversations());
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar AI Ops");
     } finally {
@@ -63,9 +71,9 @@ export default function AiOpsPage() {
             <p className="meta-line">Visualiza razonamiento, estrategia, riesgo, urgencia y próximas acciones sugeridas por la IA.</p>
           </div>
           <div className="ai-ops-hero-kpis">
-            <span className="badge sales-alert-critical">🚨 {critical.length} críticos</span>
-            <span className="badge sales-alert-hot">🔥 {strategic.length} oportunidades</span>
-            <span className="badge sales-alert-action">🧠 {avg}% score prom.</span>
+            <span className="badge sales-alert-critical">🚨 {summary?.metrics.critical ?? critical.length} críticos</span>
+            <span className="badge sales-alert-hot">🔥 {summary?.metrics.opportunities ?? strategic.length} oportunidades</span>
+            <span className="badge sales-alert-action">🧠 {summary?.metrics.averageScore ?? avg}% score prom.</span>
             <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
           </div>
         </section>

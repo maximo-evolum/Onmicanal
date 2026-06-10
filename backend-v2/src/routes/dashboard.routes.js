@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { getSalesQueue } from "../services/sales-engine.service.js";
+import { getAiOperationsSummary } from "../services/ai-ops.service.js";
 
 export const dashboardRouter = Router();
 
@@ -138,5 +139,23 @@ dashboardRouter.get("/sales/queue", async (req, res) => {
   } catch (error) {
     console.error("Sales queue error:", error);
     res.status(500).json({ error: "No se pudieron obtener cierres IA" });
+  }
+});
+
+
+dashboardRouter.get("/ai-ops/summary", async (req, res) => {
+  try {
+    const tenantId = req.user?.role === "SUPER_ADMIN" && req.query?.tenantId
+      ? String(req.query.tenantId)
+      : req.tenantId;
+
+    const summary = await getAiOperationsSummary({
+      tenantId,
+      superAdmin: req.user?.role === "SUPER_ADMIN"
+    });
+    res.json(summary);
+  } catch (error) {
+    console.error("AI Ops summary error:", error);
+    res.status(500).json({ error: "No se pudo obtener AI Operations" });
   }
 });

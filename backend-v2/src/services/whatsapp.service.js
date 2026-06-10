@@ -1,6 +1,7 @@
 import { env } from "../lib/env.js";
 import { resolveOutboundChannelConfig } from "./tenant-channel-config.service.js";
 import { traceError, traceStep } from "../lib/trace.js";
+import { fetchJsonWithRetry } from "./stability.service.js";
 
 export async function sendWhatsAppText({ to, message, phoneNumberId, accessToken, tenant = null, tenantId = null, trace = null }) {
   const resolved = await resolveOutboundChannelConfig({ tenant, tenantId, channel: "whatsapp" });
@@ -20,35 +21,39 @@ export async function sendWhatsAppText({ to, message, phoneNumberId, accessToken
 
   const url = `https://graph.facebook.com/v23.0/${effectivePhoneNumberId}/messages`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to,
-      type: "text",
-      text: { body: message }
-    })
-  });
+  try {
+    const { response, data } = await fetchJsonWithRetry(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "text",
+        text: { body: message }
+      })
+    }, {
+      retries: 2,
+      timeoutMs: 15000,
+      label: "whatsapp_send",
+      trace,
+      traceStep
+    });
 
-  const data = await response.json();
-  traceStep(trace, "WHATSAPP_SEND_RESPONSE", {
-    ok: response.ok,
-    status: response.status,
-    data
-  });
+    traceStep(trace, "WHATSAPP_SEND_RESPONSE", {
+      ok: response.ok,
+      status: response.status,
+      data
+    });
 
-  if (!response.ok) {
-    console.error("WhatsApp send error:", data);
-    const error = new Error(data?.error?.message || "Error enviando mensaje a WhatsApp");
+    return data;
+  } catch (error) {
+    console.error("WhatsApp send error:", error?.data || error);
     traceError(trace, "WHATSAPP_SEND_ERROR", error);
     throw error;
   }
-
-  return data;
 }
 
 
@@ -71,28 +76,32 @@ export async function sendWhatsAppInteractive({ to, payload, phoneNumberId, acce
 
   const url = `https://graph.facebook.com/v23.0/${effectivePhoneNumberId}/messages`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
+  try {
+    const { response, data } = await fetchJsonWithRetry(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }, {
+      retries: 2,
+      timeoutMs: 15000,
+      label: "whatsapp_interactive_send",
+      trace,
+      traceStep
+    });
 
-  const data = await response.json();
-  traceStep(trace, "WHATSAPP_INTERACTIVE_SEND_RESPONSE", {
-    ok: response.ok,
-    status: response.status,
-    data
-  });
+    traceStep(trace, "WHATSAPP_INTERACTIVE_SEND_RESPONSE", {
+      ok: response.ok,
+      status: response.status,
+      data
+    });
 
-  if (!response.ok) {
-    console.error("WhatsApp interactive send error:", data);
-    const error = new Error(data?.error?.message || "Error enviando mensaje interactivo a WhatsApp");
+    return data;
+  } catch (error) {
+    console.error("WhatsApp interactive send error:", error?.data || error);
     traceError(trace, "WHATSAPP_INTERACTIVE_SEND_ERROR", error);
     throw error;
   }
-
-  return data;
 }

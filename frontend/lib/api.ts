@@ -398,6 +398,28 @@ export async function getSalesQueue(): Promise<Conversation[]> {
   return request<Conversation[]>("/sales/queue");
 }
 
+export type AiOpsSummary = {
+  metrics: {
+    total: number;
+    critical: number;
+    opportunities: number;
+    averageScore: number;
+    recovery: number;
+  };
+  priorities: Array<{ conversation: Conversation; profile: Record<string, any> }>;
+  strategies: Array<{ conversation: Conversation; profile: Record<string, any> }>;
+  learning: Array<{ conversation: Conversation; profile: Record<string, any> }>;
+  alerts: Array<{ conversationId: string; title: string; message: string; score: number }>;
+};
+
+export async function getAiOpsSummary(): Promise<AiOpsSummary> {
+  return request<AiOpsSummary>("/ai-ops/summary");
+}
+
+export async function previewAutonomousFollowUps(): Promise<{ count: number; actions: unknown[] }> {
+  return request<{ count: number; actions: unknown[] }>("/saas/followups/preview");
+}
+
 export type TenantModulesResponse = {
   tenantId: string;
   plan: string;

@@ -3,6 +3,7 @@ import { registerSalesSignal } from "./sales-engine.service.js";
 
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/db.js";
+import { fetchJsonWithRetry } from "./stability.service.js";
 import { buildProductContext, searchProducts } from "./product.service.js";
 import { buildServiceContext, extractEventPreferences, getPrimaryService, isEventServiceIntent, scenarioInstruction } from "./event-sales.service.js";
 import { getConversationMemory, getConversationHistory } from "./memory.service.js";
@@ -453,7 +454,7 @@ Evita repetir frases del historial reciente. Mantén conversación fluida y huma
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const { data } = await fetchJsonWithRetry("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${env.openAiApiKey}`,
@@ -468,10 +469,12 @@ Evita repetir frases del historial reciente. Mantén conversación fluida y huma
           { role: "user", content: user }
         ]
       })
+    }, {
+      retries: 2,
+      timeoutMs: 25000,
+      label: "openai_chat"
     });
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error?.message || "OpenAI request failed");
     const content = data?.choices?.[0]?.message?.content?.trim();
     return postProcessReply(content || (eventMode ? fallbackEventServiceReply({ userMessage, service, preferences: eventPreferences, isClosing }) : fallbackSalesReply({ userMessage, products })));
   } catch (error) {

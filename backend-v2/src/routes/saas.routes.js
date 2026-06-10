@@ -2,6 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { requireRole } from "../middleware/tenant-access.js";
+import { runAutonomousSalesFollowUps } from "../services/autonomous-sales-followup.service.js";
 import {
   auditTenantAction,
   buildSaasOverview,
@@ -146,5 +147,18 @@ saasRouter.post("/saas/audit", requireRole("OWNER", "ADMIN"), async (req, res, n
   try {
     const log = await auditTenantAction({ tenantId: req.tenantId, actorUserId: req.user?.id, action: req.body?.action || "MANUAL_NOTE", metadata: req.body?.metadata || null });
     res.status(201).json({ log });
+  } catch (error) { next(error); }
+});
+
+
+saasRouter.get("/saas/followups/preview", requireRole("OWNER", "ADMIN"), async (req, res, next) => {
+  try {
+    res.json(await runAutonomousSalesFollowUps({ tenantId: req.tenantId, dryRun: true, limit: 100 }));
+  } catch (error) { next(error); }
+});
+
+saasRouter.post("/saas/followups/run", requireRole("OWNER", "ADMIN"), async (req, res, next) => {
+  try {
+    res.json(await runAutonomousSalesFollowUps({ tenantId: req.tenantId, dryRun: false, limit: 100 }));
   } catch (error) { next(error); }
 });
