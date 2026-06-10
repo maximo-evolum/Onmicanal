@@ -198,7 +198,18 @@ Memoria del cliente:
 - Urgencia: ${memory?.urgencyLevel ?? "sin medir"}/100
 - Sentimiento: ${memory?.sentiment || "neutral"}
 - Objeción actual: ${objection ? objectionLabel(objection) : "ninguna"}
-${objectionReply ? `
+${objectionReply ? 
+\nREGLAS IMPORTANTES:
+- Nunca vuelvas a preguntar datos ya entregados por el cliente.
+- Si ya tienes cantidad de personas, comuna y fecha, recomienda directamente el servicio ideal.
+- Entrega la propuesta completa en una sola respuesta:
+  - servicio recomendado
+  - qué incluye
+  - extras solicitados
+  - siguiente paso comercial.
+- Evita dividir la venta en múltiples mensajes.
+- Responde como vendedor experto humano.
+`
 Respuesta sugerida para objeción: ${objectionReply}
 ` : ""}
 
