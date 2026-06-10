@@ -21,7 +21,7 @@ http://localhost:3001/login
 
 
 git add .
-git commit -m "nueva campañas ia "
+git commit -m "cambio de largo txt"
 git push -u origin main
 git remote add origin https://github.com/maximo-evolum/Onmicanal.git
 

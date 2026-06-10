@@ -198,8 +198,7 @@ Memoria del cliente:
 - Urgencia: ${memory?.urgencyLevel ?? "sin medir"}/100
 - Sentimiento: ${memory?.sentiment || "neutral"}
 - Objeción actual: ${objection ? objectionLabel(objection) : "ninguna"}
-${objectionReply ? 
- 
+${objectionReply ?  ${objectionReply ? `
 Respuesta sugerida para objeción: ${objectionReply}
 ` : ""}
 
