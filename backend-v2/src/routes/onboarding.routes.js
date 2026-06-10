@@ -1,3 +1,26 @@
+
+function getUploadLimitByPlan(plan) {
+  const normalized = String(plan || "").toUpperCase();
+
+  // FREE = 150MB
+  if (normalized.includes("FREE")) {
+    return 150 * 1024 * 1024;
+  }
+
+  // BUSINESS = 350MB
+  if (normalized.includes("BUSINESS")) {
+    return 350 * 1024 * 1024;
+  }
+
+  // ENTERPRISE = 850MB
+  if (normalized.includes("ENTERPRISE")) {
+    return 850 * 1024 * 1024;
+  }
+
+  // Default
+  return 150 * 1024 * 1024;
+}
+
 import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../lib/db.js";
@@ -8,7 +31,7 @@ export const onboardingRouter = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 12 * 1024 * 1024, files: 8 },
+  limits: { fileSize: getUploadLimitByPlan(plan), files: 8 },
   fileFilter(_req, file, cb) {
     const allowed = [
       "text/csv",

@@ -341,7 +341,7 @@ export default function OnboardingPage() {
 
             <div className="upload-zone" onClick={() => fileInputRef.current?.click()}>
               <strong>Seleccionar archivos</strong>
-              <span>CSV, XLSX, XLS, PDF o TXT · hasta 8 archivos · 12 MB por archivo</span>
+              <span>CSV, XLSX, XLS, PDF o TXT · hasta 8 archivos · 150 MB FREE · 350 MB BUSINESS · 850 MB ENTERPRISE</span>
               <input ref={fileInputRef} type="file" multiple accept=".csv,.xlsx,.xls,.pdf,.txt" onChange={(e) => setFiles(Array.from(e.target.files || []))} />
             </div>
 
