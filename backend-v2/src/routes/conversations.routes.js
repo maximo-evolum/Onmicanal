@@ -75,6 +75,13 @@ function conversationWhere(req) {
     where.contact = { channel: String(req.query.channel) };
   }
 
+  // Por defecto no mostrar conversaciones eliminadas/cerradas en el inbox.
+  if (!req.query?.includeClosed || req.query.includeClosed !== "true") {
+    where.status = {
+      notIn: ["CLOSED", "DELETED"]
+    };
+  }
+
   return where;
 }
 
@@ -194,20 +201,39 @@ conversationsRouter.delete("/conversations/:id", requireRole(ROLE_GROUPS.MANAGER
     const conversation = await findAccessibleConversation(req, req.params.id);
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
-    // No borramos mensajes de forma física para evitar pérdida accidental del historial.
-    // La conversación queda cerrada y permanece auditable en la base de datos.
-    await prisma.conversation.update({
-      where: { id: req.params.id },
-      data: {
-        status: "CLOSED",
-        mode: "HUMAN",
-        lastMessageAt: new Date()
-      }
+    // FIX REAL:
+    // Antes solo cambiábamos status=CLOSED y la conversación reaparecía.
+    // Ahora eliminamos completamente mensajes, memoria y conversación.
+    await prisma.$transaction(async (tx) => {
+      await tx.message.deleteMany({
+        where: { conversationId: req.params.id }
+      });
+
+      // Compatibilidad con diferentes nombres de tabla de memoria.
+      try {
+        await tx.conversationMemory.deleteMany({
+          where: { conversationId: req.params.id }
+        });
+      } catch (_) {}
+
+      try {
+        await tx.lead.deleteMany({
+          where: { conversationId: req.params.id }
+        });
+      } catch (_) {}
+
+      await tx.conversation.delete({
+        where: { id: req.params.id }
+      });
     });
 
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      deleted: true,
+      conversationId: req.params.id
+    });
   } catch (error) {
     console.error("Delete conversation error:", error);
-    res.status(500).json({ error: "No se pudo cerrar la conversación" });
+    res.status(500).json({ error: "No se pudo eliminar la conversación" });
   }
 });
