@@ -10,6 +10,23 @@ function firstEnv(...keys) {
   return undefined;
 }
 
+function normalizeUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return undefined;
+  if (/^https?:\/\//i.test(text)) return text.replace(/\/$/, "");
+  return `https://${text.replace(/\/$/, "")}`;
+}
+
+const publicBaseUrl = normalizeUrl(firstEnv("PUBLIC_BASE_URL", "BACKEND_PUBLIC_URL", "RAILWAY_PUBLIC_DOMAIN"));
+const frontendOrigin = normalizeUrl(firstEnv(
+  "FRONTEND_ORIGIN",
+  "FRONTEND_URL",
+  "CORS_ORIGIN",
+  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_SITE_URL",
+  "frontendOrigin"
+)) || publicBaseUrl || "*";
+
 export const env = {
   nodeEnv: firstEnv("NODE_ENV", "nodeEnv") || "development",
 
@@ -46,11 +63,9 @@ export const env = {
 
   jwtSecret: firstEnv("JWT_SECRET", "jwtSecret"),
 
-  frontendOrigin:
-    firstEnv("FRONTEND_ORIGIN", "frontendOrigin") || "*",
+  frontendOrigin,
 
-  publicBaseUrl:
-    firstEnv("PUBLIC_BASE_URL", "BACKEND_PUBLIC_URL", "RAILWAY_PUBLIC_DOMAIN"),
+  publicBaseUrl,
 
   enableAutomation:
     firstEnv("ENABLE_AUTOMATION", "enableAutomation") === "true",
