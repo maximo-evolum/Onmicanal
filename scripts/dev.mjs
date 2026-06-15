@@ -21,7 +21,7 @@ function run(name, cwd, command, args) {
 
 const npm = isWin ? 'npm.cmd' : 'npm';
 const backend = run('backend', 'backend-v2', npm, ['run', 'dev']);
-const frontend = run('frontend', 'frontend-inbox', npm, ['run', 'dev']);
+const frontend = run('frontend', 'frontend', npm, ['run', 'dev']);
 
 function shutdown() {
   backend.kill('SIGTERM');

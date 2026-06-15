@@ -1,3 +1,5 @@
+import { ensurePublicCampaignImage } from "./campaign-assets.service.js";
+
 const OPENAI_URL = "https://api.openai.com/v1";
 
 function safeJsonParse(text) {
@@ -238,7 +240,11 @@ Evita logos de marcas reales no solicitadas. No agregues texto pequeño ilegible
 
   const image = data?.data?.[0];
   if (image?.url) return image.url;
-  if (image?.b64_json) return `data:image/png;base64,${image.b64_json}`;
+  if (image?.b64_json) {
+    return ensurePublicCampaignImage(`data:image/png;base64,${image.b64_json}`, {
+      title: visualTitle || "campaña"
+    });
+  }
 
   const encoded = encodeURIComponent(visualTitle || "Campaña IA");
   return `https://placehold.co/1080x1350/21183a/ede9fe/png?text=${encoded}`;
@@ -269,19 +275,22 @@ export async function generateCampaignImages(input = {}) {
     baseVariants.slice(0, variantCount).map(async (variant, index) => {
       const normalized = normalizeVariant(variant, input, index);
       if (normalized.image || normalized.imageUrl) {
+        const image = await ensurePublicCampaignImage(normalized.image || normalized.imageUrl, {
+          title: normalized.title
+        });
         return {
           ...normalized,
-          image: normalized.image || normalized.imageUrl,
-          imageUrl: normalized.imageUrl || normalized.image,
+          image,
+          imageUrl: image,
           generationStage: "complete"
         };
       }
 
-      const image = await generateImage(normalized.imagePrompt, normalized.title, {
+      const image = await ensurePublicCampaignImage(await generateImage(normalized.imagePrompt, normalized.title, {
         skipRealImage: Boolean(input.previewOnly),
         imageModel: input.imageModel,
         size: input.imageSize
-      });
+      }), { title: normalized.title });
 
       return {
         ...normalized,
@@ -376,7 +385,10 @@ async function publishInstagramPhoto({ igUserId, accessToken, imageUrl, caption 
 export async function publishCampaignToPlatforms({ tenant, channelConfigs = [], campaign, platforms = [], selectedVariant = {}, whatsappRecipients = [] }) {
   const selectedPlatforms = normalizePlatforms(platforms);
   const caption = `${selectedVariant.caption || selectedVariant.text || campaign?.template || ""}${selectedVariant.hashtags ? `\n\n${selectedVariant.hashtags}` : ""}`;
-  const imageUrl = selectedVariant.imageUrl || selectedVariant.image || null;
+  const imageUrl = await ensurePublicCampaignImage(selectedVariant.imageUrl || selectedVariant.image || null, {
+    title: selectedVariant.title || campaign?.name || "campaña",
+    requirePublicUrl: selectedPlatforms.some((platform) => ["facebook", "instagram"].includes(platform))
+  });
 
   const byChannel = Object.fromEntries(
     channelConfigs.map((config) => [String(config.channel).toLowerCase(), config])

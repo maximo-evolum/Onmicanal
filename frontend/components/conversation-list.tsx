@@ -1,4 +1,5 @@
 import { Conversation } from "@/lib/types";
+import { getCommercialState } from "@/lib/commercial-state";
 
 function getInitials(label: string) {
   return label
@@ -16,6 +17,8 @@ function truncate(value: string, max = 82) {
 
 function getPriority(conversation: Conversation): "high" | "medium" | "low" {
   const value = (conversation.priorityLabel || "medium").toString().toLowerCase();
+  const commercial = getCommercialState(conversation, conversation.lead);
+  if (commercial.priority === "high") return "high";
   if (conversation.aiHandoffRequired || conversation.aiNextActionCode === "READY_TO_CLOSE") return "high";
   if (value === "high" || value === "low") return value;
   return "medium";
@@ -56,6 +59,7 @@ export function ConversationList({
 
         const priority = getPriority(conversation);
         const signal = getSalesSignal(conversation);
+        const commercial = getCommercialState(conversation, conversation.lead);
 
         const modeClass =
           conversation.mode === "BOT"
@@ -103,7 +107,7 @@ export function ConversationList({
               <span className={`badge ${modeClass}`}>
                 {conversation.mode === "BOT" ? "IA" : conversation.mode === "HUMAN" ? "Humano" : "Híbrido"}
               </span>
-              <span className="badge">{conversation.status}</span>
+              <span className={`badge priority-${commercial.priority}`}>{commercial.label}</span>
               {typeof conversation.messageCount === "number" ? <span className="badge">{conversation.messageCount} msg</span> : null}
               {conversation.assignedTo ? <span className="badge">{conversation.assignedTo.name}</span> : null}
               {signal ? <span className={`badge ${signal.className}`}>{signal.label}</span> : null}

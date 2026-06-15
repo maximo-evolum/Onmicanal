@@ -65,6 +65,25 @@ export type Conversation = {
     createdAt: string;
   } | null;
   messageCount?: number;
+  commercialState?: {
+    code: string;
+    label: string;
+    priority: "low" | "medium" | "high" | string;
+  };
+  latestPayment?: {
+    id: string;
+    status: string;
+    amount: number;
+    currency: string;
+    paymentUrl?: string | null;
+    createdAt: string;
+  } | null;
+  latestBooking?: {
+    id: string;
+    status: string;
+    date: string;
+    total: number;
+  } | null;
 };
 
 export type Message = {

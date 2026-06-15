@@ -11,6 +11,8 @@ function firstEnv(...keys) {
 }
 
 export const env = {
+  nodeEnv: firstEnv("NODE_ENV", "nodeEnv") || "development",
+
   port: Number(firstEnv("PORT") || 3000),
 
   DATABASE_URL: firstEnv("DATABASE_URL"),
@@ -47,8 +49,14 @@ export const env = {
   frontendOrigin:
     firstEnv("FRONTEND_ORIGIN", "frontendOrigin") || "*",
 
+  publicBaseUrl:
+    firstEnv("PUBLIC_BASE_URL", "BACKEND_PUBLIC_URL", "RAILWAY_PUBLIC_DOMAIN"),
+
   enableAutomation:
     firstEnv("ENABLE_AUTOMATION", "enableAutomation") === "true",
+
+  enableDevTools:
+    firstEnv("ENABLE_DEV_TOOLS", "enableDevTools") === "true",
 
   metaAppSecret: firstEnv(
     "META_APP_SECRET",
@@ -64,6 +72,9 @@ export const env = {
     "PAYMENT_BASE_URL",
     "paymentBaseUrl"
   ),
+
+  paymentProvider:
+    firstEnv("PAYMENT_PROVIDER", "paymentProvider") || "manual",
 };
 
 const required = ["DATABASE_URL", "jwtSecret"];
@@ -74,4 +85,23 @@ for (const key of required) {
       `Falta variable de entorno: ${key}`
     );
   }
+}
+
+if (env.nodeEnv === "production") {
+  const unsafeJwtSecrets = new Set(["change_me_local", "secret", "jwt_secret", "dev", "password"]);
+  if (unsafeJwtSecrets.has(String(env.jwtSecret || "").trim()) || String(env.jwtSecret || "").length < 32) {
+    throw new Error("JWT_SECRET de producción debe tener al menos 32 caracteres y no usar valores demo.");
+  }
+
+  if (!env.frontendOrigin || env.frontendOrigin === "*") {
+    throw new Error("FRONTEND_ORIGIN debe apuntar al dominio real en producción.");
+  }
+
+  if (env.defaultTenantSlug && String(env.defaultTenantSlug).startsWith("demo")) {
+    console.warn("[ENV_WARNING] DEFAULT_TENANT_SLUG apunta a un tenant demo. Revisa configuración productiva.");
+  }
+}
+
+if (env.nodeEnv !== "production" && firstEnv("ENABLE_DEV_TOOLS", "enableDevTools") === undefined) {
+  env.enableDevTools = true;
 }

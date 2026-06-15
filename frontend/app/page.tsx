@@ -1,5 +1,5 @@
-import { BotLabShell } from "@/components/bot-lab-shell";
+import { redirect } from "next/navigation";
 
 export default function BotLabPage() {
-  return <BotLabShell />;
+  redirect("/dashboard");
 }

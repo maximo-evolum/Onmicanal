@@ -44,7 +44,7 @@ paymentsRouter.post("/payments", requireRole(ROLE_GROUPS.MANAGERS), async (req, 
       bookingId: req.body?.bookingId || null,
       amount: req.body?.amount,
       currency: req.body?.currency || "CLP",
-      provider: req.body?.provider || "manual",
+      provider: req.body?.provider || null,
       description: req.body?.description || null,
       metadata: req.body?.metadata || null,
       expiresAt: req.body?.expiresAt || null

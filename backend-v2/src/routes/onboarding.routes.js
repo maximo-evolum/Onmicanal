@@ -37,12 +37,11 @@ const upload = multer({
       "text/csv",
       "text/plain",
       "application/pdf",
-      "application/vnd.ms-excel",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ];
     const name = file.originalname.toLowerCase();
-    if (allowed.includes(file.mimetype) || /\.(csv|txt|pdf|xls|xlsx)$/i.test(name)) return cb(null, true);
-    cb(new Error("Formato no soportado. Usa CSV, Excel, PDF o TXT."));
+    if (allowed.includes(file.mimetype) || /\.(csv|txt|pdf|xlsx)$/i.test(name)) return cb(null, true);
+    cb(new Error("Formato no soportado. Usa CSV, XLSX, PDF o TXT."));
   }
 });
 

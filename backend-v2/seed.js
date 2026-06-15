@@ -7,7 +7,11 @@ async function hashPassword(password) {
 }
 
 const SUPER_ADMIN_EMAIL = String(process.env.SUPER_ADMIN_EMAIL || "admin@platform.local").trim().toLowerCase();
-const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || "Admin123*";
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD;
+
+if (!SUPER_ADMIN_PASSWORD || SUPER_ADMIN_PASSWORD.length < 12) {
+  throw new Error("Define SUPER_ADMIN_PASSWORD con al menos 12 caracteres antes de ejecutar el seed.");
+}
 
 async function ensureDefaultAiProfile({ tenantId, name, industry, objective }) {
   await prisma.tenantAiProfile.upsert({
@@ -71,7 +75,7 @@ async function main() {
     }
   });
 
-  console.log(`SUPER_ADMIN listo: ${SUPER_ADMIN_EMAIL} / ${SUPER_ADMIN_PASSWORD}`);
+  console.log(`SUPER_ADMIN listo: ${SUPER_ADMIN_EMAIL}`);
 
   const tenant = await prisma.tenant.upsert({
     where: { slug: "demo-inmobiliaria" },

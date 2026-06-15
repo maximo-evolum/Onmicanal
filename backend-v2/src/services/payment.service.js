@@ -1,5 +1,6 @@
 
 import { prisma } from "../lib/db.js";
+import { env } from "../lib/env.js";
 
 export const PAYMENT_STATUS = Object.freeze({
   PENDING: "PENDING",
@@ -34,6 +35,27 @@ function buildManualPaymentUrl(payment) {
   const base = process.env.PAYMENT_BASE_URL || process.env.FRONTEND_ORIGIN || "";
   if (!base || base === "*") return null;
   return `${String(base).replace(/\/$/, "")}/pay/${payment.id}`;
+}
+
+function normalizeProvider(provider) {
+  return String(provider || env.paymentProvider || "manual").trim().toLowerCase();
+}
+
+function assertProviderAvailable(provider) {
+  const normalized = normalizeProvider(provider);
+  if (normalized === "manual") return normalized;
+
+  const configured = {
+    mercadopago: Boolean(process.env.MERCADOPAGO_ACCESS_TOKEN),
+    stripe: Boolean(process.env.STRIPE_SECRET_KEY),
+    transbank: Boolean(process.env.TRANSBANK_COMMERCE_CODE && process.env.TRANSBANK_API_KEY)
+  };
+
+  if (!configured[normalized]) {
+    throw new Error(`Proveedor de pago "${normalized}" no configurado. Usa provider=manual o configura el conector real.`);
+  }
+
+  throw new Error(`Proveedor de pago "${normalized}" tiene credenciales, pero el conector de cobro real aún no está implementado.`);
 }
 
 export async function ensureBookingForPayment({ tenantId, conversationId = null, lead = null, quote = null, input = {} }) {
@@ -85,7 +107,7 @@ export async function createPaymentIntent({
   bookingId = null,
   amount,
   currency = "CLP",
-  provider = "manual",
+  provider = null,
   description = null,
   metadata = null,
   expiresAt = null
@@ -93,6 +115,8 @@ export async function createPaymentIntent({
   if (!tenantId) throw new Error("tenantId requerido");
   const numericAmount = toNumber(amount);
   if (!numericAmount || numericAmount <= 0) throw new Error("Monto inválido para pago");
+
+  const normalizedProvider = assertProviderAvailable(provider);
 
   const lead = leadId
     ? await prisma.lead.findFirst({ where: { id: leadId, tenantId } }).catch(() => null)
@@ -115,11 +139,11 @@ export async function createPaymentIntent({
       bookingId: booking?.id || bookingId || null,
       amount: numericAmount,
       currency,
-      provider,
+      provider: normalizedProvider,
       status: PAYMENT_STATUS.PENDING,
       description: cleanText(description) || "Pago pendiente",
       expiresAt: expiresAt ? new Date(expiresAt) : null,
-      metadata: metadata || {}
+      metadata: { ...(metadata || {}), providerMode: normalizedProvider === "manual" ? "manual" : "external" }
     },
     include: { tenant: true, conversation: { include: { contact: true } }, lead: true, booking: true }
   });

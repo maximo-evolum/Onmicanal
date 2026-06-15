@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import pdfParse from "pdf-parse";
 import { env } from "../lib/env.js";
 import { chatComplete } from "../lib/openai.js";
@@ -31,6 +31,18 @@ function simpleCsvParse(text = "") {
   });
 }
 
+function cellToText(value) {
+  if (value === null || value === undefined) return "";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "object") {
+    if (value.text) return compact(value.text);
+    if (value.result !== undefined) return compact(value.result);
+    if (Array.isArray(value.richText)) return compact(value.richText.map((part) => part.text || "").join(""));
+    return compact(JSON.stringify(value));
+  }
+  return compact(value);
+}
+
 function normalizeProduct(row = {}) {
   const keys = Object.keys(row);
   const find = (...names) => {
@@ -55,18 +67,36 @@ async function extractTextFromFile(file) {
   const mime = file.mimetype || "";
   const lower = originalname.toLowerCase();
 
-  if (lower.endsWith(".xlsx") || lower.endsWith(".xls") || mime.includes("spreadsheet")) {
-    const workbook = XLSX.read(file.buffer, { type: "buffer" });
+  if (lower.endsWith(".xlsx") || mime.includes("spreadsheetml.sheet")) {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(file.buffer);
     const parts = [];
     const rows = [];
-    for (const sheetName of workbook.SheetNames) {
-      const sheet = workbook.Sheets[sheetName];
-      const jsonRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-      rows.push(...jsonRows);
-      parts.push(`Hoja: ${sheetName}`);
-      parts.push(XLSX.utils.sheet_to_csv(sheet));
-    }
+
+    workbook.eachSheet((sheet) => {
+      const sheetRows = [];
+      const headers = [];
+
+      sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        const values = row.values.slice(1).map(cellToText);
+        sheetRows.push(values.join(","));
+        if (rowNumber === 1) {
+          headers.push(...values.map((h) => compact(h).toLowerCase()));
+          return;
+        }
+        if (!headers.length) return;
+        rows.push(Object.fromEntries(headers.map((header, index) => [header, values[index] || ""])));
+      });
+
+      parts.push(`Hoja: ${sheet.name}`);
+      parts.push(sheetRows.join("\n"));
+    });
+
     return { text: parts.join("\n"), rows };
+  }
+
+  if (lower.endsWith(".xls")) {
+    throw new Error("Formato XLS antiguo no soportado por seguridad. Exporta el archivo como .xlsx o .csv.");
   }
 
   if (lower.endsWith(".pdf") || mime === "application/pdf") {

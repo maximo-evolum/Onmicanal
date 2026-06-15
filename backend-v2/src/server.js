@@ -1,6 +1,9 @@
 import express from "express";
 import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
+import jwt from "jsonwebtoken";
 import { env } from "./lib/env.js";
 import { prisma } from "./lib/db.js";
 import { setIo } from "./lib/socket.js";
@@ -30,17 +33,27 @@ import { apiErrorHandler, requestContext } from "./middleware/request-context.js
 import { runAutonomousSalesFollowUps } from "./services/autonomous-sales-followup.service.js";
 
 const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
+
 app.use(express.json({ limit: "1mb" }));
 app.use(requestContext);
 app.use(basicRateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 300) }));
 app.use((req, res, next) => {
-  res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Access-Control-Allow-Origin", env.frontendOrigin);
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
+  if (!req.path.startsWith("/campaign-assets/")) {
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+  }
   next();
 });
+
+app.use("/campaign-assets", express.static(campaignAssetsDir, {
+  immutable: true,
+  maxAge: "30d"
+}));
 
 app.get("/health", async (_req, res) => {
   try {
@@ -75,7 +88,9 @@ app.get("/", (_req, res) => {
 
 app.use("/meta", metaRouter);
 app.use("/api", authRouter);
-app.use("/api", workspaceUsersRouter); // demo login helper
+if (env.enableDevTools) {
+  app.use("/api", workspaceUsersRouter); // helper local/demo, deshabilitado en producción por defecto
+}
 
 const protectedApi = [authMiddleware, tenantContext];
 
@@ -99,7 +114,9 @@ app.get("/api/debug/session", ...protectedApi, async (req, res) => {
 app.use("/api", ...protectedApi, modulesRouter);
 app.use("/api", ...protectedApi, adminRouter);
 app.use("/api", ...protectedApi, saasRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.BOT_LAB), devRouter);
+if (env.enableDevTools) {
+  app.use("/api", ...protectedApi, requireModule(MODULES.BOT_LAB), devRouter);
+}
 app.use("/api", ...protectedApi, onboardingRouter);
 app.use("/api", ...protectedApi, conversationsRouter); // Inbox: auth + tenant, sin bloqueo por módulo para evitar 403 en tenants configurados
 app.use("/api", ...protectedApi, messagesRouter); // Mensajes manuales del inbox: auth + tenant
@@ -128,6 +145,46 @@ const io = new Server(server, {
 
 setIo(io);
 
+function getSocketToken(socket) {
+  const authToken = socket.handshake.auth?.token;
+  if (authToken) return authToken;
+
+  const cookieHeader = socket.handshake.headers?.cookie || "";
+  const match = String(cookieHeader).match(/(?:^|;\s*)inbox_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function authenticateSocket(socket, next) {
+  try {
+    const token = getSocketToken(socket);
+    if (!token) return next(new Error("socket_unauthorized"));
+
+    const decoded = jwt.verify(token, env.jwtSecret);
+    const user = await prisma.workspaceUser.findFirst({
+      where: { id: decoded.userId, isActive: true },
+      include: { tenant: true }
+    });
+
+    if (!user || !user.tenant) return next(new Error("socket_unauthorized"));
+
+    socket.user = {
+      id: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+      email: user.email
+    };
+    return next();
+  } catch {
+    return next(new Error("socket_unauthorized"));
+  }
+}
+
+function canAccessTenant(socket, tenantId) {
+  return socket.user?.role === "SUPER_ADMIN" || socket.user?.tenantId === tenantId;
+}
+
+io.use(authenticateSocket);
+
 if (env.enableAutomation) {
   setInterval(() => {
     runAutomationCycle().catch((error) => console.error("Automation error:", error));
@@ -140,8 +197,8 @@ if (env.enableAutomation) {
 }
 
 io.on("connection", (socket) => {
-  socket.on("join:tenant", (tenantId) => {
-    if (!tenantId) return;
+  socket.on("join:tenant", async (tenantId) => {
+    if (!tenantId || !canAccessTenant(socket, tenantId)) return;
     socket.join(`tenant:${tenantId}`);
   });
 
@@ -150,8 +207,12 @@ io.on("connection", (socket) => {
     socket.leave(`tenant:${tenantId}`);
   });
 
-  socket.on("join:conversation", (conversationId) => {
+  socket.on("join:conversation", async (conversationId) => {
     if (!conversationId) return;
+    const where = { id: conversationId };
+    if (socket.user?.role !== "SUPER_ADMIN") where.tenantId = socket.user?.tenantId;
+    const conversation = await prisma.conversation.findFirst({ where, select: { id: true } }).catch(() => null);
+    if (!conversation) return;
     socket.join(`conversation:${conversationId}`);
   });
 

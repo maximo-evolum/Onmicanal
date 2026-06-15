@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { Conversation, Message } from "@/lib/types";
+import { getCommercialState } from "@/lib/commercial-state";
 import { Composer } from "./composer";
 
 function getInitials(label: string) {
@@ -76,6 +77,7 @@ export function ChatPanel({
 
   const requiresHandoff = Boolean(conversation.aiHandoffRequired || conversation.aiNextActionCode === "READY_TO_CLOSE");
   const closeScore = conversation.aiCloseScore ?? conversation.aiLeadScore ?? 0;
+  const commercial = getCommercialState(conversation, conversation.lead);
 
   const modeClass =
     conversation.mode === "BOT"
@@ -100,7 +102,7 @@ export function ChatPanel({
           </div>
 
           <div className="header-meta-row">
-            <span className="badge">{conversation.status}</span>
+            <span className={`badge priority-${commercial.priority}`}>{commercial.label}</span>
             <span className={`badge ${modeClass}`}>{modeLabel}</span>
             {conversation.priorityLabel ? <span className={`badge priority-${conversation.priorityLabel}`}>Prioridad {conversation.priorityLabel}</span> : null}
             {conversation.assignedTo ? <span className="badge">Asignado a {conversation.assignedTo.name}</span> : null}

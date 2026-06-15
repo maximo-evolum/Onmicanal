@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { releaseConversation, takeConversation } from "../services/conversation.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { deriveCommercialState } from "../lib/commercial-state.js";
 
 export const conversationsRouter = Router();
 
@@ -39,8 +40,28 @@ async function enrichConversation(conversation) {
     where: { tenantId: conversation.tenantId, conversationId: conversation.id }
   });
 
+  const latestPayment = await prisma.payment.findFirst({
+    where: { tenantId: conversation.tenantId, conversationId: conversation.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, status: true, amount: true, currency: true, paymentUrl: true, createdAt: true }
+  });
+
+  const latestBooking = await prisma.booking.findFirst({
+    where: { tenantId: conversation.tenantId, conversationId: conversation.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, status: true, date: true, total: true }
+  });
+
   return {
     ...conversation,
+    commercialState: deriveCommercialState({
+      conversation,
+      lead: conversation.lead,
+      payment: latestPayment,
+      booking: latestBooking
+    }),
+    latestPayment,
+    latestBooking,
     channelConfig: channelConfig
       ? {
           id: channelConfig.id,

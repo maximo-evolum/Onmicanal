@@ -18,7 +18,6 @@ async function emitConversation(conversationId) {
 
   io.to(`conversation:${conversationId}`).emit("conversation:updated", conversation);
   io.to(`tenant:${conversation.tenantId}`).emit("inbox:conversation-updated", conversation);
-  io.emit("inbox:conversation-updated", conversation);
 }
 
 export async function updateConversationPriority({ conversationId, messageText }) {
@@ -127,7 +126,6 @@ export async function getOrCreateOpenConversation({ tenantId, contactId }) {
 
       const io = getIo();
       io.to(`tenant:${tenantId}`).emit("inbox:conversation-updated", reopened);
-      io.emit("inbox:conversation-updated", reopened);
       return reopened;
     }
 
@@ -148,7 +146,6 @@ export async function getOrCreateOpenConversation({ tenantId, contactId }) {
 
   const io = getIo();
   io.to(`tenant:${tenantId}`).emit("inbox:conversation-created", conversation);
-  io.emit("inbox:conversation-created", conversation);
   return conversation;
 }
 

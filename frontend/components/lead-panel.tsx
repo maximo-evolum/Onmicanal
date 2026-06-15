@@ -2,6 +2,7 @@
 
 import { Conversation, Lead } from "@/lib/types";
 import { buildAiOpsProfile, getAiBadgeClass, getConversationState, riskLabel } from "@/lib/ai-ops";
+import { getCommercialState } from "@/lib/commercial-state";
 
 
 const UNIVERSAL_CUSTOM_FIELD_PRESETS = [
@@ -21,6 +22,10 @@ const STATUS_OPTIONS = [
   ["PROPOSAL", "Propuesta enviada"],
   ["NEGOTIATION", "Negociación"],
   ["READY_TO_CLOSE", "Listo para cierre"],
+  ["PAYMENT_PENDING", "Espera de pago"],
+  ["PARTIAL_PAYMENT", "Abono recibido"],
+  ["BOOKED", "Reserva"],
+  ["PAID", "Pagado"],
   ["ESCALATED", "Escalado a humano"],
   ["WON", "Ganado"],
   ["LOST", "Perdido"]
@@ -65,6 +70,7 @@ export function LeadPanel({
 
   const profile = buildAiOpsProfile(conversation, lead);
   const state = getConversationState(conversation, lead);
+  const commercial = getCommercialState(conversation, lead);
 
   return (
     <aside className="sidebar" style={{ borderRight: 0, borderLeft: "1px solid rgba(255,255,255,0.10)" }}>
@@ -81,7 +87,7 @@ export function LeadPanel({
           <div className="ai-ops-card-top">
             <div>
               <strong>🧠 Operación IA</strong>
-              <div className="meta-line">Estado: {state}</div>
+              <div className="meta-line">Estado: {commercial.label} · IA: {state}</div>
             </div>
             <span className={`badge ${getAiBadgeClass(profile)}`}>{profile.score}%</span>
           </div>

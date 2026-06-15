@@ -18,14 +18,18 @@ export function middleware(request: NextRequest) {
 
   if (pathname.startsWith("/login") || pathname.startsWith("/register")) {
     if (token && session?.role === "SUPER_ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
-    if (token) return NextResponse.redirect(new URL("/", request.url));
+    if (token) return NextResponse.redirect(new URL("/dashboard", request.url));
     return NextResponse.next();
   }
 
   if (!token) return NextResponse.redirect(new URL("/login", request.url));
 
   if (pathname.startsWith("/admin") && session?.role !== "SUPER_ADMIN") {
-    return NextResponse.redirect(new URL("/", request.url));
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if (pathname.startsWith("/dev") && session?.role !== "SUPER_ADMIN") {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return NextResponse.next();

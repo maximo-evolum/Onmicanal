@@ -99,7 +99,7 @@ export default function PaymentsPage() {
           <div>
             <span className="eyebrow">Portal de pagos</span>
             <h1 className="chat-title">Pagos, links y reservas</h1>
-            <div className="meta-line">Base preparada para MercadoPago, Webpay, Stripe o links manuales.</div>
+            <div className="meta-line">Modo actual: links manuales. Los proveedores externos se activan solo cuando su conector real este configurado.</div>
           </div>
           <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
         </section>
@@ -117,7 +117,7 @@ export default function PaymentsPage() {
           <div className="phase5-panel-head">
             <div>
               <h2>Crear link de pago</h2>
-              <p>Permite dejar pagos pendientes conectados a conversación, lead o reserva.</p>
+              <p>Permite dejar pagos pendientes conectados a conversacion, lead o reserva. No procesa tarjetas por si solo.</p>
             </div>
           </div>
           <form className="admin-detail-grid" onSubmit={submitPayment}>

@@ -43,7 +43,6 @@ async function emitConversationUpdate(conversationId) {
 
   io.to(`conversation:${conversationId}`).emit("conversation:updated", conversation);
   io.to(`tenant:${conversation.tenantId}`).emit("inbox:conversation-updated", conversation);
-  io.emit("inbox:conversation-updated", conversation);
 }
 
 // =============================
