@@ -7,11 +7,7 @@ async function hashPassword(password) {
 }
 
 const SUPER_ADMIN_EMAIL = String(process.env.SUPER_ADMIN_EMAIL || "admin@platform.local").trim().toLowerCase();
-const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD;
-
-if (!SUPER_ADMIN_PASSWORD || SUPER_ADMIN_PASSWORD.length < 12) {
-  throw new Error("Define SUPER_ADMIN_PASSWORD con al menos 12 caracteres antes de ejecutar el seed.");
-}
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || null;
 
 async function ensureDefaultAiProfile({ tenantId, name, industry, objective }) {
   await prisma.tenantAiProfile.upsert({
@@ -57,6 +53,18 @@ async function main() {
     }
   });
   await ensureTenantSubscriptionAndModules({ tenantId: platformTenant.id, planCode: "ENTERPRISE" });
+  const existingSuperAdmin = await prisma.workspaceUser.findUnique({
+    where: { email: SUPER_ADMIN_EMAIL }
+  });
+
+  if (!existingSuperAdmin && (!SUPER_ADMIN_PASSWORD || SUPER_ADMIN_PASSWORD.length < 12)) {
+    throw new Error("Define SUPER_ADMIN_PASSWORD con al menos 12 caracteres para crear el super admin inicial.");
+  }
+
+  const superAdminPasswordPatch = SUPER_ADMIN_PASSWORD
+    ? { passwordHash: await hashPassword(SUPER_ADMIN_PASSWORD) }
+    : {};
+
   await prisma.workspaceUser.upsert({
     where: { email: SUPER_ADMIN_EMAIL },
     update: {
@@ -64,7 +72,7 @@ async function main() {
       name: "Super Admin",
       role: "SUPER_ADMIN",
       isActive: true,
-      passwordHash: await hashPassword(SUPER_ADMIN_PASSWORD)
+      ...superAdminPasswordPatch
     },
     create: {
       tenantId: platformTenant.id,

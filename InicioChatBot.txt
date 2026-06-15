@@ -28,3 +28,6 @@ git remote add origin https://github.com/maximo-evolum/Onmicanal.git
 admin@platform.local / Admin123*
 
 maximo.jara@evolum.cl / Bendo2026
+
+cd E:\Onmicanal\backend-v2 recuprea weas depues de un cagazoooo
+npm run repair:admin
