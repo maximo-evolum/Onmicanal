@@ -39,8 +39,18 @@ const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
 app.use(express.json({ limit: "1mb" }));
 app.use(requestContext);
 app.use(basicRateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 300) }));
+
+function resolveCorsOrigin(origin) {
+  const allowed = env.corsOrigins || [];
+  if (!origin) return env.frontendOrigin;
+  if (allowed.includes("*")) return origin;
+  if (allowed.includes(origin)) return origin;
+  return env.frontendOrigin;
+}
+
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", env.frontendOrigin);
+  res.setHeader("Access-Control-Allow-Origin", resolveCorsOrigin(req.headers.origin));
+  res.setHeader("Vary", "Origin");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
@@ -138,7 +148,11 @@ app.use(apiErrorHandler);
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: env.frontendOrigin,
+    origin: (origin, callback) => {
+      const allowed = env.corsOrigins || [];
+      if (!origin || allowed.includes("*") || allowed.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
     methods: ["GET", "POST"]
   }
 });

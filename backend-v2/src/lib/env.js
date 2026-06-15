@@ -17,6 +17,13 @@ function normalizeUrl(value) {
   return `https://${text.replace(/\/$/, "")}`;
 }
 
+function normalizeUrlList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => normalizeUrl(item))
+    .filter(Boolean);
+}
+
 const publicBaseUrl = normalizeUrl(firstEnv("PUBLIC_BASE_URL", "BACKEND_PUBLIC_URL", "RAILWAY_PUBLIC_DOMAIN"));
 const frontendOrigin = normalizeUrl(firstEnv(
   "FRONTEND_ORIGIN",
@@ -26,6 +33,11 @@ const frontendOrigin = normalizeUrl(firstEnv(
   "NEXT_PUBLIC_SITE_URL",
   "frontendOrigin"
 )) || publicBaseUrl || "*";
+const corsOrigins = [
+  ...normalizeUrlList(firstEnv("CORS_ORIGINS", "ALLOWED_ORIGINS", "ALLOWED_ORIGIN")),
+  frontendOrigin,
+  publicBaseUrl
+].filter(Boolean);
 
 export const env = {
   nodeEnv: firstEnv("NODE_ENV", "nodeEnv") || "development",
@@ -64,6 +76,7 @@ export const env = {
   jwtSecret: firstEnv("JWT_SECRET", "jwtSecret"),
 
   frontendOrigin,
+  corsOrigins: [...new Set(corsOrigins)],
 
   publicBaseUrl,
 
