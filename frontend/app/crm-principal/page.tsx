@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   getCampaigns,
   getConversations,
@@ -57,7 +58,6 @@ const navItems: NavItem[] = [
   { label: "Campanas", href: "/campaigns", description: "Marketing IA y publicaciones" },
   { label: "Pagos", href: "/payments", description: "Cobros, estados y links" },
   { label: "Cierres IA", href: "/sales-queue", description: "Leads listos para vendedor" },
-  { label: "Automatizaciones", href: "#flow", description: "Flujos y procesos operativos" },
   { label: "Base de Conocimiento", href: "/onboarding", description: "Documentos, FAQs y contexto" },
   { label: "Integraciones", href: "/settings/ai", description: "Canales, IA y reglas" },
   { label: "Equipo", href: "/team", description: "Usuarios, roles y actividad" },
@@ -163,12 +163,12 @@ const knowledge = [
 ];
 
 const integrations = [
-  ["WhatsApp Business", "Conectado"],
-  ["Instagram DM", "Conectado"],
-  ["Google Workspace", "Listo"],
-  ["HubSpot CRM", "Pendiente"],
-  ["Stripe", "Pendiente"],
-  ["Notion", "Listo"]
+  { name: "WhatsApp Business", status: "Conectado", icon: "https://cdn.simpleicons.org/whatsapp/25D366" },
+  { name: "Instagram DM", status: "Conectado", icon: "https://cdn.simpleicons.org/instagram/E4405F" },
+  { name: "Google Workspace", status: "Listo", icon: "https://cdn.simpleicons.org/google/4285F4" },
+  { name: "HubSpot CRM", status: "Pendiente", icon: "https://cdn.simpleicons.org/hubspot/FF7A59" },
+  { name: "Stripe", status: "Pendiente", icon: "https://cdn.simpleicons.org/stripe/635BFF" },
+  { name: "Notion", status: "Listo", icon: "https://cdn.simpleicons.org/notion/FFFFFF" }
 ];
 
 function money(value = 0) {
@@ -221,7 +221,20 @@ function planLabel(plan: AccountLevel) {
   return labels[plan];
 }
 
+function compactText(value?: string | null, maxLength = 92) {
+  const text = String(value || "").replace(/\s+/g, " ").replace(/\*\*/g, "").trim();
+  if (!text) return "Sin descripcion reciente.";
+  return text.length > maxLength ? `${text.slice(0, maxLength).trim()}...` : text;
+}
+
+function phoneLabel(conversation?: Conversation | null) {
+  const raw = conversation?.contact?.externalId || conversation?.contact?.username || conversation?.contact?.name || "Sin numero";
+  const value = String(raw);
+  return value.startsWith("+") || value.toLowerCase().includes("cliente") ? value : `+${value}`;
+}
+
 export default function CrmPrincipalPage() {
+  const router = useRouter();
   const [state, setState] = useState<LoadState>({
     session: null,
     conversations: [],
@@ -233,6 +246,7 @@ export default function CrmPrincipalPage() {
     tenant: null,
     error: null
   });
+  const [searchTerm, setSearchTerm] = useState("");
 
   const isDeveloper = state.session?.role === "SUPER_ADMIN";
   const visibleNav = isDeveloper ? [...navItems, ...developerOnlyItems] : navItems;
@@ -277,7 +291,6 @@ export default function CrmPrincipalPage() {
   const hotLeads = state.leadMetrics?.alerts?.hotLeads ?? state.crm?.kpis?.hotLeads ?? 0;
   const totalLeads = state.leadMetrics?.total ?? state.crm?.kpis?.leads ?? 0;
   const estimatedRevenue = state.crm?.forecasts?.expectedRevenue ?? state.leadMetrics?.estimatedRevenue ?? 0;
-  const tasks = state.crm?.kpis ? state.crm.kpis.readyToClose + state.crm.kpis.paymentPending + state.crm.kpis.bookingsPending : hotLeads;
   const enabledAgents = agentCatalog.filter((agent) => (
     agent.implemented &&
     (
@@ -305,39 +318,47 @@ export default function CrmPrincipalPage() {
         : "Listo para usar"
   })), [enabledAgents, openConversations, totalLeads, state.campaigns]);
 
-  const activity = state.conversations.slice(0, 5).map((conversation) => [
-    conversation.contact?.channel || "Canal",
-    conversation.lastMessage?.content || conversation.aiNextAction || conversation.aiSummary || `Conversacion ${statusLabel(conversation.status)}`,
-    shortTime(conversation.lastMessageAt),
-    conversation.id
-  ]);
+  const activity = state.conversations.slice(0, 5).map((conversation) => ({
+    channel: conversation.contact?.channel || "Canal",
+    phone: phoneLabel(conversation),
+    description: compactText(conversation.aiSummary || conversation.lastMessage?.content || conversation.aiNextAction || `Conversacion ${statusLabel(conversation.status)}`),
+    time: shortTime(conversation.lastMessageAt),
+    id: conversation.id
+  }));
 
   const fallbackActivity = [
-    ["WhatsApp", "El agente de chat esta listo para gestionar conversaciones", "Ahora", ""],
-    ["Marketing", "El agente de campanas esta listo para generar contenido", "Ahora", ""],
-    ["CRM", "La vista principal ya separa usuario y desarrollador", "Ahora", ""]
-  ];
-
-  const pipeline = state.crm?.pipeline?.length ? state.crm.pipeline.slice(0, 5).map((stage) => [
-    statusLabel(stage.stage),
-    String(stage.count),
-    money(stage.value)
-  ]) : [
-    ["Captura", String(openConversations), "Conversaciones"],
-    ["IA atiende", String(totalLeads), "Leads"],
-    ["Gestor interviene", String(tasks), "Tareas"],
-    ["Oportunidad", String(hotLeads), "Leads calientes"],
-    ["Cierre", money(estimatedRevenue), "Forecast"]
+    { channel: "WhatsApp", phone: "+56 9 demo", description: "El agente de chat esta listo para gestionar conversaciones.", time: "Ahora", id: "" },
+    { channel: "Marketing", phone: "Campanas", description: "El agente de campanas esta listo para generar contenido.", time: "Ahora", id: "" },
+    { channel: "CRM", phone: "EVOLUM", description: "La vista principal ya separa usuario y desarrollador.", time: "Ahora", id: "" }
   ];
 
   const modules = [
-    ["Inbox Omnicanal", "Conversaciones unificadas por empresa, canal y prioridad.", String(openConversations)],
-    ["Agentes AI", "Catalogo gobernado por plan, rubro y modulo activo.", String(agentCount)],
-    ["CRM Universal", "Leads, clientes, oportunidades, tareas y actividad comercial.", String(totalLeads)],
-    ["Agenda", "Reservas, citas, sucursales y direcciones conectadas al inbox.", String(state.crm?.kpis?.bookingsConfirmed ?? 0)],
-    ["Realty", "Primer vertical para integrar AI Corretaje como modulo inmobiliario.", isDeveloper ? "Roadmap" : "Proximo"]
+    { title: "Inbox Omnicanal", text: "Conversaciones unificadas por empresa, canal y prioridad.", value: String(openConversations), href: "/inbox" },
+    { title: "Agentes AI", text: "Catalogo gobernado por plan, rubro y modulo activo.", value: String(agentCount), href: "#agents" },
+    { title: "CRM Universal", text: "Leads, clientes, oportunidades, tareas y actividad comercial.", value: String(totalLeads), href: "/pipeline" },
+    { title: "Agenda", text: "Reservas, citas, sucursales y direcciones conectadas al inbox.", value: String(state.crm?.kpis?.bookingsConfirmed ?? 0), href: "/agenda" },
+    { title: "Realty", text: "Primer vertical para integrar AI Corretaje como modulo inmobiliario.", value: isDeveloper ? "Roadmap" : "Proximo", href: "/pipeline" }
   ];
   const homeAccessItems = visibleNav.filter((item) => !item.href.startsWith("#"));
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredAccessItems = normalizedSearch
+    ? homeAccessItems.filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(normalizedSearch))
+    : homeAccessItems;
+  const conversationPreview = state.conversations[0];
+  const conversationSummary = compactText(
+    conversationPreview?.aiSummary ||
+    conversationPreview?.decisionSummary ||
+    conversationPreview?.lastMessage?.content ||
+    conversationPreview?.aiNextAction,
+    120
+  );
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const first = filteredAccessItems[0];
+    if (!first) return;
+    router.push(first.href);
+  }
 
   return (
     <main className="crm-main">
@@ -382,10 +403,15 @@ export default function CrmPrincipalPage() {
             <h1>Hola, {state.session?.name || "Usuario"}</h1>
             <p>{isDeveloper ? "Administra el catalogo global de agentes, sus rubros compatibles y el nivel de cuenta en que aparecen para cada cliente." : "Gestiona conversaciones, clientes, agentes habilitados por tu plan y oportunidades desde una vista central."}</p>
           </div>
-          <div className="crm-main-search">
-            <span>Buscar en EVOLUM...</span>
-            <kbd>Ctrl K</kbd>
-          </div>
+          <form className="crm-main-search" onSubmit={submitSearch}>
+            <input
+              aria-label="Buscar en EVOLUM"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Buscar en EVOLUM..."
+            />
+            <button type="submit" aria-label="Buscar">⌕</button>
+          </form>
           <div className="crm-main-profile">
             <strong>{state.session?.name || "Usuario"}</strong>
             <span>{isDeveloper ? "Desarrollador" : state.session?.role || "Cliente"}</span>
@@ -423,12 +449,13 @@ export default function CrmPrincipalPage() {
               </div>
             </div>
             <div className="crm-main-access-grid">
-              {homeAccessItems.map((item) => (
+              {filteredAccessItems.map((item) => (
                 <Link className="crm-main-access-card" href={item.href} key={item.href}>
                   <strong>{item.label}</strong>
                   <span>{item.description}</span>
                 </Link>
               ))}
+              {!filteredAccessItems.length ? <div className="crm-main-empty">Sin resultados para "{searchTerm}".</div> : null}
             </div>
           </section>
 
@@ -439,14 +466,14 @@ export default function CrmPrincipalPage() {
                 <h2>Eventos vivos</h2>
               </div>
             </div>
-            {(activity.length ? activity : fallbackActivity).map(([channel, title, time, id]) => (
-              <Link className="crm-main-activity" href={id ? `/inbox?conversation=${id}` : "/inbox"} key={`${channel}-${time}-${title}`}>
-                <b>{String(channel).slice(0, 2).toUpperCase()}</b>
+            {(activity.length ? activity : fallbackActivity).map((item) => (
+              <Link className="crm-main-activity" href={item.id ? `/inbox?conversation=${item.id}` : "/inbox"} key={`${item.channel}-${item.time}-${item.phone}`}>
+                <b>WA</b>
                 <div>
-                  <strong>{title}</strong>
-                  <span>{channel}</span>
+                  <strong>{item.phone}</strong>
+                  <span>{item.description}</span>
                 </div>
-                <small>{time}</small>
+                <small>{item.channel} / {item.time}</small>
               </Link>
             ))}
           </aside>
@@ -489,20 +516,20 @@ export default function CrmPrincipalPage() {
             <div className="crm-main-panel-head">
               <div>
                 <span>Vista de conversacion</span>
-                <h2>{state.conversations[0]?.contact?.name || state.conversations[0]?.contact?.username || "Inbox omnicanal"}</h2>
+                <h2>{phoneLabel(conversationPreview)}</h2>
               </div>
               <Link className="crm-main-action-link" href="/inbox">Abrir inbox</Link>
             </div>
-            <div className="crm-main-chat">
-              <div className="crm-main-bubble inbound">{state.conversations[0]?.lastMessage?.content || "El agente de chat centraliza los mensajes entrantes."}</div>
-              <div className="crm-main-bubble outbound">La conversacion puede convertirse en lead, oportunidad, tarea o derivacion humana.</div>
-              <div className="crm-main-bubble inbound">{state.conversations[0]?.aiSuggestedReply || "La IA sugiere la proxima respuesta y actualiza el contexto comercial."}</div>
+            <div className="crm-main-conversation-card">
+              <span>{conversationPreview?.contact?.channel || "WhatsApp"}</span>
+              <strong>{conversationPreview?.contact?.name || conversationPreview?.contact?.username || "Contacto sin nombre"}</strong>
+              <p>{conversationSummary}</p>
             </div>
             <div className="crm-main-context">
               <span>Contexto comercial</span>
-              <p>Canal: {state.conversations[0]?.contact?.channel || "WhatsApp / Instagram"}</p>
-              <p>Estado: {statusLabel(state.conversations[0]?.status)}</p>
-              <p>Score IA: {state.conversations[0]?.aiCloseScore ?? state.conversations[0]?.aiLeadScore ?? "Pendiente"}</p>
+              <p>Canal: {conversationPreview?.contact?.channel || "WhatsApp / Instagram"}</p>
+              <p>Estado: {statusLabel(conversationPreview?.status)}</p>
+              <p>Score IA: {conversationPreview?.aiCloseScore ?? conversationPreview?.aiLeadScore ?? "Pendiente"}</p>
             </div>
           </section>
 
@@ -554,26 +581,6 @@ export default function CrmPrincipalPage() {
             </section>
           ) : null}
 
-          <section className="crm-main-panel crm-main-flow" id="flow">
-            <div className="crm-main-panel-head">
-              <div>
-                <span>Orquestador</span>
-                <h2>Flujo general del sistema</h2>
-              </div>
-              {isDeveloper ? <button>Editar flujo</button> : null}
-            </div>
-            <div className="crm-main-flow-canvas">
-              {pipeline.map(([stage, count, detail], index) => (
-                <article className="crm-main-node" key={stage}>
-                  <span>{index + 1}</span>
-                  <strong>{stage}</strong>
-                  <small>{count}</small>
-                  <p>{detail}</p>
-                </article>
-              ))}
-            </div>
-          </section>
-
           <section className="crm-main-panel crm-main-modules">
             <div className="crm-main-panel-head">
               <div>
@@ -583,12 +590,14 @@ export default function CrmPrincipalPage() {
               {isDeveloper ? <Link className="crm-main-action-link" href="/saas">Configurar</Link> : null}
             </div>
             <div className="crm-main-module-grid">
-              {modules.map(([title, text, value]) => (
-                <article className="crm-main-module" key={title}>
-                  <strong>{title}</strong>
-                  <p>{text}</p>
-                  <span>{value}</span>
-                </article>
+              {modules.map((module) => (
+                <Link className="crm-main-module" href={module.href} key={module.title}>
+                  <div>
+                    <strong>{module.title}</strong>
+                    <p>{module.text}</p>
+                  </div>
+                  <span>{module.value}</span>
+                </Link>
               ))}
             </div>
           </section>
@@ -621,11 +630,11 @@ export default function CrmPrincipalPage() {
               {isDeveloper ? <Link className="crm-main-action-link" href="/admin">Nueva</Link> : null}
             </div>
             <div className="crm-main-integration-grid">
-              {integrations.map(([name, status]) => (
-                <article key={name}>
-                  <b>{name.slice(0, 2)}</b>
-                  <strong>{name}</strong>
-                  <span>{status}</span>
+              {integrations.map((integration) => (
+                <article key={integration.name}>
+                  <b><img alt="" src={integration.icon} /></b>
+                  <strong>{integration.name}</strong>
+                  <span>{integration.status}</span>
                 </article>
               ))}
             </div>

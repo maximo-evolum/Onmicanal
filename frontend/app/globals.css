@@ -340,20 +340,62 @@ a {
 }
 
 .crm-main-search {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 15px;
+  gap: 10px;
+  padding: 7px 8px 7px 15px;
   color: var(--crm-main-muted);
 }
 
-.crm-main-search kbd {
+.crm-main-search input {
+  min-height: 40px;
+  border: 0;
+  padding: 0;
+  color: var(--crm-main-text);
+  background: transparent;
+  box-shadow: none;
+}
+
+.crm-main-search input:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.crm-main-search button {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   border: 1px solid var(--crm-main-border-strong);
   border-radius: 8px;
-  padding: 6px 8px;
-  color: var(--crm-main-text);
   background: rgba(139, 92, 246, 0.12);
+  color: transparent;
+  font-size: 0;
+}
+
+.crm-main-search button::before {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 11px;
+  top: 10px;
+  border: 2px solid var(--crm-main-text);
+  border-radius: 50%;
+}
+
+.crm-main-search button::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 2px;
+  left: 24px;
+  top: 25px;
+  border-radius: 999px;
+  background: var(--crm-main-text);
+  transform: rotate(45deg);
 }
 
 .crm-main-profile {
@@ -481,7 +523,7 @@ a {
 }
 
 .crm-main-modules {
-  grid-column: span 4;
+  grid-column: span 8;
 }
 
 .crm-main-knowledge,
@@ -697,15 +739,14 @@ a {
 
 .crm-main-activity {
   display: grid;
-  grid-template-columns: 42px 1fr auto;
-  align-items: center;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
   gap: 10px;
   padding: 12px;
   margin-top: 10px;
 }
 
-.crm-main-activity b,
-.crm-main-integration-grid b {
+.crm-main-activity b {
   width: 38px;
   height: 38px;
   display: grid;
@@ -716,8 +757,23 @@ a {
 }
 
 .crm-main-activity strong,
-.crm-main-activity span {
+.crm-main-activity span,
+.crm-main-activity small {
   display: block;
+}
+
+.crm-main-activity strong {
+  margin-bottom: 3px;
+}
+
+.crm-main-activity span {
+  line-height: 1.35;
+}
+
+.crm-main-activity small {
+  grid-column: 2;
+  color: var(--crm-main-faint);
+  font-size: 12px;
 }
 
 .crm-main-chat {
@@ -749,6 +805,39 @@ a {
 
 .crm-main-context p {
   margin: 7px 0 0;
+}
+
+.crm-main-conversation-card {
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  background: rgba(17, 12, 29, 0.72);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.crm-main-conversation-card span,
+.crm-main-conversation-card strong,
+.crm-main-conversation-card p {
+  display: block;
+}
+
+.crm-main-conversation-card span {
+  width: max-content;
+  border: 1px solid rgba(52, 211, 153, 0.24);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--crm-main-green);
+  background: rgba(52, 211, 153, 0.08);
+  font-size: 12px;
+}
+
+.crm-main-conversation-card strong {
+  margin-top: 12px;
+}
+
+.crm-main-conversation-card p {
+  margin: 8px 0 0;
+  color: var(--crm-main-muted);
+  line-height: 1.45;
 }
 
 .crm-main-flow-canvas {
@@ -802,11 +891,15 @@ a {
 }
 
 .crm-main-module-grid {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
 }
 
 .crm-main-module {
+  min-height: 150px;
   padding: 14px;
+  display: grid;
+  align-content: space-between;
+  gap: 14px;
 }
 
 .crm-main-module strong,
@@ -900,7 +993,7 @@ a {
 }
 
 .crm-main-integration-grid article {
-  min-height: 104px;
+  min-height: 124px;
   display: grid;
   place-items: center;
   gap: 6px;
@@ -908,9 +1001,34 @@ a {
   text-align: center;
 }
 
+.crm-main-integration-grid b {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--crm-main-primary), var(--crm-main-pink));
+}
+
+.crm-main-integration-grid img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
 .crm-main-integration-grid span {
   color: var(--crm-main-green);
   font-size: 12px;
+}
+
+.crm-main-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed rgba(192, 132, 252, 0.28);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--crm-main-muted);
+  background: rgba(139, 92, 246, 0.08);
 }
 
 .crm-main-bars {
