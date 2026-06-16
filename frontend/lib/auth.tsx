@@ -88,7 +88,7 @@ export function LoginPage() {
       setError(null);
       const data = await loginWithEmail(email, password || undefined);
       setStoredAuth(data.user, data.token);
-      router.push(data.user.role === "SUPER_ADMIN" ? "/admin" : "/dashboard");
+      router.push("/crm-principal");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión");

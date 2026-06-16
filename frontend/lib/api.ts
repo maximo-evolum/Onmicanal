@@ -1,4 +1,4 @@
-import { AgentSession, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
+import { AgentSession, Booking, BookingSlot, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
 import { API_BASE_URL, TOKEN_COOKIE, TOKEN_STORAGE_KEY, SESSION_STORAGE_KEY } from "./constants";
 
 function getCookie(name: string) {
@@ -232,6 +232,44 @@ export async function getLeadMetrics(): Promise<LeadMetrics> {
 
 export async function getCampaigns(): Promise<Campaign[]> {
   return request<Campaign[]>("/campaigns");
+}
+
+export async function getBookings(): Promise<Booking[]> {
+  return request<Booking[]>("/bookings");
+}
+
+export async function getBookingSlots(date: string): Promise<{ date: string; slots: BookingSlot[] }> {
+  return request<{ date: string; slots: BookingSlot[] }>(`/bookings/slots?date=${encodeURIComponent(date)}`);
+}
+
+export async function createBookingApi(input: {
+  conversationId?: string | null;
+  name?: string;
+  phone?: string;
+  email?: string;
+  date: string;
+  guests: number;
+  location?: string;
+  total?: number;
+  notes?: string;
+}): Promise<Booking> {
+  return request<Booking>("/bookings", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateBookingApi(id: string, input: Partial<Pick<Booking, "status" | "name" | "phone" | "email" | "date" | "guests" | "location" | "total" | "notes">>): Promise<Booking> {
+  return request<Booking>(`/bookings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function markBookingPaymentReady(id: string): Promise<{ booking: Booking; message: string }> {
+  return request<{ booking: Booking; message: string }>(`/bookings/${id}/payment-ready`, {
+    method: "POST"
+  });
 }
 
 export async function createCampaign(input: { name: string; segment?: string; template: string; scheduledAt?: string | null }): Promise<Campaign> {

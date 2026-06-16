@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function BotLabPage() {
+export default function CobaltCrmConceptPage() {
   redirect("/crm-principal");
 }

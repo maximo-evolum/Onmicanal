@@ -170,3 +170,26 @@ export type Campaign = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type Booking = {
+  id: string;
+  tenantId: string;
+  conversationId?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  date: string;
+  guests: number;
+  location?: string | null;
+  total: number;
+  status: string;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BookingSlot = {
+  date: string;
+  time: string;
+  available: boolean;
+};

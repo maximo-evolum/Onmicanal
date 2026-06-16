@@ -17,8 +17,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/login") || pathname.startsWith("/register")) {
-    if (token && session?.role === "SUPER_ADMIN") return NextResponse.redirect(new URL("/admin", request.url));
-    if (token) return NextResponse.redirect(new URL("/dashboard", request.url));
+    if (token) return NextResponse.redirect(new URL("/crm-principal", request.url));
     return NextResponse.next();
   }
 
@@ -36,5 +35,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/admin/:path*", "/inbox", "/dashboard/:path*", "/pipeline/:path*", "/campaigns/:path*", "/dev/:path*", "/onboarding/:path*", "/login", "/register"]
+  matcher: ["/", "/admin/:path*", "/crm-principal/:path*", "/crm-concepts/:path*", "/agenda/:path*", "/inbox", "/dashboard/:path*", "/pipeline/:path*", "/campaigns/:path*", "/dev/:path*", "/onboarding/:path*", "/login", "/register"]
 };

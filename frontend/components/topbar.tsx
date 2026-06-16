@@ -10,11 +10,13 @@ import AppMenu from "./AppMenu";
 const ADMIN_MENU_ITEM = { href: "/admin", label: "Desarrollador", module: "admin", description: "Clientes, planes y módulos" };
 
 const MENU_ITEMS = [
+  { href: "/crm-principal", label: "CRM Principal", module: "analytics", description: "Oficina de agentes y operaciones" },
   { href: "/saas", label: "SaaS Center", module: "analytics", description: "Plan, límites y salud" },
   { href: "/settings/ai", label: "Config IA", module: "bot_lab", description: "Personalidad y reglas" },
   { href: "/team", label: "Equipo", module: "inbox", description: "Roles y actividad" },
   { href: "/saas-analytics", label: "SaaS Analytics", module: "analytics", description: "Uso y performance" },
   { href: "/inbox", label: "Inbox", module: "inbox", description: "Conversaciones y bot" },
+  { href: "/agenda", label: "Agenda", module: "bookings", description: "Reservas, citas y disponibilidad" },
   { href: "/pipeline", label: "Pipeline", module: "sales", description: "Leads y ventas" },
   { href: "/sales-queue", label: "Cierres IA", module: "sales", description: "Leads listos para vendedor" },
   { href: "/payments", label: "Pagos", module: "payments", description: "Links, estados y reservas" },
@@ -51,7 +53,7 @@ export function Topbar({ agent }: { agent?: AgentSession | null }) {
     if (session?.role === "SUPER_ADMIN") return [ADMIN_MENU_ITEM, ...MENU_ITEMS];
 
     if (session?.role === "SELLER") {
-      return MENU_ITEMS.filter((item) => ["/inbox", "/dashboard", "/pipeline", "/campaigns", "/payments"].includes(item.href));
+      return MENU_ITEMS.filter((item) => ["/crm-principal", "/inbox", "/agenda", "/dashboard", "/pipeline", "/campaigns", "/payments"].includes(item.href));
     }
 
     // Evita mostrar módulos bloqueados si aún no cargan.
