@@ -42,21 +42,34 @@ type AgentCatalogItem = {
   implemented: boolean;
 };
 
-const navItems = [
-  { label: "Inicio", href: "/crm-principal" },
-  { label: "Oficina de Agentes", href: "#agents" },
-  { label: "Inbox Omnicanal", href: "/inbox" },
-  { label: "Agenda", href: "/agenda" },
-  { label: "Clientes", href: "/pipeline" },
-  { label: "Automatizaciones", href: "#flow" },
-  { label: "Base de Conocimiento", href: "/onboarding" },
-  { label: "Integraciones", href: "/settings/ai" },
-  { label: "Analytics & KPIs", href: "/dashboard" }
+type NavItem = {
+  label: string;
+  href: string;
+  description: string;
+};
+
+const navItems: NavItem[] = [
+  { label: "Inicio", href: "/crm-principal", description: "Centro principal de EVOLUM" },
+  { label: "Oficina de Agentes", href: "#agents", description: "Agentes AI activos y futuros" },
+  { label: "Inbox Omnicanal", href: "/inbox", description: "Conversaciones y atencion IA" },
+  { label: "Agenda", href: "/agenda", description: "Reservas, citas y disponibilidad" },
+  { label: "Clientes", href: "/pipeline", description: "Leads, clientes y pipeline" },
+  { label: "Campanas", href: "/campaigns", description: "Marketing IA y publicaciones" },
+  { label: "Pagos", href: "/payments", description: "Cobros, estados y links" },
+  { label: "Cierres IA", href: "/sales-queue", description: "Leads listos para vendedor" },
+  { label: "Automatizaciones", href: "#flow", description: "Flujos y procesos operativos" },
+  { label: "Base de Conocimiento", href: "/onboarding", description: "Documentos, FAQs y contexto" },
+  { label: "Integraciones", href: "/settings/ai", description: "Canales, IA y reglas" },
+  { label: "Equipo", href: "/team", description: "Usuarios, roles y actividad" },
+  { label: "Analytics & KPIs", href: "/dashboard", description: "Metricas operativas" },
+  { label: "SaaS Analytics", href: "/saas-analytics", description: "Uso, costos y rendimiento" },
+  { label: "AI Ops", href: "/ai-ops", description: "Razonamiento y alertas IA" }
 ];
 
-const developerOnlyItems = [
-  { label: "Desarrollador", href: "/admin" },
-  { label: "Planes y modulos", href: "/saas" }
+const developerOnlyItems: NavItem[] = [
+  { label: "Desarrollador", href: "/admin", description: "Clientes, planes, modulos y permisos" },
+  { label: "Planes y modulos", href: "/saas", description: "Configuracion SaaS por cuenta" },
+  { label: "Bot Lab", href: "/dev/bot-lab", description: "Pruebas de respuestas y reglas" }
 ];
 
 const planOrder: AccountLevel[] = ["basica", "normal", "avanzada", "pro"];
@@ -324,6 +337,7 @@ export default function CrmPrincipalPage() {
     ["Agenda", "Reservas, citas, sucursales y direcciones conectadas al inbox.", String(state.crm?.kpis?.bookingsConfirmed ?? 0)],
     ["Realty", "Primer vertical para integrar AI Corretaje como modulo inmobiliario.", isDeveloper ? "Roadmap" : "Proximo"]
   ];
+  const homeAccessItems = visibleNav.filter((item) => !item.href.startsWith("#"));
 
   return (
     <main className="crm-main">
@@ -339,8 +353,8 @@ export default function CrmPrincipalPage() {
         <nav className="crm-main-nav">
           {visibleNav.map((item, index) => (
             item.href.startsWith("#")
-              ? <a className={index === 0 ? "active" : ""} href={item.href} key={item.label}>{item.label}</a>
-              : <Link className={index === 0 ? "active" : ""} href={item.href} key={item.label}>{item.label}</Link>
+              ? <a className={index === 0 ? "active" : ""} href={item.href} key={item.label}><span>{item.label}</span><small>{item.description}</small></a>
+              : <Link className={index === 0 ? "active" : ""} href={item.href} key={item.label}><span>{item.label}</span><small>{item.description}</small></Link>
           ))}
         </nav>
 
@@ -397,6 +411,23 @@ export default function CrmPrincipalPage() {
                   <small>{item.delta}</small>
                   <div className="crm-main-line"><i /><i /><i /><i /><i /><i /></div>
                 </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="crm-main-panel crm-main-menu-panel">
+            <div className="crm-main-panel-head">
+              <div>
+                <span>Inicio EVOLUM</span>
+                <h2>Menu principal</h2>
+              </div>
+            </div>
+            <div className="crm-main-access-grid">
+              {homeAccessItems.map((item) => (
+                <Link className="crm-main-access-card" href={item.href} key={item.href}>
+                  <strong>{item.label}</strong>
+                  <span>{item.description}</span>
+                </Link>
               ))}
             </div>
           </section>
