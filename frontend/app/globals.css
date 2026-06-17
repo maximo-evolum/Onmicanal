@@ -5728,6 +5728,7 @@ html, body {
 .inbox-app-header {
   grid-column: 1 / -1;
   min-width: 0;
+  height: 120px;
   display: grid;
   gap: 8px;
   padding: 10px 20px 8px;
