@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   deleteConversation,
@@ -10,11 +11,10 @@ import {
   sendManualMessage,
   takeConversation,
 } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { getCommercialState } from "@/lib/commercial-state";
 import { getSocketToken, socket } from "@/lib/socket";
 import { Conversation, Message } from "@/lib/types";
-import { ConversationList } from "./conversation-list";
 import { ChatPanel } from "./chat-panel";
 
 export function InboxShell() {
@@ -27,6 +27,8 @@ export function InboxShell() {
   const [sending, setSending] = useState(false);
   const [botTyping, setBotTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [channelFilter, setChannelFilter] = useState("all");
 
   function getInboxCacheKey() {
     return `inbox_conversations_${agent?.tenantId || agent?.id || "global"}`;
@@ -204,7 +206,17 @@ export function InboxShell() {
     };
   }, [selectedId]);
 
-  const filteredConversations = conversations;
+  const filteredConversations = useMemo(() => {
+    return conversations.filter((conversation) => {
+      const matchesChannel = channelFilter === "all" || conversation.contact.channel === channelFilter;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "untaken" && !conversation.assignedTo && conversation.status !== "RESOLVED") ||
+        (statusFilter === "open" && conversation.status === "OPEN") ||
+        (statusFilter === "resolved" && conversation.status === "RESOLVED");
+      return matchesChannel && matchesStatus;
+    });
+  }, [conversations, statusFilter, channelFilter]);
 
   const selectedConversation = useMemo(
     () =>
@@ -273,23 +285,26 @@ export function InboxShell() {
 
   return (
     <div className="page inbox-layout inbox-shell-modern">
-      <InboxConversationHeader
-        conversation={selectedConversation}
+      <InboxAppHeader
+        agent={agent}
         loading={loading}
+        visibleTotal={filteredConversations.length}
         total={conversations.length}
         error={error}
+        statusFilter={statusFilter}
+        channelFilter={channelFilter}
+        onStatusFilter={setStatusFilter}
+        onChannelFilter={setChannelFilter}
+      />
+
+      <aside className="sidebar inbox-conversation-rail">
+        <ActiveConversationPanel
+        conversation={selectedConversation}
         onTake={handleTake}
         onRelease={handleRelease}
         onResolve={handleResolve}
         onDelete={handleDelete}
       />
-
-      <aside className="sidebar inbox-conversation-rail">
-        <ConversationList
-          conversations={filteredConversations}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-        />
       </aside>
 
       <main className="main">
@@ -309,7 +324,7 @@ export function InboxShell() {
       </main>
 
       <ChatActivityPanel
-        conversations={conversations}
+        conversations={filteredConversations}
         selectedId={selectedId}
         loading={loading}
         onSelect={setSelectedId}
@@ -339,20 +354,80 @@ function conversationModeClass(conversation: Conversation) {
   return "mode-hybrid";
 }
 
-function InboxConversationHeader({
-  conversation,
+function InboxAppHeader({
+  agent,
   loading,
+  visibleTotal,
   total,
   error,
+  statusFilter,
+  channelFilter,
+  onStatusFilter,
+  onChannelFilter,
+}: {
+  agent: ReturnType<typeof getStoredSession>;
+  loading: boolean;
+  visibleTotal: number;
+  total: number;
+  error: string | null;
+  statusFilter: string;
+  channelFilter: string;
+  onStatusFilter: (value: string) => void;
+  onChannelFilter: (value: string) => void;
+}) {
+  return (
+    <header className="inbox-app-header">
+      <div className="inbox-app-header-top">
+        <div>
+          <span className="eyebrow">Inbox IA</span>
+          <h1>Conversaciones omnicanal</h1>
+          <p>{error || (loading ? "Cargando conversaciones..." : `${visibleTotal} visibles / ${total} totales`)}</p>
+        </div>
+
+        <div className="inbox-account-box">
+          <span>Cuenta</span>
+          <strong>{agent?.name || "Usuario"}</strong>
+          <small>{agent?.role || "Cliente"}</small>
+        </div>
+
+        <div className="inbox-app-actions">
+          <Link className="ghost-btn" href="/crm-principal">Volver al CRM</Link>
+          <LogoutButton />
+        </div>
+      </div>
+
+      <div className="inbox-filter-strip">
+        <label>
+          <span>Estado</span>
+          <select value={statusFilter} onChange={(event) => onStatusFilter(event.target.value)}>
+            <option value="all">Todos los estados</option>
+            <option value="untaken">Chat sin tomar</option>
+            <option value="open">Chat abierto</option>
+            <option value="resolved">Chat resuelto</option>
+          </select>
+        </label>
+
+        <label>
+          <span>Canal</span>
+          <select value={channelFilter} onChange={(event) => onChannelFilter(event.target.value)}>
+            <option value="all">Todos los canales</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="instagram">Instagram</option>
+          </select>
+        </label>
+      </div>
+    </header>
+  );
+}
+
+function ActiveConversationPanel({
+  conversation,
   onTake,
   onRelease,
   onResolve,
   onDelete,
 }: {
   conversation: Conversation | null;
-  loading: boolean;
-  total: number;
-  error: string | null;
   onTake: () => Promise<void>;
   onRelease: () => Promise<void>;
   onResolve: () => Promise<void>;
@@ -360,13 +435,13 @@ function InboxConversationHeader({
 }) {
   if (!conversation) {
     return (
-      <header className="inbox-conversation-header empty">
+      <section className="active-conversation-panel empty">
         <div>
-          <span className="eyebrow">Inbox IA</span>
-          <h1>{loading ? "Cargando conversaciones..." : "Selecciona una conversacion"}</h1>
-          <p>{error || `${total} conversaciones disponibles para revisar.`}</p>
+          <span className="eyebrow">Conversacion activa</span>
+          <h2>Selecciona un chat</h2>
+          <p>Elige una conversacion desde Chats recientes para ver su contexto comercial.</p>
         </div>
-      </header>
+      </section>
     );
   }
 
@@ -382,12 +457,12 @@ function InboxConversationHeader({
   const handoffReason = conversation.aiHandoffReason || conversation.aiDecisionReason || conversation.aiNextAction || "La IA mantiene el contexto comercial listo para operar.";
 
   return (
-    <header className="inbox-conversation-header">
-      <div className="inbox-header-main">
+    <section className="active-conversation-panel">
+      <div className="active-conversation-main">
         <div className="avatar">{inboxInitials(name)}</div>
-        <div className="inbox-header-copy">
+        <div className="active-conversation-copy">
           <span className="eyebrow">Conversacion activa</span>
-          <h1>{name}</h1>
+          <h2>{name}</h2>
           <p>
             {conversation.contact.channel || "whatsapp"} / Cliente {conversation.contact.externalId || "sin numero"}
             {conversation.channelConfig?.displayNumber ? ` / Bot ${conversation.channelConfig.displayNumber}` : ""}
@@ -395,25 +470,25 @@ function InboxConversationHeader({
         </div>
       </div>
 
-      <div className="inbox-header-status">
+      <div className="active-conversation-status">
         <span className={`badge priority-${commercial.priority}`}>{commercial.label}</span>
         <span className={`badge ${conversationModeClass(conversation)}`}>{conversationModeLabel(conversation)}</span>
         {conversation.priorityLabel ? <span className={`badge priority-${conversation.priorityLabel}`}>Prioridad {conversation.priorityLabel}</span> : null}
         {closeScore ? <span className="badge sales-alert-critical">{closeScore}% cierre</span> : null}
       </div>
 
-      <div className={`inbox-header-signal ${requiresHandoff ? "critical" : closeScore >= 70 ? "hot" : ""}`}>
+      <div className={`active-conversation-signal ${requiresHandoff ? "critical" : closeScore >= 70 ? "hot" : ""}`}>
         <strong>{handoffTitle}</strong>
         <span>{handoffReason}</span>
       </div>
 
-      <div className="inbox-header-actions">
+      <div className="active-conversation-actions">
         <button className="secondary-btn" onClick={onTake}>Tomar conversacion</button>
         <button className="secondary-btn" onClick={onRelease}>Devolver al bot</button>
         <button className="success-btn" onClick={onResolve}>Marcar resuelta</button>
         <button className="danger-btn" onClick={onDelete}>Eliminar chat</button>
       </div>
-    </header>
+    </section>
   );
 }
 

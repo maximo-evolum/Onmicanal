@@ -5725,6 +5725,198 @@ html, body {
   letter-spacing: 0;
 }
 
+.inbox-app-header {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 16px 24px 14px;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(139, 92, 246, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(18, 12, 31, 0.96), rgba(9, 6, 17, 0.98));
+  border-bottom: 1px solid rgba(139, 92, 246, 0.14);
+}
+
+.inbox-app-header-top {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 240px) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.inbox-app-header h1 {
+  margin: 3px 0 4px;
+  color: #f8f3ff;
+  font-size: clamp(22px, 2vw, 30px);
+  line-height: 1.05;
+}
+
+.inbox-app-header p {
+  margin: 0;
+  color: #b9add5;
+  font-size: 13px;
+}
+
+.inbox-account-box {
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
+  background: rgba(24, 17, 39, 0.7);
+}
+
+.inbox-account-box span,
+.inbox-account-box small {
+  color: #a99bc9;
+  font-size: 12px;
+}
+
+.inbox-account-box strong {
+  overflow: hidden;
+  color: #f8f3ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-app-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.inbox-filter-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+}
+
+.inbox-filter-strip label {
+  min-width: 210px;
+  display: grid;
+  gap: 5px;
+}
+
+.inbox-filter-strip span {
+  color: #a99bc9;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.inbox-filter-strip select {
+  min-height: 42px;
+  border: 1px solid rgba(139, 92, 246, 0.24);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #f8f3ff;
+  background: rgba(22, 14, 38, 0.92);
+}
+
+.active-conversation-panel {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+}
+
+.active-conversation-main {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.active-conversation-copy {
+  min-width: 0;
+}
+
+.active-conversation-copy h2,
+.active-conversation-panel.empty h2 {
+  margin: 4px 0 5px;
+  overflow: hidden;
+  color: #f8f3ff;
+  font-size: 24px;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-conversation-copy p,
+.active-conversation-panel.empty p {
+  margin: 0;
+  color: #b9add5;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.active-conversation-status,
+.active-conversation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.active-conversation-signal {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 8px;
+  background: rgba(24, 17, 39, 0.66);
+}
+
+.active-conversation-signal.critical {
+  border-color: rgba(244, 63, 94, 0.32);
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.16), rgba(124, 58, 237, 0.1));
+}
+
+.active-conversation-signal.hot {
+  border-color: rgba(232, 121, 249, 0.28);
+  background: linear-gradient(135deg, rgba(232, 121, 249, 0.13), rgba(124, 58, 237, 0.09));
+}
+
+.active-conversation-signal strong {
+  color: #f8f3ff;
+  font-size: 15px;
+}
+
+.active-conversation-signal span {
+  color: #d9cef2;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.active-conversation-actions button {
+  width: 100%;
+  min-height: 38px;
+  justify-content: center;
+}
+
+@media (max-width: 900px) {
+  .inbox-app-header-top {
+    grid-template-columns: 1fr;
+  }
+
+  .inbox-app-actions,
+  .inbox-filter-strip {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .inbox-filter-strip label {
+    min-width: 0;
+  }
+}
+
 @media (max-width: 1400px) {
   .inbox-shell-modern {
     grid-template-columns: minmax(280px, 332px) minmax(0, 1fr);
