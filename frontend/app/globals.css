@@ -5728,12 +5728,12 @@ html, body {
 .inbox-app-header {
   grid-column: 1 / -1;
   min-width: 0;
-  height: 90px;
+  height: 80px;
   display: grid;
-  grid-template-rows: 42px 29px;
+  grid-template-rows: 34px 28px;
   align-content: start;
-  gap: 4px;
-  padding: 6px 20px 5px;
+  gap: 3px;
+  padding: 5px 20px 4px;
   background:
     radial-gradient(circle at 16% 0%, rgba(139, 92, 246, 0.18), transparent 34%),
     linear-gradient(135deg, rgba(18, 12, 31, 0.96), rgba(9, 6, 17, 0.98));
@@ -5762,26 +5762,29 @@ html, body {
 }
 
 .inbox-account-box {
-  min-height: 40px;
-  display: grid;
-  align-content: center;
-  gap: 1px;
-  padding: 5px 12px;
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  border-radius: 8px;
-  background: rgba(24, 17, 39, 0.7);
+  min-height: 0;
+  width: fit-content;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #8b5cf6, #a855f7);
+  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.28);
 }
 
 .inbox-account-box span,
 .inbox-account-box small {
-  color: #a99bc9;
-  font-size: 10.5px;
+  display: none;
 }
 
 .inbox-account-box strong {
   overflow: hidden;
-  color: #f8f3ff;
-  font-size: 14px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5795,8 +5798,8 @@ html, body {
 
 .inbox-app-actions .ghost-btn,
 .inbox-app-actions button {
-  min-height: 32px;
-  padding: 6px 12px;
+  min-height: 30px;
+  padding: 5px 11px;
   border-radius: 8px;
   font-size: 12.5px;
 }
@@ -5807,7 +5810,7 @@ html, body {
   justify-content: center;
   gap: 10px;
   padding-top: 0;
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 .inbox-filter-strip label {
