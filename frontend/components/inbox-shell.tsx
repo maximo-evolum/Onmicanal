@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   deleteConversation,
@@ -12,10 +11,9 @@ import {
   takeConversation,
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
+import { getCommercialState } from "@/lib/commercial-state";
 import { getSocketToken, socket } from "@/lib/socket";
 import { Conversation, Message } from "@/lib/types";
-import { Topbar } from "./topbar";
-import { FiltersBar } from "./filters-bar";
 import { ConversationList } from "./conversation-list";
 import { ChatPanel } from "./chat-panel";
 
@@ -29,11 +27,6 @@ export function InboxShell() {
   const [sending, setSending] = useState(false);
   const [botTyping, setBotTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const [search, setSearch] = useState("");
-  const [channel, setChannel] = useState("all");
-  const [mode, setMode] = useState("all");
-  const [status, setStatus] = useState("all");
 
   function getInboxCacheKey() {
     return `inbox_conversations_${agent?.tenantId || agent?.id || "global"}`;
@@ -211,18 +204,7 @@ export function InboxShell() {
     };
   }, [selectedId]);
 
-  const filteredConversations = useMemo(() => {
-    return conversations.filter((conversation) => {
-      const label =
-        `${conversation.contact.name || ""} ${conversation.contact.username || ""} ${conversation.contact.externalId || ""}`.toLowerCase();
-      const matchesSearch = !search || label.includes(search.toLowerCase());
-      const matchesChannel =
-        channel === "all" || conversation.contact.channel === channel;
-      const matchesMode = mode === "all" || conversation.mode === mode;
-      const matchesStatus = status === "all" || conversation.status === status;
-      return matchesSearch && matchesChannel && matchesMode && matchesStatus;
-    });
-  }, [conversations, search, channel, mode, status]);
+  const filteredConversations = conversations;
 
   const selectedConversation = useMemo(
     () =>
@@ -290,42 +272,24 @@ export function InboxShell() {
   }
 
   return (
-    <div className="page inbox-layout">
-      <aside className="sidebar">
-        <Topbar agent={agent} />
+    <div className="page inbox-layout inbox-shell-modern">
+      <InboxConversationHeader
+        conversation={selectedConversation}
+        loading={loading}
+        total={conversations.length}
+        error={error}
+        onTake={handleTake}
+        onRelease={handleRelease}
+        onResolve={handleResolve}
+        onDelete={handleDelete}
+      />
 
-        <div className="sidebar-header">
-          <h2 className="sidebar-title">Conversaciones</h2>
-          <div className="meta-line">
-            {loading
-              ? "Cargando..."
-              : `${filteredConversations.length} visibles / ${conversations.length} totales`}
-          </div>
-          {error ? <div className="meta-line">{error}</div> : null}
-          <div className="inbox-quick-hint">
-            <span></span>
-            <Link href="/dev/bot-lab"></Link>
-          </div>
-        </div>
-
-        <div className="sidebar-body">
-          <FiltersBar
-            search={search}
-            channel={channel}
-            mode={mode}
-            status={status}
-            onSearch={setSearch}
-            onChannel={setChannel}
-            onMode={setMode}
-            onStatus={setStatus}
-          />
-
-          <ConversationList
-            conversations={filteredConversations}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-          />
-        </div>
+      <aside className="sidebar inbox-conversation-rail">
+        <ConversationList
+          conversations={filteredConversations}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+        />
       </aside>
 
       <main className="main">
@@ -335,6 +299,7 @@ export function InboxShell() {
           messagesLoading={messagesLoading}
           sending={sending}
           botTyping={botTyping}
+          hideHeader
           onTake={handleTake}
           onRelease={handleRelease}
           onResolve={handleResolve}
@@ -350,6 +315,105 @@ export function InboxShell() {
         onSelect={setSelectedId}
       />
     </div>
+  );
+}
+
+function inboxInitials(label: string) {
+  return label
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function conversationModeLabel(conversation: Conversation) {
+  if (conversation.mode === "BOT") return "IA activa";
+  if (conversation.mode === "HUMAN") return "Humano";
+  return "Hibrido";
+}
+
+function conversationModeClass(conversation: Conversation) {
+  if (conversation.mode === "BOT") return "mode-bot";
+  if (conversation.mode === "HUMAN") return "mode-human";
+  return "mode-hybrid";
+}
+
+function InboxConversationHeader({
+  conversation,
+  loading,
+  total,
+  error,
+  onTake,
+  onRelease,
+  onResolve,
+  onDelete,
+}: {
+  conversation: Conversation | null;
+  loading: boolean;
+  total: number;
+  error: string | null;
+  onTake: () => Promise<void>;
+  onRelease: () => Promise<void>;
+  onResolve: () => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  if (!conversation) {
+    return (
+      <header className="inbox-conversation-header empty">
+        <div>
+          <span className="eyebrow">Inbox IA</span>
+          <h1>{loading ? "Cargando conversaciones..." : "Selecciona una conversacion"}</h1>
+          <p>{error || `${total} conversaciones disponibles para revisar.`}</p>
+        </div>
+      </header>
+    );
+  }
+
+  const name = chatContactName(conversation);
+  const commercial = getCommercialState(conversation, conversation.lead);
+  const closeScore = conversation.aiCloseScore ?? conversation.aiLeadScore ?? 0;
+  const requiresHandoff = Boolean(conversation.aiHandoffRequired || conversation.aiNextActionCode === "READY_TO_CLOSE");
+  const handoffTitle = requiresHandoff
+    ? "Lead listo para cierre humano"
+    : closeScore >= 70
+      ? "Oportunidad caliente"
+      : "Conversacion activa";
+  const handoffReason = conversation.aiHandoffReason || conversation.aiDecisionReason || conversation.aiNextAction || "La IA mantiene el contexto comercial listo para operar.";
+
+  return (
+    <header className="inbox-conversation-header">
+      <div className="inbox-header-main">
+        <div className="avatar">{inboxInitials(name)}</div>
+        <div className="inbox-header-copy">
+          <span className="eyebrow">Conversacion activa</span>
+          <h1>{name}</h1>
+          <p>
+            {conversation.contact.channel || "whatsapp"} / Cliente {conversation.contact.externalId || "sin numero"}
+            {conversation.channelConfig?.displayNumber ? ` / Bot ${conversation.channelConfig.displayNumber}` : ""}
+          </p>
+        </div>
+      </div>
+
+      <div className="inbox-header-status">
+        <span className={`badge priority-${commercial.priority}`}>{commercial.label}</span>
+        <span className={`badge ${conversationModeClass(conversation)}`}>{conversationModeLabel(conversation)}</span>
+        {conversation.priorityLabel ? <span className={`badge priority-${conversation.priorityLabel}`}>Prioridad {conversation.priorityLabel}</span> : null}
+        {closeScore ? <span className="badge sales-alert-critical">{closeScore}% cierre</span> : null}
+      </div>
+
+      <div className={`inbox-header-signal ${requiresHandoff ? "critical" : closeScore >= 70 ? "hot" : ""}`}>
+        <strong>{handoffTitle}</strong>
+        <span>{handoffReason}</span>
+      </div>
+
+      <div className="inbox-header-actions">
+        <button className="secondary-btn" onClick={onTake}>Tomar conversacion</button>
+        <button className="secondary-btn" onClick={onRelease}>Devolver al bot</button>
+        <button className="success-btn" onClick={onResolve}>Marcar resuelta</button>
+        <button className="danger-btn" onClick={onDelete}>Eliminar chat</button>
+      </div>
+    </header>
   );
 }
 

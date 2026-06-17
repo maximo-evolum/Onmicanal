@@ -29,6 +29,7 @@ export function ChatPanel({
   messagesLoading,
   sending,
   botTyping = false,
+  hideHeader = false,
   onTake,
   onRelease,
   onResolve,
@@ -40,6 +41,7 @@ export function ChatPanel({
   messagesLoading: boolean;
   sending: boolean;
   botTyping?: boolean;
+  hideHeader?: boolean;
   onTake: () => Promise<void>;
   onRelease: () => Promise<void>;
   onResolve: () => Promise<void>;
@@ -88,7 +90,7 @@ export function ChatPanel({
 
   return (
     <div className="chat-shell">
-      <div className="chat-header">
+      {!hideHeader ? <div className="chat-header">
         <div className="chat-header-main">
           <div className="chat-header-left">
             <div className="avatar">{getInitials(displayName)}</div>
@@ -133,7 +135,7 @@ export function ChatPanel({
           <button className="success-btn" onClick={onResolve}>Marcar resuelta</button>
           <button className="danger-btn" onClick={onDelete}>Eliminar chat</button>
         </div>
-      </div>
+      </div> : null}
 
       <div className="chat-body">
         {messagesLoading ? (
