@@ -203,7 +203,6 @@ export default function AgendaPage() {
             <div className="meta-line">{mode.note}</div>
           </div>
           <div className="dashboard-hero-actions">
-            <Link className="ghost-btn" href="/crm-principal">Volver al CRM</Link>
             <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
           </div>
         </section>

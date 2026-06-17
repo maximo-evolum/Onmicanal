@@ -319,7 +319,8 @@ export default function CrmPrincipalPage() {
   })), [enabledAgents, openConversations, totalLeads, state.campaigns]);
 
   const activity = state.conversations.slice(0, 5).map((conversation) => ({
-    channel: conversation.contact?.channel || "Canal",
+    channel: conversation.contact?.channel || "whatsapp",
+    name: conversation.contact?.name || conversation.contact?.username || phoneLabel(conversation),
     phone: phoneLabel(conversation),
     description: compactText(conversation.aiSummary || conversation.lastMessage?.content || conversation.aiNextAction || `Conversacion ${statusLabel(conversation.status)}`),
     time: shortTime(conversation.lastMessageAt),
@@ -327,9 +328,9 @@ export default function CrmPrincipalPage() {
   }));
 
   const fallbackActivity = [
-    { channel: "WhatsApp", phone: "+56 9 demo", description: "El agente de chat esta listo para gestionar conversaciones.", time: "Ahora", id: "" },
-    { channel: "Marketing", phone: "Campanas", description: "El agente de campanas esta listo para generar contenido.", time: "Ahora", id: "" },
-    { channel: "CRM", phone: "EVOLUM", description: "La vista principal ya separa usuario y desarrollador.", time: "Ahora", id: "" }
+    { channel: "whatsapp", name: "Demo WhatsApp", phone: "+56 9 demo", description: "El agente de chat esta listo para gestionar conversaciones.", time: "Ahora", id: "" },
+    { channel: "whatsapp", name: "Campanas", phone: "+56 9 marketing", description: "El agente de campanas esta listo para generar contenido.", time: "Ahora", id: "" },
+    { channel: "whatsapp", name: "EVOLUM", phone: "+56 9 crm", description: "La vista principal ya separa usuario y desarrollador.", time: "Ahora", id: "" }
   ];
 
   const modules = [
@@ -341,7 +342,7 @@ export default function CrmPrincipalPage() {
   ];
   const homeAccessItems = visibleNav.filter((item) => !item.href.startsWith("#"));
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredAccessItems = normalizedSearch
+  const searchResults = normalizedSearch
     ? homeAccessItems.filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(normalizedSearch))
     : homeAccessItems;
   const conversationPreview = state.conversations[0];
@@ -355,7 +356,7 @@ export default function CrmPrincipalPage() {
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const first = filteredAccessItems[0];
+    const first = searchResults[0];
     if (!first) return;
     router.push(first.href);
   }
@@ -441,24 +442,6 @@ export default function CrmPrincipalPage() {
             </div>
           </section>
 
-          <section className="crm-main-panel crm-main-menu-panel">
-            <div className="crm-main-panel-head">
-              <div>
-                <span>Inicio EVOLUM</span>
-                <h2>Menu principal</h2>
-              </div>
-            </div>
-            <div className="crm-main-access-grid">
-              {filteredAccessItems.map((item) => (
-                <Link className="crm-main-access-card" href={item.href} key={item.href}>
-                  <strong>{item.label}</strong>
-                  <span>{item.description}</span>
-                </Link>
-              ))}
-              {!filteredAccessItems.length ? <div className="crm-main-empty">Sin resultados para "{searchTerm}".</div> : null}
-            </div>
-          </section>
-
           <aside className="crm-main-panel crm-main-live">
             <div className="crm-main-panel-head">
               <div>
@@ -468,10 +451,11 @@ export default function CrmPrincipalPage() {
             </div>
             {(activity.length ? activity : fallbackActivity).map((item) => (
               <Link className="crm-main-activity" href={item.id ? `/inbox?conversation=${item.id}` : "/inbox"} key={`${item.channel}-${item.time}-${item.phone}`}>
-                <b>WA</b>
+                <b><img alt="" src="https://cdn.simpleicons.org/whatsapp/25D366" /></b>
                 <div>
-                  <strong>{item.phone}</strong>
-                  <span>{item.description}</span>
+                  <strong>{item.name}</strong>
+                  <span>{item.phone}</span>
+                  <p>{item.description}</p>
                 </div>
                 <small>{item.channel} / {item.time}</small>
               </Link>

@@ -5,29 +5,25 @@ import { useEffect, useMemo, useState } from "react";
 import {
   deleteConversation,
   getConversations,
-  getLead,
   getMessages,
   releaseConversation,
   resolveConversation,
   sendManualMessage,
   takeConversation,
-  updateLeadApi,
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import { getSocketToken, socket } from "@/lib/socket";
-import { Conversation, Lead, Message } from "@/lib/types";
+import { Conversation, Message } from "@/lib/types";
 import { Topbar } from "./topbar";
 import { FiltersBar } from "./filters-bar";
 import { ConversationList } from "./conversation-list";
 import { ChatPanel } from "./chat-panel";
-import { LeadPanel } from "./lead-panel";
 
 export function InboxShell() {
   const agent = getStoredSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [lead, setLead] = useState<Lead | null>(null);
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sending, setSending] = useState(false);
@@ -153,16 +149,7 @@ export function InboxShell() {
   useEffect(() => {
     if (!selectedId) return;
     loadMessages(selectedId);
-    loadLead(selectedId);
   }, [selectedId]);
-  async function loadLead(conversationId: string) {
-    try {
-      const data = await getLead(conversationId);
-      setLead(data);
-    } catch {
-      setLead(null);
-    }
-  }
 
   useEffect(() => {
     socket.auth = { token: getSocketToken() };
@@ -266,7 +253,6 @@ export function InboxShell() {
     if (selectedId === selectedConversation.id) {
       setSelectedId(null);
       setMessages([]);
-      setLead(null);
     }
   }
 
@@ -278,7 +264,6 @@ export function InboxShell() {
     );
     setSelectedId(null);
     setMessages([]);
-    setLead(null);
   }
 
   async function handleSend(content: string) {
@@ -301,23 +286,6 @@ export function InboxShell() {
       );
     } finally {
       setSending(false);
-    }
-  }
-
-  function handleLeadChange(field: keyof Lead, value: string | number | null | Record<string, string | number | boolean | null>) {
-    setLead((prev) => (prev ? { ...prev, [field]: value } : prev));
-  }
-
-  async function handleLeadSave() {
-    if (!selectedConversation || !lead) return;
-    try {
-      const updated = await updateLeadApi(selectedConversation.id, lead);
-      setLead(updated);
-      await loadConversations();
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "No se pudo guardar el lead",
-      );
     }
   }
 
@@ -375,12 +343,86 @@ export function InboxShell() {
         />
       </main>
 
-      <LeadPanel
-        lead={lead || selectedConversation?.lead || null}
-        conversation={selectedConversation}
-        onChange={handleLeadChange}
-        onSave={handleLeadSave}
+      <ChatActivityPanel
+        conversations={conversations}
+        selectedId={selectedId}
+        loading={loading}
+        onSelect={setSelectedId}
       />
     </div>
+  );
+}
+
+function chatContactName(conversation: Conversation) {
+  return conversation.contact.name || conversation.contact.username || conversation.contact.externalId || "Contacto sin nombre";
+}
+
+function chatContactNumber(conversation: Conversation) {
+  const value = conversation.contact.externalId || conversation.contact.username || "";
+  if (!value) return conversation.contact.channel || "whatsapp";
+  return value.startsWith("+") ? value : `+${value}`;
+}
+
+function chatDescription(conversation: Conversation) {
+  const text = conversation.aiSummary || conversation.decisionSummary || conversation.lastMessage?.content || conversation.aiNextAction || "Conversacion activa en el inbox.";
+  const clean = String(text).replace(/\s+/g, " ").replace(/\*\*/g, "").trim();
+  return clean.length > 84 ? `${clean.slice(0, 84).trim()}...` : clean;
+}
+
+function chatTime(value?: string | null) {
+  if (!value) return "Ahora";
+  try {
+    return new Intl.DateTimeFormat("es-CL", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  } catch {
+    return "Ahora";
+  }
+}
+
+function ChatActivityPanel({
+  conversations,
+  selectedId,
+  loading,
+  onSelect,
+}: {
+  conversations: Conversation[];
+  selectedId: string | null;
+  loading: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const recent = conversations.slice(0, 12);
+
+  return (
+    <aside className="sidebar inbox-chat-feed-panel">
+      <div className="sidebar-header inbox-chat-feed-head">
+        <h2 className="sidebar-title">Chats recientes</h2>
+        <div className="meta-line">
+          {loading ? "Cargando conversaciones..." : `${recent.length} conversaciones visibles`}
+        </div>
+      </div>
+
+      <div className="inbox-chat-feed-list">
+        {recent.map((conversation) => (
+          <button
+            className={`inbox-chat-feed-item ${conversation.id === selectedId ? "active" : ""}`}
+            key={conversation.id}
+            type="button"
+            onClick={() => onSelect(conversation.id)}
+          >
+            <span className="inbox-chat-feed-icon">
+              <img alt="" src="https://cdn.simpleicons.org/whatsapp/25D366" />
+            </span>
+            <span className="inbox-chat-feed-copy">
+              <strong>{chatContactName(conversation)}</strong>
+              <small>{chatContactNumber(conversation)} / {chatTime(conversation.lastMessageAt)}</small>
+              <em>{chatDescription(conversation)}</em>
+            </span>
+          </button>
+        ))}
+
+        {!recent.length ? (
+          <div className="inbox-chat-feed-empty">Cuando lleguen mensajes, apareceran aqui para revisar rapido.</div>
+        ) : null}
+      </div>
+    </aside>
   );
 }
