@@ -413,6 +413,34 @@ a {
   color: var(--crm-main-muted);
 }
 
+.crm-main-profile {
+  min-height: 0;
+  width: fit-content;
+  min-width: 0;
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  place-content: initial;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #8b5cf6, #a855f7);
+  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.28);
+}
+
+.crm-main-profile strong {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.crm-main-profile span {
+  display: none;
+}
+
 .crm-main-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -4343,6 +4371,151 @@ body {
   justify-content: center;
 }
 
+.chile-calendar-panel {
+  margin-top: 10px;
+}
+
+.chile-calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chile-calendar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  color: #d9cef2;
+  font-size: 11px;
+}
+
+.chile-calendar-legend span::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #8b5cf6;
+}
+
+.chile-calendar-legend .holiday::before { background: #fb7185; }
+.chile-calendar-legend .long::before { background: #f59e0b; }
+.chile-calendar-legend .weekend::before { background: #38bdf8; }
+.chile-calendar-legend .booking::before { background: #34d399; }
+
+.chile-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.chile-calendar-month {
+  min-width: 0;
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(12, 8, 22, 0.58);
+}
+
+.chile-calendar-month h3 {
+  margin: 0 0 10px;
+  color: #f8f3ff;
+  font-size: 15px;
+  text-transform: capitalize;
+}
+
+.chile-calendar-weekdays,
+.chile-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.chile-calendar-weekdays {
+  margin-bottom: 6px;
+}
+
+.chile-calendar-weekdays span {
+  color: #a99bc9;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.chile-calendar-day,
+.chile-calendar-empty {
+  min-height: 66px;
+  border-radius: 8px;
+}
+
+.chile-calendar-day {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  padding: 7px;
+  border: 1px solid rgba(139, 92, 246, 0.13);
+  background: rgba(24, 17, 39, 0.62);
+  color: #f8f3ff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chile-calendar-day strong {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.chile-calendar-day small,
+.chile-calendar-day em {
+  overflow: hidden;
+  display: block;
+  font-size: 9.5px;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chile-calendar-day small {
+  color: #fecdd3;
+}
+
+.chile-calendar-day em {
+  color: #a7f3d0;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.chile-calendar-day.weekend {
+  background: rgba(14, 52, 76, 0.3);
+  border-color: rgba(56, 189, 248, 0.18);
+}
+
+.chile-calendar-day.holiday {
+  background: rgba(80, 20, 42, 0.36);
+  border-color: rgba(251, 113, 133, 0.34);
+}
+
+.chile-calendar-day.long-weekend {
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.35);
+}
+
+.chile-calendar-day.has-bookings {
+  border-color: rgba(52, 211, 153, 0.42);
+  background: linear-gradient(180deg, rgba(52, 211, 153, 0.11), rgba(24, 17, 39, 0.72));
+}
+
+.chile-calendar-day.today {
+  outline: 2px solid rgba(168, 85, 247, 0.58);
+  outline-offset: 1px;
+}
+
 .agenda-list {
   gap: 10px;
 }
@@ -4389,6 +4562,7 @@ body {
   .phase5-table-row { grid-template-columns: 1fr; }
   .agenda-layout,
   .agenda-form,
+  .chile-calendar-grid,
   .agenda-booking-row {
     grid-template-columns: 1fr;
   }

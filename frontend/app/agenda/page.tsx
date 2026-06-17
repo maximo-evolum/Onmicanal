@@ -102,6 +102,163 @@ function money(value = 0) {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(value || 0);
 }
 
+type HolidayInfo = {
+  name: string;
+  type: "holiday" | "long-weekend" | "weekend";
+};
+
+type CalendarDay = {
+  date: Date;
+  key: string;
+  day: number;
+  isToday: boolean;
+  isWeekend: boolean;
+  isLongWeekend: boolean;
+  holiday?: HolidayInfo;
+  bookings: Booking[];
+};
+
+function addDays(date: Date, days: number) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function dateKey(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Santiago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function localDateFromKey(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function easterDate(year: number) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+function chileHolidays(year: number) {
+  const easter = easterDate(year);
+  const holidays: Record<string, string> = {
+    [`${year}-01-01`]: "Ano Nuevo",
+    [`${year}-05-01`]: "Dia del Trabajo",
+    [`${year}-05-21`]: "Glorias Navales",
+    [`${year}-06-21`]: "Pueblos Indigenas",
+    [`${year}-06-29`]: "San Pedro y San Pablo",
+    [`${year}-07-16`]: "Virgen del Carmen",
+    [`${year}-08-15`]: "Asuncion de la Virgen",
+    [`${year}-09-18`]: "Fiestas Patrias",
+    [`${year}-09-19`]: "Glorias del Ejercito",
+    [`${year}-10-12`]: "Encuentro de Dos Mundos",
+    [`${year}-10-31`]: "Iglesias Evangelicas",
+    [`${year}-11-01`]: "Todos los Santos",
+    [`${year}-12-08`]: "Inmaculada Concepcion",
+    [`${year}-12-25`]: "Navidad"
+  };
+  holidays[dateKey(addDays(easter, -2))] = "Viernes Santo";
+  holidays[dateKey(addDays(easter, -1))] = "Sabado Santo";
+  return holidays;
+}
+
+function holidayMapForYears(years: number[]) {
+  return years.reduce<Record<string, string>>((map, year) => ({ ...map, ...chileHolidays(year) }), {});
+}
+
+function isWeekend(date: Date) {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+function buildLongWeekendKeys(holidays: Record<string, string>) {
+  const offDays = new Set<string>();
+  Object.keys(holidays).forEach((key) => offDays.add(key));
+  Object.keys(holidays).forEach((key) => {
+    const date = localDateFromKey(key);
+    for (let offset = -3; offset <= 3; offset += 1) {
+      const candidate = addDays(date, offset);
+      if (isWeekend(candidate)) offDays.add(dateKey(candidate));
+    }
+  });
+
+  const longWeekends = new Set<string>();
+  Array.from(offDays).sort().forEach((key) => {
+    const date = localDateFromKey(key);
+    const run = [key];
+    let prev = addDays(date, -1);
+    while (offDays.has(dateKey(prev))) {
+      run.unshift(dateKey(prev));
+      prev = addDays(prev, -1);
+    }
+    let next = addDays(date, 1);
+    while (offDays.has(dateKey(next))) {
+      run.push(dateKey(next));
+      next = addDays(next, 1);
+    }
+    if (run.length >= 3) run.forEach((item) => longWeekends.add(item));
+  });
+  return longWeekends;
+}
+
+function monthLabel(date: Date) {
+  return new Intl.DateTimeFormat("es-CL", { month: "long", year: "numeric" }).format(date);
+}
+
+function calendarMonths(bookings: Booking[], selectedDate: string) {
+  const base = localDateFromKey(selectedDate);
+  const starts = [0, 1, 2].map((offset) => new Date(base.getFullYear(), base.getMonth() + offset, 1));
+  const years = Array.from(new Set(starts.flatMap((start) => [start.getFullYear(), new Date(start.getFullYear(), start.getMonth() + 1, 0).getFullYear()])));
+  const holidays = holidayMapForYears(years);
+  const longWeekends = buildLongWeekendKeys(holidays);
+  const todayKey = dateKey(new Date());
+  const bookingsByDate = bookings.reduce<Record<string, Booking[]>>((map, booking) => {
+    const key = dateKey(new Date(booking.date));
+    map[key] = [...(map[key] || []), booking];
+    return map;
+  }, {});
+
+  return starts.map((start) => {
+    const lastDay = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+    const firstDay = (start.getDay() + 6) % 7;
+    const days: Array<CalendarDay | null> = Array.from({ length: firstDay }, () => null);
+    for (let day = 1; day <= lastDay; day += 1) {
+      const date = new Date(start.getFullYear(), start.getMonth(), day);
+      const key = dateKey(date);
+      days.push({
+        date,
+        key,
+        day,
+        isToday: key === todayKey,
+        isWeekend: isWeekend(date),
+        isLongWeekend: longWeekends.has(key),
+        holiday: holidays[key] ? { name: holidays[key], type: "holiday" } : undefined,
+        bookings: bookingsByDate[key] || []
+      });
+    }
+    return { key: dateKey(start), label: monthLabel(start), days };
+  });
+}
+
 export default function AgendaPage() {
   const agent = getStoredSession();
   const [tenant, setTenant] = useState<TenantSession | null>(null);
@@ -123,6 +280,7 @@ export default function AgendaPage() {
   });
 
   const mode = modeForTenant(tenant);
+  const months = useMemo(() => calendarMonths(bookings, selectedDate), [bookings, selectedDate]);
 
   async function load() {
     try {
@@ -214,6 +372,49 @@ export default function AgendaPage() {
           <Card title="Proximas" value={stats.upcoming} />
           <Card title="Pendientes" value={stats.pending} />
           <Card title="Confirmadas" value={stats.confirmed} />
+        </section>
+
+        <section className="phase5-panel chile-calendar-panel">
+          <div className="phase5-panel-head">
+            <div>
+              <h2>Calendario de reservas Chile</h2>
+              <p>Vista mensual con reservas, feriados, fines de semana y fines de semana largos.</p>
+            </div>
+            <div className="chile-calendar-legend">
+              <span className="holiday">Feriado</span>
+              <span className="long">Fin de semana largo</span>
+              <span className="weekend">Sabado / domingo</span>
+              <span className="booking">Reserva</span>
+            </div>
+          </div>
+
+          <div className="chile-calendar-grid">
+            {months.map((month) => (
+              <article className="chile-calendar-month" key={month.key}>
+                <h3>{month.label}</h3>
+                <div className="chile-calendar-weekdays">
+                  {["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"].map((day) => <span key={day}>{day}</span>)}
+                </div>
+                <div className="chile-calendar-days">
+                  {month.days.map((day, index) => (
+                    day ? (
+                      <button
+                        className={`chile-calendar-day ${day.isToday ? "today" : ""} ${day.isWeekend ? "weekend" : ""} ${day.isLongWeekend ? "long-weekend" : ""} ${day.holiday ? "holiday" : ""} ${day.bookings.length ? "has-bookings" : ""}`}
+                        key={day.key}
+                        type="button"
+                        title={[day.holiday?.name, day.isLongWeekend ? "Fin de semana largo" : "", day.bookings.length ? `${day.bookings.length} reservas` : ""].filter(Boolean).join(" / ")}
+                        onClick={() => setSelectedDate(day.key)}
+                      >
+                        <strong>{day.day}</strong>
+                        {day.holiday ? <small>{day.holiday.name}</small> : null}
+                        {day.bookings.length ? <em>{day.bookings.length} reserva{day.bookings.length > 1 ? "s" : ""}</em> : null}
+                      </button>
+                    ) : <span className="chile-calendar-empty" key={`empty-${month.key}-${index}`} />
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="agenda-layout">

@@ -253,6 +253,7 @@ export default function CrmPrincipalPage() {
 
   async function load() {
     const session = getStoredSession();
+    setState((current) => ({ ...current, session }));
     const [me, conversations, leadMetrics, crm, campaigns, modules] = await Promise.allSettled([
       getMe(),
       getConversations(),
@@ -278,6 +279,7 @@ export default function CrmPrincipalPage() {
   }
 
   useEffect(() => {
+    setState((current) => ({ ...current, session: getStoredSession() }));
     load().catch((error) => {
       setState((current) => ({
         ...current,
@@ -286,6 +288,8 @@ export default function CrmPrincipalPage() {
       }));
     });
   }, []);
+
+  const currentSession = state.session;
 
   const openConversations = state.conversations.filter((item) => item.status === "OPEN").length;
   const hotLeads = state.leadMetrics?.alerts?.hotLeads ?? state.crm?.kpis?.hotLeads ?? 0;
@@ -401,7 +405,7 @@ export default function CrmPrincipalPage() {
         <header className="crm-main-header">
           <div>
             <span className="crm-main-kicker">{isDeveloper ? "Desarrollador / EVOLUM" : "CRM principal / EVOLUM"}</span>
-            <h1>Hola, {state.session?.name || "Usuario"}</h1>
+            <h1>Hola, {currentSession?.name || "Usuario"}</h1>
             <p>{isDeveloper ? "Administra el catalogo global de agentes, sus rubros compatibles y el nivel de cuenta en que aparecen para cada cliente." : "Gestiona conversaciones, clientes, agentes habilitados por tu plan y oportunidades desde una vista central."}</p>
           </div>
           <form className="crm-main-search" onSubmit={submitSearch}>
@@ -414,8 +418,8 @@ export default function CrmPrincipalPage() {
             <button type="submit" aria-label="Buscar">⌕</button>
           </form>
           <div className="crm-main-profile">
-            <strong>{state.session?.name || "Usuario"}</strong>
-            <span>{isDeveloper ? "Desarrollador" : state.session?.role || "Cliente"}</span>
+            <strong>{currentSession?.name || "Usuario"}</strong>
+            <span>{isDeveloper ? "Desarrollador" : currentSession?.role || "Cliente"}</span>
           </div>
         </header>
 
