@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getCrmOperationalDashboard, getLeadMetrics, type CrmOperationalDashboard } from "@/lib/api";
 import { LeadMetrics } from "@/lib/types";
-import { BackToInbox } from "@/components/BackToInbox";
-import { Topbar } from "@/components/topbar";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 
 function money(value = 0) {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(value || 0);
@@ -34,6 +33,23 @@ function stageLabel(stage = "") {
   return map[stage] || stage || "Sin estado";
 }
 
+function AnalyticsHeader({ agentName }: { agentName: string }) {
+  return (
+    <header className="module-app-header">
+      <div>
+        <span className="eyebrow">Analytics & KPIs</span>
+        <h1>Analytics & KPIs</h1>
+        <div className="meta-line">Revenue, reservas, pagos, pipeline, alertas y próximas acciones.</div>
+      </div>
+      <div className="module-app-actions">
+        <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
+        <span className="module-account-pill">{agentName}</span>
+        <LogoutButton />
+      </div>
+    </header>
+  );
+}
+
 export default function DashboardPage() {
   const agent = getStoredSession();
   const [metrics, setMetrics] = useState<LeadMetrics | null>(null);
@@ -60,8 +76,7 @@ export default function DashboardPage() {
     return (
       <div className="page page-single">
         <main className="main dashboard-page">
-          <Topbar agent={agent} />
-          <div className="content-toolbar"><BackToInbox /></div>
+          <AnalyticsHeader agentName={agent?.name || "Usuario"} />
           {error ? <div className="sales-queue-error">{error}</div> : <div className="empty-state">Cargando CRM operativo...</div>}
         </main>
       </div>
@@ -71,8 +86,7 @@ export default function DashboardPage() {
   return (
     <div className="page page-single">
       <main className="main dashboard-page">
-        <Topbar agent={agent} />
-        <div className="content-toolbar"><BackToInbox /></div>
+        <AnalyticsHeader agentName={agent?.name || "Usuario"} />
 
         <section className="chat-header dashboard-hero">
           <div>
@@ -141,39 +155,6 @@ export default function DashboardPage() {
               <small className="meta-line">{money(stage.value)}</small>
             </div>
           ))}
-        </div>
-
-        <h2 className="section-title">Actividad viva</h2>
-        <div className="activity-feed">
-          {crm.activity.slice(0, 12).map((item, index) => (
-            <button
-              className={`activity-card activity-${activityType(item.title)}`}
-              key={item.id}
-              onClick={() => item.conversationId ? window.location.href = `/inbox?conversation=${item.conversationId}` : undefined}
-            >
-              <div className="activity-line" />
-              <div className="activity-icon">
-                {activityIcon(item.title)}
-              </div>
-
-              <div className="activity-content">
-                <div className="activity-header">
-                  <strong>{humanizeTitle(item.title)}</strong>
-                  <span className="activity-time">{relativeTime(item.createdAt)}</span>
-                </div>
-
-                <div className="activity-description">
-                  {humanizeDescription(item.description)}
-                </div>
-
-                <div className="activity-footer">
-                  {item.amount ? <span className="activity-badge success">{money(item.amount)}</span> : null}
-                  {(item as any).stage ? <span className="activity-badge">{stageLabel((item as any).stage)}</span> : null}
-                </div>
-              </div>
-            </button>
-          ))}
-          {!crm.activity.length ? <div className="empty-state">Aún no hay actividad operativa.</div> : null}
         </div>
 
         <h2 className="section-title">Próximas reservas</h2>

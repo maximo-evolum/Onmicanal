@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { getConversations, getSalesQueue } from "@/lib/api";
 import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, riskLabel } from "@/lib/ai-ops";
-import { Topbar } from "@/components/topbar";
-import { BackToInbox } from "@/components/BackToInbox";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 
 function getScore(conversation: Conversation) {
   return conversation.aiCloseScore ?? conversation.aiLeadScore ?? conversation.lead?.closeProbability ?? 0;
@@ -66,14 +65,20 @@ export default function SalesQueuePage() {
   return (
     <div className="page page-single">
       <main className="main sales-queue-page">
-        <Topbar agent={agent} />
-        <div className="content-toolbar"><BackToInbox /></div>
+        <header className="module-app-header">
+          <div>
+            <span className="eyebrow">Cierres IA</span>
+            <h1>Cola de cierre</h1>
+            <div className="meta-line">Leads con intención alta, listos para reserva/pago o que requieren intervención humana.</div>
+          </div>
+          <div className="module-app-actions">
+            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
+            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <LogoutButton />
+          </div>
+        </header>
 
         <section className="sales-queue-hero">
-          <div>
-            <h1 className="chat-title">Cierres IA</h1>
-            <p className="meta-line">Cola operativa para vendedores: leads con intención alta, listos para reserva/pago o que requieren intervención humana.</p>
-          </div>
           <div className="sales-queue-kpis">
             <span className="badge sales-alert-critical">🚨 {stats.total} listos</span>
             <span className="badge sales-alert-hot">👤 {stats.handoff} handoff</span>

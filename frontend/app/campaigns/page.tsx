@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
-import { BackToInbox } from "@/components/BackToInbox";
-import { Topbar } from "@/components/topbar";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 
 const PLATFORM_LABELS: Record<CampaignPlatform, string> = {
   instagram: "Instagram",
@@ -242,15 +241,20 @@ export default function CampaignsPage() {
   return (
     <div className="page page-single campaign-page">
       <main className="main">
-        <Topbar agent={agent} />
-        <div className="content-toolbar"><BackToInbox /></div>
+        <header className="module-app-header">
+          <div>
+            <span className="eyebrow">Marketing IA</span>
+            <h1>Campañas IA</h1>
+            <div className="meta-line">Crea imagenes, titulos y textos listos para publicar en los canales del cliente.</div>
+          </div>
+          <div className="module-app-actions">
+            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
+            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <LogoutButton />
+          </div>
+        </header>
 
         <section className="campaign-hero">
-          <div>
-            <p className="eyebrow">Marketing IA</p>
-            <h1 className="chat-title">Campañas IA</h1>
-            <div className="meta-line">Crea imágenes, títulos y textos listos para publicar en los canales del cliente.</div>
-          </div>
           <div className="campaign-status-pill">
             {variants.length ? `${variants.length} variantes ${variants.some((v) => v.image || v.imageUrl) ? "con imagen" : "de copy"}` : "Borrador"}
           </div>

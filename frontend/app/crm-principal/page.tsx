@@ -58,11 +58,9 @@ const navItems: NavItem[] = [
   { label: "Campanas", href: "/campaigns", description: "Marketing IA y publicaciones" },
   { label: "Pagos", href: "/payments", description: "Cobros, estados y links" },
   { label: "Cierres IA", href: "/sales-queue", description: "Leads listos para vendedor" },
-  { label: "Base de Conocimiento", href: "/onboarding", description: "Documentos, FAQs y contexto" },
-  { label: "Integraciones", href: "/settings/ai", description: "Canales, IA y reglas" },
+  { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA" },
   { label: "Equipo", href: "/team", description: "Usuarios, roles y actividad" },
   { label: "Analytics & KPIs", href: "/dashboard", description: "Metricas operativas" },
-  { label: "SaaS Analytics", href: "/saas-analytics", description: "Uso, costos y rendimiento" },
   { label: "AI Ops", href: "/ai-ops", description: "Razonamiento y alertas IA" }
 ];
 
@@ -160,15 +158,6 @@ const knowledge = [
   ["Objeciones frecuentes", "Respuestas y politicas", "Activo"],
   ["Guia Realty", "Propiedades y visitas", "Preparado"],
   ["Proceso de onboarding", "Activacion de clientes", "Activo"]
-];
-
-const integrations = [
-  { name: "WhatsApp Business", status: "Conectado", icon: "https://cdn.simpleicons.org/whatsapp/25D366" },
-  { name: "Instagram DM", status: "Conectado", icon: "https://cdn.simpleicons.org/instagram/E4405F" },
-  { name: "Google Workspace", status: "Listo", icon: "https://cdn.simpleicons.org/google/4285F4" },
-  { name: "HubSpot CRM", status: "Pendiente", icon: "https://cdn.simpleicons.org/hubspot/FF7A59" },
-  { name: "Stripe", status: "Pendiente", icon: "https://cdn.simpleicons.org/stripe/635BFF" },
-  { name: "Notion", status: "Listo", icon: "https://cdn.simpleicons.org/notion/FFFFFF" }
 ];
 
 function money(value = 0) {
@@ -593,8 +582,8 @@ export default function CrmPrincipalPage() {
           <section className="crm-main-panel crm-main-knowledge">
             <div className="crm-main-panel-head">
               <div>
-                <span>Base de conocimiento</span>
-                <h2>Documentos activos</h2>
+                <span>Configuracion de Agente</span>
+                <h2>Perfil, documentos y reglas IA</h2>
               </div>
               <Link className="crm-main-action-link" href="/onboarding">Gestionar</Link>
             </div>
@@ -607,25 +596,6 @@ export default function CrmPrincipalPage() {
                 <small>{status}</small>
               </article>
             ))}
-          </section>
-
-          <section className="crm-main-panel crm-main-integrations">
-            <div className="crm-main-panel-head">
-              <div>
-                <span>Centro de integraciones</span>
-                <h2>Canales conectados</h2>
-              </div>
-              {isDeveloper ? <Link className="crm-main-action-link" href="/admin">Nueva</Link> : null}
-            </div>
-            <div className="crm-main-integration-grid">
-              {integrations.map((integration) => (
-                <article key={integration.name}>
-                  <b><img alt="" src={integration.icon} /></b>
-                  <strong>{integration.name}</strong>
-                  <span>{integration.status}</span>
-                </article>
-              ))}
-            </div>
           </section>
 
           <section className="crm-main-panel crm-main-analytics">

@@ -2,10 +2,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { cancelPayment, confirmPayment, createPayment, getPaymentMetrics, getPayments, Payment, PaymentMetrics } from "@/lib/api";
-import { Topbar } from "@/components/topbar";
-import { BackToInbox } from "@/components/BackToInbox";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 
 function money(value = 0, currency = "CLP") {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value || 0);
@@ -92,15 +91,20 @@ export default function PaymentsPage() {
   return (
     <div className="page page-single">
       <main className="main dashboard-page">
-        <Topbar agent={agent} />
-        <div className="content-toolbar"><BackToInbox /></div>
-
-        <section className="chat-header dashboard-hero">
+        <header className="module-app-header">
           <div>
             <span className="eyebrow">Portal de pagos</span>
-            <h1 className="chat-title">Pagos, links y reservas</h1>
-            <div className="meta-line">Modo actual: links manuales. Los proveedores externos se activan solo cuando su conector real este configurado.</div>
+            <h1>Pagos, links y reservas</h1>
+            <div className="meta-line">Links manuales y pagos conectados a conversaciones, leads o reservas.</div>
           </div>
+          <div className="module-app-actions">
+            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
+            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <LogoutButton />
+          </div>
+        </header>
+
+        <section className="chat-header dashboard-hero">
           <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
         </section>
 

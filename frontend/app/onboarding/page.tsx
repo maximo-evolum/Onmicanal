@@ -251,14 +251,14 @@ export default function OnboardingPage() {
     <main className="onboarding-page onboarding-pro-page">
       <section className="onboarding-pro-hero">
         <div>
-          <span className="badge accent">Wizard Onboarding IA</span>
-          <h1>Entrena tu IA</h1>
+          <span className="badge accent">Configuracion de Agente</span>
+          <h1>Configuracion de Agente</h1>
           <p>
             Configura el perfil comercial del tenant, sube documentos y aplica conocimiento para que Bot Lab, Inbox y respuestas automáticas usen datos reales del negocio.
           </p>
         </div>
         <div className="onboarding-hero-actions">
-          <Link className="ghost-btn" href="/inbox">Ir al Inbox</Link>
+          <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
                   </div>
       </section>
 
@@ -466,7 +466,7 @@ export default function OnboardingPage() {
             <article><strong>{existing?.rules?.length || 0}</strong><span>Reglas / FAQs en BD</span></article>
           </div>
           <div className="header-actions">
-            <Link className="ghost-btn" href="/inbox">Ir al Inbox</Link>
+            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <button className="ghost-btn" onClick={resetWizard}>Nuevo onboarding</button>
           </div>
         </section>

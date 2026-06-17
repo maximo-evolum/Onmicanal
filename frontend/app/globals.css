@@ -3606,6 +3606,56 @@ body {
   white-space: nowrap;
 }
 
+.module-app-header {
+  min-height: 80px;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.18), rgba(232, 121, 249, 0.06)),
+    linear-gradient(180deg, rgba(15, 11, 26, 0.98), rgba(12, 8, 22, 0.98));
+  border-bottom: 1px solid rgba(124, 58, 237, 0.16);
+}
+
+.module-app-header h1 {
+  margin: 2px 0 4px;
+  color: #f8f3ff;
+  font-size: 22px;
+  line-height: 1.05;
+}
+
+.module-app-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.module-app-actions .ghost-btn,
+.module-app-actions button {
+  min-height: 36px;
+  padding: 8px 13px;
+  border-radius: 8px;
+}
+
+.module-account-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #7c3aed, #c084fc);
+  box-shadow: 0 10px 22px rgba(124, 58, 237, 0.28);
+  white-space: nowrap;
+}
+
 .content-toolbar {
   min-height: 42px;
   padding: 8px 14px;
@@ -4334,6 +4384,7 @@ body {
 .phase5-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .phase5-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .phase5-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.phase5-grid.one { grid-template-columns: 1fr; }
 .phase5-card, .phase5-panel {
   border: 1px solid rgba(124,58,237,0.17);
   background: linear-gradient(180deg, rgba(26,19,43,0.82), rgba(15,11,26,0.94));
@@ -4529,6 +4580,36 @@ body {
   background: rgba(124, 58, 237, 0.22);
 }
 
+.compact-calendar-btn {
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.calendar-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(124, 58, 237, 0.22);
+  border-radius: 10px;
+  background: rgba(15, 11, 26, 0.62);
+}
+
+.calendar-view-toggle button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: transparent;
+}
+
+.calendar-view-toggle button.active {
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed, #c084fc);
+}
+
 .chile-calendar-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(420px, 1fr));
@@ -4536,6 +4617,18 @@ body {
   margin-top: 14px;
   overflow-x: auto;
   padding-bottom: 4px;
+}
+
+.chile-calendar-grid.month-count-1 {
+  grid-template-columns: minmax(520px, 1fr);
+}
+
+.chile-calendar-grid.month-count-2 {
+  grid-template-columns: repeat(2, minmax(420px, 1fr));
+}
+
+.chile-calendar-grid.month-count-3 {
+  grid-template-columns: repeat(3, minmax(420px, 1fr));
 }
 
 .chile-calendar-month {

@@ -236,9 +236,9 @@ function bookingShortInfo(booking: Booking) {
   return clean.length > 42 ? `${clean.slice(0, 42).trim()}...` : clean;
 }
 
-function calendarMonths(bookings: Booking[], selectedDate: string) {
+function calendarMonths(bookings: Booking[], selectedDate: string, visibleMonthCount = 3) {
   const base = localDateFromKey(selectedDate);
-  const starts = [0, 1, 2].map((offset) => new Date(base.getFullYear(), base.getMonth() + offset, 1));
+  const starts = Array.from({ length: visibleMonthCount }, (_, offset) => new Date(base.getFullYear(), base.getMonth() + offset, 1));
   const years = Array.from(new Set(starts.flatMap((start) => [start.getFullYear(), new Date(start.getFullYear(), start.getMonth() + 1, 0).getFullYear()])));
   const holidays = holidayMapForYears(years);
   const longWeekends = buildLongWeekendKeys(holidays);
@@ -277,7 +277,8 @@ export default function AgendaPage() {
   const [tenant, setTenant] = useState<TenantSession | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [slots, setSlots] = useState<BookingSlot[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState(dateKey(new Date()));
+  const [visibleMonthCount, setVisibleMonthCount] = useState(3);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -293,7 +294,7 @@ export default function AgendaPage() {
   });
 
   const mode = modeForTenant(tenant);
-  const months = useMemo(() => calendarMonths(bookings, selectedDate), [bookings, selectedDate]);
+  const months = useMemo(() => calendarMonths(bookings, selectedDate, visibleMonthCount), [bookings, selectedDate, visibleMonthCount]);
 
   useEffect(() => {
     setSession(getStoredSession());
@@ -369,6 +370,10 @@ export default function AgendaPage() {
     setSelectedDate(dateKey(addMonths(localDateFromKey(selectedDate), monthsToMove)));
   }
 
+  function goToCurrentMonth() {
+    setSelectedDate(dateKey(new Date()));
+  }
+
   return (
     <div className="page page-single">
       <main className="main dashboard-page">
@@ -403,6 +408,19 @@ export default function AgendaPage() {
             <div className="chile-calendar-tools">
               <button className="calendar-arrow" type="button" aria-label="Mes anterior" onClick={() => shiftCalendar(-1)}>{"<"}</button>
               <button className="calendar-arrow" type="button" aria-label="Mes siguiente" onClick={() => shiftCalendar(1)}>{">"}</button>
+              <button className="ghost-btn compact-calendar-btn" type="button" onClick={goToCurrentMonth}>Mes actual</button>
+              <div className="calendar-view-toggle" aria-label="Cantidad de meses visibles">
+                {[1, 2, 3].map((count) => (
+                  <button
+                    key={count}
+                    type="button"
+                    className={visibleMonthCount === count ? "active" : ""}
+                    onClick={() => setVisibleMonthCount(count)}
+                  >
+                    {count} mes{count > 1 ? "es" : ""}
+                  </button>
+                ))}
+              </div>
               <div className="chile-calendar-legend">
                 <span className="holiday">Feriado</span>
                 <span className="long">Fin de semana largo</span>
@@ -412,7 +430,7 @@ export default function AgendaPage() {
             </div>
           </div>
 
-          <div className="chile-calendar-grid">
+          <div className={`chile-calendar-grid month-count-${visibleMonthCount}`}>
             {months.map((month) => (
               <article className="chile-calendar-month" key={month.key}>
                 <h3>{month.label}</h3>
