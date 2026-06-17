@@ -5728,10 +5728,10 @@ html, body {
 .inbox-app-header {
   grid-column: 1 / -1;
   min-width: 0;
-  height: 120px;
+  height: 100px;
   display: grid;
-  gap: 8px;
-  padding: 10px 20px 8px;
+  gap: 6px;
+  padding: 8px 20px 7px;
   background:
     radial-gradient(circle at 16% 0%, rgba(139, 92, 246, 0.18), transparent 34%),
     linear-gradient(135deg, rgba(18, 12, 31, 0.96), rgba(9, 6, 17, 0.98));
@@ -5802,8 +5802,9 @@ html, body {
 .inbox-filter-strip {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
-  padding-top: 2px;
+  padding-top: 0;
 }
 
 .inbox-filter-strip label {
