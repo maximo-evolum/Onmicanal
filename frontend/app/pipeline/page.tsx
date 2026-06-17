@@ -3,19 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { getLeads, updateLeadApi } from "@/lib/api";
 import { Lead } from "@/lib/types";
-import { BackToInbox } from "@/components/BackToInbox";
-import { Topbar } from "@/components/topbar";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
+import Link from "next/link";
 
 const columns = [
   { id: "NEW", label: "Nuevos" },
   { id: "CONTACTED", label: "Contactados" },
-  { id: "QUALIFIED", label: "Calificados" },
   { id: "VISIT_SCHEDULED", label: "Visitas" },
   { id: "NEGOTIATION", label: "Negociación" },
   { id: "READY_TO_CLOSE", label: "Listos cierre" },
-  { id: "ESCALATED", label: "Escalados" },
-  { id: "WON", label: "Ganados" },
   { id: "LOST", label: "Perdidos" },
 ];
 
@@ -55,30 +51,21 @@ function getLeadSignal(lead: Lead) {
 export default function PipelinePage() {
   const agent = getStoredSession();
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [priority, setPriority] = useState("all");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
   async function load() {
     try {
-      setLoading(true);
       setError(null);
       setLeads(await getLeads());
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron cargar leads");
-    } finally {
-      setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
   }, []);
-
-  const filtered = useMemo(() => {
-    return leads.filter((lead) => priority === "all" || lead.conversation?.priorityLabel === priority);
-  }, [leads, priority]);
 
   const stats = useMemo(() => {
     const hot = leads.filter((lead) => (lead.closeProbability ?? 0) >= 75 || lead.conversation?.priorityLabel === "high").length;
@@ -111,16 +98,20 @@ export default function PipelinePage() {
   return (
     <div className="page page-single">
       <main className="main">
-        <Topbar agent={agent} />
-        <div className="content-toolbar"><BackToInbox /></div>
+        <header className="pipeline-app-header">
+          <div>
+            <h1>Pipeline comercial</h1>
+            <div className="meta-line">Prioriza oportunidades, revisa senales de cierre y vuelve al chat en un clic.</div>
+          </div>
+          <div className="pipeline-app-actions">
+            <Link className="ghost-btn" href="/crm-principal">Volver al CRM</Link>
+            <span className="pipeline-account-pill">{agent?.name || "Usuario"}</span>
+            <LogoutButton />
+          </div>
+        </header>
 
         <div className="chat-header pipeline-hero">
           <div className="chat-header-main">
-            <div>
-              <h1 className="chat-title">Pipeline comercial</h1>
-              <div className="meta-line">Prioriza oportunidades, revisa señales de cierre y vuelve al chat en un clic.</div>
-            </div>
-
             <div className="pipeline-kpis">
               <span className="badge sales-alert-critical">🚨 {stats.ready} listos cierre</span>
               <span className="badge signal-hot">🔥 {stats.hot} calientes</span>
@@ -129,22 +120,12 @@ export default function PipelinePage() {
             </div>
           </div>
 
-          <div className="header-actions pipeline-toolbar">
-            <select value={priority} onChange={(e) => setPriority(e.target.value)}>
-              <option value="all">Todas las prioridades</option>
-              <option value="high">Alta</option>
-              <option value="medium">Media</option>
-              <option value="low">Baja</option>
-            </select>
-            <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
-          </div>
-
           {error ? <div className="meta-line" style={{ marginTop: 8 }}>{error}</div> : null}
         </div>
 
         <div className="pipeline-board">
           {columns.map((column) => {
-            const items = filtered.filter((lead) => lead.status === column.id);
+            const items = leads.filter((lead) => lead.status === column.id);
 
             return (
               <section
