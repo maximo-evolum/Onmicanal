@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { BackToInbox } from "@/components/BackToInbox";
-import { Topbar } from "@/components/topbar";
 import { createBookingApi, getBookingSlots, getBookings, getMe, markBookingPaymentReady, updateBookingApi } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
-import type { Booking, BookingSlot, TenantSession } from "@/lib/types";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
+import type { AgentSession, Booking, BookingSlot, TenantSession } from "@/lib/types";
 
 type AgendaMode = {
   title: string;
@@ -124,6 +122,10 @@ function addDays(date: Date, days: number) {
   return copy;
 }
 
+function addMonths(date: Date, months: number) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
 function dateKey(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Santiago",
@@ -224,6 +226,16 @@ function monthLabel(date: Date) {
   return new Intl.DateTimeFormat("es-CL", { month: "long", year: "numeric" }).format(date);
 }
 
+function bookingTime(value: string) {
+  return new Intl.DateTimeFormat("es-CL", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function bookingShortInfo(booking: Booking) {
+  const text = booking.notes || booking.location || booking.email || booking.phone || "Reserva creada por IA/equipo";
+  const clean = String(text).replace(/\s+/g, " ").trim();
+  return clean.length > 42 ? `${clean.slice(0, 42).trim()}...` : clean;
+}
+
 function calendarMonths(bookings: Booking[], selectedDate: string) {
   const base = localDateFromKey(selectedDate);
   const starts = [0, 1, 2].map((offset) => new Date(base.getFullYear(), base.getMonth() + offset, 1));
@@ -261,6 +273,7 @@ function calendarMonths(bookings: Booking[], selectedDate: string) {
 
 export default function AgendaPage() {
   const agent = getStoredSession();
+  const [session, setSession] = useState<AgentSession | null>(agent);
   const [tenant, setTenant] = useState<TenantSession | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [slots, setSlots] = useState<BookingSlot[]>([]);
@@ -281,6 +294,10 @@ export default function AgendaPage() {
 
   const mode = modeForTenant(tenant);
   const months = useMemo(() => calendarMonths(bookings, selectedDate), [bookings, selectedDate]);
+
+  useEffect(() => {
+    setSession(getStoredSession());
+  }, []);
 
   async function load() {
     try {
@@ -348,22 +365,25 @@ export default function AgendaPage() {
     await load();
   }
 
+  function shiftCalendar(monthsToMove: number) {
+    setSelectedDate(dateKey(addMonths(localDateFromKey(selectedDate), monthsToMove)));
+  }
+
   return (
     <div className="page page-single">
       <main className="main dashboard-page">
-        <Topbar agent={agent} />
-        <div className="content-toolbar"><BackToInbox /></div>
-
-        <section className="chat-header dashboard-hero agenda-hero">
+        <header className="agenda-app-header">
           <div>
-            <span className="eyebrow">Modulo independiente</span>
-            <h1 className="chat-title">{mode.title}</h1>
+            <h1>Agenda EVOLUM</h1>
             <div className="meta-line">{mode.note}</div>
           </div>
-          <div className="dashboard-hero-actions">
+          <div className="agenda-app-actions">
+            <Link className="ghost-btn" href="/crm-principal">Volver al CRM</Link>
+            <span className="agenda-account-pill">{session?.name || agent?.name || "Usuario"}</span>
             <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
+            <LogoutButton />
           </div>
-        </section>
+        </header>
 
         {error ? <div className="admin-notice error">{error}</div> : null}
 
@@ -380,11 +400,15 @@ export default function AgendaPage() {
               <h2>Calendario de reservas Chile</h2>
               <p>Vista mensual con reservas, feriados, fines de semana y fines de semana largos.</p>
             </div>
-            <div className="chile-calendar-legend">
-              <span className="holiday">Feriado</span>
-              <span className="long">Fin de semana largo</span>
-              <span className="weekend">Sabado / domingo</span>
-              <span className="booking">Reserva</span>
+            <div className="chile-calendar-tools">
+              <button className="calendar-arrow" type="button" aria-label="Mes anterior" onClick={() => shiftCalendar(-1)}>{"<"}</button>
+              <button className="calendar-arrow" type="button" aria-label="Mes siguiente" onClick={() => shiftCalendar(1)}>{">"}</button>
+              <div className="chile-calendar-legend">
+                <span className="holiday">Feriado</span>
+                <span className="long">Fin de semana largo</span>
+                <span className="weekend">Sabado / domingo</span>
+                <span className="booking">Reserva</span>
+              </div>
             </div>
           </div>
 
@@ -407,7 +431,13 @@ export default function AgendaPage() {
                       >
                         <strong>{day.day}</strong>
                         {day.holiday ? <small>{day.holiday.name}</small> : null}
-                        {day.bookings.length ? <em>{day.bookings.length} reserva{day.bookings.length > 1 ? "s" : ""}</em> : null}
+                        {day.bookings.slice(0, 2).map((booking) => (
+                          <span className="chile-calendar-booking" key={booking.id}>
+                            <b>{bookingTime(booking.date)} / {booking.name || booking.phone || "Reserva"}</b>
+                            <em>{bookingShortInfo(booking)}</em>
+                          </span>
+                        ))}
+                        {day.bookings.length > 2 ? <span className="chile-calendar-more">+{day.bookings.length - 2} mas</span> : null}
                       </button>
                     ) : <span className="chile-calendar-empty" key={`empty-${month.key}-${index}`} />
                   ))}

@@ -4310,11 +4310,54 @@ body {
 .phase5-table-row span { color: var(--text-muted); font-size: 12px; }
 
 /* Agenda EVOLUM */
-.agenda-hero {
-  border-color: rgba(192, 132, 252, 0.28);
+.agenda-app-header {
+  min-height: 92px;
+  margin: 0 0 18px;
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   background:
     linear-gradient(135deg, rgba(124, 58, 237, 0.20), rgba(232, 121, 249, 0.08)),
     linear-gradient(180deg, rgba(26, 19, 43, 0.92), rgba(15, 11, 26, 0.96));
+}
+
+.agenda-app-header h1 {
+  margin: 0 0 4px;
+  color: #f8f3ff;
+  font-size: 24px;
+  line-height: 1.05;
+}
+
+.agenda-app-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agenda-app-actions .ghost-btn,
+.agenda-app-actions button {
+  min-height: 36px;
+  padding: 8px 13px;
+  border-radius: 8px;
+}
+
+.agenda-account-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #8b5cf6, #a855f7);
+  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.28);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .agenda-layout {
@@ -4408,11 +4451,40 @@ body {
 .chile-calendar-legend .weekend::before { background: #38bdf8; }
 .chile-calendar-legend .booking::before { background: #34d399; }
 
+.chile-calendar-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.calendar-arrow {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(192, 132, 252, 0.28);
+  border-radius: 8px;
+  color: #f8f3ff;
+  background: rgba(124, 58, 237, 0.12);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.calendar-arrow:hover {
+  border-color: rgba(192, 132, 252, 0.52);
+  background: rgba(124, 58, 237, 0.22);
+}
+
 .chile-calendar-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(420px, 1fr));
   gap: 14px;
   margin-top: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .chile-calendar-month {
@@ -4451,14 +4523,14 @@ body {
 
 .chile-calendar-day,
 .chile-calendar-empty {
-  min-height: 66px;
+  min-height: 116px;
   border-radius: 8px;
 }
 
 .chile-calendar-day {
   display: grid;
   align-content: start;
-  gap: 3px;
+  gap: 5px;
   padding: 7px;
   border: 1px solid rgba(139, 92, 246, 0.13);
   background: rgba(24, 17, 39, 0.62);
@@ -4473,7 +4545,9 @@ body {
 }
 
 .chile-calendar-day small,
-.chile-calendar-day em {
+.chile-calendar-day em,
+.chile-calendar-booking b,
+.chile-calendar-more {
   overflow: hidden;
   display: block;
   font-size: 9.5px;
@@ -4490,6 +4564,32 @@ body {
   color: #a7f3d0;
   font-style: normal;
   font-weight: 700;
+}
+
+.chile-calendar-booking {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 5px 6px;
+  border-radius: 7px;
+  background: rgba(52, 211, 153, 0.10);
+  border: 1px solid rgba(52, 211, 153, 0.20);
+}
+
+.chile-calendar-booking b {
+  color: #ecfdf5;
+  font-weight: 800;
+}
+
+.chile-calendar-booking em {
+  color: #a7f3d0;
+  font-style: normal;
+  white-space: normal;
+}
+
+.chile-calendar-more {
+  color: #c4b5fd;
+  font-weight: 800;
 }
 
 .chile-calendar-day.weekend {
