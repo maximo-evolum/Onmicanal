@@ -3695,6 +3695,14 @@ body {
   border-radius: 8px;
 }
 
+.module-app-actions .badge {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .module-account-pill {
   display: inline-flex;
   align-items: center;

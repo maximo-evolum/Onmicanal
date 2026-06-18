@@ -254,12 +254,6 @@ export default function CampaignsPage() {
           </div>
         </header>
 
-        <section className="campaign-hero">
-          <div className="campaign-status-pill">
-            {variants.length ? `${variants.length} variantes ${variants.some((v) => v.image || v.imageUrl) ? "con imagen" : "de copy"}` : "Borrador"}
-          </div>
-        </section>
-
         <div className="campaign-builder-v2">
           <section className="campaign-form-card">
             <div className="campaign-form-grid">

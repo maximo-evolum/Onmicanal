@@ -59,7 +59,7 @@ const navItems: NavItem[] = [
   { label: "Inbox Omnicanal", href: "/inbox", description: "Conversaciones y atencion IA" },
   { label: "Agenda", href: "/agenda", description: "Reservas, citas y disponibilidad" },
   { label: "Clientes", href: "/pipeline", description: "Leads, clientes y pipeline" },
-  { label: "Campanas", href: "/campaigns", description: "Marketing IA y publicaciones" },
+  { label: "Campañas", href: "/campaigns", description: "Marketing IA y publicaciones" },
   { label: "Pagos", href: "/payments", description: "Cobros, estados y links" },
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA" },
   { label: "Equipo", href: "/team", description: "Usuarios, roles y actividad" },
@@ -91,7 +91,7 @@ const agentCatalog: AgentCatalogItem[] = [
   },
   {
     id: "campaigns",
-    name: "Agente de Campanas",
+    name: "Agente de Campañas",
     team: "Marketing IA",
     status: "Activo",
     minPlan: "normal",
@@ -306,7 +306,7 @@ export default function CrmPrincipalPage() {
 
   const activeAgents = useMemo(() => enabledAgents.map((agent) => ({
     ...agent,
-    work: agent.id === "chat" ? `${openConversations} conversaciones abiertas` : `${state.campaigns.length} campanas`,
+    work: agent.id === "chat" ? `${openConversations} conversaciones abiertas` : `${state.campaigns.length} campañas`,
     result: agent.id === "chat"
       ? `${totalLeads} leads registrados`
       : state.campaigns[0]
@@ -325,7 +325,7 @@ export default function CrmPrincipalPage() {
 
   const fallbackActivity = [
     { channel: "whatsapp", name: "Demo WhatsApp", phone: "+56 9 demo", description: "El agente de chat esta listo para gestionar conversaciones.", time: "Ahora", id: "" },
-    { channel: "whatsapp", name: "Campanas", phone: "+56 9 marketing", description: "El agente de campanas esta listo para generar contenido.", time: "Ahora", id: "" },
+    { channel: "whatsapp", name: "Campañas", phone: "+56 9 marketing", description: "El agente de campañas esta listo para generar contenido.", time: "Ahora", id: "" },
     { channel: "whatsapp", name: "EVOLUM", phone: "+56 9 crm", description: "La vista principal ya separa usuario y desarrollador.", time: "Ahora", id: "" }
   ];
 
@@ -360,7 +360,7 @@ export default function CrmPrincipalPage() {
     }))
   ];
   const searchResults = normalizedSearch
-    ? searchIndex.filter((item) => `${item.label} ${item.description} ${item.group}`.toLowerCase().includes(normalizedSearch)).slice(0, 8)
+    ? searchIndex.filter((item) => item.label.trim().toLowerCase().startsWith(normalizedSearch)).slice(0, 8)
     : homeAccessItems.map((item) => ({ ...item, group: "Modulo" })).slice(0, 6);
   const conversationPreview = state.conversations[0];
   const conversationSummary = compactText(

@@ -22,10 +22,10 @@ export default function AiOpsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  async function load(silent = false) {
     try {
-      setLoading(true);
-      setError(null);
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
       try {
         const data = await getAiOpsSummary();
         setSummary(data);
@@ -37,12 +37,14 @@ export default function AiOpsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar AI Ops");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
+    const interval = window.setInterval(() => load(true), 15000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const enriched = useMemo(() => {
@@ -67,20 +69,14 @@ export default function AiOpsPage() {
             <div className="meta-line">Prioridades, cierre humano, estrategia, riesgo, urgencia y proximas acciones sugeridas por la IA.</div>
           </div>
           <div className="module-app-actions">
+            <span className="badge sales-alert-critical">🚨 {summary?.metrics.critical ?? critical.length} críticos</span>
+            <span className="badge sales-alert-hot">🔥 {summary?.metrics.opportunities ?? strategic.length} oportunidades</span>
+            <span className="badge sales-alert-action">🧠 {summary?.metrics.averageScore ?? avg}% score prom.</span>
             <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <span className="module-account-pill">{agent?.name || "Usuario"}</span>
             <LogoutButton />
           </div>
         </header>
-
-        <section className="ai-ops-hero">
-          <div className="ai-ops-hero-kpis">
-            <span className="badge sales-alert-critical">🚨 {summary?.metrics.critical ?? critical.length} críticos</span>
-            <span className="badge sales-alert-hot">🔥 {summary?.metrics.opportunities ?? strategic.length} oportunidades</span>
-            <span className="badge sales-alert-action">🧠 {summary?.metrics.averageScore ?? avg}% score prom.</span>
-            <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
-          </div>
-        </section>
 
         {error ? <div className="sales-queue-error">{error}</div> : null}
         {loading ? <div className="empty-state">Cargando inteligencia IA...</div> : null}

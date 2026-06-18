@@ -28,6 +28,7 @@ export default function PaymentsPage() {
   const [metrics, setMetrics] = useState<PaymentMetrics | null>(null);
   const [status, setStatus] = useState("all");
   const [error, setError] = useState<string | null>(null);
+  const [paymentNotice, setPaymentNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [form, setForm] = useState({
@@ -38,28 +39,31 @@ export default function PaymentsPage() {
     bookingId: ""
   });
 
-  async function load() {
+  async function load(silent = false) {
     try {
-      setLoading(true);
-      setError(null);
+      if (!silent) setLoading(true);
+      if (!silent) setError(null);
       const [list, summary] = await Promise.all([getPayments(status), getPaymentMetrics()]);
       setPayments(list);
       setMetrics(summary);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar pagos");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
+    const interval = window.setInterval(() => load(true), 15000);
+    return () => window.clearInterval(interval);
   }, [status]);
 
   async function submitPayment(e: React.FormEvent) {
     e.preventDefault();
     try {
       setError(null);
+      setPaymentNotice(null);
       await createPayment({
         amount: Number(form.amount),
         description: form.description || "Link de pago manual",
@@ -70,20 +74,22 @@ export default function PaymentsPage() {
         currency: "CLP"
       });
       setForm({ amount: "", description: "", conversationId: "", leadId: "", bookingId: "" });
-      await load();
+      setPaymentNotice({ type: "success", text: "Pago creado" });
+      await load(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo crear el pago");
+      setPaymentNotice({ type: "error", text: "Pago mal ingresado" });
     }
   }
 
   async function markPaid(id: string) {
     await confirmPayment(id);
-    await load();
+    await load(true);
   }
 
   async function markCanceled(id: string) {
     await cancelPayment(id);
-    await load();
+    await load(true);
   }
 
   const pending = useMemo(() => payments.filter((p) => p.status === "PENDING"), [payments]);
@@ -104,11 +110,8 @@ export default function PaymentsPage() {
           </div>
         </header>
 
-        <section className="chat-header dashboard-hero">
-          <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
-        </section>
-
         {error ? <div className="admin-notice error">{error}</div> : null}
+        {paymentNotice ? <div className={`admin-notice ${paymentNotice.type}`}>{paymentNotice.text}</div> : null}
 
         <section className="dashboard-grid">
           <Card title="Pagos creados" value={metrics?.count || 0} />
