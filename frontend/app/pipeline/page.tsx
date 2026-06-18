@@ -5,6 +5,7 @@ import { getLeads, updateLeadApi } from "@/lib/api";
 import { Lead } from "@/lib/types";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 import Link from "next/link";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 const columns = [
   { id: "NEW", label: "Prospeccion", tone: "prospect" },
@@ -52,6 +53,7 @@ export default function PipelinePage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   async function load() {
     try {
@@ -100,16 +102,13 @@ export default function PipelinePage() {
   }
 
   return (
-    <div className="pipeline-pro-shell">
-      <aside className="pipeline-pro-sidebar">
-        <div className="executive-brand">EVOLUM</div>
-        {["Dashboard", "Workforce IA", "CRM", "Propiedades", "Contratos", "Pagos", "Analytics", "Configuracion"].map((item) => (
-          <Link className={item === "CRM" ? "active" : ""} href={item === "Dashboard" ? "/dashboard" : item === "CRM" ? "/crm-principal" : item === "Pagos" ? "/payments" : "#"} key={item}>
-            <span>{item.slice(0, 2).toUpperCase()}</span>{item}
-          </Link>
-        ))}
-        <Link className="executive-new-btn" href="/inbox">Nueva oportunidad</Link>
-      </aside>
+    <div className={`pipeline-pro-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Clientes"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
 
       <main className="pipeline-pro-main">
         <header className="pipeline-pro-topbar">
@@ -137,17 +136,6 @@ export default function PipelinePage() {
         </section>
 
         {error ? <div className="sales-queue-error">{error}</div> : null}
-
-        <section className="pipeline-pro-toolbar">
-          <button className="active">Kanban</button>
-          <button>Lista</button>
-          <button>Actividades</button>
-          <button>Analisis</button>
-          <span />
-          <button>Filtros</button>
-          <button>Automatizar</button>
-          <Link className="primary-btn" href="/inbox">Nueva oportunidad</Link>
-        </section>
 
         <div className="pipeline-pro-content">
           <div className="pipeline-board pipeline-board-pro">
@@ -231,7 +219,7 @@ export default function PipelinePage() {
           <aside className="pipeline-insights-panel">
             <article>
               <div className="pipeline-insight-head">
-                <h2>Resumen del pipeline</h2>
+                <h2>Resumen del mes</h2>
                 <span>Este mes</span>
               </div>
               <strong>{money(stats.totalValue)}</strong>
@@ -241,27 +229,6 @@ export default function PipelinePage() {
                 <span>Valor promedio <b>{money(leads.length ? stats.totalValue / leads.length : 0)}</b></span>
                 <span>Tasa de conversion <b>{stats.avgClose}%</b></span>
                 <span>Ciclo promedio <b>32 dias</b></span>
-              </div>
-            </article>
-            <article>
-              <div className="pipeline-insight-head">
-                <h2>Insights con IA</h2>
-                <span>IA</span>
-              </div>
-              <div className="pipeline-ai-note">2 oportunidades requieren seguimiento para mantener el cierre estimado.</div>
-              <div className="pipeline-ai-note">Mejor momento para contactar: entre 10:00 y 12:00 hrs.</div>
-              <div className="pipeline-ai-note">La etapa de propuesta acumula el mayor tiempo promedio.</div>
-            </article>
-            <article>
-              <div className="pipeline-insight-head">
-                <h2>Conversion por etapa</h2>
-              </div>
-              <div className="pipeline-stage-bars">
-                {columns.map((column) => {
-                  const count = leads.filter((lead) => lead.status === column.id).length;
-                  const width = Math.max(8, Math.round((count / Math.max(1, leads.length)) * 100));
-                  return <div key={column.id}><span>{column.label}</span><i><b style={{ width: `${width}%` }} /></i><strong>{width}%</strong></div>;
-                })}
               </div>
             </article>
           </aside>

@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getTeamManagement } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 export default function TeamPage() {
   const agent = getStoredSession();
   const [users, setUsers] = useState<any[]>([]);
   const [error, setError] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     getTeamManagement()
@@ -17,8 +19,14 @@ export default function TeamPage() {
   }, []);
 
   return (
-    <div className="page page-single">
-      <main className="main dashboard-page phase5-page">
+    <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Configuracion de Agente"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
+      <main className="main dashboard-page phase5-page team-page">
         <header className="module-app-header">
           <div>
             <span className="eyebrow">Equipo</span>

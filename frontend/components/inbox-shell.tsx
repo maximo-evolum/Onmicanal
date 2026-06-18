@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   deleteConversation,
@@ -11,11 +10,12 @@ import {
   sendManualMessage,
   takeConversation,
 } from "@/lib/api";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getStoredSession } from "@/lib/auth";
 import { getCommercialState } from "@/lib/commercial-state";
 import { getSocketToken, socket } from "@/lib/socket";
 import { Conversation, Message } from "@/lib/types";
 import { ChatPanel } from "./chat-panel";
+import { EvolumSidebar } from "./evolum-sidebar";
 
 export function InboxShell() {
   const agent = getStoredSession();
@@ -286,7 +286,12 @@ export function InboxShell() {
 
   return (
     <div className={`inbox-unified-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
-      <InboxUnifiedNav agent={agent} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
+      <EvolumSidebar
+        active="Inbox Omnicanal"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
 
       <section className="inbox-unified-workspace">
         <InboxAppHeader
@@ -297,7 +302,11 @@ export function InboxShell() {
           error={error}
         />
 
-        <InboxChannelTabs conversations={filteredConversations} />
+        <InboxChannelTabs
+          activeChannel={channelFilter}
+          conversations={conversations}
+          onSelectChannel={setChannelFilter}
+        />
 
         <div className="inbox-unified-main">
           <ChatActivityPanel
@@ -319,6 +328,7 @@ export function InboxShell() {
               onResolve={handleResolve}
               onDelete={handleDelete}
               onSend={handleSend}
+              hideHeader
             />
           </main>
 
@@ -338,88 +348,35 @@ export function InboxShell() {
   );
 }
 
-function InboxUnifiedNav({
-  agent,
-  isOpen,
-  onToggle,
+function InboxChannelTabs({
+  activeChannel,
+  conversations,
+  onSelectChannel,
 }: {
-  agent: ReturnType<typeof getStoredSession>;
-  isOpen: boolean;
-  onToggle: () => void;
+  activeChannel: string;
+  conversations: Conversation[];
+  onSelectChannel: (channel: string) => void;
 }) {
-  const isDeveloper = agent?.role === "SUPER_ADMIN";
-  const items = [
-    ["Inicio", "/crm-principal", "Centro principal de EVOLUM", "IN"],
-    ["Oficina de Agentes", "/crm-principal#agents", "Agentes AI activos y futuros", "OA"],
-    ["Inbox Omnicanal", "/inbox", "Conversaciones y atencion IA", "IO"],
-    ["Agenda", "/agenda", "Reservas, citas y disponibilidad", "AG"],
-    ["Clientes", "/pipeline", "Leads, clientes y pipeline", "CL"],
-    ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA"],
-    ["Pagos", "/payments", "Cobros, estados y links", "PA"],
-    ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG"],
-    ["Equipo", "/team", "Usuarios, roles y actividad", "EQ"],
-    ["Analytics & KPIs", "/dashboard", "Metricas operativas", "AN"],
-    ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI"],
-    ...(isDeveloper ? [
-      ["Desarrollador", "/admin", "Clientes, planes, modulos y permisos", "DE"],
-      ["Planes y modulos", "/saas", "Configuracion SaaS por cuenta", "PM"],
-      ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL"],
-    ] : [])
-  ];
-
-  return (
-    <aside className="inbox-unified-nav">
-      <div className="inbox-nav-head">
-        <Link className="inbox-nav-brand" href="/crm-principal" title="EVOLUM">
-          <span>EV</span>
-          <strong>EVOLUM</strong>
-        </Link>
-        <button className="inbox-nav-toggle" type="button" onClick={onToggle} aria-label={isOpen ? "Cerrar menu" : "Abrir menu"}>
-          {isOpen ? "‹" : "›"}
-        </button>
-      </div>
-
-      <nav className="inbox-unified-nav-list">
-        {items.map(([label, href, description, icon]) => (
-          <Link className={label === "Inbox Omnicanal" ? "active" : ""} href={href} key={label} title={label}>
-            <span>{icon}</span>
-            <div>
-              <strong>{label}</strong>
-              <small>{description}</small>
-            </div>
-          </Link>
-        ))}
-      </nav>
-
-      <div className="inbox-nav-footer">
-        <Link className="inbox-nav-action" href="/crm-principal" title="Volver al CRM">
-          <span>CR</span>
-          <strong>Volver al CRM</strong>
-        </Link>
-        <div className="inbox-nav-logout">
-          <LogoutButton />
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-function InboxChannelTabs({ conversations }: { conversations: Conversation[] }) {
   const count = (channel: string) => conversations.filter((conversation) => conversation.contact.channel === channel).length;
   const tabs = [
-    ["Todos", conversations.length, ""],
-    ["WhatsApp", count("whatsapp"), "https://cdn.simpleicons.org/whatsapp/25D366"],
-    ["Instagram", count("instagram"), "https://cdn.simpleicons.org/instagram/E4405F"]
+    ["all", "Todos", conversations.length, ""],
+    ["whatsapp", "WhatsApp", count("whatsapp"), "https://cdn.simpleicons.org/whatsapp/25D366"],
+    ["instagram", "Instagram", count("instagram"), "https://cdn.simpleicons.org/instagram/E4405F"]
   ];
 
   return (
     <div className="inbox-channel-tabs">
-      {tabs.map(([label, value, icon]) => (
-        <span key={label}>
+      {tabs.map(([channel, label, value, icon]) => (
+        <button
+          className={activeChannel === channel ? "active" : ""}
+          key={channel}
+          onClick={() => onSelectChannel(String(channel))}
+          type="button"
+        >
           {icon ? <img alt="" src={String(icon)} /> : null}
           {label}
           <b>{value}</b>
-        </span>
+        </button>
       ))}
     </div>
   );

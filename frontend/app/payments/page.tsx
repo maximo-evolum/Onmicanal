@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { cancelPayment, confirmPayment, createPayment, getPaymentMetrics, getPayments, Payment, PaymentMetrics } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 function money(value = 0, currency = "CLP") {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value || 0);
@@ -30,6 +31,7 @@ export default function PaymentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const [form, setForm] = useState({
     amount: "",
@@ -95,8 +97,14 @@ export default function PaymentsPage() {
   const pending = useMemo(() => payments.filter((p) => p.status === "PENDING"), [payments]);
 
   return (
-    <div className="page page-single">
-      <main className="main dashboard-page">
+    <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Pagos"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
+      <main className="main dashboard-page payments-page">
         <header className="module-app-header">
           <div>
             <span className="eyebrow">Portal de pagos</span>

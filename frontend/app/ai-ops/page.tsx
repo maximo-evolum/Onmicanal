@@ -6,6 +6,7 @@ import { getAiOpsSummary, getConversations, type AiOpsSummary } from "@/lib/api"
 import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, getAiBadgeClass, getConversationState, isReadyToClose, riskLabel } from "@/lib/ai-ops";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 function openInbox(conversationId: string) {
   window.location.href = `/inbox?conversation=${conversationId}`;
@@ -21,6 +22,7 @@ export default function AiOpsPage() {
   const [summary, setSummary] = useState<AiOpsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   async function load(silent = false) {
     try {
@@ -60,7 +62,13 @@ export default function AiOpsPage() {
   const avg = enriched.length ? Math.round(enriched.reduce((sum, item) => sum + item.profile.score, 0) / enriched.length) : 0;
 
   return (
-    <div className="page page-single">
+    <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="AI Ops / Cierres IA"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
       <main className="main ai-ops-page">
         <header className="module-app-header">
           <div>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 
@@ -46,6 +47,7 @@ export default function CampaignsPage() {
   const [campaignJobMessage, setCampaignJobMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [publishResults, setPublishResults] = useState<Array<{ platform: string; status: string; note?: string; error?: string }> | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const selectedVariant = variants[selectedIndex] || null;
 
@@ -239,7 +241,13 @@ export default function CampaignsPage() {
   }
 
   return (
-    <div className="page page-single campaign-page">
+    <div className={`module-with-menu-shell campaign-page ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Campañas"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
       <main className="main">
         <header className="module-app-header">
           <div>

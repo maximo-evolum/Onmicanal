@@ -5539,6 +5539,26 @@ body {
   grid-template-columns: 64px minmax(0, 1fr);
 }
 
+.executive-shell.nav-collapsed,
+.pipeline-pro-shell.nav-collapsed,
+.module-with-menu-shell.nav-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+
+.module-with-menu-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 16% 0%, rgba(124, 58, 237, 0.16), transparent 32%),
+    linear-gradient(180deg, #0a0614 0%, #10081e 100%);
+  transition: grid-template-columns 180ms ease;
+}
+
+.module-with-menu-shell > main {
+  min-width: 0;
+}
+
 .inbox-unified-workspace {
   height: 100vh;
   padding: 14px 16px;
@@ -5638,11 +5658,32 @@ body {
   font-weight: 800;
 }
 
+.inbox-channel-tabs button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid rgba(124, 58, 237, 0.32);
+  border-radius: 8px;
+  color: #f4edff;
+  background: rgba(124, 58, 237, 0.08);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.inbox-channel-tabs button.active,
+.inbox-channel-tabs button:hover {
+  border-color: rgba(168, 85, 247, 0.7);
+  background: rgba(124, 58, 237, 0.22);
+}
+
 .inbox-channel-tabs img {
   width: 16px;
   height: 16px;
 }
 
+.inbox-channel-tabs button b,
 .inbox-channel-tabs b {
   color: #c4b5fd;
 }
@@ -7693,4 +7734,78 @@ html, body {
 .nav-collapsed .inbox-nav-action span {
   width: 36px !important;
   height: 36px;
+}
+
+.analytics-evolum-shell .executive-topbar {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.analytics-evolum-shell .executive-top-actions {
+  grid-column: 2;
+}
+
+.analytics-evolum-shell .executive-dashboard {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(124, 58, 237, 0.18), transparent 32%),
+    linear-gradient(180deg, #0a0614 0%, #10081e 100%);
+}
+
+.analytics-evolum-shell .executive-kpi-card,
+.analytics-evolum-shell .executive-panel {
+  border-color: rgba(168, 85, 247, 0.22);
+  background: linear-gradient(180deg, rgba(25, 14, 43, 0.92), rgba(11, 7, 20, 0.96));
+}
+
+.analytics-evolum-shell .executive-kpi-card.blue .executive-kpi-icon,
+.analytics-evolum-shell .executive-kpi-card.pink .executive-kpi-icon,
+.analytics-evolum-shell .executive-kpi-card.gold .executive-kpi-icon,
+.analytics-evolum-shell .executive-kpi-card.cyan .executive-kpi-icon,
+.analytics-evolum-shell .executive-kpi-icon {
+  background: linear-gradient(135deg, #7c3aed, #c084fc);
+}
+
+.analytics-loading-strip {
+  padding: 10px 14px;
+  border: 1px solid rgba(168, 85, 247, 0.18);
+  border-radius: 8px;
+  color: #cdbdff;
+  background: rgba(124, 58, 237, 0.08);
+  font-size: 13px;
+}
+
+.pipeline-pro-shell .pipeline-pro-main {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(124, 58, 237, 0.16), transparent 32%),
+    linear-gradient(180deg, #0a0614 0%, #10081e 100%);
+}
+
+.pipeline-pro-shell .pipeline-board-pro .pipeline-column {
+  border-color: rgba(168, 85, 247, 0.22);
+  background: linear-gradient(180deg, rgba(24, 14, 42, 0.9), rgba(12, 8, 23, 0.96));
+}
+
+.pipeline-pro-shell .pipeline-board-pro .pipeline-column-prospect,
+.pipeline-pro-shell .pipeline-board-pro .pipeline-column-contact,
+.pipeline-pro-shell .pipeline-board-pro .pipeline-column-proposal,
+.pipeline-pro-shell .pipeline-board-pro .pipeline-column-negotiation,
+.pipeline-pro-shell .pipeline-board-pro .pipeline-column-close {
+  border-color: rgba(168, 85, 247, 0.28);
+}
+
+.pipeline-pro-shell .pipeline-column-header strong {
+  color: #f7f0ff;
+}
+
+.pipeline-pro-shell .pipeline-column-header small {
+  color: #c4b5fd;
+}
+
+.pipeline-pro-shell .pipeline-insights-panel article {
+  border-color: rgba(168, 85, 247, 0.24);
+  background: linear-gradient(180deg, rgba(31, 18, 52, 0.92), rgba(13, 8, 24, 0.98));
+}
+
+.payments-page .dashboard-grid,
+.team-page .phase5-grid.one {
+  margin-top: 14px;
 }

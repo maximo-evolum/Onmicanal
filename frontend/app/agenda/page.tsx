@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { createBookingApi, getBookingSlots, getBookings, getMe, markBookingPaymentReady, updateBookingApi } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 import type { AgentSession, Booking, BookingSlot, TenantSession } from "@/lib/types";
@@ -282,6 +283,7 @@ export default function AgendaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bookingNotice, setBookingNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -384,7 +386,13 @@ export default function AgendaPage() {
   }
 
   return (
-    <div className="page page-single">
+    <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Agenda"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
       <main className="main dashboard-page">
         <header className="agenda-app-header">
           <div>
