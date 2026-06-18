@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { getAiOpsSummary, getConversations, type AiOpsSummary } from "@/lib/api";
 import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, getAiBadgeClass, getConversationState, isReadyToClose, riskLabel } from "@/lib/ai-ops";
-import { Topbar } from "@/components/topbar";
-import { BackToInbox } from "@/components/BackToInbox";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 
 function openInbox(conversationId: string) {
   window.location.href = `/inbox?conversation=${conversationId}`;
@@ -61,15 +60,20 @@ export default function AiOpsPage() {
   return (
     <div className="page page-single">
       <main className="main ai-ops-page">
-        <Topbar agent={agent} />
-        <div className="content-toolbar"><BackToInbox /></div>
+        <header className="module-app-header">
+          <div>
+            <span className="eyebrow">AI Ops / Cierres IA</span>
+            <h1>Centro de inteligencia comercial</h1>
+            <div className="meta-line">Prioridades, cierre humano, estrategia, riesgo, urgencia y proximas acciones sugeridas por la IA.</div>
+          </div>
+          <div className="module-app-actions">
+            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
+            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <LogoutButton />
+          </div>
+        </header>
 
         <section className="ai-ops-hero">
-          <div>
-            <span className="eyebrow">AI Operations</span>
-            <h1 className="chat-title">Centro de inteligencia comercial</h1>
-            <p className="meta-line">Visualiza razonamiento, estrategia, riesgo, urgencia y próximas acciones sugeridas por la IA.</p>
-          </div>
           <div className="ai-ops-hero-kpis">
             <span className="badge sales-alert-critical">🚨 {summary?.metrics.critical ?? critical.length} críticos</span>
             <span className="badge sales-alert-hot">🔥 {summary?.metrics.opportunities ?? strategic.length} oportunidades</span>

@@ -12,7 +12,7 @@ import {
   getMyModules,
   type CrmOperationalDashboard
 } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
 
 type LoadState = {
@@ -49,6 +49,10 @@ type NavItem = {
   description: string;
 };
 
+type SearchResult = NavItem & {
+  group: string;
+};
+
 const navItems: NavItem[] = [
   { label: "Inicio", href: "/crm-principal", description: "Centro principal de EVOLUM" },
   { label: "Oficina de Agentes", href: "#agents", description: "Agentes AI activos y futuros" },
@@ -57,11 +61,10 @@ const navItems: NavItem[] = [
   { label: "Clientes", href: "/pipeline", description: "Leads, clientes y pipeline" },
   { label: "Campanas", href: "/campaigns", description: "Marketing IA y publicaciones" },
   { label: "Pagos", href: "/payments", description: "Cobros, estados y links" },
-  { label: "Cierres IA", href: "/sales-queue", description: "Leads listos para vendedor" },
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA" },
   { label: "Equipo", href: "/team", description: "Usuarios, roles y actividad" },
   { label: "Analytics & KPIs", href: "/dashboard", description: "Metricas operativas" },
-  { label: "AI Ops", href: "/ai-ops", description: "Razonamiento y alertas IA" }
+  { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA" }
 ];
 
 const developerOnlyItems: NavItem[] = [
@@ -335,9 +338,30 @@ export default function CrmPrincipalPage() {
   ];
   const homeAccessItems = visibleNav.filter((item) => !item.href.startsWith("#"));
   const normalizedSearch = searchTerm.trim().toLowerCase();
+  const searchIndex: SearchResult[] = [
+    ...visibleNav.map((item) => ({ ...item, group: "Modulo" })),
+    ...enabledAgents.map((agent) => ({
+      label: agent.name,
+      href: agent.href,
+      description: `${agent.team}. ${agent.description}`,
+      group: "Agente IA"
+    })),
+    ...modules.map((module) => ({
+      label: module.title,
+      href: module.href,
+      description: module.text,
+      group: "Operacion"
+    })),
+    ...knowledge.map(([title, type, status]) => ({
+      label: title,
+      href: "/onboarding",
+      description: `${type}. ${status}`,
+      group: "Configuracion"
+    }))
+  ];
   const searchResults = normalizedSearch
-    ? homeAccessItems.filter((item) => `${item.label} ${item.description}`.toLowerCase().includes(normalizedSearch))
-    : homeAccessItems;
+    ? searchIndex.filter((item) => `${item.label} ${item.description} ${item.group}`.toLowerCase().includes(normalizedSearch)).slice(0, 8)
+    : homeAccessItems.map((item) => ({ ...item, group: "Modulo" })).slice(0, 6);
   const conversationPreview = state.conversations[0];
   const conversationSummary = compactText(
     conversationPreview?.aiSummary ||
@@ -351,6 +375,10 @@ export default function CrmPrincipalPage() {
     event.preventDefault();
     const first = searchResults[0];
     if (!first) return;
+    if (first.href.startsWith("#")) {
+      window.location.hash = first.href;
+      return;
+    }
     router.push(first.href);
   }
 
@@ -404,12 +432,32 @@ export default function CrmPrincipalPage() {
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Buscar en EVOLUM..."
             />
-            <button type="submit" aria-label="Buscar">⌕</button>
+            <button type="submit" aria-label="Buscar">Buscar</button>
+            {normalizedSearch ? (
+              <div className="crm-main-search-results">
+                {searchResults.length ? searchResults.map((result) => (
+                  result.href.startsWith("#") ? (
+                    <a href={result.href} key={`${result.group}-${result.label}`} onClick={() => setSearchTerm("")}>
+                      <small>{result.group}</small>
+                      <strong>{result.label}</strong>
+                      <span>{result.description}</span>
+                    </a>
+                  ) : (
+                    <Link href={result.href} key={`${result.group}-${result.label}`} onClick={() => setSearchTerm("")}>
+                      <small>{result.group}</small>
+                      <strong>{result.label}</strong>
+                      <span>{result.description}</span>
+                    </Link>
+                  )
+                )) : <div className="crm-main-search-empty">Sin resultados disponibles para esta cuenta.</div>}
+              </div>
+            ) : null}
           </form>
           <div className="crm-main-profile">
             <strong>{currentSession?.name || "Usuario"}</strong>
             <span>{isDeveloper ? "Desarrollador" : currentSession?.role || "Cliente"}</span>
           </div>
+          <LogoutButton />
         </header>
 
         {state.error ? <div className="crm-main-notice">{state.error}</div> : null}

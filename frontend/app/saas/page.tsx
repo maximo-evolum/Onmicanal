@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getSaasOverview, SaasOverview } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
-import { Topbar } from "@/components/topbar";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 
 function money(value?: number, currency = "CLP") {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value || 0);
@@ -22,7 +21,18 @@ export default function SaasPage() {
   return (
     <div className="page page-single">
       <main className="main dashboard-page phase5-page">
-        <Topbar agent={agent} />
+        <header className="module-app-header">
+          <div>
+            <span className="eyebrow">Planes y modulos</span>
+            <h1>Centro SaaS</h1>
+            <div className="meta-line">Planes, limites, modulos activos, onboarding y senales comerciales.</div>
+          </div>
+          <div className="module-app-actions">
+            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
+            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <LogoutButton />
+          </div>
+        </header>
         <section className="phase5-hero">
           <div>
             <span className="eyebrow">SaaS Command Center</span>
@@ -30,8 +40,8 @@ export default function SaasPage() {
             <p className="meta-line">Planes, límites, onboarding, configuración IA y señales comerciales en un solo lugar.</p>
           </div>
           <div className="phase5-actions">
-            <Link className="primary-btn" href="/settings/ai">Configurar IA</Link>
-            <Link className="ghost-btn" href="/saas-analytics">Ver analytics</Link>
+            <Link className="primary-btn" href="/onboarding">Configurar agente</Link>
+            <Link className="ghost-btn" href="/dashboard">Ver analytics</Link>
           </div>
         </section>
 
@@ -74,10 +84,10 @@ export default function SaasPage() {
             <section className="phase5-panel">
               <div className="phase5-panel-head"><div><h2>Accesos rápidos</h2><p>Herramientas de operación comercial SaaS.</p></div></div>
               <div className="phase5-quick-grid">
-                <Link href="/settings/ai">Personalidad y reglas IA</Link>
+                <Link href="/onboarding">Personalidad y reglas IA</Link>
                 <Link href="/team">Equipo y roles</Link>
                 <Link href="/onboarding">Onboarding guiado</Link>
-                <Link href="/saas-analytics">Analytics SaaS</Link>
+                <Link href="/dashboard">Analytics & KPIs</Link>
               </div>
             </section>
           </>

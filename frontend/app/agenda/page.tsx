@@ -281,6 +281,7 @@ export default function AgendaPage() {
   const [visibleMonthCount, setVisibleMonthCount] = useState(3);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bookingNotice, setBookingNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -300,9 +301,9 @@ export default function AgendaPage() {
     setSession(getStoredSession());
   }, []);
 
-  async function load() {
+  async function load(silent = false) {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const [me, list, slotData] = await Promise.all([
         getMe().catch(() => null),
@@ -315,12 +316,17 @@ export default function AgendaPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar la agenda");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => load(true), 15000);
+    return () => window.clearInterval(interval);
   }, [selectedDate]);
 
   const stats = useMemo(() => {
@@ -338,6 +344,7 @@ export default function AgendaPage() {
     event.preventDefault();
     try {
       setError(null);
+      setBookingNotice(null);
       await createBookingApi({
         conversationId: form.conversationId || null,
         name: form.name,
@@ -350,9 +357,11 @@ export default function AgendaPage() {
         notes: form.notes
       });
       setForm({ name: "", phone: "", email: "", date: dateInputValue(new Date(Date.now() + 24 * 60 * 60 * 1000)), guests: "1", location: "", total: "", notes: "", conversationId: "" });
-      await load();
+      await load(true);
+      setBookingNotice({ type: "success", text: "fecha agendada" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo crear la reserva");
+      setBookingNotice({ type: "error", text: "No se pudo agendar fecha" });
     }
   }
 
@@ -385,12 +394,12 @@ export default function AgendaPage() {
           <div className="agenda-app-actions">
             <Link className="ghost-btn" href="/crm-principal">Volver al CRM</Link>
             <span className="agenda-account-pill">{session?.name || agent?.name || "Usuario"}</span>
-            <button className="ghost-btn" onClick={load} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</button>
             <LogoutButton />
           </div>
         </header>
 
         {error ? <div className="admin-notice error">{error}</div> : null}
+        {bookingNotice ? <div className={`admin-notice ${bookingNotice.type === "success" ? "success" : "error"}`}>{bookingNotice.text}</div> : null}
 
         <section className="dashboard-grid">
           <Card title="Reservas totales" value={stats.total} />

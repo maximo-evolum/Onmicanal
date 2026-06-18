@@ -33,7 +33,7 @@ function stageLabel(stage = "") {
   return map[stage] || stage || "Sin estado";
 }
 
-function AnalyticsHeader({ agentName }: { agentName: string }) {
+function AnalyticsHeader({ agentName, hotLeads = 0, revenue = "$0" }: { agentName: string; hotLeads?: number; revenue?: string }) {
   return (
     <header className="module-app-header">
       <div>
@@ -42,6 +42,8 @@ function AnalyticsHeader({ agentName }: { agentName: string }) {
         <div className="meta-line">Revenue, reservas, pagos, pipeline, alertas y próximas acciones.</div>
       </div>
       <div className="module-app-actions">
+        <span className="badge signal-followup">💰 {revenue}</span>
+        <span className="badge signal-hot">🔥 {hotLeads} leads calientes</span>
         <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
         <span className="module-account-pill">{agentName}</span>
         <LogoutButton />
@@ -70,7 +72,11 @@ export default function DashboardPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    const interval = window.setInterval(load, 15000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   if (!crm) {
     return (
@@ -86,20 +92,7 @@ export default function DashboardPage() {
   return (
     <div className="page page-single">
       <main className="main dashboard-page">
-        <AnalyticsHeader agentName={agent?.name || "Usuario"} />
-
-        <section className="chat-header dashboard-hero">
-          <div>
-            <span className="eyebrow">CRM Operativo Real</span>
-            <h1 className="chat-title">Centro comercial vivo</h1>
-            <div className="meta-line">Revenue, reservas, pagos, pipeline, alertas, próximas acciones y actividad en tiempo real.</div>
-          </div>
-          <div className="dashboard-hero-actions">
-            <button className="ghost-btn" onClick={load}>Actualizar</button>
-            <span className="badge signal-hot">🔥 {crm.kpis.hotLeads} leads calientes</span>
-            <span className="badge signal-followup">💰 {money(crm.forecasts.expectedRevenue || crm.revenue.estimated)}</span>
-          </div>
-        </section>
+        <AnalyticsHeader agentName={agent?.name || "Usuario"} hotLeads={crm.kpis.hotLeads} revenue={money(crm.forecasts.expectedRevenue || crm.revenue.estimated)} />
 
         {error ? <div className="sales-queue-error">{error}</div> : null}
 
