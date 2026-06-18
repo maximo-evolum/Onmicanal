@@ -7443,3 +7443,108 @@ html, body {
     justify-content: flex-start;
   }
 }
+
+/* Inbox cleanup requested 2026-06-18 */
+.inbox-unified-workspace {
+  grid-template-rows: 80px auto minmax(0, 1fr);
+}
+
+.inbox-app-header {
+  height: 80px;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  padding: 10px 24px;
+}
+
+.inbox-app-header-top {
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.inbox-app-header .eyebrow {
+  margin-bottom: 3px;
+}
+
+.inbox-app-header h1 {
+  font-size: 25px;
+}
+
+.inbox-app-header p {
+  font-size: 12px;
+}
+
+.inbox-app-actions,
+.inbox-filter-strip,
+.inbox-stats-bar {
+  display: none !important;
+}
+
+.inbox-account-box {
+  min-height: 42px;
+  padding: 9px 16px;
+}
+
+.inbox-channel-tabs span {
+  min-width: 0;
+}
+
+.evolum-nav-menu {
+  position: relative;
+  margin: 0 0 18px;
+}
+
+.evolum-nav-menu summary {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #fff;
+  cursor: pointer;
+  list-style: none;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.evolum-nav-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.evolum-nav-menu summary b {
+  color: #c4b5fd;
+  font-size: 14px;
+}
+
+.evolum-nav-menu-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(220px, calc(100vw - 32px));
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(168, 85, 247, 0.30);
+  border-radius: 10px;
+  background: rgba(10, 13, 28, 0.98);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.42);
+}
+
+.evolum-nav-menu-panel a,
+.evolum-nav-menu-panel button {
+  width: 100%;
+  min-height: 36px;
+  justify-content: flex-start;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: left;
+}
+
+.evolum-nav-menu-panel button {
+  color: #fecdd3;
+  border-color: rgba(244, 63, 94, 0.22);
+  background: rgba(244, 63, 94, 0.08);
+}

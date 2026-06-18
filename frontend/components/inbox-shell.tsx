@@ -294,10 +294,6 @@ export function InboxShell() {
           visibleTotal={filteredConversations.length}
           total={conversations.length}
           error={error}
-          statusFilter={statusFilter}
-          channelFilter={channelFilter}
-          onStatusFilter={setStatusFilter}
-          onChannelFilter={setChannelFilter}
         />
 
         <InboxChannelTabs conversations={filteredConversations} />
@@ -336,7 +332,6 @@ export function InboxShell() {
           </aside>
         </div>
 
-        <InboxStatsBar conversations={filteredConversations} />
       </section>
     </div>
   );
@@ -355,13 +350,22 @@ function InboxUnifiedNav() {
 
   return (
     <aside className="inbox-unified-nav">
-      <div className="executive-brand">EVOLUM</div>
+      <details className="evolum-nav-menu">
+        <summary>
+          <span>EVOLUM</span>
+          <b>⌄</b>
+        </summary>
+        <div className="evolum-nav-menu-panel">
+          <Link href="/crm-principal">Ir a CRM</Link>
+          <Link href="/dashboard">Dashboard</Link>
+          <LogoutButton />
+        </div>
+      </details>
       {items.map(([label, href]) => (
         <Link className={label === "CRM" ? "active" : ""} href={href} key={label}>
           <span>{label.slice(0, 2).toUpperCase()}</span>{label}
         </Link>
       ))}
-      <Link className="executive-new-btn" href="/crm-principal">Ir a CRM</Link>
     </aside>
   );
 }
@@ -371,9 +375,7 @@ function InboxChannelTabs({ conversations }: { conversations: Conversation[] }) 
   const tabs = [
     ["Todos", conversations.length, ""],
     ["WhatsApp", count("whatsapp"), "https://cdn.simpleicons.org/whatsapp/25D366"],
-    ["Instagram", count("instagram"), "https://cdn.simpleicons.org/instagram/E4405F"],
-    ["Email", count("email"), "https://cdn.simpleicons.org/gmail/EA4335"],
-    ["Web Chat", count("web"), ""]
+    ["Instagram", count("instagram"), "https://cdn.simpleicons.org/instagram/E4405F"]
   ];
 
   return (
@@ -386,23 +388,6 @@ function InboxChannelTabs({ conversations }: { conversations: Conversation[] }) 
         </span>
       ))}
     </div>
-  );
-}
-
-function InboxStatsBar({ conversations }: { conversations: Conversation[] }) {
-  const active = conversations.filter((conversation) => conversation.status === "OPEN").length;
-  const closed = conversations.filter((conversation) => conversation.status === "RESOLVED").length;
-  const avgScore = conversations.length
-    ? Math.round(conversations.reduce((sum, conversation) => sum + (conversation.aiCloseScore || conversation.aiLeadScore || 0), 0) / conversations.length)
-    : 0;
-
-  return (
-    <section className="inbox-stats-bar">
-      <article><span>Conversaciones activas</span><strong>{active}</strong><small>Actualizacion en tiempo real</small></article>
-      <article><span>Score IA promedio</span><strong>{avgScore}%</strong><small>Probabilidad comercial</small></article>
-      <article><span>Conversaciones cerradas</span><strong>{closed}</strong><small>Resueltas por equipo o IA</small></article>
-      <article><span>Satisfaccion del cliente</span><strong>4.8 / 5</strong><small>Indicador operativo</small></article>
-    </section>
   );
 }
 
@@ -433,20 +418,12 @@ function InboxAppHeader({
   visibleTotal,
   total,
   error,
-  statusFilter,
-  channelFilter,
-  onStatusFilter,
-  onChannelFilter,
 }: {
   agent: ReturnType<typeof getStoredSession>;
   loading: boolean;
   visibleTotal: number;
   total: number;
   error: string | null;
-  statusFilter: string;
-  channelFilter: string;
-  onStatusFilter: (value: string) => void;
-  onChannelFilter: (value: string) => void;
 }) {
   return (
     <header className="inbox-app-header">
@@ -463,31 +440,7 @@ function InboxAppHeader({
           <small>{agent?.role || "Cliente"}</small>
         </div>
 
-        <div className="inbox-app-actions">
-          <Link className="ghost-btn" href="/crm-principal">Volver al CRM</Link>
-          <LogoutButton />
-        </div>
-      </div>
-
-      <div className="inbox-filter-strip">
-        <label>
-          <span>Estado</span>
-          <select value={statusFilter} onChange={(event) => onStatusFilter(event.target.value)}>
-            <option value="all">Todos los estados</option>
-            <option value="untaken">Chat sin tomar</option>
-            <option value="open">Chat abierto</option>
-            <option value="resolved">Chat resuelto</option>
-          </select>
-        </label>
-
-        <label>
-          <span>Canal</span>
-          <select value={channelFilter} onChange={(event) => onChannelFilter(event.target.value)}>
-            <option value="all">Todos los canales</option>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="instagram">Instagram</option>
-          </select>
-        </label>
+        <div className="inbox-app-actions" aria-hidden="true" />
       </div>
     </header>
   );
