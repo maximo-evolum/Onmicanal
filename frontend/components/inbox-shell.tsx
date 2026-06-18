@@ -29,6 +29,7 @@ export function InboxShell() {
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [channelFilter, setChannelFilter] = useState("all");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   function getInboxCacheKey() {
     return `inbox_conversations_${agent?.tenantId || agent?.id || "global"}`;
@@ -284,8 +285,8 @@ export function InboxShell() {
   }
 
   return (
-    <div className="inbox-unified-shell">
-      <InboxUnifiedNav />
+    <div className={`inbox-unified-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <InboxUnifiedNav agent={agent} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
 
       <section className="inbox-unified-workspace">
         <InboxAppHeader
@@ -337,35 +338,68 @@ export function InboxShell() {
   );
 }
 
-function InboxUnifiedNav() {
+function InboxUnifiedNav({
+  agent,
+  isOpen,
+  onToggle,
+}: {
+  agent: ReturnType<typeof getStoredSession>;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const isDeveloper = agent?.role === "SUPER_ADMIN";
   const items = [
-    ["Dashboard", "/dashboard"],
-    ["Workforce IA", "/crm-principal#agents"],
-    ["CRM", "/crm-principal"],
-    ["Agenda", "/agenda"],
-    ["Pagos", "/payments"],
-    ["Analytics", "/dashboard"],
-    ["Configuracion", "/onboarding"]
+    ["Inicio", "/crm-principal", "Centro principal de EVOLUM", "IN"],
+    ["Oficina de Agentes", "/crm-principal#agents", "Agentes AI activos y futuros", "OA"],
+    ["Inbox Omnicanal", "/inbox", "Conversaciones y atencion IA", "IO"],
+    ["Agenda", "/agenda", "Reservas, citas y disponibilidad", "AG"],
+    ["Clientes", "/pipeline", "Leads, clientes y pipeline", "CL"],
+    ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA"],
+    ["Pagos", "/payments", "Cobros, estados y links", "PA"],
+    ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG"],
+    ["Equipo", "/team", "Usuarios, roles y actividad", "EQ"],
+    ["Analytics & KPIs", "/dashboard", "Metricas operativas", "AN"],
+    ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI"],
+    ...(isDeveloper ? [
+      ["Desarrollador", "/admin", "Clientes, planes, modulos y permisos", "DE"],
+      ["Planes y modulos", "/saas", "Configuracion SaaS por cuenta", "PM"],
+      ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL"],
+    ] : [])
   ];
 
   return (
     <aside className="inbox-unified-nav">
-      <details className="evolum-nav-menu">
-        <summary>
-          <span>EVOLUM</span>
-          <b>⌄</b>
-        </summary>
-        <div className="evolum-nav-menu-panel">
-          <Link href="/crm-principal">Ir a CRM</Link>
-          <Link href="/dashboard">Dashboard</Link>
+      <div className="inbox-nav-head">
+        <Link className="inbox-nav-brand" href="/crm-principal" title="EVOLUM">
+          <span>EV</span>
+          <strong>EVOLUM</strong>
+        </Link>
+        <button className="inbox-nav-toggle" type="button" onClick={onToggle} aria-label={isOpen ? "Cerrar menu" : "Abrir menu"}>
+          {isOpen ? "‹" : "›"}
+        </button>
+      </div>
+
+      <nav className="inbox-unified-nav-list">
+        {items.map(([label, href, description, icon]) => (
+          <Link className={label === "Inbox Omnicanal" ? "active" : ""} href={href} key={label} title={label}>
+            <span>{icon}</span>
+            <div>
+              <strong>{label}</strong>
+              <small>{description}</small>
+            </div>
+          </Link>
+        ))}
+      </nav>
+
+      <div className="inbox-nav-footer">
+        <Link className="inbox-nav-action" href="/crm-principal" title="Volver al CRM">
+          <span>CR</span>
+          <strong>Volver al CRM</strong>
+        </Link>
+        <div className="inbox-nav-logout">
           <LogoutButton />
         </div>
-      </details>
-      {items.map(([label, href]) => (
-        <Link className={label === "CRM" ? "active" : ""} href={href} key={label}>
-          <span>{label.slice(0, 2).toUpperCase()}</span>{label}
-        </Link>
-      ))}
+      </div>
     </aside>
   );
 }

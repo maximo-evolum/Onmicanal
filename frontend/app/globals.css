@@ -5529,9 +5529,14 @@ body {
 
 /* Inbox unified */
 .inbox-unified-shell {
-  grid-template-columns: 164px minmax(0, 1fr);
+  grid-template-columns: 252px minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
+  transition: grid-template-columns 180ms ease;
+}
+
+.inbox-unified-shell.nav-collapsed {
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 
 .inbox-unified-workspace {
@@ -7489,62 +7494,203 @@ html, body {
   min-width: 0;
 }
 
-.evolum-nav-menu {
-  position: relative;
-  margin: 0 0 18px;
+.inbox-unified-nav {
+  width: 252px;
+  min-width: 0;
+  padding: 18px 14px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
+  overflow: hidden;
+  transition: width 180ms ease, padding 180ms ease;
 }
 
-.evolum-nav-menu summary {
-  min-height: 36px;
+.nav-collapsed .inbox-unified-nav {
+  width: 64px;
+  padding: 14px 8px;
+}
+
+.inbox-nav-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  color: #fff;
-  cursor: pointer;
-  list-style: none;
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: 0.03em;
+  min-width: 0;
+  margin-bottom: 14px;
 }
 
-.evolum-nav-menu summary::-webkit-details-marker {
+.inbox-nav-brand {
+  min-width: 0;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 10px;
+  padding: 0 !important;
+  color: #fff !important;
+  background: transparent !important;
+}
+
+.inbox-nav-brand span {
+  width: 36px !important;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  color: #fff !important;
+  font-size: 12px !important;
+  background: linear-gradient(135deg, #7c3aed, #c084fc);
+  box-shadow: 0 12px 26px rgba(124, 58, 237, 0.32);
+}
+
+.inbox-nav-brand strong {
+  overflow: hidden;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-nav-toggle {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(168, 85, 247, 0.26);
+  border-radius: 9px;
+  color: #f8f3ff;
+  background: rgba(124, 58, 237, 0.12);
+  box-shadow: none;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.inbox-nav-toggle:hover {
+  border-color: rgba(168, 85, 247, 0.44);
+  background: rgba(124, 58, 237, 0.20);
+}
+
+.inbox-unified-nav-list {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.inbox-unified-nav-list a,
+.inbox-nav-action {
+  min-height: 48px !important;
+  display: grid !important;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px !important;
+  border: 1px solid transparent;
+  border-radius: 10px !important;
+  color: #ded7f2 !important;
+  background: transparent;
+}
+
+.inbox-unified-nav-list a span,
+.inbox-nav-action span {
+  width: 34px !important;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #c4b5fd !important;
+  background: rgba(124, 58, 237, 0.10);
+  font-size: 10px !important;
+  font-weight: 900;
+}
+
+.inbox-unified-nav-list a div,
+.inbox-nav-action strong {
+  min-width: 0;
+}
+
+.inbox-unified-nav-list a strong,
+.inbox-nav-action strong {
+  display: block;
+  overflow: hidden;
+  color: #f8f3ff;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-unified-nav-list a small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #a99bc9;
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-unified-nav-list a:hover,
+.inbox-unified-nav-list a.active,
+.inbox-nav-action:hover {
+  border-color: rgba(168, 85, 247, 0.28);
+  background: rgba(124, 58, 237, 0.14);
+}
+
+.inbox-unified-nav-list a.active {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+}
+
+.inbox-unified-nav-list a.active span {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.inbox-nav-footer {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(168, 85, 247, 0.14);
+}
+
+.inbox-nav-logout button {
+  width: 100%;
+  min-height: 42px;
+  justify-content: center;
+  border-color: rgba(244, 63, 94, 0.22);
+  color: #fecdd3;
+  background: rgba(244, 63, 94, 0.08);
+}
+
+.nav-collapsed .inbox-nav-brand {
+  justify-content: center;
+}
+
+.nav-collapsed .inbox-nav-brand strong,
+.nav-collapsed .inbox-unified-nav-list a div,
+.nav-collapsed .inbox-nav-action strong,
+.nav-collapsed .inbox-nav-logout {
   display: none;
 }
 
-.evolum-nav-menu summary b {
-  color: #c4b5fd;
-  font-size: 14px;
+.nav-collapsed .inbox-nav-head {
+  justify-content: center;
+  flex-direction: column;
 }
 
-.evolum-nav-menu-panel {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 8px);
-  left: 0;
-  width: min(220px, calc(100vw - 32px));
-  display: grid;
-  gap: 8px;
-  padding: 10px;
-  border: 1px solid rgba(168, 85, 247, 0.30);
-  border-radius: 10px;
-  background: rgba(10, 13, 28, 0.98);
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.42);
+.nav-collapsed .inbox-nav-toggle {
+  width: 36px;
 }
 
-.evolum-nav-menu-panel a,
-.evolum-nav-menu-panel button {
-  width: 100%;
-  min-height: 36px;
-  justify-content: flex-start;
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  text-align: left;
+.nav-collapsed .inbox-unified-nav-list a,
+.nav-collapsed .inbox-nav-action {
+  grid-template-columns: 36px;
+  justify-content: center;
+  padding: 6px !important;
 }
 
-.evolum-nav-menu-panel button {
-  color: #fecdd3;
-  border-color: rgba(244, 63, 94, 0.22);
-  background: rgba(244, 63, 94, 0.08);
+.nav-collapsed .inbox-unified-nav-list a span,
+.nav-collapsed .inbox-nav-action span {
+  width: 36px !important;
+  height: 36px;
 }
