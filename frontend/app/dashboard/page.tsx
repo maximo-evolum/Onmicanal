@@ -89,88 +89,147 @@ export default function DashboardPage() {
     );
   }
 
+  const dashboardStats = [
+    { label: "Leads captados", value: crm.kpis.leads || metrics?.total || 0, delta: `${crm.kpis.hotLeads} calientes`, tone: "purple", icon: "LC" },
+    { label: "Ventas cerradas", value: crm.kpis.paidCount, delta: `${crm.kpis.conversionRate}% conversion`, tone: "blue", icon: "VC" },
+    { label: "Reservas activas", value: crm.kpis.bookingsConfirmed, delta: `${crm.kpis.bookingsPending} pendientes`, tone: "pink", icon: "RA" },
+    { label: "Ingresos totales", value: money(crm.revenue.paidMonth || crm.revenue.paid), delta: `${money(crm.revenue.pending)} pendiente`, tone: "gold", icon: "$" },
+    { label: "Agentes IA activos", value: Math.max(2, crm.forecasts.humanActionsRequired || 0), delta: "operacion online", tone: "cyan", icon: "AI" }
+  ];
+  const weeklyBars = [42, 55, 63, 58, 74, 82, 79, 91];
+  const pipelineValue = crm.pipeline.reduce((sum, stage) => sum + stage.value, 0);
+  const sources = [
+    { label: "WhatsApp", value: Math.max(42, Math.round((crm.kpis.conversations || 1) * 0.42)), color: "#22c55e" },
+    { label: "Portal Web", value: Math.max(24, Math.round((crm.kpis.leads || 1) * 0.24)), color: "#38bdf8" },
+    { label: "Instagram", value: 15, color: "#f97316" },
+    { label: "Referidos", value: 10, color: "#f43f5e" },
+    { label: "Otros", value: 9, color: "#a855f7" }
+  ];
+  const sourceTotal = sources.reduce((sum, source) => sum + source.value, 0) || 1;
+
   return (
-    <div className="page page-single">
-      <main className="main dashboard-page">
-        <AnalyticsHeader agentName={agent?.name || "Usuario"} hotLeads={crm.kpis.hotLeads} revenue={money(crm.forecasts.expectedRevenue || crm.revenue.estimated)} />
+    <div className="executive-shell">
+      <aside className="executive-sidebar">
+        <div className="executive-brand">EVOLUM</div>
+        {["Dashboard", "Workforce IA", "CRM", "Agenda", "Pagos", "Automatizaciones", "Analytics", "Configuracion"].map((item, index) => (
+          <Link className={index === 0 ? "active" : ""} href={item === "Dashboard" ? "/dashboard" : item === "CRM" ? "/crm-principal" : item === "Agenda" ? "/agenda" : item === "Pagos" ? "/payments" : "#"} key={item}>
+            <span>{item.slice(0, 2).toUpperCase()}</span>
+            {item}
+          </Link>
+        ))}
+        <Link className="executive-new-btn" href="/inbox">Nueva conversacion</Link>
+      </aside>
+
+      <main className="executive-dashboard">
+        <header className="executive-topbar">
+          <button className="executive-menu" aria-label="Menu">=</button>
+          <div className="executive-search">Buscar clientes, reservas, pagos...</div>
+          <div className="executive-top-actions">
+            <span className="executive-icon-btn">⌕</span>
+            <span className="executive-icon-btn">●</span>
+            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <LogoutButton />
+          </div>
+        </header>
+
+        <section className="executive-title-row">
+          <div>
+            <h1>Dashboard Ejecutivo</h1>
+            <p>Bienvenido, {agent?.name || "Usuario"}. Aqui esta el resumen operativo en tiempo real.</p>
+          </div>
+          <div className="executive-actions">
+            <span className="executive-date">12 May - 18 May 2026</span>
+            <Link className="primary-btn" href="/crm-principal">Personalizar</Link>
+          </div>
+        </section>
 
         {error ? <div className="sales-queue-error">{error}</div> : null}
 
-        <h2 className="section-title">Revenue y operación</h2>
-        <div className="dashboard-grid">
-          <Card title="Ingresos pagados" value={money(crm.revenue.paid)} />
-          <Card title="Ingresos del mes" value={money(crm.revenue.paidMonth)} />
-          <Card title="Pagos pendientes" value={money(crm.revenue.pending)} />
-          <Card title="Revenue estimado" value={money(crm.revenue.estimated)} />
-          <Card title="Pipeline ponderado" value={money(crm.revenue.pipeline)} />
-          <Card title="Forecast esperado" value={money(crm.forecasts.expectedRevenue)} />
-        </div>
-
-        <h2 className="section-title">Reservas, pagos y cierre</h2>
-        <div className="dashboard-grid">
-          <Card title="Reservas confirmadas" value={crm.kpis.bookingsConfirmed} />
-          <Card title="Reservas pendientes" value={crm.kpis.bookingsPending} />
-          <Card title="Pagos pendientes" value={crm.kpis.paymentPending} />
-          <Card title="Pagos confirmados" value={crm.kpis.paidCount} />
-          <Card title="Listos para cierre" value={crm.kpis.readyToClose} />
-          <Card title="Conversión" value={`${crm.kpis.conversionRate}%`} />
-        </div>
-
-        <h2 className="section-title">Alertas inteligentes</h2>
-        <div className="dashboard-grid">
-          {crm.alerts.length ? crm.alerts.map((alert) => (
-            <div className="alert-card" key={alert.type}>
-              <div>{alert.title}</div>
-              <strong>{alert.count}</strong>
-              <small className="meta-line">{alert.message}</small>
-            </div>
-          )) : <div className="empty-state" style={{ minHeight: 120 }}>Sin alertas críticas por ahora.</div>}
-        </div>
-
-        <h2 className="section-title">Prioridades del vendedor</h2>
-        <div className="ai-ops-dashboard-strip">
-          {crm.priorities.slice(0, 6).map((item) => (
-            <button className="ai-ops-mini-card" key={item.conversationId} onClick={() => { window.location.href = `/inbox?conversation=${item.conversationId}`; }}>
-              <strong>{item.customer}</strong>
-              <span>{stageLabel(item.stage)} · {item.score}%</span>
-              <small>{item.nextAction}</small>
-              {item.amount ? <small>{money(item.amount)}</small> : null}
-            </button>
+        <section className="executive-kpi-grid">
+          {dashboardStats.map((stat) => (
+            <article className={`executive-kpi-card ${stat.tone}`} key={stat.label}>
+              <div className="executive-kpi-icon">{stat.icon}</div>
+              <span>{stat.label}</span>
+              <strong>{stat.value}</strong>
+              <small>↑ {stat.delta}</small>
+              <div className="executive-sparkline">{weeklyBars.slice(0, 6).map((bar, index) => <i style={{ height: `${bar}%` }} key={index} />)}</div>
+            </article>
           ))}
-        </div>
+        </section>
 
-        <h2 className="section-title">Pipeline CRM completo</h2>
-        <div className="dashboard-grid">
-          {crm.pipeline.map((stage) => (
-            <div className="metric-card" key={stage.stage}>
-              <div className="meta-line">{stageLabel(stage.stage)}</div>
-              <strong>{stage.count}</strong>
-              <small className="meta-line">{money(stage.value)}</small>
+        <section className="executive-main-grid">
+          <article className="executive-panel executive-chart-panel">
+            <div className="executive-panel-head">
+              <h2>Rendimiento de ventas</h2>
+              <span>Ventas / Meta</span>
             </div>
-          ))}
-        </div>
-
-        <h2 className="section-title">Próximas reservas</h2>
-        <div className="dashboard-grid dashboard-list-grid">
-          {crm.upcomingBookings.length ? crm.upcomingBookings.map((booking) => (
-            <div key={booking.id} className="metric-card dashboard-booking-card">
-              <div className="meta-line">{formatDate(booking.date)} · {booking.status}</div>
-              <strong>{booking.guests} personas</strong>
-              <div className="meta-line">{booking.location || "Lugar por confirmar"}</div>
-              <div className="badge" style={{ marginTop: 8 }}>{money(booking.total)}</div>
+            <div className="executive-line-chart">
+              {weeklyBars.map((bar, index) => <i style={{ height: `${bar}%` }} key={index}><b /></i>)}
             </div>
-          )) : <div className="empty-state" style={{ minHeight: 120 }}>Aún no hay reservas próximas.</div>}
-        </div>
+            <div className="executive-axis"><span>12 May</span><span>14 May</span><span>16 May</span><span>18 May</span></div>
+          </article>
 
-        <h2 className="section-title">Resumen adicional</h2>
-        <div className="dashboard-grid">
-          <Card title="Leads totales" value={crm.kpis.leads || metrics?.total || 0} />
-          <Card title="Conversaciones" value={crm.kpis.conversations} />
-          <Card title="Score cierre promedio" value={`${crm.kpis.averageCloseScore}%`} />
-          <Card title="Acciones humanas" value={crm.forecasts.humanActionsRequired} />
-          <Card title="Recuperaciones" value={crm.forecasts.recoveryOpportunities} />
-          <Card title="Revenue histórico leads" value={money(metrics?.estimatedRevenue || 0)} />
-        </div>
+          <article className="executive-panel">
+            <div className="executive-panel-head">
+              <h2>Leads por fuente</h2>
+              <span>Esta semana</span>
+            </div>
+            <div className="executive-donut-row">
+              <div
+                className="executive-donut"
+                style={{ background: `conic-gradient(#2563eb 0 ${Math.round((sources[0].value / sourceTotal) * 100)}%, #22c55e ${Math.round((sources[0].value / sourceTotal) * 100)}% ${Math.round(((sources[0].value + sources[1].value) / sourceTotal) * 100)}%, #f59e0b 0 76%, #a855f7 0 100%)` }}
+              >
+                <strong>{crm.kpis.leads || metrics?.total || 0}</strong>
+                <span>Leads</span>
+              </div>
+              <div className="executive-source-list">
+                {sources.map((source) => (
+                  <div key={source.label}><i style={{ background: source.color }} /><span>{source.label}</span><strong>{Math.round((source.value / sourceTotal) * 100)}%</strong></div>
+                ))}
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section className="executive-bottom-grid">
+          <article className="executive-panel">
+            <div className="executive-panel-head"><h2>Pipeline general</h2><span>{money(pipelineValue)}</span></div>
+            <div className="executive-funnel">
+              {crm.pipeline.slice(0, 5).map((stage, index) => (
+                <div style={{ width: `${100 - index * 12}%` }} key={stage.stage}>
+                  <span>{stageLabel(stage.stage)}</span><strong>{stage.count}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="executive-panel">
+            <div className="executive-panel-head"><h2>Alertas criticas</h2><Link href="/ai-ops">Ver todas</Link></div>
+            <div className="executive-list">
+              {(crm.alerts.length ? crm.alerts : [{ type: "ok", title: "Operacion estable", count: 0, message: "Sin alertas criticas por ahora." }]).slice(0, 4).map((alert) => (
+                <div key={alert.type}><b>{alert.count}</b><span>{alert.title}</span><small>{alert.message}</small></div>
+              ))}
+            </div>
+          </article>
+
+          <article className="executive-panel">
+            <div className="executive-panel-head"><h2>Proximas actividades</h2><Link href="/agenda">Agenda</Link></div>
+            <div className="executive-list schedule">
+              {crm.upcomingBookings.slice(0, 4).map((booking) => (
+                <div key={booking.id}><b>{formatDate(booking.date).slice(0, 5)}</b><span>{booking.name || "Reserva"}</span><small>{booking.location || "Lugar por confirmar"}</small></div>
+              ))}
+              {!crm.upcomingBookings.length ? <div><b>--</b><span>Sin reservas proximas</span><small>El agente agregara fechas aqui.</small></div> : null}
+            </div>
+          </article>
+        </section>
+
+        <section className="executive-quickbar">
+          <strong>Accesos rapidos</strong>
+          <Link className="primary-btn" href="/inbox">Nuevo lead</Link>
+          <Link className="ghost-btn" href="/agenda">Crear reserva</Link>
+          <Link className="ghost-btn" href="/payments">Crear pago</Link>
+          <Link className="ghost-btn" href="/ai-ops">Ver alertas IA</Link>
+        </section>
       </main>
     </div>
   );

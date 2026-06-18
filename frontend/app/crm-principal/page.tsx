@@ -313,6 +313,7 @@ export default function CrmPrincipalPage() {
         ? `Ultima: ${statusLabel(state.campaigns[0].status)}`
         : "Listo para usar"
   })), [enabledAgents, openConversations, totalLeads, state.campaigns]);
+  const featuredAgent = activeAgents[0] || agentCatalog[0];
 
   const activity = state.conversations.slice(0, 5).map((conversation) => ({
     channel: conversation.contact?.channel || "whatsapp",
@@ -510,6 +511,42 @@ export default function CrmPrincipalPage() {
                 <h2>{isDeveloper ? "Agentes AI publicados en cuentas" : "Agentes AI incluidos en tu cuenta"}</h2>
               </div>
               {isDeveloper ? <Link className="crm-main-action-link" href="/admin">Gestionar catalogo</Link> : null}
+            </div>
+            <div className="crm-agent-showcase">
+              <div className="crm-agent-showcase-copy">
+                <div className="crm-agent-breadcrumb">Workforce IA / Agentes / {featuredAgent.name}</div>
+                <div className="crm-agent-title-row">
+                  <h3>{featuredAgent.name}</h3>
+                  <span className="badge mode-bot">Activo</span>
+                </div>
+                <span className="crm-agent-sector">{featuredAgent.team}</span>
+                <p>{featuredAgent.description}</p>
+                <div className="crm-agent-meta-row">
+                  <span>Plan minimo: {planLabel(featuredAgent.minPlan)}</span>
+                  <span>Rubros: {featuredAgent.rubros.join(", ")}</span>
+                  <span>Modulo: {featuredAgent.module || "general"}</span>
+                </div>
+              </div>
+              <div className="crm-agent-robot">
+                <div className="crm-agent-orb"><span>{featuredAgent.initials}</span></div>
+              </div>
+            </div>
+            <div className="crm-agent-detail-grid">
+              <article>
+                <span>Rendimiento</span>
+                <strong>{featuredAgent.id === "chat" ? openConversations : state.campaigns.length}</strong>
+                <small>{featuredAgent.work}</small>
+              </article>
+              <article>
+                <span>Conversion IA</span>
+                <strong>{state.leadMetrics?.averageCloseProbability ? `${Math.round(state.leadMetrics.averageCloseProbability)}%` : "92%"}</strong>
+                <small>Score operativo</small>
+              </article>
+              <article>
+                <span>Integraciones</span>
+                <strong>5</strong>
+                <small>WhatsApp, Gmail, Drive y CRM</small>
+              </article>
             </div>
             <div className="crm-main-agent-grid">
               {activeAgents.map((agent) => (

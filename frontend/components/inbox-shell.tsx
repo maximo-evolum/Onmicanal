@@ -284,52 +284,125 @@ export function InboxShell() {
   }
 
   return (
-    <div className="page inbox-layout inbox-shell-modern">
-      <InboxAppHeader
-        agent={agent}
-        loading={loading}
-        visibleTotal={filteredConversations.length}
-        total={conversations.length}
-        error={error}
-        statusFilter={statusFilter}
-        channelFilter={channelFilter}
-        onStatusFilter={setStatusFilter}
-        onChannelFilter={setChannelFilter}
-      />
+    <div className="inbox-unified-shell">
+      <InboxUnifiedNav />
 
-      <aside className="sidebar inbox-conversation-rail">
-        <ActiveConversationPanel
-        conversation={selectedConversation}
-        onTake={handleTake}
-        onRelease={handleRelease}
-        onResolve={handleResolve}
-        onDelete={handleDelete}
-      />
-      </aside>
-
-      <main className="main">
-        <ChatPanel
-          conversation={selectedConversation}
-          messages={messages}
-          messagesLoading={messagesLoading}
-          sending={sending}
-          botTyping={botTyping}
-          hideHeader
-          onTake={handleTake}
-          onRelease={handleRelease}
-          onResolve={handleResolve}
-          onDelete={handleDelete}
-          onSend={handleSend}
+      <section className="inbox-unified-workspace">
+        <InboxAppHeader
+          agent={agent}
+          loading={loading}
+          visibleTotal={filteredConversations.length}
+          total={conversations.length}
+          error={error}
+          statusFilter={statusFilter}
+          channelFilter={channelFilter}
+          onStatusFilter={setStatusFilter}
+          onChannelFilter={setChannelFilter}
         />
-      </main>
 
-      <ChatActivityPanel
-        conversations={filteredConversations}
-        selectedId={selectedId}
-        loading={loading}
-        onSelect={setSelectedId}
-      />
+        <InboxChannelTabs conversations={filteredConversations} />
+
+        <div className="inbox-unified-main">
+          <ChatActivityPanel
+            conversations={filteredConversations}
+            selectedId={selectedId}
+            loading={loading}
+            onSelect={setSelectedId}
+          />
+
+          <main className="main inbox-chat-stage">
+            <ChatPanel
+              conversation={selectedConversation}
+              messages={messages}
+              messagesLoading={messagesLoading}
+              sending={sending}
+              botTyping={botTyping}
+              onTake={handleTake}
+              onRelease={handleRelease}
+              onResolve={handleResolve}
+              onDelete={handleDelete}
+              onSend={handleSend}
+            />
+          </main>
+
+          <aside className="sidebar inbox-contact-panel">
+            <ActiveConversationPanel
+              conversation={selectedConversation}
+              onTake={handleTake}
+              onRelease={handleRelease}
+              onResolve={handleResolve}
+              onDelete={handleDelete}
+            />
+          </aside>
+        </div>
+
+        <InboxStatsBar conversations={filteredConversations} />
+      </section>
     </div>
+  );
+}
+
+function InboxUnifiedNav() {
+  const items = [
+    ["Dashboard", "/dashboard"],
+    ["Workforce IA", "/crm-principal#agents"],
+    ["CRM", "/crm-principal"],
+    ["Agenda", "/agenda"],
+    ["Pagos", "/payments"],
+    ["Analytics", "/dashboard"],
+    ["Configuracion", "/onboarding"]
+  ];
+
+  return (
+    <aside className="inbox-unified-nav">
+      <div className="executive-brand">EVOLUM</div>
+      {items.map(([label, href]) => (
+        <Link className={label === "CRM" ? "active" : ""} href={href} key={label}>
+          <span>{label.slice(0, 2).toUpperCase()}</span>{label}
+        </Link>
+      ))}
+      <Link className="executive-new-btn" href="/crm-principal">Ir a CRM</Link>
+    </aside>
+  );
+}
+
+function InboxChannelTabs({ conversations }: { conversations: Conversation[] }) {
+  const count = (channel: string) => conversations.filter((conversation) => conversation.contact.channel === channel).length;
+  const tabs = [
+    ["Todos", conversations.length, ""],
+    ["WhatsApp", count("whatsapp"), "https://cdn.simpleicons.org/whatsapp/25D366"],
+    ["Instagram", count("instagram"), "https://cdn.simpleicons.org/instagram/E4405F"],
+    ["Email", count("email"), "https://cdn.simpleicons.org/gmail/EA4335"],
+    ["Web Chat", count("web"), ""]
+  ];
+
+  return (
+    <div className="inbox-channel-tabs">
+      {tabs.map(([label, value, icon]) => (
+        <span key={label}>
+          {icon ? <img alt="" src={String(icon)} /> : null}
+          {label}
+          <b>{value}</b>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function InboxStatsBar({ conversations }: { conversations: Conversation[] }) {
+  const active = conversations.filter((conversation) => conversation.status === "OPEN").length;
+  const closed = conversations.filter((conversation) => conversation.status === "RESOLVED").length;
+  const avgScore = conversations.length
+    ? Math.round(conversations.reduce((sum, conversation) => sum + (conversation.aiCloseScore || conversation.aiLeadScore || 0), 0) / conversations.length)
+    : 0;
+
+  return (
+    <section className="inbox-stats-bar">
+      <article><span>Conversaciones activas</span><strong>{active}</strong><small>Actualizacion en tiempo real</small></article>
+      <article><span>Score IA promedio</span><strong>{avgScore}%</strong><small>Probabilidad comercial</small></article>
+      <article><span>Conversaciones cerradas</span><strong>{closed}</strong><small>Resueltas por equipo o IA</small></article>
+      <article><span>Satisfaccion del cliente</span><strong>4.8 / 5</strong><small>Indicador operativo</small></article>
+    </section>
   );
 }
 
