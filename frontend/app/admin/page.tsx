@@ -21,7 +21,7 @@ import {
   type OnboardingExtraction,
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
-import { Topbar } from "@/components/topbar";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 const PLANS = ["STARTER", "PRO", "BUSINESS", "ENTERPRISE"];
 const ROLES = ["OWNER", "ADMIN", "AGENT", "SELLER", "VIEWER"];
@@ -34,7 +34,37 @@ const MODULE_LABELS: Record<string, string> = {
   followups: "Follow-ups",
   analytics: "Analytics",
   bot_lab: "Bot Lab",
+  agenda: "Agenda",
+  pipeline: "Pipeline",
+  campaigns: "Campañas",
+  dashboard: "Dashboard",
+  ai_ops: "AI Ops / Cierres IA",
+  onboarding: "Configuracion de Agente",
+  saas: "Planes y modulos",
+  users: "Usuarios y roles",
+  integrations: "Integraciones",
+  developer: "Desarrollador",
 };
+
+const PROJECT_MODULE_CATALOG = [
+  "inbox",
+  "agenda",
+  "pipeline",
+  "campaigns",
+  "payments",
+  "onboarding",
+  "saas",
+  "users",
+  "dashboard",
+  "ai_ops",
+  "integrations",
+  "sales",
+  "marketing",
+  "bookings",
+  "followups",
+  "analytics",
+  "bot_lab",
+];
 
 const emptyClient = {
   name: "",
@@ -111,6 +141,15 @@ const emptyImportManual = {
   restrictions: "No inventar precios, stock ni políticas. Si falta información, pedir confirmación."
 };
 
+function normalizePlanLabel(plan?: string | null) {
+  const value = String(plan || "").trim().toUpperCase();
+  if (["FREE", "STARTER", "BASIC", "BASICA", "MVP", "DEMO"].includes(value)) return "STARTER";
+  if (["NORMAL", "PRO"].includes(value)) return "PRO";
+  if (["BUSINESS", "ADVANCED", "AVANZADA"].includes(value)) return "BUSINESS";
+  if (["ENTERPRISE", "PRO_MAX", "PROFESSIONAL"].includes(value)) return "ENTERPRISE";
+  return value || "STARTER";
+}
+
 function asArrayRules(value: unknown) {
   if (Array.isArray(value)) return value.map((item) => String(item));
   if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).map((item) => String(item));
@@ -139,6 +178,7 @@ function numberOrEmpty(value: unknown) {
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
   const [agent, setAgent] = useState<ReturnType<typeof getStoredSession>>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
     setAgent(getStoredSession());
@@ -274,7 +314,10 @@ export default function AdminPage() {
   const totals = useMemo(() => {
     const users = tenants.reduce((acc, tenant) => acc + (tenant.workspaceUsers?.length || 0), 0);
     const activeModules = tenants.reduce((acc, tenant) => acc + enabledModulesOf(tenant).length, 0);
-    const business = tenants.filter((tenant) => tenant.plan === "BUSINESS" || tenant.plan === "ENTERPRISE").length;
+    const business = tenants.filter((tenant) => {
+      const plan = normalizePlanLabel(tenant.plan);
+      return plan === "BUSINESS" || plan === "ENTERPRISE";
+    }).length;
     return { users, activeModules, business };
   }, [tenants]);
 
@@ -284,6 +327,11 @@ export default function AdminPage() {
     const pending = [...pendingModules].sort().join("|");
     return saved !== pending;
   }, [selectedTenant, pendingModules]);
+
+  const availableModules = useMemo(() => {
+    const merged = new Set([...PROJECT_MODULE_CATALOG, ...moduleCatalog]);
+    return Array.from(merged);
+  }, [moduleCatalog]);
 
   function updateTenantLocal(updated: AdminTenant) {
     setTenants((items) => items.map((item) => (item.id === updated.id ? updated : item)));
@@ -574,9 +622,9 @@ export default function AdminPage() {
 
   if (!mounted) {
     return (
-      <div className="page page-single">
-        <main className="main dashboard-page">
-          <Topbar agent={null} />
+      <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+        <EvolumSidebar active="Desarrollador" isDeveloper isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
+        <main className="main dashboard-page admin-page">
           <div className="empty-state">Cargando vista de desarrollador...</div>
         </main>
       </div>
@@ -585,9 +633,9 @@ export default function AdminPage() {
 
   if (agent?.role !== "SUPER_ADMIN") {
     return (
-      <div className="page page-single">
-        <main className="main dashboard-page">
-          <Topbar agent={agent} />
+      <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+        <EvolumSidebar active="Desarrollador" isDeveloper={false} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
+        <main className="main dashboard-page admin-page">
           <div className="empty-state">No tienes permiso para ver la vista de desarrollador.</div>
         </main>
       </div>
@@ -595,18 +643,19 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="page page-single">
+    <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar active="Desarrollador" isDeveloper isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
       <main className="main dashboard-page admin-page">
-        <Topbar agent={agent} />
 
-        <div className="admin-hero">
+        <header className="module-app-header admin-module-header">
           <div>
             <span className="eyebrow">Control Center</span>
-            <h1 className="chat-title">Vista desarrollador</h1>
+            <h1>Vista desarrollador</h1>
             <div className="meta-line">Crea clientes, asigna planes, habilita módulos y administra usuarios desde un solo lugar.</div>
           </div>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar cliente, slug, rubro o plan..." />
-        </div>
+          <span className="module-account-pill">{agent?.name || "Super Admin"}</span>
+        </header>
 
         <div className="admin-stats-grid">
           <div className="metric-card"><div className="meta-line">Clientes</div><strong>{tenants.length}</strong></div>
@@ -671,7 +720,7 @@ export default function AdminPage() {
                     <strong>{tenant.name}</strong>
                     <div className="meta-line">/{tenant.slug} · {tenant.industry || "sin rubro"}</div>
                   </div>
-                  <span className="badge accent">{tenant.plan || "STARTER"}</span>
+                  <span className="badge accent">{normalizePlanLabel(tenant.plan)}</span>
                 </button>
               ))}
             </div>
@@ -685,7 +734,7 @@ export default function AdminPage() {
                     <strong>{selectedTenant.name}</strong>
                     <div className="meta-line">Configura plan, módulos, datos y usuarios.</div>
                   </div>
-                  <span className="badge accent">{selectedTenant.plan || "STARTER"}</span>
+                  <span className="badge accent">{normalizePlanLabel(selectedTenant.plan)}</span>
                 </div>
 
                 <div className="admin-detail-grid">
@@ -703,7 +752,7 @@ export default function AdminPage() {
                   </label>
                   <label>
                     <span className="meta-line">Plan</span>
-                    <select value={selectedTenant.plan || "STARTER"} onChange={(e) => handlePlanChange(selectedTenant.id, e.target.value)} disabled={savingId === selectedTenant.id}>
+                    <select value={normalizePlanLabel(selectedTenant.plan)} onChange={(e) => handlePlanChange(selectedTenant.id, e.target.value)} disabled={savingId === selectedTenant.id}>
                       {PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
                     </select>
                   </label>
@@ -730,7 +779,7 @@ export default function AdminPage() {
                   <div className="admin-detail-grid">
                     <label>
                       <span className="meta-line">Código plan</span>
-                      <select value={billingForm.planCode} onChange={(e) => setBillingForm({ ...billingForm, planCode: e.target.value })}>
+                      <select value={normalizePlanLabel(billingForm.planCode)} onChange={(e) => setBillingForm({ ...billingForm, planCode: e.target.value })}>
                         {PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
                       </select>
                     </label>
@@ -962,7 +1011,7 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <div className="module-toggle-grid">
-                    {(moduleCatalog.length ? moduleCatalog : ["inbox", "sales", "marketing", "bookings", "payments", "followups", "analytics", "bot_lab"]).map((module) => {
+                    {availableModules.map((module) => {
                       const active = pendingModules.includes(module);
                       const saved = enabledModulesOf(selectedTenant).includes(module);
                       return (

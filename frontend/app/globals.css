@@ -3019,7 +3019,40 @@ button.primary-btn {
 }
 
 .bot-lab-layout {
+  display: grid;
   grid-template-columns: minmax(280px, 320px) minmax(0, 1fr) minmax(320px, 380px);
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.bot-lab-module-main {
+  min-width: 0;
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.bot-lab-shell-modern .sidebar,
+.bot-lab-shell-modern .main {
+  height: auto;
+  min-height: 0;
+}
+
+.bot-lab-module-header p,
+.admin-module-header p {
+  margin: 0 0 6px;
+  color: #c084fc;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.bot-lab-module-header > div > span,
+.admin-module-header > div > span {
+  color: rgba(248, 243, 255, 0.72);
 }
 
 @media (max-width: 1280px) {

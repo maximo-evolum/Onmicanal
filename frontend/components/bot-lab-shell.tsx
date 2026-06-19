@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { simulateLeadUtf8, testBot, type BotLabResult } from "@/lib/api";
-import { Topbar } from "./topbar";
 import { getStoredSession } from "@/lib/auth";
-import { BackToInbox } from "./BackToInbox";
+import { EvolumSidebar } from "./evolum-sidebar";
 
 const TENANTS = [
   { slug: "demo-parrilladas", name: "Eventos Alta Brasa", label: "Parrilladas / eventos" },
@@ -53,6 +52,7 @@ export function BotLabShell() {
   const [loading, setLoading] = useState(false);
   const [simulatingLead, setSimulatingLead] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [history, setHistory] = useState<
     Array<{ input: string; output: string }>
   >([]);
@@ -161,13 +161,25 @@ export function BotLabShell() {
   }
 
   return (
-    <div className="page bot-lab-layout">
-      <aside className="sidebar">
-        <Topbar agent={agent} />
-        <div className="content-toolbar">
-          <BackToInbox />
-        </div>
+    <div className={`module-with-menu-shell bot-lab-shell-modern ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Bot Lab"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
+      <main className="bot-lab-module-main">
+        <header className="module-app-header bot-lab-module-header">
+          <div>
+            <p>BOT LAB</p>
+            <h1>Laboratorio de agentes</h1>
+            <span>Prueba respuestas, escenarios y trazas antes de publicar cambios.</span>
+          </div>
+          <span className="module-account-pill">{agent?.name || "Super Admin"}</span>
+        </header>
 
+        <div className="bot-lab-layout">
+      <aside className="sidebar">
         <div className="sidebar-header">
           <h2 className="sidebar-title">Bot Lab</h2>
           <div className="meta-line">
@@ -404,6 +416,8 @@ export function BotLabShell() {
           </div>
         </div>
       </aside>
+        </div>
+      </main>
     </div>
   );
 }

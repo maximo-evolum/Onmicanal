@@ -2,35 +2,59 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getSaasOverview, SaasOverview } from "@/lib/api";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getSaasOverview, getTeamManagement, SaasOverview } from "@/lib/api";
+import { getStoredSession } from "@/lib/auth";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 function money(value?: number, currency = "CLP") {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value || 0);
 }
 
+function normalizePlanLabel(plan?: string | null) {
+  const value = String(plan || "").trim().toUpperCase();
+  if (["FREE", "STARTER", "BASIC", "BASICA", "MVP", "DEMO"].includes(value)) return "STARTER";
+  if (["NORMAL", "PRO"].includes(value)) return "PRO";
+  if (["BUSINESS", "ADVANCED", "AVANZADA"].includes(value)) return "BUSINESS";
+  if (["ENTERPRISE", "PRO_MAX", "PROFESSIONAL"].includes(value)) return "ENTERPRISE";
+  return value || "STARTER";
+}
+
 export default function SaasPage() {
   const agent = getStoredSession();
   const [data, setData] = useState<SaasOverview | null>(null);
+  const [users, setUsers] = useState<Array<{ id: string; name: string; email: string; role: string; isActive: boolean }>>([]);
   const [error, setError] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   useEffect(() => {
-    getSaasOverview().then(setData).catch((err) => setError(err instanceof Error ? err.message : "No se pudo cargar SaaS Center"));
+    Promise.all([
+      getSaasOverview(),
+      getTeamManagement().catch(() => ({ users: [] })),
+    ])
+      .then(([overview, team]) => {
+        setData(overview);
+        setUsers(team.users || []);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "No se pudo cargar SaaS Center"));
   }, []);
 
   return (
-    <div className="page page-single">
+    <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Planes y modulos"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
       <main className="main dashboard-page phase5-page">
         <header className="module-app-header">
           <div>
             <span className="eyebrow">Planes y modulos</span>
-            <h1>Centro SaaS</h1>
-            <div className="meta-line">Planes, limites, modulos activos, onboarding y senales comerciales.</div>
+            <h1>Planes, modulos y usuarios</h1>
+            <div className="meta-line">Plan de cuenta, limites, modulos habilitados, onboarding y usuarios del workspace.</div>
           </div>
           <div className="module-app-actions">
-            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-            <LogoutButton />
           </div>
         </header>
         <section className="phase5-hero">
@@ -49,7 +73,7 @@ export default function SaasPage() {
         {!data ? <div className="empty-state">Cargando centro SaaS...</div> : (
           <>
             <section className="phase5-grid four">
-              <Card title="Plan actual" value={data.plan?.name || data.tenant?.plan || "Starter"} detail={data.plan?.description || "Plan activo"} />
+              <Card title="Plan actual" value={normalizePlanLabel(data.plan?.name || data.tenant?.plan)} detail={data.plan?.description || "Plan activo"} />
               <Card title="Precio mensual" value={money(data.plan?.priceMonthly, data.plan?.currency)} detail="Referencia comercial" />
               <Card title="Uso mensual" value={`${data.usage?.usagePercent || 0}%`} detail={`${data.usage?.messages || 0}/${data.usage?.limits?.messagesMonthly ?? "∞"} mensajes`} />
               <Card title="Onboarding" value={`${data.onboarding?.completedPercent || 0}%`} detail={`${data.onboarding?.completed || 0}/${data.onboarding?.total || 0} pasos`} />
@@ -75,6 +99,26 @@ export default function SaasPage() {
               </article>
             </section>
 
+            <section className="phase5-panel">
+              <div className="phase5-panel-head">
+                <div>
+                  <h2>Usuarios y roles</h2>
+                  <p>Equipo operativo incluido en este workspace. Este bloque reemplaza el modulo Equipo independiente.</p>
+                </div>
+              </div>
+              <div className="phase5-table">
+                {users.map((user) => (
+                  <div className="phase5-table-row" key={user.id}>
+                    <strong>{user.name}</strong>
+                    <span>{user.email}</span>
+                    <span>{user.role}</span>
+                    <span className={user.isActive ? "badge mode-bot" : "badge danger"}>{user.isActive ? "Activo" : "Inactivo"}</span>
+                  </div>
+                ))}
+                {!users.length ? <div className="empty-state">Sin usuarios cargados para este workspace.</div> : null}
+              </div>
+            </section>
+
             <section className="phase5-grid three">
               <Card title="Conversaciones" value={data.analytics?.conversations || 0} detail="últimas operativas" />
               <Card title="Listos para cierre" value={data.analytics?.ready || 0} detail="requieren vendedor" />
@@ -85,7 +129,7 @@ export default function SaasPage() {
               <div className="phase5-panel-head"><div><h2>Accesos rápidos</h2><p>Herramientas de operación comercial SaaS.</p></div></div>
               <div className="phase5-quick-grid">
                 <Link href="/onboarding">Personalidad y reglas IA</Link>
-                <Link href="/team">Equipo y roles</Link>
+                <Link href="/saas">Usuarios y roles</Link>
                 <Link href="/onboarding">Onboarding guiado</Link>
                 <Link href="/dashboard">Analytics & KPIs</Link>
               </div>

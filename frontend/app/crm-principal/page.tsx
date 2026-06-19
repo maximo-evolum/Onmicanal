@@ -27,7 +27,7 @@ type LoadState = {
   error: string | null;
 };
 
-type AccountLevel = "basica" | "normal" | "avanzada" | "pro";
+type AccountLevel = "STARTER" | "PRO" | "BUSINESS" | "ENTERPRISE";
 
 type AgentCatalogItem = {
   id: string;
@@ -62,18 +62,17 @@ const navItems: NavItem[] = [
   { label: "Campañas", href: "/campaigns", description: "Marketing IA y publicaciones" },
   { label: "Pagos", href: "/payments", description: "Cobros, estados y links" },
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA" },
-  { label: "Equipo", href: "/team", description: "Usuarios, roles y actividad" },
+  { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites" },
   { label: "Dashboard", href: "/dashboard", description: "Metricas operativas" },
   { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA" }
 ];
 
 const developerOnlyItems: NavItem[] = [
   { label: "Desarrollador", href: "/admin", description: "Clientes, planes, modulos y permisos" },
-  { label: "Planes y modulos", href: "/saas", description: "Configuracion SaaS por cuenta" },
   { label: "Bot Lab", href: "/dev/bot-lab", description: "Pruebas de respuestas y reglas" }
 ];
 
-const planOrder: AccountLevel[] = ["basica", "normal", "avanzada", "pro"];
+const planOrder: AccountLevel[] = ["STARTER", "PRO", "BUSINESS", "ENTERPRISE"];
 
 const agentCatalog: AgentCatalogItem[] = [
   {
@@ -81,7 +80,7 @@ const agentCatalog: AgentCatalogItem[] = [
     name: "Agente de Chat",
     team: "Inbox omnicanal",
     status: "Activo",
-    minPlan: "basica",
+    minPlan: "STARTER",
     rubros: ["Todos"],
     module: "inbox",
     href: "/inbox",
@@ -94,7 +93,7 @@ const agentCatalog: AgentCatalogItem[] = [
     name: "Agente de Campañas",
     team: "Marketing IA",
     status: "Activo",
-    minPlan: "normal",
+    minPlan: "PRO",
     rubros: ["Todos"],
     module: "marketing",
     href: "/campaigns",
@@ -107,7 +106,7 @@ const agentCatalog: AgentCatalogItem[] = [
     name: "Agente de Soporte",
     team: "Atencion al cliente",
     status: "Preparado",
-    minPlan: "normal",
+    minPlan: "PRO",
     rubros: ["Todos"],
     module: "inbox",
     href: "/inbox",
@@ -120,7 +119,7 @@ const agentCatalog: AgentCatalogItem[] = [
     name: "Agente Inmobiliario",
     team: "Realty",
     status: "Roadmap",
-    minPlan: "avanzada",
+    minPlan: "BUSINESS",
     rubros: ["Inmobiliaria", "Realty"],
     module: "realty",
     href: "/pipeline",
@@ -133,7 +132,7 @@ const agentCatalog: AgentCatalogItem[] = [
     name: "Agente de Finanzas",
     team: "Pagos y cobranza",
     status: "Roadmap",
-    minPlan: "avanzada",
+    minPlan: "BUSINESS",
     rubros: ["Todos"],
     module: "payments",
     href: "/payments",
@@ -146,7 +145,7 @@ const agentCatalog: AgentCatalogItem[] = [
     name: "Agente de Operaciones",
     team: "Servicios y reservas",
     status: "Roadmap",
-    minPlan: "pro",
+    minPlan: "ENTERPRISE",
     rubros: ["Hospitality", "Servicios", "Retail", "Manufactura"],
     module: "bookings",
     href: "/agenda",
@@ -192,11 +191,11 @@ function statusLabel(value?: string | null) {
 
 function accountLevelFromPlan(plan?: string | null): AccountLevel {
   const value = String(plan || "").toUpperCase();
-  if (["FREE", "STARTER", "BASIC", "BASICA", "MVP", "DEMO"].includes(value)) return "basica";
-  if (["NORMAL", "PRO"].includes(value)) return "normal";
-  if (["BUSINESS", "ADVANCED", "AVANZADA"].includes(value)) return "avanzada";
-  if (["ENTERPRISE", "PRO_MAX", "PROFESSIONAL"].includes(value)) return "pro";
-  return "basica";
+  if (["FREE", "STARTER", "BASIC", "BASICA", "MVP", "DEMO"].includes(value)) return "STARTER";
+  if (["NORMAL", "PRO"].includes(value)) return "PRO";
+  if (["BUSINESS", "ADVANCED", "AVANZADA"].includes(value)) return "BUSINESS";
+  if (["ENTERPRISE", "PRO_MAX", "PROFESSIONAL"].includes(value)) return "ENTERPRISE";
+  return "STARTER";
 }
 
 function planAllows(current: AccountLevel, required: AccountLevel) {
@@ -204,13 +203,7 @@ function planAllows(current: AccountLevel, required: AccountLevel) {
 }
 
 function planLabel(plan: AccountLevel) {
-  const labels: Record<AccountLevel, string> = {
-    basica: "Basica",
-    normal: "Normal",
-    avanzada: "Avanzada",
-    pro: "Pro"
-  };
-  return labels[plan];
+  return plan;
 }
 
 function compactText(value?: string | null, maxLength = 92) {
@@ -234,7 +227,7 @@ export default function CrmPrincipalPage() {
     crm: null,
     campaigns: [],
     modules: [],
-    plan: "basica",
+    plan: "STARTER",
     tenant: null,
     error: null
   });
@@ -404,8 +397,8 @@ export default function CrmPrincipalPage() {
         <section className="crm-main-side-summary">
           <span>{isDeveloper ? "Control de plataforma" : "Resumen del dia"}</span>
           <div>
-            <strong>{planLabel(state.plan)}</strong>
             <small>Nivel de cuenta</small>
+            <strong>{planLabel(state.plan)}</strong>
           </div>
           <div>
             <strong>{state.tenant?.industry || "General"}</strong>

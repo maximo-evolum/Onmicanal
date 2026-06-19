@@ -18,13 +18,13 @@ const baseItems = [
   ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA"],
   ["Pagos", "/payments", "Cobros, estados y links", "PA"],
   ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG"],
+  ["Planes y modulos", "/saas", "Plan, modulos, usuarios y limites", "PM"],
   ["Dashboard", "/dashboard", "Metricas operativas", "DA"],
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI"],
 ] as const;
 
 const developerItems = [
   ["Desarrollador", "/admin", "Clientes, planes, modulos y permisos", "DE"],
-  ["Planes y modulos", "/saas", "Configuracion SaaS por cuenta", "PM"],
   ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL"],
 ] as const;
 
