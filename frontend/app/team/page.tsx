@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { getTeamManagement } from "@/lib/api";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 export default function TeamPage() {
@@ -34,9 +33,7 @@ export default function TeamPage() {
             <div className="meta-line">Administracion humana detras de la operacion IA.</div>
           </div>
           <div className="module-app-actions">
-            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-            <LogoutButton />
           </div>
         </header>
 

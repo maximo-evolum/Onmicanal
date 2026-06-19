@@ -2,9 +2,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { cancelPayment, confirmPayment, createPayment, getPaymentMetrics, getPayments, Payment, PaymentMetrics } from "@/lib/api";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 function money(value = 0, currency = "CLP") {
@@ -112,9 +111,7 @@ export default function PaymentsPage() {
             <div className="meta-line">Links manuales y pagos conectados a conversaciones, leads o reservas.</div>
           </div>
           <div className="module-app-actions">
-            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-            <LogoutButton />
           </div>
         </header>
 

@@ -58,12 +58,12 @@ const navItems: NavItem[] = [
   { label: "Oficina de Agentes", href: "#agents", description: "Agentes AI activos y futuros" },
   { label: "Inbox Omnicanal", href: "/inbox", description: "Conversaciones y atencion IA" },
   { label: "Agenda", href: "/agenda", description: "Reservas, citas y disponibilidad" },
-  { label: "Clientes", href: "/pipeline", description: "Leads, clientes y pipeline" },
+  { label: "Pipeline", href: "/pipeline", description: "Leads, clientes y oportunidades" },
   { label: "Campañas", href: "/campaigns", description: "Marketing IA y publicaciones" },
   { label: "Pagos", href: "/payments", description: "Cobros, estados y links" },
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA" },
   { label: "Equipo", href: "/team", description: "Usuarios, roles y actividad" },
-  { label: "Analytics & KPIs", href: "/dashboard", description: "Metricas operativas" },
+  { label: "Dashboard", href: "/dashboard", description: "Metricas operativas" },
   { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA" }
 ];
 

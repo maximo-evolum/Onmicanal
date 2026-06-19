@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { getAiOpsSummary, getConversations, type AiOpsSummary } from "@/lib/api";
 import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, getAiBadgeClass, getConversationState, isReadyToClose, riskLabel } from "@/lib/ai-ops";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 function openInbox(conversationId: string) {
@@ -80,9 +79,7 @@ export default function AiOpsPage() {
             <span className="badge sales-alert-critical">🚨 {summary?.metrics.critical ?? critical.length} críticos</span>
             <span className="badge sales-alert-hot">🔥 {summary?.metrics.opportunities ?? strategic.length} oportunidades</span>
             <span className="badge sales-alert-action">🧠 {summary?.metrics.averageScore ?? avg}% score prom.</span>
-            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-            <LogoutButton />
           </div>
         </header>
 

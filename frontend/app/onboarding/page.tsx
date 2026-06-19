@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 import {
   applyOnboardingExtraction,
   getOnboardingKnowledge,
@@ -9,6 +9,7 @@ import {
   saveOnboardingProfile,
   uploadOnboardingFiles
 } from "../../lib/api";
+import { getStoredSession } from "@/lib/auth";
 
 type OnboardingForm = {
   businessName: string;
@@ -82,6 +83,7 @@ function formatMoney(value?: number) {
 }
 
 export default function OnboardingPage() {
+  const agent = getStoredSession();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<OnboardingForm>(emptyForm);
   const [files, setFiles] = useState<File[]>([]);
@@ -93,6 +95,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [replaceProducts, setReplaceProducts] = useState(false);
   const [replaceFaqs, setReplaceFaqs] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -248,6 +251,13 @@ export default function OnboardingPage() {
   }
 
   return (
+    <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Configuracion de Agente"
+        isDeveloper={agent?.role === "SUPER_ADMIN"}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
     <main className="onboarding-page onboarding-pro-page">
       <section className="onboarding-pro-hero">
         <div>
@@ -257,9 +267,6 @@ export default function OnboardingPage() {
             Configura el perfil comercial del tenant, sube documentos y aplica conocimiento para que Bot Lab, Inbox y respuestas automáticas usen datos reales del negocio.
           </p>
         </div>
-        <div className="onboarding-hero-actions">
-          <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
-                  </div>
       </section>
 
       <section className="onboarding-status-panel">
@@ -466,11 +473,11 @@ export default function OnboardingPage() {
             <article><strong>{existing?.rules?.length || 0}</strong><span>Reglas / FAQs en BD</span></article>
           </div>
           <div className="header-actions">
-            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <button className="ghost-btn" onClick={resetWizard}>Nuevo onboarding</button>
           </div>
         </section>
       )}
     </main>
+    </div>
   );
 }

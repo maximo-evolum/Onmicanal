@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { getCrmOperationalDashboard, getLeadMetrics, type CrmOperationalDashboard } from "@/lib/api";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getStoredSession } from "@/lib/auth";
 import type { LeadMetrics } from "@/lib/types";
 
 function money(value = 0) {
@@ -82,7 +82,7 @@ export default function DashboardPage() {
   return (
     <div className={`executive-shell analytics-evolum-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
-        active="Analytics & KPIs"
+        active="Dashboard"
         isDeveloper={agent?.role === "SUPER_ADMIN"}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
@@ -90,10 +90,8 @@ export default function DashboardPage() {
 
       <main className="executive-dashboard">
         <header className="executive-topbar">
-          <button className="executive-menu" aria-label="Menu" onClick={() => setSidebarOpen((value) => !value)} type="button">=</button>
           <div className="executive-top-actions">
             <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-            <LogoutButton />
           </div>
         </header>
 

@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getStoredSession } from "@/lib/auth";
 
 const PLATFORM_LABELS: Record<CampaignPlatform, string> = {
   instagram: "Instagram",
@@ -256,9 +255,7 @@ export default function CampaignsPage() {
             <div className="meta-line">Crea imagenes, titulos y textos listos para publicar en los canales del cliente.</div>
           </div>
           <div className="module-app-actions">
-            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-            <LogoutButton />
           </div>
         </header>
 

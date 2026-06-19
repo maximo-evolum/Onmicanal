@@ -14,11 +14,11 @@ const baseItems = [
   ["Inicio", "/crm-principal", "Centro principal de EVOLUM", "IN"],
   ["Inbox Omnicanal", "/inbox", "Conversaciones y atencion IA", "IO"],
   ["Agenda", "/agenda", "Reservas, citas y disponibilidad", "AG"],
-  ["Clientes", "/pipeline", "Leads, clientes y pipeline", "CL"],
+  ["Pipeline", "/pipeline", "Leads, clientes y oportunidades", "PI"],
   ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA"],
   ["Pagos", "/payments", "Cobros, estados y links", "PA"],
   ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG"],
-  ["Analytics & KPIs", "/dashboard", "Metricas operativas", "AN"],
+  ["Dashboard", "/dashboard", "Metricas operativas", "DA"],
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI"],
 ] as const;
 

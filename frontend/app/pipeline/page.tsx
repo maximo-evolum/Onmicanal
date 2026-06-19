@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getLeads, updateLeadApi } from "@/lib/api";
 import { Lead } from "@/lib/types";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
-import Link from "next/link";
+import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 const columns = [
@@ -104,7 +103,7 @@ export default function PipelinePage() {
   return (
     <div className={`pipeline-pro-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
-        active="Clientes"
+        active="Pipeline"
         isDeveloper={agent?.role === "SUPER_ADMIN"}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
@@ -112,19 +111,16 @@ export default function PipelinePage() {
 
       <main className="pipeline-pro-main">
         <header className="pipeline-pro-topbar">
-          <button className="executive-menu" aria-label="Menu">=</button>
           <div className="executive-search">Buscar oportunidades, clientes, propiedades...</div>
           <div className="executive-top-actions">
-            <Link className="ghost-btn" href="/crm-principal">Ir a CRM</Link>
             <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-            <LogoutButton />
           </div>
         </header>
 
         <section className="pipeline-pro-title">
           <div>
             <span className="meta-line">CRM / Pipeline</span>
-            <h1>Pipeline de oportunidades</h1>
+            <h1>Pipeline</h1>
             <p>Gestiona y da seguimiento a tus oportunidades comerciales.</p>
           </div>
           <div className="pipeline-kpis">
@@ -136,6 +132,18 @@ export default function PipelinePage() {
         </section>
 
         {error ? <div className="sales-queue-error">{error}</div> : null}
+
+        <section className="pipeline-month-summary">
+          <div>
+            <span>Resumen del mes</span>
+            <strong>{money(stats.totalValue)}</strong>
+            <small>Valor total por oportunidades activas.</small>
+          </div>
+          <div><span>Oportunidades</span><strong>{leads.length}</strong></div>
+          <div><span>Valor promedio</span><strong>{money(leads.length ? stats.totalValue / leads.length : 0)}</strong></div>
+          <div><span>Conversion</span><strong>{stats.avgClose}%</strong></div>
+          <div><span>Ciclo promedio</span><strong>32 dias</strong></div>
+        </section>
 
         <div className="pipeline-pro-content">
           <div className="pipeline-board pipeline-board-pro">
@@ -216,22 +224,6 @@ export default function PipelinePage() {
             })}
           </div>
 
-          <aside className="pipeline-insights-panel">
-            <article>
-              <div className="pipeline-insight-head">
-                <h2>Resumen del mes</h2>
-                <span>Este mes</span>
-              </div>
-              <strong>{money(stats.totalValue)}</strong>
-              <p>Valor total por oportunidades activas.</p>
-              <div className="pipeline-summary-list">
-                <span>Oportunidades <b>{leads.length}</b></span>
-                <span>Valor promedio <b>{money(leads.length ? stats.totalValue / leads.length : 0)}</b></span>
-                <span>Tasa de conversion <b>{stats.avgClose}%</b></span>
-                <span>Ciclo promedio <b>32 dias</b></span>
-              </div>
-            </article>
-          </aside>
         </div>
       </main>
     </div>
