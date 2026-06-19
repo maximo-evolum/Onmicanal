@@ -89,18 +89,15 @@ export default function DashboardPage() {
       />
 
       <main className="executive-dashboard">
-        <header className="executive-topbar">
-          <div className="executive-top-actions">
-            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-          </div>
-        </header>
-
-        <section className="executive-title-row">
+        <header className="executive-topbar executive-dashboard-header">
           <div>
             <h1>Dashboard Ejecutivo</h1>
             <p>Bienvenido, {agent?.name || "Usuario"}. Resumen operativo en tiempo real.</p>
           </div>
-        </section>
+          <div className="executive-top-actions">
+            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+          </div>
+        </header>
 
         {error ? <div className="sales-queue-error">{error}</div> : null}
         {!crm ? <div className="analytics-loading-strip">Cargando dashboard en tiempo real...</div> : null}

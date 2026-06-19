@@ -110,14 +110,7 @@ export default function PipelinePage() {
       />
 
       <main className="pipeline-pro-main">
-        <header className="pipeline-pro-topbar">
-          <div className="executive-search">Buscar oportunidades, clientes, propiedades...</div>
-          <div className="executive-top-actions">
-            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
-          </div>
-        </header>
-
-        <section className="pipeline-pro-title">
+        <header className="pipeline-pro-topbar pipeline-pro-header-main">
           <div>
             <span className="meta-line">CRM / Pipeline</span>
             <h1>Pipeline</h1>
@@ -129,7 +122,8 @@ export default function PipelinePage() {
             <span className="badge signal-followup">🤖 {stats.followups} follow-ups</span>
             <span className="badge">🔮 {stats.avgClose}% cierre prom.</span>
           </div>
-        </section>
+          <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+        </header>
 
         {error ? <div className="sales-queue-error">{error}</div> : null}
 

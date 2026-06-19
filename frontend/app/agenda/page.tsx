@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { createBookingApi, getBookingSlots, getBookings, getMe, markBookingPaymentReady, updateBookingApi } from "@/lib/api";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getStoredSession } from "@/lib/auth";
 import type { AgentSession, Booking, BookingSlot, TenantSession } from "@/lib/types";
 
 type AgendaMode = {
@@ -400,9 +400,7 @@ export default function AgendaPage() {
             <div className="meta-line">{mode.note}</div>
           </div>
           <div className="agenda-app-actions">
-            <Link className="ghost-btn" href="/crm-principal">Volver al CRM</Link>
             <span className="agenda-account-pill">{session?.name || agent?.name || "Usuario"}</span>
-            <LogoutButton />
           </div>
         </header>
 
