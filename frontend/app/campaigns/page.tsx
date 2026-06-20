@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
-import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
+import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, getConversations, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
+import { Conversation } from "@/lib/types";
 
 const PLATFORM_LABELS: Record<CampaignPlatform, string> = {
   instagram: "Instagram",
@@ -25,6 +26,16 @@ function togglePlatform(current: CampaignPlatform[], platform: CampaignPlatform)
   return [...current, platform];
 }
 
+function normalizeCampaignPhone(value = "") {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  return digits.length >= 8 ? digits : "";
+}
+
+function phoneFromConversation(conversation: Conversation) {
+  if (conversation.contact?.channel !== "whatsapp") return "";
+  return normalizeCampaignPhone(conversation.contact.externalId || conversation.contact.username || conversation.contact.name || "");
+}
+
 export default function CampaignsPage() {
   const agent = getStoredSession();
   const [product, setProduct] = useState("");
@@ -34,6 +45,9 @@ export default function CampaignsPage() {
   const [cta, setCta] = useState("");
   const [platforms, setPlatforms] = useState<CampaignPlatform[]>(["instagram"]);
   const [whatsappRecipientsText, setWhatsappRecipientsText] = useState("");
+  const [useInboxWhatsappRecipients, setUseInboxWhatsappRecipients] = useState(true);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
   const [variantCount, setVariantCount] = useState<number>(2);
   const [quickMode, setQuickMode] = useState<boolean>(false);
   const [variants, setVariants] = useState<CampaignVariant[]>([]);
@@ -51,18 +65,49 @@ export default function CampaignsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const selectedVariant = variants[selectedIndex] || null;
+  const inboxWhatsappRecipients = useMemo(
+    () => [...new Set(conversations.map(phoneFromConversation).filter(Boolean))],
+    [conversations]
+  );
   const whatsappRecipients = useMemo(
-    () => whatsappRecipientsText
-      .split(/[\n,;]/)
-      .map((item) => item.trim())
-      .filter(Boolean),
-    [whatsappRecipientsText]
+    () => {
+      const manual = whatsappRecipientsText
+        .split(/[\n,;]/)
+        .map(normalizeCampaignPhone)
+        .filter(Boolean);
+      return [...new Set([
+        ...(useInboxWhatsappRecipients ? inboxWhatsappRecipients : []),
+        ...manual
+      ])];
+    },
+    [inboxWhatsappRecipients, useInboxWhatsappRecipients, whatsappRecipientsText]
   );
 
   const previewCaption = useMemo(() => {
     if (!selectedVariant) return caption;
     return `${caption || selectedVariant.caption || selectedVariant.text || ""}${selectedVariant.hashtags ? `\n\n${selectedVariant.hashtags}` : ""}`;
   }, [caption, selectedVariant]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadWhatsappRecipients() {
+      try {
+        setRecipientsLoading(true);
+        const data = await getConversations();
+        if (active) setConversations(data || []);
+      } catch {
+        if (active) setConversations([]);
+      } finally {
+        if (active) setRecipientsLoading(false);
+      }
+    }
+
+    loadWhatsappRecipients();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   function buildPayload() {
     return {
@@ -339,15 +384,28 @@ export default function CampaignsPage() {
                   })}
                 </div>
                 {platforms.includes("whatsapp") ? (
-                  <label className="campaign-whatsapp-recipients">
+                  <div className="campaign-whatsapp-recipients">
                     <span>Destinatarios WhatsApp</span>
+                    <label className="campaign-inline-check campaign-recipient-toggle">
+                      <input
+                        type="checkbox"
+                        checked={useInboxWhatsappRecipients}
+                        onChange={(e) => setUseInboxWhatsappRecipients(e.target.checked)}
+                      />
+                      <span>Usar numeros detectados desde el inbox WhatsApp</span>
+                    </label>
+                    <small>
+                      {recipientsLoading
+                        ? "Buscando numeros en conversaciones..."
+                        : `${inboxWhatsappRecipients.length} numeros detectados desde chats WhatsApp.`}
+                    </small>
                     <textarea
                       value={whatsappRecipientsText}
                       onChange={(e) => setWhatsappRecipientsText(e.target.value)}
-                      placeholder="Ingresa telefonos separados por coma o salto de linea. Ej: 56912345678"
+                      placeholder="Agrega numeros extra separados por coma o salto de linea. Ej: 56912345678"
                     />
                     <small>{whatsappRecipients.length ? `${whatsappRecipients.length} destinatarios listos para enviar.` : "Si lo dejas vacio, WhatsApp quedara preparado sin enviar."}</small>
-                  </label>
+                  </div>
                 ) : null}
               </div>
 

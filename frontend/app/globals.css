@@ -6444,6 +6444,14 @@ body {
   color: var(--text-muted);
 }
 
+.campaign-recipient-toggle {
+  width: fit-content;
+  padding: 9px 12px;
+  border: 1px solid rgba(168, 85, 247, 0.32);
+  border-radius: 12px;
+  background: rgba(168, 85, 247, 0.1);
+}
+
 .platform-btn {
   min-height: 72px;
   text-align: left;
