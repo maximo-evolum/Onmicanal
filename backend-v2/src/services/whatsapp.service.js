@@ -47,6 +47,12 @@ export async function sendWhatsAppText({ to, message, phoneNumberId, accessToken
       status: response.status,
       data
     });
+    traceStep(trace, "WHATSAPP_SEND_ACCEPTED", {
+      to,
+      contactWaIds: Array.isArray(data?.contacts) ? data.contacts.map((contact) => contact.wa_id || contact.input || null).filter(Boolean) : [],
+      messageIds: Array.isArray(data?.messages) ? data.messages.map((message) => message.id || null).filter(Boolean) : [],
+      messageStatuses: Array.isArray(data?.messages) ? data.messages.map((message) => message.message_status || null).filter(Boolean) : []
+    });
 
     return data;
   } catch (error) {

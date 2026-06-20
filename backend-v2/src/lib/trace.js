@@ -42,6 +42,7 @@ export function summarizeMetaPayload(body = {}) {
   const value = change?.value || {};
   const metadata = value?.metadata || {};
   const message = value?.messages?.[0] || null;
+  const status = value?.statuses?.[0] || null;
   const contact = value?.contacts?.[0] || null;
   const messaging = entry?.messaging?.[0] || null;
 
@@ -55,6 +56,12 @@ export function summarizeMetaPayload(body = {}) {
       id: message.id || null,
       type: message.type || null,
       text: message.text?.body || null
+    } : null,
+    whatsappStatus: status ? {
+      id: status.id || null,
+      recipientId: status.recipient_id || null,
+      status: status.status || null,
+      errors: status.errors || null
     } : null,
     contact: contact ? {
       waId: contact.wa_id || null,

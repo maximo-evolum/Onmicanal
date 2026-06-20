@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { env } from "../lib/env.js";
 import { normalizeMetaWebhook } from "../adapters/channel.adapter.js";
+import { parseWhatsAppStatuses } from "../adapters/whatsapp.adapter.js";
 import { getOrCreateContact, getOrCreateOpenConversation, updateContactProfile } from "../services/conversation.service.js";
 import { persistInboundMessage, processIncomingText } from "../services/message.service.js";
 import { resolveTenantFromMetaWebhook } from "../services/meta-tenant.service.js";
@@ -41,6 +42,20 @@ metaRouter.post("/webhook", async (req, res) => {
     traceStep(trace, "1_WEBHOOK_RECEIVED", summarizeMetaPayload(req.body));
     traceStep(trace, "1B_META_RAW_PAYLOAD", req.body);
 
+    const whatsappStatuses = parseWhatsAppStatuses(req.body);
+    if (whatsappStatuses.length) {
+      traceStep(trace, "1C_WHATSAPP_DELIVERY_STATUSES", whatsappStatuses.map((status) => ({
+        channelAccountId: status.channelAccountId,
+        externalMessageId: status.externalMessageId,
+        recipientId: status.recipientId,
+        status: status.status,
+        conversationId: status.conversationId,
+        conversationOrigin: status.conversationOrigin,
+        pricingCategory: status.pricingCategory,
+        errors: status.errors
+      })));
+    }
+
     const incoming = normalizeMetaWebhook(req.body);
     traceStep(trace, "2_NORMALIZED_INCOMING", incoming ? {
       channel: incoming.channel,
@@ -53,7 +68,7 @@ metaRouter.post("/webhook", async (req, res) => {
     } : null);
 
     if (!incoming) {
-      traceStep(trace, "2_STOP_NO_INCOMING_MESSAGE");
+      traceStep(trace, whatsappStatuses.length ? "2_STOP_STATUS_EVENT_ONLY" : "2_STOP_NO_INCOMING_MESSAGE");
       return;
     }
 
