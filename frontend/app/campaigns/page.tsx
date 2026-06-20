@@ -48,6 +48,7 @@ export default function CampaignsPage() {
   const [useInboxWhatsappRecipients, setUseInboxWhatsappRecipients] = useState(true);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [recipientsLoading, setRecipientsLoading] = useState(false);
+  const [recipientImportMessage, setRecipientImportMessage] = useState<string | null>(null);
   const [variantCount, setVariantCount] = useState<number>(2);
   const [quickMode, setQuickMode] = useState<boolean>(false);
   const [variants, setVariants] = useState<CampaignVariant[]>([]);
@@ -108,6 +109,35 @@ export default function CampaignsPage() {
       active = false;
     };
   }, []);
+
+  async function importWhatsappRecipientsFromInbox() {
+    try {
+      setRecipientsLoading(true);
+      setRecipientImportMessage(null);
+      const data = await getConversations();
+      const nextConversations = data || [];
+      setConversations(nextConversations);
+
+      const detected = [...new Set(nextConversations.map(phoneFromConversation).filter(Boolean))];
+      if (!detected.length) {
+        setRecipientImportMessage("No se encontraron numeros WhatsApp en el inbox.");
+        return;
+      }
+
+      const current = whatsappRecipientsText
+        .split(/[\n,;]/)
+        .map(normalizeCampaignPhone)
+        .filter(Boolean);
+      const merged = [...new Set([...current, ...detected])];
+      setWhatsappRecipientsText(merged.join("\n"));
+      setUseInboxWhatsappRecipients(false);
+      setRecipientImportMessage(`${detected.length} numeros importados desde el inbox.`);
+    } catch {
+      setRecipientImportMessage("No se pudieron importar los numeros del inbox.");
+    } finally {
+      setRecipientsLoading(false);
+    }
+  }
 
   function buildPayload() {
     return {
@@ -386,6 +416,14 @@ export default function CampaignsPage() {
                 {platforms.includes("whatsapp") ? (
                   <div className="campaign-whatsapp-recipients">
                     <span>Destinatarios WhatsApp</span>
+                    <button
+                      type="button"
+                      className="campaign-import-recipients"
+                      onClick={importWhatsappRecipientsFromInbox}
+                      disabled={recipientsLoading}
+                    >
+                      {recipientsLoading ? "Importando..." : "Importar numeros del inbox"}
+                    </button>
                     <label className="campaign-inline-check campaign-recipient-toggle">
                       <input
                         type="checkbox"
@@ -399,6 +437,7 @@ export default function CampaignsPage() {
                         ? "Buscando numeros en conversaciones..."
                         : `${inboxWhatsappRecipients.length} numeros detectados desde chats WhatsApp.`}
                     </small>
+                    {recipientImportMessage ? <small>{recipientImportMessage}</small> : null}
                     <textarea
                       value={whatsappRecipientsText}
                       onChange={(e) => setWhatsappRecipientsText(e.target.value)}
