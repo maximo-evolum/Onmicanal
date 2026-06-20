@@ -13,6 +13,7 @@ import {
   type CrmOperationalDashboard
 } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
 
 type LoadState = {
@@ -22,6 +23,7 @@ type LoadState = {
   crm: CrmOperationalDashboard | null;
   campaigns: Campaign[];
   modules: string[];
+  modulesLoaded: boolean;
   plan: AccountLevel;
   tenant: TenantSession | null;
   error: string | null;
@@ -47,6 +49,7 @@ type NavItem = {
   label: string;
   href: string;
   description: string;
+  moduleKey?: ModuleAccessKey;
 };
 
 type SearchResult = NavItem & {
@@ -54,22 +57,22 @@ type SearchResult = NavItem & {
 };
 
 const navItems: NavItem[] = [
-  { label: "Inicio", href: "/crm-principal", description: "Centro principal de EVOLUM" },
+  { label: "Inicio", href: "/crm-principal", description: "Centro principal de EVOLUM", moduleKey: "crm" },
   { label: "Oficina de Agentes", href: "#agents", description: "Agentes AI activos y futuros" },
-  { label: "Inbox Omnicanal", href: "/inbox", description: "Conversaciones y atencion IA" },
-  { label: "Agenda", href: "/agenda", description: "Reservas, citas y disponibilidad" },
-  { label: "Pipeline", href: "/pipeline", description: "Leads, clientes y oportunidades" },
-  { label: "Campañas", href: "/campaigns", description: "Marketing IA y publicaciones" },
-  { label: "Pagos", href: "/payments", description: "Cobros, estados y links" },
-  { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA" },
-  { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites" },
-  { label: "Dashboard", href: "/dashboard", description: "Metricas operativas" },
-  { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA" }
+  { label: "Inbox Omnicanal", href: "/inbox", description: "Conversaciones y atencion IA", moduleKey: "inbox" },
+  { label: "Agenda", href: "/agenda", description: "Reservas, citas y disponibilidad", moduleKey: "agenda" },
+  { label: "Pipeline", href: "/pipeline", description: "Leads, clientes y oportunidades", moduleKey: "pipeline" },
+  { label: "Campañas", href: "/campaigns", description: "Marketing IA y publicaciones", moduleKey: "campaigns" },
+  { label: "Pagos", href: "/payments", description: "Cobros, estados y links", moduleKey: "payments" },
+  { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA", moduleKey: "onboarding" },
+  { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites", moduleKey: "saas" },
+  { label: "Dashboard", href: "/dashboard", description: "Metricas operativas", moduleKey: "dashboard" },
+  { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA", moduleKey: "ai_ops" }
 ];
 
 const developerOnlyItems: NavItem[] = [
-  { label: "Desarrollador", href: "/admin", description: "Clientes, planes, modulos y permisos" },
-  { label: "Bot Lab", href: "/dev/bot-lab", description: "Pruebas de respuestas y reglas" }
+  { label: "Desarrollador", href: "/admin", description: "Clientes, planes, modulos y permisos", moduleKey: "admin" },
+  { label: "Bot Lab", href: "/dev/bot-lab", description: "Pruebas de respuestas y reglas", moduleKey: "bot_lab" }
 ];
 
 const planOrder: AccountLevel[] = ["STARTER", "PRO", "BUSINESS", "ENTERPRISE"];
@@ -227,6 +230,7 @@ export default function CrmPrincipalPage() {
     crm: null,
     campaigns: [],
     modules: [],
+    modulesLoaded: false,
     plan: "STARTER",
     tenant: null,
     error: null
@@ -234,7 +238,10 @@ export default function CrmPrincipalPage() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const isDeveloper = state.session?.role === "SUPER_ADMIN";
-  const visibleNav = isDeveloper ? [...navItems, ...developerOnlyItems] : navItems;
+  const visibleNav = (isDeveloper ? [...navItems, ...developerOnlyItems] : navItems).filter((item) => {
+    if (!item.moduleKey || !state.modulesLoaded) return true;
+    return moduleAllowed(item.moduleKey, state.modules, state.session?.role);
+  });
 
   async function load() {
     const session = getStoredSession();
@@ -255,6 +262,7 @@ export default function CrmPrincipalPage() {
       crm: crm.status === "fulfilled" ? crm.value : null,
       campaigns: campaigns.status === "fulfilled" ? campaigns.value : [],
       modules: modules.status === "fulfilled" ? modules.value.modules || [] : [],
+      modulesLoaded: true,
       plan: modules.status === "fulfilled" ? accountLevelFromPlan(modules.value.plan) : accountLevelFromPlan(me.status === "fulfilled" ? me.value.tenant?.plan : null),
       tenant: me.status === "fulfilled" ? me.value.tenant : null,
       error: [me, conversations, leadMetrics, crm, campaigns, modules].some((item) => item.status === "rejected")
@@ -323,12 +331,15 @@ export default function CrmPrincipalPage() {
   ];
 
   const modules = [
-    { title: "Inbox Omnicanal", text: "Conversaciones unificadas por empresa, canal y prioridad.", value: String(openConversations), href: "/inbox" },
+    { title: "Inbox Omnicanal", text: "Conversaciones unificadas por empresa, canal y prioridad.", value: String(openConversations), href: "/inbox", moduleKey: "inbox" as ModuleAccessKey },
     { title: "Agentes AI", text: "Catalogo gobernado por plan, rubro y modulo activo.", value: String(agentCount), href: "#agents" },
-    { title: "CRM Universal", text: "Leads, clientes, oportunidades, tareas y actividad comercial.", value: String(totalLeads), href: "/pipeline" },
-    { title: "Agenda", text: "Reservas, citas, sucursales y direcciones conectadas al inbox.", value: String(state.crm?.kpis?.bookingsConfirmed ?? 0), href: "/agenda" },
-    { title: "Realty", text: "Primer vertical para integrar AI Corretaje como modulo inmobiliario.", value: isDeveloper ? "Roadmap" : "Proximo", href: "/pipeline" }
-  ];
+    { title: "CRM Universal", text: "Leads, clientes, oportunidades, tareas y actividad comercial.", value: String(totalLeads), href: "/pipeline", moduleKey: "pipeline" as ModuleAccessKey },
+    { title: "Agenda", text: "Reservas, citas, sucursales y direcciones conectadas al inbox.", value: String(state.crm?.kpis?.bookingsConfirmed ?? 0), href: "/agenda", moduleKey: "agenda" as ModuleAccessKey },
+    { title: "Realty", text: "Primer vertical para integrar AI Corretaje como modulo inmobiliario.", value: isDeveloper ? "Roadmap" : "Proximo", href: "/pipeline", moduleKey: "pipeline" as ModuleAccessKey }
+  ].filter((item) => {
+    if (!item.moduleKey || !state.modulesLoaded) return true;
+    return moduleAllowed(item.moduleKey, state.modules, state.session?.role);
+  });
   const homeAccessItems = visibleNav.filter((item) => !item.href.startsWith("#"));
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const searchIndex: SearchResult[] = [

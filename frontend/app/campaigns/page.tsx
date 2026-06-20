@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleGate } from "@/components/module-gate";
 import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 
@@ -240,6 +241,7 @@ export default function CampaignsPage() {
   }
 
   return (
+    <ModuleGate moduleKey="campaigns">
     <div className={`module-with-menu-shell campaign-page ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
         active="Campañas"
@@ -502,5 +504,6 @@ export default function CampaignsPage() {
         </section>
       </main>
     </div>
+    </ModuleGate>
   );
 }

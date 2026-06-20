@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleGate } from "@/components/module-gate";
 import {
   applyOnboardingExtraction,
   getOnboardingKnowledge,
@@ -251,6 +252,7 @@ export default function OnboardingPage() {
   }
 
   return (
+    <ModuleGate moduleKey="onboarding">
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
         active="Configuracion de Agente"
@@ -479,5 +481,6 @@ export default function OnboardingPage() {
       )}
     </main>
     </div>
+    </ModuleGate>
   );
 }

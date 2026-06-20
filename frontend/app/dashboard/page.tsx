@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleGate } from "@/components/module-gate";
 import { getCrmOperationalDashboard, getLeadMetrics, type CrmOperationalDashboard } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import type { LeadMetrics } from "@/lib/types";
@@ -80,6 +81,7 @@ export default function DashboardPage() {
   const portalEnd = Math.round(((sources[0].value + sources[1].value) / sourceTotal) * 100);
 
   return (
+    <ModuleGate moduleKey="dashboard">
     <div className={`executive-shell analytics-evolum-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
         active="Dashboard"
@@ -182,5 +184,6 @@ export default function DashboardPage() {
         </section>
       </main>
     </div>
+    </ModuleGate>
   );
 }

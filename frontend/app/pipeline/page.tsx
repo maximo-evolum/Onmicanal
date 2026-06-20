@@ -5,6 +5,7 @@ import { getLeads, updateLeadApi } from "@/lib/api";
 import { Lead } from "@/lib/types";
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleGate } from "@/components/module-gate";
 
 const columns = [
   { id: "NEW", label: "Prospeccion", tone: "prospect" },
@@ -101,6 +102,7 @@ export default function PipelinePage() {
   }
 
   return (
+    <ModuleGate moduleKey="pipeline">
     <div className={`pipeline-pro-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
         active="Pipeline"
@@ -221,5 +223,6 @@ export default function PipelinePage() {
         </div>
       </main>
     </div>
+    </ModuleGate>
   );
 }

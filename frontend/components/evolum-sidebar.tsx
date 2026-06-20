@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { getMyModules } from "@/lib/api";
 import { LogoutButton } from "@/lib/auth";
+import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 
 type EvolumSidebarProps = {
   active: string;
@@ -10,26 +13,57 @@ type EvolumSidebarProps = {
   isDeveloper?: boolean;
 };
 
-const baseItems = [
-  ["Inicio", "/crm-principal", "Centro principal de EVOLUM", "IN"],
-  ["Inbox Omnicanal", "/inbox", "Conversaciones y atencion IA", "IO"],
-  ["Agenda", "/agenda", "Reservas, citas y disponibilidad", "AG"],
-  ["Pipeline", "/pipeline", "Leads, clientes y oportunidades", "PI"],
-  ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA"],
-  ["Pagos", "/payments", "Cobros, estados y links", "PA"],
-  ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG"],
-  ["Planes y modulos", "/saas", "Plan, modulos, usuarios y limites", "PM"],
-  ["Dashboard", "/dashboard", "Metricas operativas", "DA"],
-  ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI"],
-] as const;
+type SidebarItem = readonly [
+  label: string,
+  href: string,
+  description: string,
+  icon: string,
+  moduleKey: ModuleAccessKey,
+];
 
-const developerItems = [
-  ["Desarrollador", "/admin", "Clientes, planes, modulos y permisos", "DE"],
-  ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL"],
-] as const;
+const baseItems: SidebarItem[] = [
+  ["Inicio", "/crm-principal", "Centro principal de EVOLUM", "IN", "crm"],
+  ["Inbox Omnicanal", "/inbox", "Conversaciones y atencion IA", "IO", "inbox"],
+  ["Agenda", "/agenda", "Reservas, citas y disponibilidad", "AG", "agenda"],
+  ["Pipeline", "/pipeline", "Leads, clientes y oportunidades", "PI", "pipeline"],
+  ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA", "campaigns"],
+  ["Pagos", "/payments", "Cobros, estados y links", "PA", "payments"],
+  ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG", "onboarding"],
+  ["Planes y modulos", "/saas", "Plan, modulos, usuarios y limites", "PM", "saas"],
+  ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],
+  ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI", "ai_ops"],
+];
+
+const developerItems: SidebarItem[] = [
+  ["Desarrollador", "/admin", "Clientes, planes, modulos y permisos", "DE", "admin"],
+  ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL", "bot_lab"],
+];
 
 export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
-  const items = isDeveloper ? [...baseItems, ...developerItems] : baseItems;
+  const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getMyModules()
+      .then((data) => {
+        if (mounted) setEnabledModules(data.modules || []);
+      })
+      .catch(() => {
+        if (mounted) setEnabledModules([]);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const items = useMemo(() => {
+    const allItems = isDeveloper ? [...baseItems, ...developerItems] : baseItems;
+    if (enabledModules === null) return allItems;
+    return allItems.filter(([, , , , moduleKey]) =>
+      moduleAllowed(moduleKey, enabledModules, isDeveloper ? "SUPER_ADMIN" : undefined),
+    );
+  }, [enabledModules, isDeveloper]);
 
   return (
     <aside className="inbox-unified-nav evolum-unified-nav">
@@ -39,7 +73,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
           <strong>EVOLUM</strong>
         </div>
         <button className="inbox-nav-toggle" type="button" onClick={onToggle} aria-label={isOpen ? "Cerrar menu" : "Abrir menu"}>
-          {isOpen ? "‹" : "›"}
+          {isOpen ? "<" : ">"}
         </button>
       </div>
 

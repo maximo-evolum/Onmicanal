@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { cancelPayment, confirmPayment, createPayment, getPaymentMetrics, getPayments, Payment, PaymentMetrics } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleGate } from "@/components/module-gate";
 
 function money(value = 0, currency = "CLP") {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value || 0);
@@ -96,6 +97,7 @@ export default function PaymentsPage() {
   const pending = useMemo(() => payments.filter((p) => p.status === "PENDING"), [payments]);
 
   return (
+    <ModuleGate moduleKey="payments">
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
         active="Pagos"
@@ -195,6 +197,7 @@ export default function PaymentsPage() {
         </section>
       </main>
     </div>
+    </ModuleGate>
   );
 }
 

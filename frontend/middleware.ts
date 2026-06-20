@@ -35,5 +35,26 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/admin/:path*", "/crm-principal/:path*", "/crm-concepts/:path*", "/agenda/:path*", "/inbox", "/dashboard/:path*", "/pipeline/:path*", "/campaigns/:path*", "/dev/:path*", "/onboarding/:path*", "/login", "/register"]
+  matcher: [
+    "/",
+    "/admin/:path*",
+    "/crm-principal/:path*",
+    "/crm-concepts/:path*",
+    "/agenda/:path*",
+    "/ai-ops/:path*",
+    "/campaigns/:path*",
+    "/dashboard/:path*",
+    "/dev/:path*",
+    "/inbox/:path*",
+    "/onboarding/:path*",
+    "/payments/:path*",
+    "/pipeline/:path*",
+    "/saas/:path*",
+    "/saas-analytics/:path*",
+    "/sales-queue/:path*",
+    "/settings/:path*",
+    "/team/:path*",
+    "/login",
+    "/register",
+  ]
 };

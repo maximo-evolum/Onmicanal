@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleGate } from "@/components/module-gate";
 import { createBookingApi, getBookingSlots, getBookings, getMe, markBookingPaymentReady, updateBookingApi } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import type { AgentSession, Booking, BookingSlot, TenantSession } from "@/lib/types";
@@ -386,6 +387,7 @@ export default function AgendaPage() {
   }
 
   return (
+    <ModuleGate moduleKey="agenda">
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
         active="Agenda"
@@ -583,6 +585,7 @@ export default function AgendaPage() {
         </section>
       </main>
     </div>
+    </ModuleGate>
   );
 }
 

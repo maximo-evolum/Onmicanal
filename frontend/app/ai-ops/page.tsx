@@ -6,6 +6,7 @@ import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, getAiBadgeClass, getConversationState, isReadyToClose, riskLabel } from "@/lib/ai-ops";
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleGate } from "@/components/module-gate";
 
 function openInbox(conversationId: string) {
   window.location.href = `/inbox?conversation=${conversationId}`;
@@ -61,6 +62,7 @@ export default function AiOpsPage() {
   const avg = enriched.length ? Math.round(enriched.reduce((sum, item) => sum + item.profile.score, 0) / enriched.length) : 0;
 
   return (
+    <ModuleGate moduleKey="ai_ops">
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
         active="AI Ops / Cierres IA"
@@ -151,5 +153,6 @@ export default function AiOpsPage() {
         ) : null}
       </main>
     </div>
+    </ModuleGate>
   );
 }
