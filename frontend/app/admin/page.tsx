@@ -83,6 +83,7 @@ const emptyClient = {
   verifyToken: "",
   instagramBusinessAccountId: "",
   instagramPageId: "",
+  facebookPageId: "",
 };
 
 const emptyUser = {
@@ -109,6 +110,15 @@ const emptyInstagramConfig = {
   accessToken: "",
   verifyToken: "",
   pageId: "",
+  isActive: true,
+};
+
+const emptyFacebookConfig = {
+  label: "Facebook principal",
+  pageId: "",
+  businessAccountId: "",
+  accessToken: "",
+  verifyToken: "",
   isActive: true,
 };
 
@@ -197,6 +207,7 @@ export default function AdminPage() {
   const [userForm, setUserForm] = useState(emptyUser);
   const [whatsappForm, setWhatsappForm] = useState(emptyWhatsAppConfig);
   const [instagramForm, setInstagramForm] = useState(emptyInstagramConfig);
+  const [facebookForm, setFacebookForm] = useState(emptyFacebookConfig);
   const [aiForm, setAiForm] = useState(emptyAiProfile);
   const [billingForm, setBillingForm] = useState(emptyBillingForm);
   const [importManual, setImportManual] = useState(emptyImportManual);
@@ -241,6 +252,7 @@ export default function AdminPage() {
 
     const whatsapp = selectedTenant.channelConfigs?.find((item) => item.channel === "whatsapp");
     const instagram = selectedTenant.channelConfigs?.find((item) => item.channel === "instagram");
+    const facebook = selectedTenant.channelConfigs?.find((item) => item.channel === "facebook");
     const profile = selectedTenant.aiProfiles?.find((item) => item.code === "default") || selectedTenant.aiProfiles?.[0];
     const subscription = activeSubscriptionOf(selectedTenant);
     const metadata = subscriptionMetadata(selectedTenant);
@@ -278,6 +290,19 @@ export default function AdminPage() {
       verifyToken: instagram?.verifyToken || "",
       pageId: typeof instagram?.metadata === "object" && instagram?.metadata ? String((instagram.metadata as Record<string, unknown>).pageId || "") : "",
       isActive: instagram?.isActive ?? true,
+    });
+
+    const facebookMetadata = typeof facebook?.metadata === "object" && facebook?.metadata
+      ? facebook.metadata as Record<string, unknown>
+      : {};
+
+    setFacebookForm({
+      label: facebook?.label || "Facebook principal",
+      pageId: facebook?.externalAccountId || facebook?.businessAccountId || String(facebookMetadata.pageId || ""),
+      businessAccountId: facebook?.businessAccountId || "",
+      accessToken: facebook?.accessToken || "",
+      verifyToken: facebook?.verifyToken || "",
+      isActive: facebook?.isActive ?? true,
     });
 
     setAiForm({
@@ -409,7 +434,7 @@ export default function AdminPage() {
     }
   }
 
-  async function handleSaveChannel(channel: "whatsapp" | "instagram") {
+  async function handleSaveChannel(channel: "whatsapp" | "instagram" | "facebook") {
     if (!selectedTenant) return;
     try {
       setSavingId(`channel-${channel}`);
@@ -425,25 +450,34 @@ export default function AdminPage() {
             verifyToken: whatsappForm.verifyToken,
             isActive: whatsappForm.isActive,
           }
-        : {
-            label: instagramForm.label,
-            externalAccountId: instagramForm.externalAccountId,
-            businessAccountId: instagramForm.businessAccountId,
-            accessToken: instagramForm.accessToken,
-            verifyToken: instagramForm.verifyToken,
-            metadata: { pageId: instagramForm.pageId },
-            isActive: instagramForm.isActive,
-          };
+        : channel === "instagram"
+          ? {
+              label: instagramForm.label,
+              externalAccountId: instagramForm.externalAccountId,
+              businessAccountId: instagramForm.businessAccountId,
+              accessToken: instagramForm.accessToken,
+              verifyToken: instagramForm.verifyToken,
+              metadata: { pageId: instagramForm.pageId },
+              isActive: instagramForm.isActive,
+            }
+          : {
+              label: facebookForm.label,
+              externalAccountId: facebookForm.pageId,
+              businessAccountId: facebookForm.businessAccountId,
+              accessToken: facebookForm.accessToken,
+              verifyToken: facebookForm.verifyToken,
+              metadata: { pageId: facebookForm.pageId },
+              isActive: facebookForm.isActive,
+            };
       const updated = await updateAdminTenantChannelConfig(selectedTenant.id, channel, payload);
       updateTenantLocal(updated);
-      setSuccess(`Configuración ${channel === "whatsapp" ? "WhatsApp" : "Instagram"} guardada.`);
+      setSuccess(`Configuracion ${channel === "whatsapp" ? "WhatsApp" : channel === "instagram" ? "Instagram" : "Facebook"} guardada.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el canal");
     } finally {
       setSavingId(null);
     }
   }
-
   async function handleSaveAiProfile() {
     if (!selectedTenant) return;
     try {
@@ -698,7 +732,8 @@ export default function AdminPage() {
               </div>
               <div className="admin-form-row">
                 <input value={clientForm.instagramBusinessAccountId} onChange={(e) => setClientForm({ ...clientForm, instagramBusinessAccountId: e.target.value })} placeholder="Instagram Business Account ID" />
-                <input value={clientForm.instagramPageId} onChange={(e) => setClientForm({ ...clientForm, instagramPageId: e.target.value })} placeholder="Facebook Page ID / Instagram Page ID" />
+                <input value={clientForm.instagramPageId} onChange={(e) => setClientForm({ ...clientForm, instagramPageId: e.target.value })} placeholder="Instagram Page ID opcional" />
+                <input value={clientForm.facebookPageId} onChange={(e) => setClientForm({ ...clientForm, facebookPageId: e.target.value })} placeholder="Facebook Page ID" />
               </div>
               <div className="admin-form-row">
                 <input value={clientForm.metaAccessToken} onChange={(e) => setClientForm({ ...clientForm, metaAccessToken: e.target.value })} placeholder="Meta Access Token opcional" />
@@ -813,7 +848,7 @@ export default function AdminPage() {
                 <div className="admin-module-section">
                   <div className="admin-panel-header slim">
                     <div>
-                      <strong>Meta, WhatsApp e Instagram</strong>
+                      <strong>Meta, WhatsApp, Instagram y Facebook</strong>
                       <div className="meta-line">Guarda los identificadores y tokens por cliente. Estos datos quedan asociados al tenant seleccionado.</div>
                     </div>
                   </div>
@@ -876,6 +911,32 @@ export default function AdminPage() {
                   </div>
                   <button className="primary-btn" type="button" onClick={() => handleSaveChannel("instagram")} disabled={savingId === "channel-instagram"}>
                     {savingId === "channel-instagram" ? "Guardando Instagram..." : "Guardar Instagram"}
+                  </button>
+
+                  <div className="admin-detail-grid" style={{ marginTop: 18 }}>
+                    <label>
+                      <span className="meta-line">Facebook label</span>
+                      <input value={facebookForm.label} onChange={(e) => setFacebookForm({ ...facebookForm, label: e.target.value })} />
+                    </label>
+                    <label>
+                      <span className="meta-line">Facebook Page ID</span>
+                      <input value={facebookForm.pageId} onChange={(e) => setFacebookForm({ ...facebookForm, pageId: e.target.value })} placeholder="Page ID para publicar posts" />
+                    </label>
+                    <label>
+                      <span className="meta-line">Facebook / Meta Business Account ID</span>
+                      <input value={facebookForm.businessAccountId} onChange={(e) => setFacebookForm({ ...facebookForm, businessAccountId: e.target.value })} placeholder="Business Manager ID opcional" />
+                    </label>
+                    <label>
+                      <span className="meta-line">Facebook Verify Token</span>
+                      <input value={facebookForm.verifyToken} onChange={(e) => setFacebookForm({ ...facebookForm, verifyToken: e.target.value })} placeholder="Token de verificacion webhook" />
+                    </label>
+                    <label style={{ gridColumn: "1 / -1" }}>
+                      <span className="meta-line">Meta Access Token para Facebook</span>
+                      <input value={facebookForm.accessToken} onChange={(e) => setFacebookForm({ ...facebookForm, accessToken: e.target.value })} placeholder="Token de Meta con permisos de pagina" />
+                    </label>
+                  </div>
+                  <button className="primary-btn" type="button" onClick={() => handleSaveChannel("facebook")} disabled={savingId === "channel-facebook"}>
+                    {savingId === "channel-facebook" ? "Guardando Facebook..." : "Guardar Facebook"}
                   </button>
                 </div>
 

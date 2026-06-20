@@ -33,6 +33,7 @@ export default function CampaignsPage() {
   const [caption, setCaption] = useState("");
   const [cta, setCta] = useState("");
   const [platforms, setPlatforms] = useState<CampaignPlatform[]>(["instagram"]);
+  const [whatsappRecipientsText, setWhatsappRecipientsText] = useState("");
   const [variantCount, setVariantCount] = useState<number>(2);
   const [quickMode, setQuickMode] = useState<boolean>(false);
   const [variants, setVariants] = useState<CampaignVariant[]>([]);
@@ -50,6 +51,13 @@ export default function CampaignsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const selectedVariant = variants[selectedIndex] || null;
+  const whatsappRecipients = useMemo(
+    () => whatsappRecipientsText
+      .split(/[\n,;]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+    [whatsappRecipientsText]
+  );
 
   const previewCaption = useMemo(() => {
     if (!selectedVariant) return caption;
@@ -223,6 +231,7 @@ export default function CampaignsPage() {
         caption: caption || selectedVariant.caption,
         cta,
         platforms,
+        whatsappRecipients,
         selectedVariant: {
           ...selectedVariant,
           title: visualTitle || selectedVariant.title,
@@ -329,6 +338,17 @@ export default function CampaignsPage() {
                     );
                   })}
                 </div>
+                {platforms.includes("whatsapp") ? (
+                  <label className="campaign-whatsapp-recipients">
+                    <span>Destinatarios WhatsApp</span>
+                    <textarea
+                      value={whatsappRecipientsText}
+                      onChange={(e) => setWhatsappRecipientsText(e.target.value)}
+                      placeholder="Ingresa telefonos separados por coma o salto de linea. Ej: 56912345678"
+                    />
+                    <small>{whatsappRecipients.length ? `${whatsappRecipients.length} destinatarios listos para enviar.` : "Si lo dejas vacio, WhatsApp quedara preparado sin enviar."}</small>
+                  </label>
+                ) : null}
               </div>
 
               <div className="campaign-optimization-panel campaign-full">

@@ -6429,6 +6429,21 @@ body {
   gap: 10px;
 }
 
+.campaign-whatsapp-recipients {
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.campaign-whatsapp-recipients textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.campaign-whatsapp-recipients small {
+  color: var(--text-muted);
+}
+
 .platform-btn {
   min-height: 72px;
   text-align: left;
@@ -6502,6 +6517,10 @@ body {
 
 .publish-result.ready {
   border-color: rgba(167, 139, 250, 0.35);
+}
+
+.publish-result.partial {
+  border-color: rgba(245, 158, 11, 0.45);
 }
 
 .publish-result small {

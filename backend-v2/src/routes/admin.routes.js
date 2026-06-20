@@ -207,7 +207,8 @@ adminRouter.post("/admin/tenants", async (req, res) => {
       metaAppSecret,
       verifyToken,
       instagramBusinessAccountId,
-      instagramPageId
+      instagramPageId,
+      facebookPageId
     } = req.body || {};
 
     const tenantName = cleanText(name);
@@ -298,6 +299,22 @@ adminRouter.post("/admin/tenants", async (req, res) => {
             accessToken: cleanText(metaAccessToken),
             verifyToken: cleanText(verifyToken),
             metadata: { pageId: cleanOptionalUnique(instagramPageId), metaAppSecret: cleanText(metaAppSecret) },
+            isActive: true
+          }
+        });
+      }
+
+      const resolvedFacebookPageId = cleanOptionalUnique(facebookPageId) || cleanOptionalUnique(instagramPageId);
+      if (resolvedFacebookPageId || cleanText(metaAccessToken) || cleanText(verifyToken)) {
+        await tx.tenantChannelConfig.create({
+          data: {
+            tenantId: createdTenant.id,
+            channel: "facebook",
+            label: "Facebook principal",
+            externalAccountId: resolvedFacebookPageId,
+            accessToken: cleanText(metaAccessToken),
+            verifyToken: cleanText(verifyToken),
+            metadata: { pageId: resolvedFacebookPageId, metaAppSecret: cleanText(metaAppSecret) },
             isActive: true
           }
         });
@@ -414,7 +431,7 @@ adminRouter.put("/admin/tenants/:tenantId/channel-configs/:channel", async (req,
   try {
     const { tenantId, channel } = req.params;
     const normalizedChannel = String(channel || "").trim().toLowerCase();
-    if (!["whatsapp", "instagram"].includes(normalizedChannel)) {
+    if (!["whatsapp", "instagram", "facebook"].includes(normalizedChannel)) {
       return res.status(400).json({ error: "Canal no soportado" });
     }
 

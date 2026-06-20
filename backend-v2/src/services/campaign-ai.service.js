@@ -1,4 +1,5 @@
 import { ensurePublicCampaignImage } from "./campaign-assets.service.js";
+import { sendWhatsAppText } from "./whatsapp.service.js";
 
 const OPENAI_URL = "https://api.openai.com/v1";
 
@@ -335,6 +336,15 @@ function isHttpImageUrl(url = "") {
   return /^https?:\/\//i.test(String(url || ""));
 }
 
+function normalizeWhatsappRecipients(recipients = []) {
+  if (!Array.isArray(recipients)) return [];
+  return [...new Set(
+    recipients
+      .map((recipient) => String(recipient || "").replace(/[^\d]/g, ""))
+      .filter((recipient) => recipient.length >= 8)
+  )];
+}
+
 async function publishFacebookPhoto({ pageId, accessToken, imageUrl, caption }) {
   if (!pageId || !accessToken) throw new Error("Facebook Page ID o access token no configurado");
   if (!isHttpImageUrl(imageUrl)) throw new Error("Facebook requiere una URL pública de imagen. Las imágenes base64 deben subirse primero a storage.");
@@ -400,7 +410,8 @@ export async function publishCampaignToPlatforms({ tenant, channelConfigs = [], 
     try {
       if (platform === "facebook") {
         const config = byChannel.facebook || byChannel.instagram || {};
-        const pageId = config.externalAccountId || config.businessAccountId || process.env.FACEBOOK_PAGE_ID;
+        const metadata = config.metadata && typeof config.metadata === "object" ? config.metadata : {};
+        const pageId = config.externalAccountId || config.businessAccountId || metadata.pageId || process.env.FACEBOOK_PAGE_ID;
         const token = config.accessToken || process.env.META_ACCESS_TOKEN;
         const data = await publishFacebookPhoto({ pageId, accessToken: token, imageUrl, caption });
         results.push({ platform, status: "PUBLISHED", data });
@@ -417,24 +428,46 @@ export async function publishCampaignToPlatforms({ tenant, channelConfigs = [], 
       }
 
       if (platform === "whatsapp") {
-        if (!whatsappRecipients.length) {
+        const recipients = normalizeWhatsappRecipients(whatsappRecipients);
+        if (!recipients.length) {
           results.push({
             platform,
             status: "READY",
-            note: "WhatsApp no publica posts públicos. La campaña quedó lista para enviar como mensaje/template a una lista de destinatarios."
+            note: "WhatsApp quedo listo, pero falta agregar destinatarios para enviarlo."
           });
           continue;
         }
 
+        const message = imageUrl && isHttpImageUrl(imageUrl)
+          ? `${caption}\n\nImagen de campana: ${imageUrl}`
+          : caption;
+
+        const sent = [];
+        const failed = [];
+        for (const recipient of recipients) {
+          try {
+            const data = await sendWhatsAppText({
+              to: recipient,
+              message,
+              tenant
+            });
+            sent.push({ to: recipient, data });
+          } catch (error) {
+            failed.push({ to: recipient, error: error.message });
+          }
+        }
+
         results.push({
           platform,
-          status: "READY",
-          note: "Envío masivo de WhatsApp preparado. Se recomienda usar plantillas aprobadas por Meta antes de producción.",
-          recipients: whatsappRecipients.length
+          status: failed.length && sent.length ? "PARTIAL" : failed.length ? "ERROR" : "PUBLISHED",
+          note: failed.length
+            ? `WhatsApp envio ${sent.length} de ${recipients.length} destinatarios.`
+            : `WhatsApp enviado a ${sent.length} destinatarios.`,
+          recipients: recipients.length,
+          data: { sent, failed }
         });
         continue;
       }
-
       results.push({ platform, status: "SKIPPED", note: "Plataforma no soportada todavía" });
     } catch (error) {
       results.push({ platform, status: "ERROR", error: error.message });

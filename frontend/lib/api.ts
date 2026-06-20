@@ -623,7 +623,7 @@ export type TenantAiProfile = {
 export type TenantChannelConfig = {
   id: string;
   tenantId: string;
-  channel: "whatsapp" | "instagram" | string;
+  channel: "whatsapp" | "instagram" | "facebook" | string;
   label?: string | null;
   phoneNumberId?: string | null;
   businessAccountId?: string | null;
@@ -704,6 +704,7 @@ export type CreateAdminTenantInput = {
   ownerPassword?: string;
   whatsappPhoneNumberId?: string;
   instagramBusinessAccountId?: string;
+  facebookPageId?: string;
   metaAccessToken?: string;
   metaAppSecret?: string;
   verifyToken?: string;
@@ -734,7 +735,7 @@ export async function updateAdminTenant(tenantId: string, input: UpdateAdminTena
 
 export async function updateAdminTenantChannelConfig(
   tenantId: string,
-  channel: "whatsapp" | "instagram",
+  channel: "whatsapp" | "instagram" | "facebook",
   input: {
     label?: string;
     phoneNumberId?: string;

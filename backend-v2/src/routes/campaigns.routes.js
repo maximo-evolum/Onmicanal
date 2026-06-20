@@ -416,9 +416,10 @@ campaignsRouter.post("/campaigns/publish", requireRole(ROLE_GROUPS.STAFF), async
       whatsappRecipients
     });
 
-    const hasPublished = results.some((r) => r.status === "PUBLISHED");
+    const hasPublished = results.some((r) => ["PUBLISHED", "PARTIAL"].includes(r.status));
+    const hasPartial = results.some((r) => r.status === "PARTIAL");
     const hasError = results.some((r) => r.status === "ERROR");
-    const status = hasPublished && !hasError ? "PUBLISHED" : hasPublished ? "PARTIAL" : hasError ? "ERROR" : "READY";
+    const status = hasPublished && !hasError && !hasPartial ? "PUBLISHED" : hasPublished || hasPartial ? "PARTIAL" : hasError ? "ERROR" : "READY";
 
     const updated = await prisma.campaign.update({
       where: { id: campaign.id },
