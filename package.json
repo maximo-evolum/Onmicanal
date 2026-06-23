@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "mobile": "npm --prefix mobile run start",
+    "mobile:web": "npm --prefix mobile run web",
+    "mobile:typecheck": "npm --prefix mobile run typecheck"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "next": "^15.3.6"

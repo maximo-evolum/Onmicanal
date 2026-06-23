@@ -1,0 +1,10 @@
+
+> evolum-mobile@0.1.0 web
+> expo start --web --port 8084
+
+Starting project at E:\Onmicanal\mobile
+Starting Metro Bundler
+
+Waiting on http://localhost:8084
+3 packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.

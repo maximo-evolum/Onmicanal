@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "EVOLUM",
+    "slug": "evolum-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "evolum",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.evolum.mobile",
+      "usesCleartextTraffic": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "backgroundColor": "#070711"
+      }
+    },
+    "extra": {
+      "apiBaseUrl": "http://localhost:3000/api"
+    }
+  }
+}
