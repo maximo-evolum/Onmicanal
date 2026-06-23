@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   AdminTenant,
   Booking,
+  Campaign,
   Conversation,
   CrmOperationalDashboard,
   Message,
@@ -128,6 +129,59 @@ export async function resolveConversation(conversationId: string): Promise<Conve
 
 export async function getBookings(): Promise<Booking[]> {
   return request<Booking[]>("/bookings");
+}
+
+export async function createBooking(payload: {
+  conversationId?: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  date: string;
+  guests: number;
+  location?: string;
+  total?: number;
+  notes?: string;
+}): Promise<Booking> {
+  return request<Booking>("/bookings", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getCampaigns(): Promise<Campaign[]> {
+  return request<Campaign[]>("/campaigns");
+}
+
+export async function generateCampaignCopy(payload: {
+  product: string;
+  visualTitle: string;
+  idea: string;
+  caption?: string;
+  cta?: string;
+  platforms: string[];
+}) {
+  return request<any>("/campaigns/generate-copy", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function publishCampaign(payload: {
+  campaignId?: string;
+  product: string;
+  visualTitle: string;
+  idea: string;
+  caption: string;
+  cta: string;
+  platforms: string[];
+  selectedVariant?: any;
+  variants?: any[];
+  whatsappRecipients?: string[];
+}) {
+  return request<any>("/campaigns/publish", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function getPaymentsMetrics(): Promise<PaymentMetrics> {

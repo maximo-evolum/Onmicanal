@@ -4,6 +4,8 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -18,8 +20,11 @@ import {
   API_BASE_URL,
   checkApiHealth,
   clearMobileSession,
+  createBooking,
+  generateCampaignCopy,
   getAdminTenants,
   getBookings,
+  getCampaigns,
   getConversations,
   getCrmOperationalDashboard,
   getMe,
@@ -27,6 +32,7 @@ import {
   getMobileSession,
   getMyModules,
   loginWithEmail,
+  publishCampaign,
   releaseConversation,
   resolveConversation,
   sendManualMessage,
@@ -35,7 +41,7 @@ import {
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
-import { AdminTenant, AgentSession, Booking, Conversation, CrmOperationalDashboard, Message, TenantSession } from "./src/types";
+import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, Message, TenantSession } from "./src/types";
 
 type ScreenKey = "dashboard" | "inbox" | "agenda" | "pipeline" | "campaigns" | "admin";
 
@@ -49,7 +55,7 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "inbox", label: "Inbox", short: "IO", module: "inbox" },
   { key: "agenda", label: "Agenda", short: "AG", module: "bookings" },
   { key: "pipeline", label: "Pipeline", short: "PI", module: "sales" },
-  { key: "campaigns", label: "Campanas", short: "CA", module: "marketing" },
+  { key: "campaigns", label: "Campañas", short: "CA", module: "marketing" },
   { key: "admin", label: "Admin", short: "SA" }
 ];
 
@@ -75,6 +81,21 @@ function dateLabel(value?: string | null) {
   }
 }
 
+function inputDateTime(offsetDays = 1) {
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  date.setHours(19, 30, 0, 0);
+  return date.toISOString().slice(0, 16);
+}
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function sameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
 function initials(value?: string | null) {
   const text = String(value || "EV").trim();
   return text.slice(0, 2).toUpperCase();
@@ -92,8 +113,10 @@ export default function App() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [chatFilter, setChatFilter] = useState<"all" | "whatsapp" | "instagram">("all");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [reply, setReply] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [adminTenants, setAdminTenants] = useState<AdminTenant[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -157,7 +180,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.allSettled([loadModules(), loadDashboard(false), loadConversations(false), loadBookings(false)]);
+    await Promise.allSettled([loadModules(), loadDashboard(false), loadConversations(false), loadBookings(false), loadCampaigns(false)]);
   }
 
   async function loadModules() {
@@ -189,6 +212,13 @@ export default function App() {
     if (showLoading) setRefreshing(true);
     const data = await getBookings().catch(() => []);
     setBookings(data);
+    if (showLoading) setRefreshing(false);
+  }
+
+  async function loadCampaigns(showLoading = true) {
+    if (showLoading) setRefreshing(true);
+    const data = await getCampaigns().catch(() => []);
+    setCampaigns(data);
     if (showLoading) setRefreshing(false);
   }
 
@@ -236,6 +266,7 @@ export default function App() {
     if (screen === "dashboard") return loadDashboard();
     if (screen === "inbox") return loadConversations();
     if (screen === "agenda") return loadBookings();
+    if (screen === "campaigns") return loadCampaigns();
     if (screen === "admin") return loadAdminTenants();
   }
 
@@ -314,8 +345,17 @@ export default function App() {
   return (
     <SafeAreaView style={styles.appShell}>
       <StatusBar style="light" />
-      <SideNav items={visibleNav} active={screen} onChange={(next) => {
+      <SideNav
+        items={visibleNav}
+        active={screen}
+        session={session}
+        profile={profile}
+        open={menuOpen}
+        setOpen={setMenuOpen}
+        onLogout={handleLogout}
+        onChange={(next) => {
         setScreen(next);
+        setMenuOpen(false);
         if (next === "admin") loadAdminTenants();
       }} />
       <View style={styles.contentShell}>
@@ -345,28 +385,80 @@ export default function App() {
             onRefresh={refreshCurrent}
           />
         )}
-        {screen === "agenda" && <AgendaScreen bookings={bookings} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />}
-        {screen === "pipeline" && <PipelineScreen dashboard={dashboard} profile={profile} conversations={conversations} refreshing={refreshing} onRefresh={refreshCurrent} />}
-        {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} />}
+        {screen === "agenda" && <AgendaScreen bookings={bookings} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadBookings(false); await loadDashboard(false); }} />}
+        {screen === "pipeline" && <PipelineScreen dashboard={dashboard} profile={profile} conversations={conversations} refreshing={refreshing} onRefresh={refreshCurrent} onOpenConversation={(conversation) => { setSelectedConversationId(conversation.id); setScreen("inbox"); }} />}
+        {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} campaigns={campaigns} onRefresh={loadCampaigns} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
       </View>
     </SafeAreaView>
   );
 }
 
-function SideNav({ items, active, onChange }: { items: typeof navItems; active: ScreenKey; onChange: (key: ScreenKey) => void }) {
+function SideNav({
+  items,
+  active,
+  session,
+  profile,
+  open,
+  setOpen,
+  onChange,
+  onLogout
+}: {
+  items: typeof navItems;
+  active: ScreenKey;
+  session: SessionState;
+  profile: IndustryProfile;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  onChange: (key: ScreenKey) => void;
+  onLogout: () => void;
+}) {
   return (
-    <View style={styles.sideNav}>
-      <View style={styles.sideLogo}><Text style={styles.sideLogoText}>EV</Text></View>
-      <View style={styles.sideItems}>
-        {items.map((item) => (
-          <Pressable key={item.key} style={[styles.sideItem, active === item.key && styles.sideItemActive]} onPress={() => onChange(item.key)}>
-            <Text style={[styles.sideItemText, active === item.key && styles.sideItemTextActive]}>{item.short}</Text>
-          </Pressable>
-        ))}
+    <>
+      <View style={styles.sideNav}>
+        <TouchableOpacity style={styles.sideLogo} onPress={() => setOpen(true)}>
+          <Text style={styles.sideLogoText}>EV</Text>
+        </TouchableOpacity>
+        <View style={styles.sideItems}>
+          {items.map((item) => (
+            <Pressable key={item.key} style={[styles.sideItem, active === item.key && styles.sideItemActive]} onPress={() => onChange(item.key)}>
+              <Text style={[styles.sideItemText, active === item.key && styles.sideItemTextActive]}>{item.short}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <TouchableOpacity style={styles.sideItem} onPress={() => setOpen(true)}><Text style={styles.sideItemText}>ME</Text></TouchableOpacity>
       </View>
-      <View style={styles.sideItem}><Text style={styles.sideItemText}>MA</Text></View>
-    </View>
+
+      {open && (
+        <View style={styles.menuOverlay}>
+          <Pressable style={styles.menuScrim} onPress={() => setOpen(false)} />
+          <View style={styles.fullMenu}>
+            <View style={styles.fullMenuTop}>
+              <View style={styles.sideLogo}><Text style={styles.sideLogoText}>EV</Text></View>
+              <TouchableOpacity style={styles.iconButton} onPress={() => setOpen(false)}><Text style={styles.iconButtonText}>x</Text></TouchableOpacity>
+            </View>
+            <View style={styles.accountBlock}>
+              <Text style={styles.headerEyebrow}>EVOLUM / {profile.label}</Text>
+              <Text style={styles.menuAccountName}>{session.tenant?.name || session.user.name}</Text>
+              <Text style={styles.muted}>Nivel: {session.tenant?.plan || session.tenant?.type || "STARTER"}</Text>
+              <Text style={styles.muted}>Usuario: {session.user.name}</Text>
+            </View>
+            <View style={styles.menuItems}>
+              {items.map((item) => (
+                <TouchableOpacity key={item.key} style={[styles.menuItem, active === item.key && styles.menuItemActive]} onPress={() => onChange(item.key)}>
+                  <View style={[styles.menuIcon, active === item.key && styles.menuIconActive]}><Text style={styles.sideItemTextActive}>{item.short}</Text></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.menuItemTitle}>{item.label}</Text>
+                    <Text style={styles.menuItemSub}>{item.module || "cuenta"}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={styles.logoutButton} onPress={onLogout}><Text style={styles.logoutButtonText}>Cerrar sesion</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </>
   );
 }
 
@@ -376,10 +468,14 @@ function TopHeader({ session, profile, onLogout }: { session: SessionState; prof
       <View>
         <Text style={styles.headerEyebrow}>EVOLUM / {profile.label}</Text>
         <Text style={styles.headerTitle}>{session.tenant?.name || session.user.name}</Text>
+        <Text style={styles.headerPlan}>{session.tenant?.plan || session.tenant?.type || "STARTER"}</Text>
       </View>
-      <TouchableOpacity style={styles.accountPill} onPress={onLogout}>
-        <Text style={styles.accountPillText}>{session.user.role === "SUPER_ADMIN" ? "Super Admin" : session.user.name}</Text>
-      </TouchableOpacity>
+      <View style={styles.headerActions}>
+        <View style={styles.accountPill}>
+          <Text style={styles.accountPillText}>{session.user.role === "SUPER_ADMIN" ? "Super Admin" : session.user.name}</Text>
+        </View>
+        <TouchableOpacity style={styles.logoutMini} onPress={onLogout}><Text style={styles.logoutMiniText}>Salir</Text></TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -396,11 +492,23 @@ function DashboardScreen({ dashboard, profile, refreshing, onRefresh }: { dashbo
         <Kpi label={profile.bookingLabel} value={dashboard?.kpis.bookingsConfirmed ?? 0} detail={`${dashboard?.kpis.bookingsPending ?? 0} pendientes`} />
         <Kpi label="Revenue" value={money(dashboard?.revenue.paid)} detail={`${money(dashboard?.revenue.pending)} pendiente`} />
       </View>
+      <Panel title="Estado comercial">
+        <View style={styles.compactMetrics}>
+          <Kpi label="Listos cierre" value={dashboard?.kpis.readyToClose ?? 0} detail={`${dashboard?.kpis.averageCloseScore ?? 0}% score IA`} />
+          <Kpi label="Conversion" value={`${dashboard?.kpis.conversionRate ?? 0}%`} detail={money(dashboard?.revenue.estimated)} />
+        </View>
+      </Panel>
       <Panel title="Actividad reciente">
         {(dashboard?.activity || []).slice(0, 5).map((item) => (
           <ListRow key={item.id} left={initials(item.type)} title={item.title} subtitle={item.description} right={dateLabel(item.createdAt)} />
         ))}
         {!dashboard?.activity?.length && <Text style={styles.muted}>Sin actividad registrada.</Text>}
+      </Panel>
+      <Panel title="Proximas actividades">
+        {(dashboard?.upcomingBookings || []).slice(0, 4).map((booking) => (
+          <ListRow key={booking.id} left="AG" title={booking.name || profile.bookingLabel} subtitle={`${dateLabel(booking.date)} ${timeLabel(booking.date)} / ${booking.location || "Sin ubicacion"}`} right={booking.status} />
+        ))}
+        {!dashboard?.upcomingBookings?.length && <Text style={styles.muted}>Sin reservas proximas.</Text>}
       </Panel>
     </ScrollView>
   );
@@ -425,7 +533,7 @@ function InboxScreen(props: {
 }) {
   const active = props.selectedConversation;
   return (
-    <View style={styles.inboxRoot}>
+    <KeyboardAvoidingView style={styles.inboxRoot} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={10}>
       <View style={styles.chatHeader}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{initials(active?.contact.name || active?.contact.externalId)}</Text></View>
         <View style={{ flex: 1 }}>
@@ -498,45 +606,171 @@ function InboxScreen(props: {
           </View>
         </View>
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
-function AgendaScreen({ bookings, profile, refreshing, onRefresh }: { bookings: Booking[]; profile: IndustryProfile; refreshing: boolean; onRefresh: () => void }) {
+function AgendaScreen({
+  bookings,
+  profile,
+  refreshing,
+  onRefresh,
+  onCreated
+}: {
+  bookings: Booking[];
+  profile: IndustryProfile;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onCreated: () => void;
+}) {
+  const [monthDate, setMonthDate] = useState(new Date());
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [date, setDate] = useState(inputDateTime());
+  const [guests, setGuests] = useState("2");
+  const [location, setLocation] = useState("");
+  const [saving, setSaving] = useState(false);
+  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const calendarStart = new Date(monthStart);
+  calendarStart.setDate(calendarStart.getDate() - ((calendarStart.getDay() + 6) % 7));
+  const days = Array.from({ length: 35 }, (_, index) => {
+    const day = new Date(calendarStart);
+    day.setDate(calendarStart.getDate() + index);
+    return day;
+  });
+  const visibleBookings = bookings.filter((booking) => monthKey(new Date(booking.date)) === monthKey(monthDate));
+
+  async function submitBooking() {
+    try {
+      setSaving(true);
+      await createBooking({
+        name: name.trim() || "Reserva movil",
+        phone: phone.trim() || undefined,
+        date: new Date(date).toISOString(),
+        guests: Number(guests || 1),
+        location: location.trim() || undefined,
+        total: 0,
+        notes: "Creada desde app movil"
+      });
+      Alert.alert("Fecha agendada", "La reserva quedo registrada.");
+      setName("");
+      setPhone("");
+      setGuests("2");
+      setLocation("");
+      setDate(inputDateTime());
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo agendar fecha", error instanceof Error ? error.message : "Revisa los datos.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>Agenda</Text>
       <Text style={styles.screenTitle}>Agenda {profile.label}</Text>
       <Text style={styles.screenSubtitle}>{profile.bookingLabel}s creadas por IA o manualmente.</Text>
+      <Panel title={monthDate.toLocaleDateString("es-CL", { month: "long", year: "numeric" })}>
+        <View style={styles.calendarActions}>
+          <MiniButton label="<" onPress={() => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1))} />
+          <MiniButton label="Hoy" onPress={() => setMonthDate(new Date())} />
+          <MiniButton label=">" onPress={() => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1))} />
+        </View>
+        <View style={styles.calendarGrid}>
+          {["L", "M", "M", "J", "V", "S", "D"].map((label, index) => <Text key={`${label}-${index}`} style={styles.calendarHead}>{label}</Text>)}
+          {days.map((day) => {
+            const dayBookings = bookings.filter((booking) => sameDay(new Date(booking.date), day));
+            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+            const outside = day.getMonth() !== monthDate.getMonth();
+            return (
+              <View key={day.toISOString()} style={[styles.calendarDay, isWeekend && styles.calendarWeekend, outside && styles.calendarOutside]}>
+                <Text style={styles.calendarNumber}>{day.getDate()}</Text>
+                {dayBookings.slice(0, 2).map((booking) => (
+                  <Text key={booking.id} style={styles.calendarBooking} numberOfLines={2}>{timeLabel(booking.date)} {booking.name || profile.bookingLabel}</Text>
+                ))}
+              </View>
+            );
+          })}
+        </View>
+      </Panel>
+      <Panel title="Crear reserva">
+        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Nombre del cliente" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="+56 9..." placeholderTextColor={colors.muted} keyboardType="phone-pad" />
+        <TextInput style={styles.input} value={date} onChangeText={setDate} placeholder="2026-06-24T19:30" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={guests} onChangeText={setGuests} placeholder="Personas" placeholderTextColor={colors.muted} keyboardType="number-pad" />
+        <TextInput style={styles.input} value={location} onChangeText={setLocation} placeholder="Sucursal, direccion u online" placeholderTextColor={colors.muted} />
+        <TouchableOpacity style={styles.primaryButton} onPress={submitBooking} disabled={saving}><Text style={styles.primaryButtonText}>{saving ? "Agendando..." : "Crear reserva"}</Text></TouchableOpacity>
+      </Panel>
       <Panel title={`Proximas ${profile.bookingLabel.toLowerCase()}s`}>
-        {bookings.slice(0, 12).map((booking) => (
+        {visibleBookings.slice(0, 12).map((booking) => (
           <ListRow key={booking.id} left="AG" title={booking.name || profile.bookingLabel} subtitle={`${dateLabel(booking.date)} / ${booking.location || "Sin ubicacion"} / ${booking.guests} personas`} right={booking.status} />
         ))}
-        {!bookings.length && <Text style={styles.muted}>Sin reservas por ahora.</Text>}
+        {!visibleBookings.length && <Text style={styles.muted}>Sin reservas para este mes.</Text>}
       </Panel>
     </ScrollView>
   );
 }
 
-function PipelineScreen({ dashboard, profile, conversations, refreshing, onRefresh }: { dashboard: CrmOperationalDashboard | null; profile: IndustryProfile; conversations: Conversation[]; refreshing: boolean; onRefresh: () => void }) {
+function PipelineScreen({
+  dashboard,
+  profile,
+  conversations,
+  refreshing,
+  onRefresh,
+  onOpenConversation
+}: {
+  dashboard: CrmOperationalDashboard | null;
+  profile: IndustryProfile;
+  conversations: Conversation[];
+  refreshing: boolean;
+  onRefresh: () => void;
+  onOpenConversation: (conversation: Conversation) => void;
+}) {
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const stageBuckets = profile.pipelineStages.map((stage, index) => {
+    const items = conversations.filter((conversation) => {
+      const score = conversation.aiCloseScore || 0;
+      if (index === 0) return score < 30;
+      if (index === 1) return score >= 30 && score < 55;
+      if (index === 2) return score >= 55 && score < 75;
+      if (index === 3) return score >= 75 && score < 90;
+      return score >= 90 || conversation.aiHandoffRequired;
+    });
+    return { stage, items, value: dashboard?.pipeline?.[index]?.value || 0 };
+  });
+  const visibleBuckets = selectedStage ? stageBuckets.filter((bucket) => bucket.stage === selectedStage) : stageBuckets;
   return (
     <ScrollView horizontal={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>CRM</Text>
       <Text style={styles.screenTitle}>Pipeline</Text>
       <Text style={styles.screenSubtitle}>{profile.primaryEntity}s y oportunidades por etapa.</Text>
+      <Panel title="Resumen comercial">
+        <View style={styles.compactMetrics}>
+          <Kpi label="Oportunidades" value={conversations.length} detail={`${dashboard?.kpis.readyToClose ?? 0} listas`} />
+          <Kpi label="Promedio IA" value={`${dashboard?.kpis.averageCloseScore ?? 0}%`} detail="score cierre" />
+        </View>
+        <View style={styles.filterRow}>
+          <TouchableOpacity style={[styles.filterPill, !selectedStage && styles.filterPillActive]} onPress={() => setSelectedStage(null)}><Text style={[styles.filterText, !selectedStage && styles.filterTextActive]}>Todas</Text></TouchableOpacity>
+          {profile.pipelineStages.map((stage) => (
+            <TouchableOpacity key={stage} style={[styles.filterPill, selectedStage === stage && styles.filterPillActive]} onPress={() => setSelectedStage(stage)}><Text style={[styles.filterText, selectedStage === stage && styles.filterTextActive]}>{stage}</Text></TouchableOpacity>
+          ))}
+        </View>
+      </Panel>
       <View style={styles.stageList}>
-        {profile.pipelineStages.map((stage, index) => {
-          const count = dashboard?.pipeline?.[index]?.count ?? (index === 0 ? conversations.length : 0);
+        {visibleBuckets.map(({ stage, items, value }) => {
           return (
             <View key={stage} style={styles.stageCard}>
-              <View style={styles.stageHeader}><Text style={styles.stageTitle}>{stage}</Text><Text style={styles.stageCount}>{count}</Text></View>
-              {conversations.slice(index, index + 1).map((item) => (
-                <View key={item.id} style={styles.opportunityCard}>
+              <View style={styles.stageHeader}><Text style={styles.stageTitle}>{stage}</Text><Text style={styles.stageCount}>{items.length}</Text></View>
+              {!!value && <Text style={styles.muted}>{money(value)} estimado</Text>}
+              {items.slice(0, 6).map((item) => (
+                <TouchableOpacity key={item.id} style={styles.opportunityCard} onPress={() => onOpenConversation(item)}>
                   <Text style={styles.cardTitle}>{item.contact.name || item.contact.externalId}</Text>
                   <Text style={styles.muted}>{item.aiSummary || item.lastMessage?.content || "Oportunidad comercial"}</Text>
                   <Text style={styles.scoreText}>{item.aiCloseScore || 0}% cierre</Text>
-                </View>
+                </TouchableOpacity>
               ))}
+              {!items.length && <Text style={styles.mutedCenter}>Sin oportunidades en esta etapa.</Text>}
             </View>
           );
         })}
@@ -545,20 +779,117 @@ function PipelineScreen({ dashboard, profile, conversations, refreshing, onRefre
   );
 }
 
-function CampaignsScreen({ profile, conversations }: { profile: IndustryProfile; conversations: Conversation[] }) {
-  const whatsappCount = conversations.filter((item) => item.contact.channel === "whatsapp").length;
+function CampaignsScreen({
+  profile,
+  conversations,
+  campaigns,
+  onRefresh
+}: {
+  profile: IndustryProfile;
+  conversations: Conversation[];
+  campaigns: Campaign[];
+  onRefresh: () => void;
+}) {
+  const [product, setProduct] = useState("");
+  const [idea, setIdea] = useState("");
+  const [visualTitle, setVisualTitle] = useState("");
+  const [caption, setCaption] = useState("");
+  const [cta, setCta] = useState("Reserva tu fecha hoy");
+  const [platforms, setPlatforms] = useState<string[]>(["whatsapp"]);
+  const [campaignId, setCampaignId] = useState<string | undefined>();
+  const [working, setWorking] = useState(false);
+  const whatsappRecipients = useMemo(
+    () => Array.from(new Set(conversations.filter((item) => item.contact.channel === "whatsapp").map((item) => item.contact.externalId).filter(Boolean))),
+    [conversations]
+  );
+  const whatsappCount = whatsappRecipients.length;
+
+  function togglePlatform(platform: string) {
+    setPlatforms((current) => current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform]);
+  }
+
+  async function handleGenerateCampaign() {
+    try {
+      setWorking(true);
+      const result = await generateCampaignCopy({
+        product: product.trim() || `${profile.label} ${profile.primaryEntity}`,
+        visualTitle: visualTitle.trim() || "Campaña movil EVOLUM",
+        idea: idea.trim() || "Promocion para contactos recientes del inbox",
+        caption,
+        cta,
+        platforms
+      });
+      const firstVariant = result?.variants?.[0];
+      setCaption(firstVariant?.caption || firstVariant?.copy || result?.caption || caption || "Hola, tenemos novedades para ti. Responde este mensaje y coordinamos los detalles.");
+      if (result?.campaign?.id) setCampaignId(result.campaign.id);
+      Alert.alert("Campaña generada", "El copy quedo listo para revisar y publicar.");
+      await onRefresh();
+    } catch (error) {
+      Alert.alert("No se pudo generar", error instanceof Error ? error.message : "Intenta nuevamente.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handlePublishCampaign() {
+    try {
+      setWorking(true);
+      const text = caption.trim();
+      if (!text) {
+        Alert.alert("Falta contenido", "Genera o escribe un texto para publicar.");
+        return;
+      }
+      const result = await publishCampaign({
+        campaignId,
+        product: product.trim() || `${profile.label} ${profile.primaryEntity}`,
+        visualTitle: visualTitle.trim() || "Campaña movil EVOLUM",
+        idea: idea.trim() || text,
+        caption: text,
+        cta,
+        platforms,
+        selectedVariant: { caption: text, cta },
+        variants: [{ caption: text, cta }],
+        whatsappRecipients
+      });
+      if (result?.campaign?.id) setCampaignId(result.campaign.id);
+      Alert.alert("Publicación enviada", "El backend recibió la campaña para publicarla en los canales seleccionados.");
+      await onRefresh();
+    } catch (error) {
+      Alert.alert("No se pudo publicar", error instanceof Error ? error.message : "Revisa conectores y destinatarios.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>Marketing IA</Text>
-      <Text style={styles.screenTitle}>Campanas</Text>
+      <Text style={styles.screenTitle}>Campañas</Text>
       <Text style={styles.screenSubtitle}>Contenido y destinatarios conectados al inbox.</Text>
       <Panel title={`Campana rapida ${profile.label}`}>
-        <Text style={styles.muted}>La app queda lista para usar el mismo generador de campanas de la web. Los destinatarios WhatsApp disponibles se importan desde conversaciones del tenant.</Text>
+        <Text style={styles.muted}>Genera contenido y publica usando destinatarios WhatsApp importados del inbox.</Text>
+        <TextInput style={styles.input} value={product} onChangeText={setProduct} placeholder="Producto o servicio" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={visualTitle} onChangeText={setVisualTitle} placeholder="Titulo de campaña" placeholderTextColor={colors.muted} />
+        <TextInput style={[styles.input, styles.textArea]} value={idea} onChangeText={setIdea} placeholder="Idea de campaña" placeholderTextColor={colors.muted} multiline />
+        <View style={styles.filterRow}>
+          {["whatsapp", "instagram", "facebook"].map((platform) => (
+            <TouchableOpacity key={platform} style={[styles.filterPill, platforms.includes(platform) && styles.filterPillActive]} onPress={() => togglePlatform(platform)}>
+              <Text style={[styles.filterText, platforms.includes(platform) && styles.filterTextActive]}>{platform}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <View style={styles.campaignStat}>
           <Text style={styles.kpiValue}>{whatsappCount}</Text>
           <Text style={styles.muted}>numeros WhatsApp detectados</Text>
         </View>
-        <TouchableOpacity style={styles.primaryButton}><Text style={styles.primaryButtonText}>Crear campana movil</Text></TouchableOpacity>
+        <TextInput style={[styles.input, styles.textArea]} value={caption} onChangeText={setCaption} placeholder="Texto generado o manual..." placeholderTextColor={colors.muted} multiline />
+        <TextInput style={styles.input} value={cta} onChangeText={setCta} placeholder="CTA" placeholderTextColor={colors.muted} />
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleGenerateCampaign} disabled={working}><Text style={styles.secondaryButtonText}>{working ? "Procesando..." : "Generar campaña"}</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.primaryButton} onPress={handlePublishCampaign} disabled={working}><Text style={styles.primaryButtonText}>{working ? "Publicando..." : "Publicar campaña"}</Text></TouchableOpacity>
+      </Panel>
+      <Panel title="Historial reciente">
+        {campaigns.slice(0, 5).map((campaign) => <ListRow key={campaign.id} left="CA" title={campaign.name} subtitle={campaign.status} right={dateLabel(campaign.createdAt)} />)}
+        {!campaigns.length && <Text style={styles.muted}>Sin campañas guardadas todavía.</Text>}
       </Panel>
     </ScrollView>
   );
@@ -734,9 +1065,56 @@ const styles = StyleSheet.create({
   sideItemActive: { backgroundColor: colors.purple, borderColor: colors.borderStrong },
   sideItemText: { color: colors.muted, fontWeight: "900", fontSize: 11 },
   sideItemTextActive: { color: colors.text },
-  contentShell: { flex: 1, paddingRight: 10, paddingTop: 10 },
+  menuOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 50,
+    flexDirection: "row"
+  },
+  menuScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.38)" },
+  fullMenu: {
+    width: 286,
+    borderRightWidth: 1,
+    borderRightColor: colors.borderStrong,
+    backgroundColor: "#07101f",
+    padding: 16,
+    gap: 14,
+    ...shadow
+  },
+  fullMenuTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  accountBlock: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 20,
+    padding: 14,
+    backgroundColor: colors.panel
+  },
+  menuAccountName: { color: colors.text, fontSize: 22, fontWeight: "900", marginVertical: 4 },
+  menuItems: { gap: 8, flex: 1 },
+  menuItem: {
+    minHeight: 58,
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.16)",
+    borderRadius: 18,
+    padding: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.03)"
+  },
+  menuItemActive: { backgroundColor: "rgba(139,63,244,0.36)", borderColor: colors.borderStrong },
+  menuIcon: { width: 36, height: 36, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(139,63,244,0.22)" },
+  menuIconActive: { backgroundColor: colors.purple },
+  menuItemTitle: { color: colors.text, fontWeight: "900" },
+  menuItemSub: { color: colors.muted, fontSize: 11 },
+  logoutButton: { minHeight: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(127,29,29,0.5)", borderWidth: 1, borderColor: "rgba(248,113,113,0.35)" },
+  logoutButtonText: { color: colors.text, fontWeight: "900" },
+  contentShell: { flex: 1, paddingRight: 10, paddingTop: 10, paddingBottom: 8 },
   header: {
-    minHeight: 78,
+    minHeight: 74,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 22,
@@ -749,9 +1127,13 @@ const styles = StyleSheet.create({
   },
   headerEyebrow: { color: colors.purple2, fontSize: 11, fontWeight: "900", letterSpacing: 1.4 },
   headerTitle: { color: colors.text, fontSize: 22, fontWeight: "900" },
-  accountPill: { backgroundColor: colors.purple, borderRadius: 999, paddingHorizontal: 14, minHeight: 42, justifyContent: "center" },
+  headerPlan: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  accountPill: { backgroundColor: colors.purple, borderRadius: 999, paddingHorizontal: 14, minHeight: 40, justifyContent: "center" },
   accountPillText: { color: colors.text, fontWeight: "900" },
-  screenContent: { paddingVertical: 14, paddingBottom: 32, gap: 14 },
+  logoutMini: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, minHeight: 40, justifyContent: "center" },
+  logoutMiniText: { color: colors.text, fontWeight: "800" },
+  screenContent: { paddingVertical: 14, paddingBottom: 42, gap: 14 },
   eyebrow: { color: colors.purple2, fontSize: 12, fontWeight: "900", letterSpacing: 1.8, textTransform: "uppercase" },
   screenTitle: { color: colors.text, fontSize: 30, fontWeight: "900" },
   screenSubtitle: { color: colors.muted, lineHeight: 20 },
@@ -767,6 +1149,7 @@ const styles = StyleSheet.create({
   },
   kpiValue: { color: colors.text, fontSize: 28, fontWeight: "900", marginVertical: 6 },
   greenText: { color: colors.green, fontSize: 12 },
+  compactMetrics: { flexDirection: "row", gap: 10 },
   panel: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -807,7 +1190,7 @@ const styles = StyleSheet.create({
   avatarText: { color: colors.text, fontWeight: "900", fontSize: 12 },
   listTitle: { color: colors.text, fontWeight: "900" },
   rowRight: { color: colors.purple2, fontWeight: "900", fontSize: 11 },
-  inboxRoot: { flex: 1, paddingTop: 12 },
+  inboxRoot: { flex: 1, paddingTop: 10, paddingBottom: 18 },
   chatHeader: {
     minHeight: 70,
     borderWidth: 1,
@@ -824,7 +1207,7 @@ const styles = StyleSheet.create({
   chatsButton: { backgroundColor: colors.purple, borderRadius: 14, minHeight: 42, paddingHorizontal: 12, justifyContent: "center" },
   chatsButtonText: { color: colors.text, fontWeight: "900", fontSize: 12 },
   messageList: { flex: 1 },
-  messageListContent: { paddingVertical: 14, gap: 10 },
+  messageListContent: { paddingVertical: 12, paddingBottom: 16, gap: 10 },
   bubble: {
     alignSelf: "flex-start",
     maxWidth: "86%",
@@ -853,8 +1236,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: 10,
-    paddingBottom: 8
+    paddingTop: 8,
+    paddingBottom: Platform.OS === "android" ? 22 : 12
   },
   composerInput: {
     flex: 1,
@@ -933,6 +1316,23 @@ const styles = StyleSheet.create({
   cardTitle: { color: colors.text, fontWeight: "900", fontSize: 16 },
   scoreText: { color: colors.orange, marginTop: 8, fontWeight: "900" },
   campaignStat: { borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 14, backgroundColor: colors.panel2 },
+  textArea: { minHeight: 92, paddingTop: 12, textAlignVertical: "top" },
+  calendarActions: { flexDirection: "row", gap: 8 },
+  calendarGrid: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  calendarHead: { width: "13.4%", color: colors.purple2, textAlign: "center", fontWeight: "900", fontSize: 11 },
+  calendarDay: {
+    width: "13.4%",
+    minHeight: 76,
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.16)",
+    borderRadius: 12,
+    padding: 5,
+    backgroundColor: "rgba(255,255,255,0.025)"
+  },
+  calendarWeekend: { backgroundColor: "rgba(139,63,244,0.12)" },
+  calendarOutside: { opacity: 0.38 },
+  calendarNumber: { color: colors.text, fontWeight: "900", fontSize: 11 },
+  calendarBooking: { color: colors.green, fontSize: 8, marginTop: 3 },
   moduleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   moduleToggle: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, minHeight: 36, justifyContent: "center" },
   moduleToggleOn: { backgroundColor: colors.purple, borderColor: colors.borderStrong },

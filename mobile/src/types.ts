@@ -76,6 +76,17 @@ export type Booking = {
   updatedAt: string;
 };
 
+export type Campaign = {
+  id: string;
+  name: string;
+  status: string;
+  template?: any;
+  scheduledAt?: string | null;
+  sentAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type PaymentMetrics = {
   count: number;
   total: number;
