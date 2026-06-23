@@ -9,8 +9,7 @@ import {
   TenantModulesResponse
 } from "../types";
 
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL || "https://onmicanal-backend-v2.up.railway.app/api";
+export const API_BASE_URL = "https://onmicanal-backend-v2.up.railway.app/api";
 const TOKEN_KEY = "evolum_mobile_token";
 const SESSION_KEY = "evolum_mobile_session";
 
@@ -40,14 +39,19 @@ async function getToken() {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getToken();
   const url = `${API_BASE_URL}${path}`;
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers || {})
-    }
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers || {})
+      }
+    });
+  } catch {
+    throw new Error(`No se pudo conectar con ${API_BASE_URL}. Revisa internet, VPN/DNS privado o vuelve a escanear el QR de Expo.`);
+  }
 
   if (!response.ok) {
     const data = await response.json().catch(() => null);
@@ -56,6 +60,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json();
+}
+
+export async function checkApiHealth() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health`, {
+      method: "GET",
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) throw new Error(`Health ${response.status}`);
+    return response.json();
+  } catch {
+    throw new Error(`Sin conexion desde el telefono hacia ${API_BASE_URL}`);
+  }
 }
 
 export async function loginWithEmail(email: string, password?: string) {

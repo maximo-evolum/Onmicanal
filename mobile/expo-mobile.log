@@ -1,0 +1,13 @@
+
+> evolum-mobile@0.1.0 start
+> expo start --tunnel --clear
+
+env: load .env
+env: export EXPO_PUBLIC_API_BASE_URL
+Starting project at E:\Onmicanal\mobile
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Tunnel connected.
+Tunnel ready.
+Waiting on http://localhost:8081
+Logs for your project will appear below.

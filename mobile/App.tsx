@@ -15,6 +15,8 @@ import {
   View
 } from "react-native";
 import {
+  API_BASE_URL,
+  checkApiHealth,
   clearMobileSession,
   getAdminTenants,
   getBookings,
@@ -96,6 +98,8 @@ export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [connectionLoading, setConnectionLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState("");
 
   const profile = useMemo(() => getIndustryProfile(session?.tenant?.industry), [session?.tenant?.industry]);
   const selectedConversation = useMemo(
@@ -206,6 +210,19 @@ export default function App() {
     }
   }
 
+  async function handleConnectionCheck() {
+    try {
+      setConnectionLoading(true);
+      setConnectionStatus("Probando conexion...");
+      const data = await checkApiHealth();
+      setConnectionStatus(data?.db ? "Conexion OK: API y base de datos en linea." : "Conexion OK: API en linea.");
+    } catch (error) {
+      setConnectionStatus(error instanceof Error ? error.message : "No se pudo probar la conexion.");
+    } finally {
+      setConnectionLoading(false);
+    }
+  }
+
   async function handleLogout() {
     await clearMobileSession();
     setSession(null);
@@ -284,6 +301,11 @@ export default function App() {
           <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={authLoading}>
             <Text style={styles.primaryButtonText}>{authLoading ? "Entrando..." : "Entrar"}</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryButton} onPress={handleConnectionCheck} disabled={connectionLoading}>
+            <Text style={styles.secondaryButtonText}>{connectionLoading ? "Probando..." : "Probar conexion"}</Text>
+          </TouchableOpacity>
+          <Text style={styles.apiHint}>{API_BASE_URL}</Text>
+          {!!connectionStatus && <Text style={styles.connectionStatus}>{connectionStatus}</Text>}
         </View>
       </SafeAreaView>
     );
@@ -665,6 +687,18 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   primaryButtonText: { color: colors.text, fontWeight: "900" },
+  secondaryButton: {
+    minHeight: 46,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(168,85,247,0.12)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  secondaryButtonText: { color: colors.text, fontWeight: "800" },
+  apiHint: { color: colors.muted, fontSize: 11, lineHeight: 15 },
+  connectionStatus: { color: colors.purple2, fontSize: 12, lineHeight: 17 },
   appShell: { flex: 1, flexDirection: "row", backgroundColor: colors.bg },
   sideNav: {
     width: 66,
