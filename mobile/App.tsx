@@ -278,9 +278,12 @@ export default function App() {
     const content = reply.trim();
     setReply("");
     try {
-      await sendManualMessage(selectedConversation.id, content);
+      const sent = await sendManualMessage(selectedConversation.id, content);
       await loadMessages(selectedConversation.id);
       await loadConversations(false);
+      if (sent.status === "FAILED") {
+        Alert.alert("WhatsApp no entrego el mensaje", sent.errorMessage || "Meta rechazo o no pudo enviar el mensaje.");
+      }
     } catch (error) {
       Alert.alert("No se pudo enviar", error instanceof Error ? error.message : "Revisa la conexion");
       setReply(content);

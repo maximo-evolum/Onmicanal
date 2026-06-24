@@ -56,6 +56,7 @@ export type Message = {
   content: string;
   channel: string;
   status: string;
+  errorMessage?: string | null;
   createdAt: string;
 };
 

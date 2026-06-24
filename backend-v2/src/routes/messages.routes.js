@@ -28,26 +28,41 @@ async function sendManualMessageHandler(req, res) {
     });
 
     if (!conversation) {
-      return res.status(404).json({ error: "Conversación no encontrada" });
+      return res.status(404).json({ error: "Conversacion no encontrada" });
     }
 
     let status = "SENT";
     let metadata = null;
+    let externalMessageId = null;
+    let rawPayload = null;
+    let errorMessage = null;
 
     try {
-      await sendChannelMessage({
+      const sendResult = await sendChannelMessage({
         channel: conversation.contact.channel,
         to: conversation.contact.externalId,
         message: normalizedContent,
         tenant: conversation.tenant
       });
-    } catch (error) {
-      // Guardamos igual el mensaje para que el historial del Inbox no se pierda.
-      // En producción el status FAILED permite auditar si Meta/API falló.
-      status = "FAILED";
+
+      rawPayload = sendResult || null;
+      externalMessageId = Array.isArray(sendResult?.messages)
+        ? sendResult.messages.map((message) => message.id).filter(Boolean)[0] || null
+        : null;
       metadata = {
-        devWarning: "No se pudo enviar por canal real, pero se guardó el mensaje.",
-        error: error?.message || "channel_send_failed"
+        metaAccepted: true,
+        recipient: conversation.contact.externalId,
+        contactWaIds: Array.isArray(sendResult?.contacts)
+          ? sendResult.contacts.map((contact) => contact.wa_id || contact.input || null).filter(Boolean)
+          : []
+      };
+    } catch (error) {
+      status = "FAILED";
+      errorMessage = error?.message || "channel_send_failed";
+      metadata = {
+        devWarning: "No se pudo enviar por canal real, pero se guardo el mensaje.",
+        error: errorMessage,
+        providerData: error?.data || null
       };
       console.warn("[MANUAL_SEND_CHANNEL_WARNING]", {
         conversationId,
@@ -65,7 +80,10 @@ async function sendManualMessageHandler(req, res) {
       channel: conversation.contact.channel,
       content: normalizedContent,
       status,
-      metadata
+      metadata,
+      externalMessageId,
+      rawPayload,
+      errorMessage
     });
 
     await prisma.conversation.update({

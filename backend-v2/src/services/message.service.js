@@ -167,7 +167,10 @@ export async function persistOutboundMessage({
   channel,
   content,
   status = "SENT",
-  metadata = null
+  metadata = null,
+  externalMessageId = null,
+  rawPayload = null,
+  errorMessage = null
 }) {
   const message = await prisma.message.create({
     data: {
@@ -179,7 +182,10 @@ export async function persistOutboundMessage({
       content: normalizeText(content),
       type: "TEXT",
       status,
-      metadata
+      externalMessageId,
+      rawPayload: rawPayload ? normalizeObjectStrings(rawPayload) : undefined,
+      metadata: metadata ? normalizeObjectStrings(metadata) : undefined,
+      errorMessage
     }
   });
 

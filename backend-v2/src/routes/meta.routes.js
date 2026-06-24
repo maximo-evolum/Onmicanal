@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { normalizeMetaWebhook } from "../adapters/channel.adapter.js";
 import { parseWhatsAppStatuses } from "../adapters/whatsapp.adapter.js";
@@ -9,6 +10,45 @@ import { isKnownVerifyToken } from "../services/tenant-channel-config.service.js
 import { createTrace, summarizeMetaPayload, traceError, traceStep } from "../lib/trace.js";
 
 export const metaRouter = Router();
+
+function mapWhatsAppDeliveryStatus(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "failed") return "FAILED";
+  if (normalized === "delivered" || normalized === "read") return "DELIVERED";
+  if (normalized === "sent") return "SENT";
+  return null;
+}
+
+async function persistWhatsAppStatuses(statuses) {
+  for (const status of statuses) {
+    if (!status.externalMessageId) continue;
+    const mappedStatus = mapWhatsAppDeliveryStatus(status.status);
+    if (!mappedStatus) continue;
+
+    const errorMessage = Array.isArray(status.errors) && status.errors.length
+      ? status.errors.map((error) => error.message || error.title || error.code).filter(Boolean).join(" | ")
+      : null;
+
+    await prisma.message.updateMany({
+      where: {
+        channel: "whatsapp",
+        externalMessageId: status.externalMessageId
+      },
+      data: {
+        status: mappedStatus,
+        errorMessage,
+        metadata: {
+          deliveryStatus: status.status,
+          recipientId: status.recipientId,
+          conversationId: status.conversationId,
+          conversationOrigin: status.conversationOrigin,
+          pricingCategory: status.pricingCategory,
+          errors: status.errors || []
+        }
+      }
+    });
+  }
+}
 
 metaRouter.get("/webhook", async (req, res) => {
   const trace = createTrace("META_VERIFY");
@@ -54,6 +94,7 @@ metaRouter.post("/webhook", async (req, res) => {
         pricingCategory: status.pricingCategory,
         errors: status.errors
       })));
+      await persistWhatsAppStatuses(whatsappStatuses);
     }
 
     const incoming = normalizeMetaWebhook(req.body);
