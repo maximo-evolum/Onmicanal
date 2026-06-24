@@ -106,9 +106,45 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
 }
 
 export async function sendManualMessage(conversationId: string, content: string): Promise<Message> {
-  return request<Message>(`/conversations/${conversationId}/messages`, {
+  const body = JSON.stringify({
+    conversationId,
+    content,
+    text: content,
+    message: content
+  });
+
+  try {
+    return await request<Message>("/messages/send", {
+      method: "POST",
+      body
+    });
+  } catch (primaryError) {
+    try {
+      return await request<Message>(`/conversations/${conversationId}/messages`, {
+        method: "POST",
+        body
+      });
+    } catch {
+      throw primaryError;
+    }
+  }
+}
+
+export async function createCampaignDraft(payload: {
+  name: string;
+  segment?: string;
+  product?: string;
+  visualTitle?: string;
+  idea?: string;
+  caption?: string;
+  cta?: string;
+  platforms: string[];
+  selectedVariant?: any;
+  variants?: any[];
+}): Promise<Campaign> {
+  return request<Campaign>("/campaigns", {
     method: "POST",
-    body: JSON.stringify({ content })
+    body: JSON.stringify(payload)
   });
 }
 

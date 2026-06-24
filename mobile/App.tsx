@@ -23,6 +23,7 @@ import {
   checkApiHealth,
   clearMobileSession,
   createBooking,
+  createCampaignDraft,
   generateCampaignCopy,
   getAdminTenants,
   getBookings,
@@ -793,6 +794,7 @@ function CampaignsScreen({
   const [platforms, setPlatforms] = useState<string[]>(["whatsapp"]);
   const [campaignId, setCampaignId] = useState<string | undefined>();
   const [working, setWorking] = useState(false);
+  const [campaignStatus, setCampaignStatus] = useState("");
   const whatsappRecipients = useMemo(
     () => Array.from(new Set(conversations.filter((item) => item.contact.channel === "whatsapp").map((item) => item.contact.externalId).filter(Boolean))),
     [conversations]
@@ -803,9 +805,47 @@ function CampaignsScreen({
     setPlatforms((current) => current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform]);
   }
 
+  function campaignPayloadText() {
+    const productLabel = product.trim() || `${profile.label} ${profile.primaryEntity}`;
+    const ideaLabel = idea.trim() || "Tenemos una novedad preparada para ti desde EVOLUM.";
+    const ctaLabel = cta.trim() || "Responde este mensaje y coordinamos los detalles.";
+    return caption.trim() || `${ideaLabel}\n\n${productLabel}\n${ctaLabel}`;
+  }
+
+  async function handleCreateCampaign() {
+    try {
+      setWorking(true);
+      setCampaignStatus("Creando campana...");
+      const text = campaignPayloadText();
+      const campaign = await createCampaignDraft({
+        name: visualTitle.trim() || product.trim() || "Campana movil EVOLUM",
+        segment: "manual",
+        product: product.trim() || `${profile.label} ${profile.primaryEntity}`,
+        visualTitle: visualTitle.trim() || "Campana movil EVOLUM",
+        idea: idea.trim() || text,
+        caption: text,
+        cta,
+        platforms,
+        selectedVariant: { caption: text, cta },
+        variants: [{ caption: text, cta }]
+      });
+      setCampaignId(campaign.id);
+      setCaption(text);
+      setCampaignStatus("Campana creada como borrador.");
+      Alert.alert("Campana creada", "El borrador quedo guardado y listo para publicar.");
+      await onRefresh();
+    } catch (error) {
+      setCampaignStatus("No se pudo crear la campana.");
+      Alert.alert("No se pudo crear", error instanceof Error ? error.message : "Revisa los datos.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function handleGenerateCampaign() {
     try {
       setWorking(true);
+      setCampaignStatus("Generando copy...");
       const result = await generateCampaignCopy({
         product: product.trim() || `${profile.label} ${profile.primaryEntity}`,
         visualTitle: visualTitle.trim() || "Campaña movil EVOLUM",
@@ -817,9 +857,11 @@ function CampaignsScreen({
       const firstVariant = result?.variants?.[0];
       setCaption(firstVariant?.caption || firstVariant?.copy || result?.caption || caption || "Hola, tenemos novedades para ti. Responde este mensaje y coordinamos los detalles.");
       if (result?.campaign?.id) setCampaignId(result.campaign.id);
+      setCampaignStatus("Copy generado y listo para publicar.");
       Alert.alert("Campaña generada", "El copy quedo listo para revisar y publicar.");
       await onRefresh();
     } catch (error) {
+      setCampaignStatus("No se pudo generar el copy.");
       Alert.alert("No se pudo generar", error instanceof Error ? error.message : "Intenta nuevamente.");
     } finally {
       setWorking(false);
@@ -829,11 +871,8 @@ function CampaignsScreen({
   async function handlePublishCampaign() {
     try {
       setWorking(true);
-      const text = caption.trim();
-      if (!text) {
-        Alert.alert("Falta contenido", "Genera o escribe un texto para publicar.");
-        return;
-      }
+      setCampaignStatus("Publicando campana...");
+      const text = campaignPayloadText();
       const result = await publishCampaign({
         campaignId,
         product: product.trim() || `${profile.label} ${profile.primaryEntity}`,
@@ -847,9 +886,12 @@ function CampaignsScreen({
         whatsappRecipients
       });
       if (result?.campaign?.id) setCampaignId(result.campaign.id);
+      setCaption(text);
+      setCampaignStatus("Campana enviada al backend para publicacion.");
       Alert.alert("Publicación enviada", "El backend recibió la campaña para publicarla en los canales seleccionados.");
       await onRefresh();
     } catch (error) {
+      setCampaignStatus("No se pudo publicar la campana.");
       Alert.alert("No se pudo publicar", error instanceof Error ? error.message : "Revisa conectores y destinatarios.");
     } finally {
       setWorking(false);
@@ -877,9 +919,11 @@ function CampaignsScreen({
           <Text style={styles.kpiValue}>{whatsappCount}</Text>
           <Text style={styles.muted}>numeros WhatsApp detectados</Text>
         </View>
+        {!!campaignStatus && <Text style={styles.greenText}>{campaignStatus}</Text>}
         <TextInput style={[styles.input, styles.textArea]} value={caption} onChangeText={setCaption} placeholder="Texto generado o manual..." placeholderTextColor={colors.muted} multiline />
         <TextInput style={styles.input} value={cta} onChangeText={setCta} placeholder="CTA" placeholderTextColor={colors.muted} />
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleGenerateCampaign} disabled={working}><Text style={styles.secondaryButtonText}>{working ? "Procesando..." : "Generar campaña"}</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleCreateCampaign} disabled={working}><Text style={styles.secondaryButtonText}>{working ? "Procesando..." : "Crear campana"}</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleGenerateCampaign} disabled={working}><Text style={styles.secondaryButtonText}>{working ? "Procesando..." : "Generar copy IA"}</Text></TouchableOpacity>
         <TouchableOpacity style={styles.primaryButton} onPress={handlePublishCampaign} disabled={working}><Text style={styles.primaryButtonText}>{working ? "Publicando..." : "Publicar campaña"}</Text></TouchableOpacity>
       </Panel>
       <Panel title="Historial reciente">
