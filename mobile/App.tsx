@@ -8,12 +8,14 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  StatusBar as RNStatusBar,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View
 } from "react-native";
 import {
@@ -358,8 +360,19 @@ export default function App() {
         setMenuOpen(false);
         if (next === "admin") loadAdminTenants();
       }} />
+      {screen === "inbox" && (
+        <View style={styles.inboxTopContact}>
+          <View style={styles.avatarTiny}><Text style={styles.avatarText}>{initials(selectedConversation?.contact.name || selectedConversation?.contact.externalId)}</Text></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.topContactName}>{selectedConversation?.contact.name || selectedConversation?.contact.externalId || "Inbox"}</Text>
+            <Text style={styles.topContactSub}>{selectedConversation ? `${selectedConversation.contact.channel} / ${selectedConversation.status} / ${selectedConversation.mode}` : "Selecciona una conversacion"}</Text>
+          </View>
+          <TouchableOpacity style={styles.chatsButtonCompact} onPress={() => setChatDrawerOpen(true)}>
+            <Text style={styles.chatsButtonText}>CHATS</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={styles.contentShell}>
-        <TopHeader session={session} profile={profile} onLogout={handleLogout} />
         {screen === "dashboard" && (
           <DashboardScreen dashboard={dashboard} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />
         )}
@@ -383,6 +396,7 @@ export default function App() {
             onAction={handleConversationAction}
             refreshing={refreshing}
             onRefresh={refreshCurrent}
+            compactHeader={screen === "inbox"}
           />
         )}
         {screen === "agenda" && <AgendaScreen bookings={bookings} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadBookings(false); await loadDashboard(false); }} />}
@@ -413,26 +427,19 @@ function SideNav({
   onChange: (key: ScreenKey) => void;
   onLogout: () => void;
 }) {
+  const { width } = useWindowDimensions();
+  const menuWidth = Math.min(width - 16, 360);
   return (
     <>
-      <View style={styles.sideNav}>
-        <TouchableOpacity style={styles.sideLogo} onPress={() => setOpen(true)}>
+      {!open && (
+        <TouchableOpacity style={styles.floatingMenuButton} onPress={() => setOpen(true)}>
           <Text style={styles.sideLogoText}>EV</Text>
         </TouchableOpacity>
-        <View style={styles.sideItems}>
-          {items.map((item) => (
-            <Pressable key={item.key} style={[styles.sideItem, active === item.key && styles.sideItemActive]} onPress={() => onChange(item.key)}>
-              <Text style={[styles.sideItemText, active === item.key && styles.sideItemTextActive]}>{item.short}</Text>
-            </Pressable>
-          ))}
-        </View>
-        <TouchableOpacity style={styles.sideItem} onPress={() => setOpen(true)}><Text style={styles.sideItemText}>ME</Text></TouchableOpacity>
-      </View>
+      )}
 
       {open && (
         <View style={styles.menuOverlay}>
-          <Pressable style={styles.menuScrim} onPress={() => setOpen(false)} />
-          <View style={styles.fullMenu}>
+          <View style={[styles.fullMenu, { width: menuWidth }]}>
             <View style={styles.fullMenuTop}>
               <View style={styles.sideLogo}><Text style={styles.sideLogoText}>EV</Text></View>
               <TouchableOpacity style={styles.iconButton} onPress={() => setOpen(false)}><Text style={styles.iconButtonText}>x</Text></TouchableOpacity>
@@ -443,7 +450,7 @@ function SideNav({
               <Text style={styles.muted}>Nivel: {session.tenant?.plan || session.tenant?.type || "STARTER"}</Text>
               <Text style={styles.muted}>Usuario: {session.user.name}</Text>
             </View>
-            <View style={styles.menuItems}>
+            <ScrollView style={styles.menuItems} contentContainerStyle={styles.menuItemsContent} showsVerticalScrollIndicator={false}>
               {items.map((item) => (
                 <TouchableOpacity key={item.key} style={[styles.menuItem, active === item.key && styles.menuItemActive]} onPress={() => onChange(item.key)}>
                   <View style={[styles.menuIcon, active === item.key && styles.menuIconActive]}><Text style={styles.sideItemTextActive}>{item.short}</Text></View>
@@ -453,30 +460,13 @@ function SideNav({
                   </View>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
             <TouchableOpacity style={styles.logoutButton} onPress={onLogout}><Text style={styles.logoutButtonText}>Cerrar sesion</Text></TouchableOpacity>
           </View>
+          <Pressable style={styles.menuScrim} onPress={() => setOpen(false)} />
         </View>
       )}
     </>
-  );
-}
-
-function TopHeader({ session, profile, onLogout }: { session: SessionState; profile: IndustryProfile; onLogout: () => void }) {
-  return (
-    <View style={styles.header}>
-      <View>
-        <Text style={styles.headerEyebrow}>EVOLUM / {profile.label}</Text>
-        <Text style={styles.headerTitle}>{session.tenant?.name || session.user.name}</Text>
-        <Text style={styles.headerPlan}>{session.tenant?.plan || session.tenant?.type || "STARTER"}</Text>
-      </View>
-      <View style={styles.headerActions}>
-        <View style={styles.accountPill}>
-          <Text style={styles.accountPillText}>{session.user.role === "SUPER_ADMIN" ? "Super Admin" : session.user.name}</Text>
-        </View>
-        <TouchableOpacity style={styles.logoutMini} onPress={onLogout}><Text style={styles.logoutMiniText}>Salir</Text></TouchableOpacity>
-      </View>
-    </View>
   );
 }
 
@@ -530,11 +520,16 @@ function InboxScreen(props: {
   onAction: (action: "take" | "release" | "resolve") => void;
   refreshing: boolean;
   onRefresh: () => void;
+  compactHeader?: boolean;
 }) {
   const active = props.selectedConversation;
   return (
-    <KeyboardAvoidingView style={styles.inboxRoot} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={10}>
-      <View style={styles.chatHeader}>
+    <KeyboardAvoidingView
+      style={styles.inboxRoot}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+    >
+      {!props.compactHeader && <View style={styles.chatHeader}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{initials(active?.contact.name || active?.contact.externalId)}</Text></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.chatName}>{active?.contact.name || active?.contact.externalId || "Inbox"}</Text>
@@ -543,7 +538,7 @@ function InboxScreen(props: {
         <TouchableOpacity style={styles.chatsButton} onPress={() => props.setDrawerOpen(true)}>
           <Text style={styles.chatsButtonText}>CHATS</Text>
         </TouchableOpacity>
-      </View>
+      </View>}
 
       <FlatList
         data={props.messages}
@@ -750,12 +745,12 @@ function PipelineScreen({
           <Kpi label="Oportunidades" value={conversations.length} detail={`${dashboard?.kpis.readyToClose ?? 0} listas`} />
           <Kpi label="Promedio IA" value={`${dashboard?.kpis.averageCloseScore ?? 0}%`} detail="score cierre" />
         </View>
-        <View style={styles.filterRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
           <TouchableOpacity style={[styles.filterPill, !selectedStage && styles.filterPillActive]} onPress={() => setSelectedStage(null)}><Text style={[styles.filterText, !selectedStage && styles.filterTextActive]}>Todas</Text></TouchableOpacity>
           {profile.pipelineStages.map((stage) => (
             <TouchableOpacity key={stage} style={[styles.filterPill, selectedStage === stage && styles.filterPillActive]} onPress={() => setSelectedStage(stage)}><Text style={[styles.filterText, selectedStage === stage && styles.filterTextActive]}>{stage}</Text></TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       </Panel>
       <View style={styles.stageList}>
         {visibleBuckets.map(({ stage, items, value }) => {
@@ -1030,7 +1025,26 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: colors.text, fontWeight: "800" },
   apiHint: { color: colors.muted, fontSize: 11, lineHeight: 15 },
   connectionStatus: { color: colors.purple2, fontSize: 12, lineHeight: 17 },
-  appShell: { flex: 1, flexDirection: "row", backgroundColor: colors.bg },
+  appShell: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    paddingTop: Platform.OS === "android" ? RNStatusBar.currentHeight || 0 : 0
+  },
+  floatingMenuButton: {
+    position: "absolute",
+    top: Platform.OS === "android" ? 34 : 22,
+    left: 12,
+    zIndex: 30,
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: colors.purple,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    ...shadow
+  },
   sideNav: {
     width: 66,
     margin: 10,
@@ -1076,11 +1090,12 @@ const styles = StyleSheet.create({
   },
   menuScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.38)" },
   fullMenu: {
-    width: 286,
     borderRightWidth: 1,
     borderRightColor: colors.borderStrong,
     backgroundColor: "#07101f",
     padding: 16,
+    paddingTop: Platform.OS === "android" ? 28 : 20,
+    paddingBottom: Platform.OS === "android" ? 28 : 22,
     gap: 14,
     ...shadow
   },
@@ -1093,7 +1108,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.panel
   },
   menuAccountName: { color: colors.text, fontSize: 22, fontWeight: "900", marginVertical: 4 },
-  menuItems: { gap: 8, flex: 1 },
+  menuItems: { flex: 1 },
+  menuItemsContent: { gap: 8, paddingBottom: 8 },
   menuItem: {
     minHeight: 58,
     borderWidth: 1,
@@ -1110,9 +1126,36 @@ const styles = StyleSheet.create({
   menuIconActive: { backgroundColor: colors.purple },
   menuItemTitle: { color: colors.text, fontWeight: "900" },
   menuItemSub: { color: colors.muted, fontSize: 11 },
-  logoutButton: { minHeight: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(127,29,29,0.5)", borderWidth: 1, borderColor: "rgba(248,113,113,0.35)" },
+  logoutButton: { minHeight: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(127,29,29,0.5)", borderWidth: 1, borderColor: "rgba(248,113,113,0.35)", marginBottom: 8 },
   logoutButtonText: { color: colors.text, fontWeight: "900" },
-  contentShell: { flex: 1, paddingRight: 10, paddingTop: 10, paddingBottom: 8 },
+  inboxTopContact: {
+    position: "absolute",
+    top: Platform.OS === "android" ? 34 : 22,
+    left: 76,
+    right: 10,
+    zIndex: 25,
+    minHeight: 54,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    backgroundColor: colors.panel,
+    padding: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  avatarTiny: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: colors.purple,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  topContactName: { color: colors.text, fontWeight: "900", fontSize: 15 },
+  topContactSub: { color: colors.muted, fontSize: 10 },
+  chatsButtonCompact: { backgroundColor: colors.purple, borderRadius: 13, minHeight: 38, paddingHorizontal: 10, justifyContent: "center" },
+  contentShell: { flex: 1, paddingHorizontal: 10, paddingTop: Platform.OS === "android" ? 98 : 86, paddingBottom: 8 },
   header: {
     minHeight: 74,
     borderWidth: 1,
@@ -1133,7 +1176,7 @@ const styles = StyleSheet.create({
   accountPillText: { color: colors.text, fontWeight: "900" },
   logoutMini: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, minHeight: 40, justifyContent: "center" },
   logoutMiniText: { color: colors.text, fontWeight: "800" },
-  screenContent: { paddingVertical: 14, paddingBottom: 42, gap: 14 },
+  screenContent: { paddingTop: 6, paddingBottom: 42, gap: 14 },
   eyebrow: { color: colors.purple2, fontSize: 12, fontWeight: "900", letterSpacing: 1.8, textTransform: "uppercase" },
   screenTitle: { color: colors.text, fontSize: 30, fontWeight: "900" },
   screenSubtitle: { color: colors.muted, lineHeight: 20 },
@@ -1190,24 +1233,24 @@ const styles = StyleSheet.create({
   avatarText: { color: colors.text, fontWeight: "900", fontSize: 12 },
   listTitle: { color: colors.text, fontWeight: "900" },
   rowRight: { color: colors.purple2, fontWeight: "900", fontSize: 11 },
-  inboxRoot: { flex: 1, paddingTop: 10, paddingBottom: 18 },
+  inboxRoot: { flex: 1, paddingTop: 0, paddingBottom: 2 },
   chatHeader: {
-    minHeight: 70,
+    minHeight: 62,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 20,
     backgroundColor: colors.panel,
-    padding: 12,
+    padding: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 10
   },
-  chatName: { color: colors.text, fontSize: 20, fontWeight: "900" },
+  chatName: { color: colors.text, fontSize: 18, fontWeight: "900" },
   chatSub: { color: colors.muted, fontSize: 11 },
   chatsButton: { backgroundColor: colors.purple, borderRadius: 14, minHeight: 42, paddingHorizontal: 12, justifyContent: "center" },
   chatsButtonText: { color: colors.text, fontWeight: "900", fontSize: 12 },
   messageList: { flex: 1 },
-  messageListContent: { paddingVertical: 12, paddingBottom: 16, gap: 10 },
+  messageListContent: { paddingTop: 6, paddingBottom: 8, gap: 10 },
   bubble: {
     alignSelf: "flex-start",
     maxWidth: "86%",
@@ -1219,7 +1262,7 @@ const styles = StyleSheet.create({
   bubbleOut: { alignSelf: "flex-end", backgroundColor: colors.purple },
   bubbleText: { color: colors.text, lineHeight: 20 },
   bubbleMeta: { color: colors.muted, fontSize: 10, marginTop: 6 },
-  actionRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  actionRow: { flexDirection: "row", gap: 8, marginBottom: 6 },
   miniButton: {
     flex: 1,
     minHeight: 39,
@@ -1236,8 +1279,8 @@ const styles = StyleSheet.create({
     gap: 8,
     borderTopWidth: 1,
     borderTopColor: colors.border,
-    paddingTop: 8,
-    paddingBottom: Platform.OS === "android" ? 22 : 12
+    paddingTop: 7,
+    paddingBottom: Platform.OS === "android" ? 18 : 12
   },
   composerInput: {
     flex: 1,
@@ -1253,20 +1296,21 @@ const styles = StyleSheet.create({
   sendButtonText: { color: colors.text, fontWeight: "900", fontSize: 20 },
   drawerOverlay: {
     position: "absolute",
-    top: 0,
+    top: Platform.OS === "android" ? -54 : -46,
     right: 0,
-    bottom: 0,
+    bottom: -6,
     left: 0,
     zIndex: 20,
     flexDirection: "row"
   },
   drawerScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.28)" },
   chatDrawer: {
-    width: "78%",
+    width: "82%",
     backgroundColor: "#080814",
     borderLeftWidth: 1,
     borderLeftColor: colors.borderStrong,
     padding: 14,
+    paddingTop: Platform.OS === "android" ? 18 : 14,
     gap: 12
   },
   drawerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
@@ -1274,6 +1318,7 @@ const styles = StyleSheet.create({
   iconButton: { width: 36, height: 36, borderRadius: 13, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" },
   iconButtonText: { color: colors.text, fontWeight: "900" },
   filterRow: { flexDirection: "row", gap: 8 },
+  filterScrollContent: { gap: 8, paddingRight: 8 },
   filterPill: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 11, minHeight: 34, justifyContent: "center" },
   filterPillActive: { backgroundColor: colors.purple, borderColor: colors.borderStrong },
   filterText: { color: colors.muted, fontWeight: "800", textTransform: "capitalize" },
