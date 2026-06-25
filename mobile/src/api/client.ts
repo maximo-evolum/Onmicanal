@@ -130,6 +130,13 @@ export async function sendManualMessage(conversationId: string, content: string)
   }
 }
 
+export async function sendReengagementTemplate(conversationId: string): Promise<Message> {
+  return request<Message>("/messages/reengage", {
+    method: "POST",
+    body: JSON.stringify({ conversationId })
+  });
+}
+
 export async function createCampaignDraft(payload: {
   name: string;
   segment?: string;

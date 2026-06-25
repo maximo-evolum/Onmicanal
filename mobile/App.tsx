@@ -39,6 +39,7 @@ import {
   releaseConversation,
   resolveConversation,
   sendManualMessage,
+  sendReengagementTemplate,
   takeConversation,
   updateAdminTenantModules
 } from "./src/api/client";
@@ -282,11 +283,40 @@ export default function App() {
       await loadMessages(selectedConversation.id);
       await loadConversations(false);
       if (sent.status === "FAILED") {
-        Alert.alert("WhatsApp no entrego el mensaje", sent.errorMessage || "Meta rechazo o no pudo enviar el mensaje.");
+        const errorText = sent.errorMessage || "Meta rechazo o no pudo enviar el mensaje.";
+        const needsTemplate = /re-engagement|24 hours|24 horas/i.test(errorText);
+        if (needsTemplate) {
+          Alert.alert(
+            "Chat fuera de ventana",
+            "WhatsApp no permite texto libre porque el cliente no ha respondido en mas de 24 horas. Envia una plantilla aprobada para reabrir el chat.",
+            [
+              { text: "Cancelar", style: "cancel" },
+              { text: "Enviar plantilla", onPress: () => sendReengagementTemplateForSelected() }
+            ]
+          );
+        } else {
+          Alert.alert("WhatsApp no entrego el mensaje", errorText);
+        }
       }
     } catch (error) {
       Alert.alert("No se pudo enviar", error instanceof Error ? error.message : "Revisa la conexion");
       setReply(content);
+    }
+  }
+
+  async function sendReengagementTemplateForSelected() {
+    if (!selectedConversation?.id) return;
+    try {
+      const sent = await sendReengagementTemplate(selectedConversation.id);
+      await loadMessages(selectedConversation.id);
+      await loadConversations(false);
+      if (sent.status === "FAILED") {
+        Alert.alert("Plantilla no enviada", sent.errorMessage || "La plantilla aun no esta aprobada o Meta la rechazo.");
+      } else {
+        Alert.alert("Plantilla enviada", "Cuando el cliente responda, se abrira la ventana de 24 horas para continuar el chat.");
+      }
+    } catch (error) {
+      Alert.alert("No se pudo enviar plantilla", error instanceof Error ? error.message : "Intenta nuevamente");
     }
   }
 
