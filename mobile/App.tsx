@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -25,8 +26,10 @@ import {
   createBooking,
   createCampaignDraft,
   generateCampaignCopy,
+  generateCampaignImages,
   getAdminTenants,
   getBookings,
+  getCampaignJob,
   getCampaigns,
   getConversations,
   getCrmOperationalDashboard,
@@ -52,6 +55,23 @@ type ScreenKey = "dashboard" | "inbox" | "agenda" | "pipeline" | "campaigns" | "
 type SessionState = {
   user: AgentSession;
   tenant?: TenantSession;
+};
+
+type CampaignVariant = {
+  id?: string;
+  title?: string;
+  visualTitle?: string;
+  caption?: string;
+  copy?: string;
+  text?: string;
+  cta?: string;
+  hashtags?: string;
+  image?: string;
+  imageUrl?: string;
+  url?: string;
+  mediaUrl?: string;
+  publicUrl?: string;
+  generationStage?: string;
 };
 
 const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: string }> = [
@@ -103,6 +123,42 @@ function sameDay(a: Date, b: Date) {
 function initials(value?: string | null) {
   const text = String(value || "EV").trim();
   return text.slice(0, 2).toUpperCase();
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseTemplateData(value: any) {
+  if (!value) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function campaignVariantImage(variant?: CampaignVariant | null) {
+  if (!variant) return "";
+  return String(variant.imageUrl || variant.image || variant.mediaUrl || variant.publicUrl || variant.url || "");
+}
+
+function campaignVariantCaption(variant?: CampaignVariant | null) {
+  if (!variant) return "";
+  return String(variant.caption || variant.copy || variant.text || "");
+}
+
+function extractCampaignVariants(source: any): CampaignVariant[] {
+  const templateData = parseTemplateData(source?.campaign?.templateData || source?.campaign?.template || source?.templateData || source?.template);
+  const candidates = [
+    source?.variants,
+    source?.result?.variants,
+    source?.campaign?.templateData?.variants,
+    templateData?.variants
+  ];
+  const variants = candidates.find((item) => Array.isArray(item) && item.length);
+  return Array.isArray(variants) ? variants : [];
 }
 
 export default function App() {
@@ -159,13 +215,21 @@ export default function App() {
   }, [selectedConversation?.id]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || screen !== "dashboard") return;
     const id = setInterval(() => {
-      if (screen === "inbox") loadConversations(false);
-      if (screen === "dashboard") loadDashboard(false);
+      loadDashboard(false);
     }, 15000);
     return () => clearInterval(id);
   }, [screen, session]);
+
+  useEffect(() => {
+    if (!session || screen !== "inbox") return;
+    const id = setInterval(() => {
+      loadConversations(false);
+      if (selectedConversation?.id) loadMessages(selectedConversation.id);
+    }, 2500);
+    return () => clearInterval(id);
+  }, [screen, session, selectedConversation?.id]);
 
   async function bootstrap() {
     try {
@@ -268,7 +332,11 @@ export default function App() {
 
   async function refreshCurrent() {
     if (screen === "dashboard") return loadDashboard();
-    if (screen === "inbox") return loadConversations();
+    if (screen === "inbox") {
+      await loadConversations();
+      if (selectedConversation?.id) await loadMessages(selectedConversation.id);
+      return;
+    }
     if (screen === "agenda") return loadBookings();
     if (screen === "campaigns") return loadCampaigns();
     if (screen === "admin") return loadAdminTenants();
@@ -826,6 +894,8 @@ function CampaignsScreen({
   const [cta, setCta] = useState("Reserva tu fecha hoy");
   const [platforms, setPlatforms] = useState<string[]>(["whatsapp"]);
   const [campaignId, setCampaignId] = useState<string | undefined>();
+  const [variants, setVariants] = useState<CampaignVariant[]>([]);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [working, setWorking] = useState(false);
   const [campaignStatus, setCampaignStatus] = useState("");
   const whatsappRecipients = useMemo(
@@ -845,6 +915,21 @@ function CampaignsScreen({
     return caption.trim() || `${ideaLabel}\n\n${productLabel}\n${ctaLabel}`;
   }
 
+  function selectedCampaignVariant(text?: string) {
+    const current = variants[selectedVariantIndex];
+    return current
+      ? { ...current, caption: text || campaignVariantCaption(current), cta: cta.trim() || current.cta }
+      : { caption: text || campaignPayloadText(), cta };
+  }
+
+  function applyVariant(variant: CampaignVariant, index: number) {
+    setSelectedVariantIndex(index);
+    const nextCaption = campaignVariantCaption(variant);
+    if (nextCaption) setCaption(nextCaption);
+    if (variant.cta) setCta(variant.cta);
+    if (variant.title || variant.visualTitle) setVisualTitle(String(variant.title || variant.visualTitle));
+  }
+
   async function handleCreateCampaign() {
     try {
       setWorking(true);
@@ -859,8 +944,8 @@ function CampaignsScreen({
         caption: text,
         cta,
         platforms,
-        selectedVariant: { caption: text, cta },
-        variants: [{ caption: text, cta }]
+        selectedVariant: selectedCampaignVariant(text),
+        variants: variants.length ? variants : [{ caption: text, cta }]
       });
       setCampaignId(campaign.id);
       setCaption(text);
@@ -878,7 +963,7 @@ function CampaignsScreen({
   async function handleGenerateCampaign() {
     try {
       setWorking(true);
-      setCampaignStatus("Generando copy...");
+      setCampaignStatus("Generando imagenes y textos...");
       const result = await generateCampaignCopy({
         product: product.trim() || `${profile.label} ${profile.primaryEntity}`,
         visualTitle: visualTitle.trim() || "Campaña movil EVOLUM",
@@ -901,6 +986,67 @@ function CampaignsScreen({
     }
   }
 
+  async function handleGenerateCampaignImages() {
+    try {
+      setWorking(true);
+      setCampaignStatus("Generando imagenes y textos...");
+      const payload = {
+        product: product.trim() || `${profile.label} ${profile.primaryEntity}`,
+        visualTitle: visualTitle.trim() || "Campana movil EVOLUM",
+        idea: idea.trim() || "Promocion para contactos recientes del inbox",
+        caption,
+        cta,
+        platforms,
+        variantCount: 3,
+        quickMode: false,
+        imageSize: "1024x1024"
+      };
+      const started = await generateCampaignImages(payload);
+      let job = started?.job || started;
+
+      if (started?.jobId) {
+        for (let attempt = 0; attempt < 28; attempt += 1) {
+          await wait(2500);
+          job = await getCampaignJob(started.jobId);
+          setCampaignStatus(job?.message || "Generando imagenes...");
+          if (job?.status === "COMPLETED" || job?.status === "FAILED") break;
+        }
+      }
+
+      if (job?.status === "FAILED") {
+        throw new Error(job.error || "No se pudieron generar imagenes.");
+      }
+
+      const generatedVariants = extractCampaignVariants(job || started);
+      if (generatedVariants.length) {
+        setVariants(generatedVariants);
+        setSelectedVariantIndex(0);
+        const firstVariant = generatedVariants[0];
+        setCaption(campaignVariantCaption(firstVariant) || caption || "Hola, tenemos novedades para ti. Responde este mensaje y coordinamos los detalles.");
+        if (firstVariant?.cta) setCta(firstVariant.cta);
+        if (firstVariant?.title || firstVariant?.visualTitle) setVisualTitle(String(firstVariant.title || firstVariant.visualTitle));
+        if (job?.result?.campaign?.id) setCampaignId(job.result.campaign.id);
+        setCampaignStatus("Imagenes listas. Elige una variante para publicar.");
+        Alert.alert("Campana generada", "Ya puedes elegir la imagen y publicar.");
+      } else {
+        const result = await generateCampaignCopy(payload);
+        const fallbackVariants = extractCampaignVariants(result);
+        setVariants(fallbackVariants);
+        const firstVariant = result?.variants?.[0];
+        setCaption(firstVariant?.caption || firstVariant?.copy || result?.caption || caption || "Hola, tenemos novedades para ti. Responde este mensaje y coordinamos los detalles.");
+        if (result?.campaign?.id) setCampaignId(result.campaign.id);
+        setCampaignStatus("Copy generado. No llegaron imagenes desde el backend.");
+        Alert.alert("Copy generado", "El texto quedo listo, pero no se recibieron imagenes.");
+      }
+      await onRefresh();
+    } catch (error) {
+      setCampaignStatus("No se pudo generar la campana.");
+      Alert.alert("No se pudo generar", error instanceof Error ? error.message : "Intenta nuevamente.");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function handlePublishCampaign() {
     try {
       setWorking(true);
@@ -914,8 +1060,8 @@ function CampaignsScreen({
         caption: text,
         cta,
         platforms,
-        selectedVariant: { caption: text, cta },
-        variants: [{ caption: text, cta }],
+        selectedVariant: selectedCampaignVariant(text),
+        variants: variants.length ? variants : [{ caption: text, cta }],
         whatsappRecipients
       });
       if (result?.campaign?.id) setCampaignId(result.campaign.id);
@@ -953,10 +1099,32 @@ function CampaignsScreen({
           <Text style={styles.muted}>numeros WhatsApp detectados</Text>
         </View>
         {!!campaignStatus && <Text style={styles.greenText}>{campaignStatus}</Text>}
+        {!!variants.length && (
+          <View style={styles.campaignImagesBlock}>
+            <Text style={styles.panelTitle}>Imagenes para elegir</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.campaignImagesRow}>
+              {variants.map((variant, index) => {
+                const imageUrl = campaignVariantImage(variant);
+                const active = index === selectedVariantIndex;
+                return (
+                  <TouchableOpacity key={variant.id || `${index}-${imageUrl}`} style={[styles.campaignImageCard, active && styles.campaignImageCardActive]} onPress={() => applyVariant(variant, index)}>
+                    {imageUrl ? (
+                      <Image source={{ uri: imageUrl }} style={styles.campaignImage} resizeMode="cover" />
+                    ) : (
+                      <View style={styles.campaignImageEmpty}><Text style={styles.avatarText}>IMG</Text></View>
+                    )}
+                    <Text style={styles.campaignImageTitle} numberOfLines={2}>{variant.title || variant.visualTitle || `Opcion ${index + 1}`}</Text>
+                    <Text style={active ? styles.greenText : styles.muted}>{active ? "Seleccionada" : "Tocar para usar"}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
         <TextInput style={[styles.input, styles.textArea]} value={caption} onChangeText={setCaption} placeholder="Texto generado o manual..." placeholderTextColor={colors.muted} multiline />
         <TextInput style={styles.input} value={cta} onChangeText={setCta} placeholder="CTA" placeholderTextColor={colors.muted} />
         <TouchableOpacity style={styles.secondaryButton} onPress={handleCreateCampaign} disabled={working}><Text style={styles.secondaryButtonText}>{working ? "Procesando..." : "Crear campana"}</Text></TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleGenerateCampaign} disabled={working}><Text style={styles.secondaryButtonText}>{working ? "Procesando..." : "Generar copy IA"}</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleGenerateCampaignImages} disabled={working}><Text style={styles.secondaryButtonText}>{working ? "Procesando..." : "Generar imagenes IA"}</Text></TouchableOpacity>
         <TouchableOpacity style={styles.primaryButton} onPress={handlePublishCampaign} disabled={working}><Text style={styles.primaryButtonText}>{working ? "Publicando..." : "Publicar campaña"}</Text></TouchableOpacity>
       </Panel>
       <Panel title="Historial reciente">
@@ -1438,6 +1606,28 @@ const styles = StyleSheet.create({
   cardTitle: { color: colors.text, fontWeight: "900", fontSize: 16 },
   scoreText: { color: colors.orange, marginTop: 8, fontWeight: "900" },
   campaignStat: { borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 14, backgroundColor: colors.panel2 },
+  campaignImagesBlock: { gap: 10 },
+  campaignImagesRow: { gap: 10, paddingRight: 8 },
+  campaignImageCard: {
+    width: 158,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    backgroundColor: colors.panel2,
+    padding: 9,
+    gap: 8
+  },
+  campaignImageCardActive: { borderColor: colors.borderStrong, backgroundColor: "rgba(139,63,244,0.24)" },
+  campaignImage: { width: "100%", height: 118, borderRadius: 14, backgroundColor: colors.panel },
+  campaignImageEmpty: {
+    width: "100%",
+    height: 118,
+    borderRadius: 14,
+    backgroundColor: "rgba(139,63,244,0.18)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  campaignImageTitle: { color: colors.text, fontWeight: "900", minHeight: 34 },
   textArea: { minHeight: 92, paddingTop: 12, textAlignVertical: "top" },
   calendarActions: { flexDirection: "row", gap: 8 },
   calendarGrid: { flexDirection: "row", flexWrap: "wrap", gap: 4 },

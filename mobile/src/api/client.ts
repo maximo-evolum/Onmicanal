@@ -209,6 +209,29 @@ export async function generateCampaignCopy(payload: {
   });
 }
 
+export async function generateCampaignImages(payload: {
+  campaignId?: string;
+  product: string;
+  visualTitle: string;
+  idea: string;
+  caption?: string;
+  cta?: string;
+  platforms: string[];
+  variantCount?: number;
+  quickMode?: boolean;
+  imageSize?: string;
+  variants?: any[];
+}) {
+  return request<any>("/campaigns/generate-images", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getCampaignJob(jobId: string) {
+  return request<any>(`/campaigns/job/${jobId}`);
+}
+
 export async function publishCampaign(payload: {
   campaignId?: string;
   product: string;
