@@ -1,5 +1,5 @@
 import { ensurePublicCampaignImage } from "./campaign-assets.service.js";
-import { sendWhatsAppText } from "./whatsapp.service.js";
+import { sendWhatsAppImage, sendWhatsAppText } from "./whatsapp.service.js";
 
 const OPENAI_URL = "https://api.openai.com/v1";
 
@@ -37,6 +37,80 @@ function normalizePlatforms(platforms) {
   }
   if (typeof platforms === "string" && platforms) return [platforms.toLowerCase()];
   return ["instagram"];
+}
+
+function metadataObject(config = {}) {
+  return config?.metadata && typeof config.metadata === "object" ? config.metadata : {};
+}
+
+function firstNonEmpty(...values) {
+  return values.find((value) => value !== undefined && value !== null && String(value).trim() !== "");
+}
+
+function graphErrorMessage(data, fallback) {
+  const error = data?.error;
+  if (!error) return fallback;
+  const parts = [
+    error.message,
+    error.code ? `code ${error.code}` : null,
+    error.error_subcode ? `subcode ${error.error_subcode}` : null,
+    error.fbtrace_id ? `trace ${error.fbtrace_id}` : null
+  ].filter(Boolean);
+  return parts.length ? parts.join(" | ") : fallback;
+}
+
+function buildCampaignCaption(selectedVariant = {}, campaign = null) {
+  const base = String(selectedVariant.caption || selectedVariant.text || campaign?.name || "Campana EVOLUM").trim();
+  const hashtags = String(selectedVariant.hashtags || "").trim();
+  if (!hashtags) return base;
+  if (base.includes(hashtags)) return base;
+  return `${base}\n\n${hashtags}`;
+}
+
+function resolveFacebookPublisherConfig(byChannel = {}) {
+  const config = byChannel.facebook || {};
+  const instagramConfig = byChannel.instagram || {};
+  const metadata = metadataObject(config);
+  const instagramMetadata = metadataObject(instagramConfig);
+  return {
+    pageId: firstNonEmpty(
+      config.externalAccountId,
+      config.businessAccountId,
+      metadata.pageId,
+      metadata.facebookPageId,
+      instagramMetadata.pageId,
+      instagramMetadata.facebookPageId,
+      process.env.FACEBOOK_PAGE_ID
+    ),
+    accessToken: firstNonEmpty(
+      config.accessToken,
+      metadata.pageAccessToken,
+      metadata.facebookPageAccessToken,
+      process.env.FACEBOOK_PAGE_ACCESS_TOKEN,
+      process.env.META_ACCESS_TOKEN
+    )
+  };
+}
+
+function resolveInstagramPublisherConfig(byChannel = {}, tenant = null) {
+  const config = byChannel.instagram || {};
+  const metadata = metadataObject(config);
+  return {
+    igUserId: firstNonEmpty(
+      config.externalAccountId,
+      config.businessAccountId,
+      metadata.instagramBusinessAccountId,
+      metadata.igUserId,
+      tenant?.instagramBusinessAccountId,
+      process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID
+    ),
+    accessToken: firstNonEmpty(
+      config.accessToken,
+      metadata.instagramAccessToken,
+      process.env.INSTAGRAM_ACCESS_TOKEN,
+      process.env.META_ACCESS_TOKEN
+    )
+  };
 }
 
 function buildSystemPrompt({ category, platforms, variantCount }) {
@@ -351,16 +425,32 @@ async function publishFacebookPhoto({ pageId, accessToken, imageUrl, caption }) 
 
   const res = await fetch(`https://graph.facebook.com/v23.0/${pageId}/photos`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      url: imageUrl,
-      caption,
-      access_token: accessToken
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      url: String(imageUrl),
+      caption: String(caption || ""),
+      access_token: String(accessToken)
     })
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || "No se pudo publicar en Facebook");
+  if (!res.ok) throw new Error(graphErrorMessage(data, "No se pudo publicar en Facebook"));
   return data;
+}
+
+async function waitForInstagramContainer({ creationId, accessToken }) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const res = await fetch(
+      `https://graph.facebook.com/v23.0/${creationId}?fields=status_code,status&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(graphErrorMessage(data, "No se pudo revisar el estado de Instagram"));
+    if (!data.status_code || data.status_code === "FINISHED") return data;
+    if (data.status_code === "ERROR") {
+      throw new Error(data.status || "Instagram no pudo preparar el contenido");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  return null;
 }
 
 async function publishInstagramPhoto({ igUserId, accessToken, imageUrl, caption }) {
@@ -369,32 +459,34 @@ async function publishInstagramPhoto({ igUserId, accessToken, imageUrl, caption 
 
   const createRes = await fetch(`https://graph.facebook.com/v23.0/${igUserId}/media`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      image_url: imageUrl,
-      caption,
-      access_token: accessToken
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      image_url: String(imageUrl),
+      caption: String(caption || ""),
+      access_token: String(accessToken)
     })
   });
   const createData = await createRes.json();
-  if (!createRes.ok) throw new Error(createData?.error?.message || "No se pudo crear media container de Instagram");
+  if (!createRes.ok) throw new Error(graphErrorMessage(createData, "No se pudo crear media container de Instagram"));
+
+  await waitForInstagramContainer({ creationId: createData.id, accessToken });
 
   const publishRes = await fetch(`https://graph.facebook.com/v23.0/${igUserId}/media_publish`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      creation_id: createData.id,
-      access_token: accessToken
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      creation_id: String(createData.id),
+      access_token: String(accessToken)
     })
   });
   const publishData = await publishRes.json();
-  if (!publishRes.ok) throw new Error(publishData?.error?.message || "No se pudo publicar en Instagram");
-  return publishData;
+  if (!publishRes.ok) throw new Error(graphErrorMessage(publishData, "No se pudo publicar en Instagram"));
+  return { ...publishData, creationId: createData.id };
 }
 
 export async function publishCampaignToPlatforms({ tenant, channelConfigs = [], campaign, platforms = [], selectedVariant = {}, whatsappRecipients = [] }) {
   const selectedPlatforms = normalizePlatforms(platforms);
-  const caption = `${selectedVariant.caption || selectedVariant.text || campaign?.template || ""}${selectedVariant.hashtags ? `\n\n${selectedVariant.hashtags}` : ""}`;
+  const caption = buildCampaignCaption(selectedVariant, campaign);
   const imageUrl = await ensurePublicCampaignImage(selectedVariant.imageUrl || selectedVariant.image || null, {
     title: selectedVariant.title || campaign?.name || "campaña",
     requirePublicUrl: selectedPlatforms.some((platform) => ["facebook", "instagram"].includes(platform))
@@ -409,20 +501,15 @@ export async function publishCampaignToPlatforms({ tenant, channelConfigs = [], 
   for (const platform of selectedPlatforms) {
     try {
       if (platform === "facebook") {
-        const config = byChannel.facebook || byChannel.instagram || {};
-        const metadata = config.metadata && typeof config.metadata === "object" ? config.metadata : {};
-        const pageId = config.externalAccountId || config.businessAccountId || metadata.pageId || process.env.FACEBOOK_PAGE_ID;
-        const token = config.accessToken || process.env.META_ACCESS_TOKEN;
-        const data = await publishFacebookPhoto({ pageId, accessToken: token, imageUrl, caption });
+        const config = resolveFacebookPublisherConfig(byChannel);
+        const data = await publishFacebookPhoto({ pageId: config.pageId, accessToken: config.accessToken, imageUrl, caption });
         results.push({ platform, status: "PUBLISHED", data });
         continue;
       }
 
       if (platform === "instagram") {
-        const config = byChannel.instagram || {};
-        const igUserId = config.externalAccountId || config.businessAccountId || tenant?.instagramBusinessAccountId || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
-        const token = config.accessToken || process.env.META_ACCESS_TOKEN;
-        const data = await publishInstagramPhoto({ igUserId, accessToken: token, imageUrl, caption });
+        const config = resolveInstagramPublisherConfig(byChannel, tenant);
+        const data = await publishInstagramPhoto({ igUserId: config.igUserId, accessToken: config.accessToken, imageUrl, caption });
         results.push({ platform, status: "PUBLISHED", data });
         continue;
       }
@@ -438,19 +525,22 @@ export async function publishCampaignToPlatforms({ tenant, channelConfigs = [], 
           continue;
         }
 
-        const message = imageUrl && isHttpImageUrl(imageUrl)
-          ? `${caption}\n\nImagen de campana: ${imageUrl}`
-          : caption;
-
         const sent = [];
         const failed = [];
         for (const recipient of recipients) {
           try {
-            const data = await sendWhatsAppText({
-              to: recipient,
-              message,
-              tenant
-            });
+            const data = imageUrl && isHttpImageUrl(imageUrl)
+              ? await sendWhatsAppImage({
+                  to: recipient,
+                  imageUrl,
+                  caption,
+                  tenant
+                })
+              : await sendWhatsAppText({
+                  to: recipient,
+                  message: caption,
+                  tenant
+                });
             sent.push({ to: recipient, data });
           } catch (error) {
             failed.push({ to: recipient, error: error.message });
