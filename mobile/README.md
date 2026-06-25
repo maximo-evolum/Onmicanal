@@ -14,13 +14,13 @@ npm run start
 
 `npm run start` usa tunnel por defecto. Es la forma recomendada para probar en Samsung, Android, iPhone y telefonos que no estan en la misma red local que el PC.
 
-Si quieres probar solo dentro de tu WiFi local:
+ WiFi local:
 
 ```bash
 npm run start:lan
 ```
 
-Si aparece `Failed to download remote update` en Expo Go, cierra Expo Go, vuelve a ejecutar:
+Si aparece `Failed to download remote update` en Expo Go, cerrar Expo Go, volver a ejecutar:
 
 ```bash
 npm run start
