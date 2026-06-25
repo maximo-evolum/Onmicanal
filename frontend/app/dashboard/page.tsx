@@ -49,7 +49,7 @@ export default function DashboardPage() {
       setMetrics(leadMetrics);
       setCrm(crmData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo cargar Analytics & KPIs");
+      setError(err instanceof Error ? err.message : "No se pudo cargar Dashboard");
     }
   }
 

@@ -131,7 +131,7 @@ export default function SaasPage() {
                 <Link href="/onboarding">Personalidad y reglas IA</Link>
                 <Link href="/saas">Usuarios y roles</Link>
                 <Link href="/onboarding">Onboarding guiado</Link>
-                <Link href="/dashboard">Analytics & KPIs</Link>
+                <Link href="/dashboard">Dashboard</Link>
               </div>
             </section>
           </>

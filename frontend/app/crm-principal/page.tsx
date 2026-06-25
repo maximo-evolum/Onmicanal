@@ -10,6 +10,7 @@ import {
   getLeadMetrics,
   getMe,
   getMyModules,
+  getOnboardingKnowledge,
   type CrmOperationalDashboard
 } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
@@ -24,6 +25,7 @@ type LoadState = {
   campaigns: Campaign[];
   modules: string[];
   modulesLoaded: boolean;
+  onboarding: any | null;
   plan: AccountLevel;
   tenant: TenantSession | null;
   error: string | null;
@@ -58,7 +60,6 @@ type SearchResult = NavItem & {
 
 const navItems: NavItem[] = [
   { label: "Inicio", href: "/crm-principal", description: "Centro principal de EVOLUM", moduleKey: "crm" },
-  { label: "Oficina de Agentes", href: "#agents", description: "Agentes AI activos y futuros" },
   { label: "Inbox Omnicanal", href: "/inbox", description: "Conversaciones y atencion IA", moduleKey: "inbox" },
   { label: "Agenda", href: "/agenda", description: "Reservas, citas y disponibilidad", moduleKey: "agenda" },
   { label: "Pipeline", href: "/pipeline", description: "Leads, clientes y oportunidades", moduleKey: "pipeline" },
@@ -158,11 +159,16 @@ const agentCatalog: AgentCatalogItem[] = [
   }
 ];
 
-const knowledge = [
-  ["Manual de ventas", "Entrenamiento comercial", "Activo"],
-  ["Objeciones frecuentes", "Respuestas y politicas", "Activo"],
-  ["Guia Realty", "Propiedades y visitas", "Preparado"],
-  ["Proceso de onboarding", "Activacion de clientes", "Activo"]
+const connectedModuleCatalog: Array<NavItem & { value: (state: LoadState, computed: { openConversations: number; totalLeads: number; agentCount: number }) => string }> = [
+  { label: "Inbox Omnicanal", href: "/inbox", description: "Conversaciones unificadas por empresa, canal y prioridad.", moduleKey: "inbox", value: (_state, computed) => String(computed.openConversations) },
+  { label: "Agenda", href: "/agenda", description: "Reservas, citas, sucursales y direcciones conectadas al inbox.", moduleKey: "agenda", value: (state) => String(state.crm?.kpis?.bookingsConfirmed ?? 0) },
+  { label: "Pipeline", href: "/pipeline", description: "Leads, clientes, oportunidades, tareas y actividad comercial.", moduleKey: "pipeline", value: (_state, computed) => String(computed.totalLeads) },
+  { label: "Campañas", href: "/campaigns", description: "Marketing IA y publicaciones conectadas a redes sociales.", moduleKey: "campaigns", value: (state) => String(state.campaigns.length) },
+  { label: "Pagos", href: "/payments", description: "Cobros, estados, links y pagos asociados a conversaciones.", moduleKey: "payments", value: (state) => money(state.crm?.revenue?.paid || 0) },
+  { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA.", moduleKey: "onboarding", value: (state) => String((state.onboarding?.rules || []).length) },
+  { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites activos.", moduleKey: "saas", value: (state) => planLabel(state.plan) },
+  { label: "Dashboard", href: "/dashboard", description: "Metricas operativas en tiempo real.", moduleKey: "dashboard", value: (state) => String(state.crm?.kpis?.conversionRate ?? 0) + "%" },
+  { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA.", moduleKey: "ai_ops", value: (state) => String(state.crm?.kpis?.readyToClose ?? 0) }
 ];
 
 function money(value = 0) {
@@ -231,6 +237,7 @@ export default function CrmPrincipalPage() {
     campaigns: [],
     modules: [],
     modulesLoaded: false,
+    onboarding: null,
     plan: "STARTER",
     tenant: null,
     error: null
@@ -246,13 +253,14 @@ export default function CrmPrincipalPage() {
   async function load() {
     const session = getStoredSession();
     setState((current) => ({ ...current, session }));
-    const [me, conversations, leadMetrics, crm, campaigns, modules] = await Promise.allSettled([
+    const [me, conversations, leadMetrics, crm, campaigns, modules, onboarding] = await Promise.allSettled([
       getMe(),
       getConversations(),
       getLeadMetrics(),
       getCrmOperationalDashboard(),
       getCampaigns(),
-      getMyModules()
+      getMyModules(),
+      getOnboardingKnowledge()
     ]);
 
     setState({
@@ -263,9 +271,10 @@ export default function CrmPrincipalPage() {
       campaigns: campaigns.status === "fulfilled" ? campaigns.value : [],
       modules: modules.status === "fulfilled" ? modules.value.modules || [] : [],
       modulesLoaded: true,
+      onboarding: onboarding.status === "fulfilled" ? onboarding.value : null,
       plan: modules.status === "fulfilled" ? accountLevelFromPlan(modules.value.plan) : accountLevelFromPlan(me.status === "fulfilled" ? me.value.tenant?.plan : null),
       tenant: me.status === "fulfilled" ? me.value.tenant : null,
-      error: [me, conversations, leadMetrics, crm, campaigns, modules].some((item) => item.status === "rejected")
+      error: [me, conversations, leadMetrics, crm, campaigns, modules, onboarding].some((item) => item.status === "rejected")
         ? "Algunos datos reales no pudieron cargarse. Se muestran datos disponibles y estructura base."
         : null
     });
@@ -295,7 +304,6 @@ export default function CrmPrincipalPage() {
       (planAllows(state.plan, agent.minPlan) && (!agent.module || state.modules.includes(agent.module)))
     )
   ));
-  const lockedAgents = agentCatalog.filter((agent) => !enabledAgents.some((enabled) => enabled.id === agent.id));
   const agentCount = isDeveloper ? agentCatalog.length : enabledAgents.length;
 
   const summary = [
@@ -330,16 +338,44 @@ export default function CrmPrincipalPage() {
     { channel: "whatsapp", name: "EVOLUM", phone: "+56 9 crm", description: "La vista principal ya separa usuario y desarrollador.", time: "Ahora", id: "" }
   ];
 
-  const modules = [
-    { title: "Inbox Omnicanal", text: "Conversaciones unificadas por empresa, canal y prioridad.", value: String(openConversations), href: "/inbox", moduleKey: "inbox" as ModuleAccessKey },
-    { title: "Agentes AI", text: "Catalogo gobernado por plan, rubro y modulo activo.", value: String(agentCount), href: "#agents" },
-    { title: "CRM Universal", text: "Leads, clientes, oportunidades, tareas y actividad comercial.", value: String(totalLeads), href: "/pipeline", moduleKey: "pipeline" as ModuleAccessKey },
-    { title: "Agenda", text: "Reservas, citas, sucursales y direcciones conectadas al inbox.", value: String(state.crm?.kpis?.bookingsConfirmed ?? 0), href: "/agenda", moduleKey: "agenda" as ModuleAccessKey },
-    { title: "Realty", text: "Primer vertical para integrar AI Corretaje como modulo inmobiliario.", value: isDeveloper ? "Roadmap" : "Proximo", href: "/pipeline", moduleKey: "pipeline" as ModuleAccessKey }
-  ].filter((item) => {
+  const modules = connectedModuleCatalog.map((module) => ({
+    title: module.label,
+    text: module.description,
+    href: module.href,
+    moduleKey: module.moduleKey,
+    value: module.value(state, { openConversations, totalLeads, agentCount })
+  })).filter((item) => {
     if (!item.moduleKey || !state.modulesLoaded) return true;
     return moduleAllowed(item.moduleKey, state.modules, state.session?.role);
   });
+  const latestImport = Array.isArray(state.onboarding?.imports) ? state.onboarding.imports[0] : null;
+  const latestImportStatus = String(latestImport?.status || "").toUpperCase();
+  const onboardingRows = [
+    {
+      title: "Perfil comercial",
+      type: state.onboarding?.profile?.industry || state.onboarding?.tenant?.industry || state.tenant?.industry || "Rubro pendiente",
+      status: state.onboarding?.profile || state.onboarding?.tenant?.onboardingCompleted ? "active" : "pending",
+      label: state.onboarding?.profile || state.onboarding?.tenant?.onboardingCompleted ? "Activo" : "Pendiente"
+    },
+    {
+      title: "Productos / servicios",
+      type: `${(state.onboarding?.products || []).length} registros cargados`,
+      status: (state.onboarding?.products || []).length ? "active" : "pending",
+      label: (state.onboarding?.products || []).length ? "Activo" : "Pendiente"
+    },
+    {
+      title: "Reglas / FAQs",
+      type: `${(state.onboarding?.rules || []).length} reglas disponibles`,
+      status: (state.onboarding?.rules || []).length ? "active" : "pending",
+      label: (state.onboarding?.rules || []).length ? "Activo" : "Pendiente"
+    },
+    {
+      title: "Ultima carga",
+      type: latestImport ? statusLabel(latestImport.status) : "Sin importaciones recientes",
+      status: latestImportStatus === "FAILED" || latestImportStatus === "ERROR" ? "error" : latestImport ? "active" : "pending",
+      label: latestImportStatus === "FAILED" || latestImportStatus === "ERROR" ? "Error" : latestImport ? "Activo" : "Pendiente"
+    }
+  ];
   const homeAccessItems = visibleNav.filter((item) => !item.href.startsWith("#"));
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const searchIndex: SearchResult[] = [
@@ -356,25 +392,16 @@ export default function CrmPrincipalPage() {
       description: module.text,
       group: "Operacion"
     })),
-    ...knowledge.map(([title, type, status]) => ({
-      label: title,
+    ...onboardingRows.map((row) => ({
+      label: row.title,
       href: "/onboarding",
-      description: `${type}. ${status}`,
+      description: `${row.type}. ${row.label}`,
       group: "Configuracion"
     }))
   ];
   const searchResults = normalizedSearch
     ? searchIndex.filter((item) => item.label.trim().toLowerCase().startsWith(normalizedSearch)).slice(0, 8)
     : homeAccessItems.map((item) => ({ ...item, group: "Modulo" })).slice(0, 6);
-  const conversationPreview = state.conversations[0];
-  const conversationSummary = compactText(
-    conversationPreview?.aiSummary ||
-    conversationPreview?.decisionSummary ||
-    conversationPreview?.lastMessage?.content ||
-    conversationPreview?.aiNextAction,
-    120
-  );
-
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const first = searchResults[0];
@@ -393,7 +420,7 @@ export default function CrmPrincipalPage() {
           <div className="crm-main-mark">EV</div>
           <div>
             <strong>EVOLUM</strong>
-            <span>{isDeveloper ? "Catalogo global" : "Oficina de agentes"}</span>
+            <span>{isDeveloper ? "Catalogo global" : "CRM operativo"}</span>
           </div>
         </div>
 
@@ -412,12 +439,12 @@ export default function CrmPrincipalPage() {
             <strong>{planLabel(state.plan)}</strong>
           </div>
           <div>
-            <strong>{state.tenant?.industry || "General"}</strong>
             <small>Rubro</small>
+            <strong>{state.tenant?.industry || "General"}</strong>
           </div>
           <div>
-            <strong>{state.modules.length || 0}</strong>
             <small>Modulos activos</small>
+            <strong>{state.modules.length || 0}</strong>
           </div>
         </section>
       </aside>
@@ -510,7 +537,7 @@ export default function CrmPrincipalPage() {
           <section className="crm-main-panel crm-main-agents" id="agents">
             <div className="crm-main-panel-head">
               <div>
-                <span>Oficina de agentes</span>
+                <span>Agentes AI</span>
                 <h2>{isDeveloper ? "Agentes AI publicados en cuentas" : "Agentes AI incluidos en tu cuenta"}</h2>
               </div>
               {isDeveloper ? <Link className="crm-main-action-link" href="/admin">Gestionar catalogo</Link> : null}
@@ -541,27 +568,6 @@ export default function CrmPrincipalPage() {
             </div>
           </section>
 
-          <section className="crm-main-panel crm-main-conversation">
-            <div className="crm-main-panel-head">
-              <div>
-                <span>Vista de conversacion</span>
-                <h2>{phoneLabel(conversationPreview)}</h2>
-              </div>
-              <Link className="crm-main-action-link" href="/inbox">Abrir inbox</Link>
-            </div>
-            <div className="crm-main-conversation-card">
-              <span>{conversationPreview?.contact?.channel || "WhatsApp"}</span>
-              <strong>{conversationPreview?.contact?.name || conversationPreview?.contact?.username || "Contacto sin nombre"}</strong>
-              <p>{conversationSummary}</p>
-            </div>
-            <div className="crm-main-context">
-              <span>Contexto comercial</span>
-              <p>Canal: {conversationPreview?.contact?.channel || "WhatsApp / Instagram"}</p>
-              <p>Estado: {statusLabel(conversationPreview?.status)}</p>
-              <p>Score IA: {conversationPreview?.aiCloseScore ?? conversationPreview?.aiLeadScore ?? "Pendiente"}</p>
-            </div>
-          </section>
-
           {isDeveloper ? (
             <section className="crm-main-panel crm-main-developer">
               <div className="crm-main-panel-head">
@@ -586,26 +592,6 @@ export default function CrmPrincipalPage() {
               </div>
               <div className="crm-main-dev-note">
                 Aqui se define que agentes existen en EVOLUM, para que rubros aplican y desde que nivel de cuenta aparecen. Los clientes solo ven el subconjunto permitido por su plan y modulos activos.
-              </div>
-            </section>
-          ) : null}
-
-          {!isDeveloper && lockedAgents.length ? (
-            <section className="crm-main-panel crm-main-developer">
-              <div className="crm-main-panel-head">
-                <div>
-                  <span>No incluidos en tu plan</span>
-                  <h2>Agentes disponibles al subir de nivel</h2>
-                </div>
-              </div>
-              <div className="crm-main-dev-grid">
-                {lockedAgents.slice(0, 4).map((agent) => (
-                  <article className="crm-main-dev-card muted" key={agent.name}>
-                    <strong>{agent.name}</strong>
-                    <span>Desde {planLabel(agent.minPlan)}</span>
-                    <p>{agent.description}</p>
-                  </article>
-                ))}
               </div>
             </section>
           ) : null}
@@ -639,13 +625,13 @@ export default function CrmPrincipalPage() {
               </div>
               <Link className="crm-main-action-link" href="/onboarding">Gestionar</Link>
             </div>
-            {knowledge.map(([title, type, status]) => (
-              <article className="crm-main-row" key={title}>
+            {onboardingRows.map((row) => (
+              <article className="crm-main-row crm-main-status-row" key={row.title}>
                 <div>
-                  <strong>{title}</strong>
-                  <span>{type}</span>
+                  <strong>{row.title}</strong>
+                  <span>{row.type}</span>
                 </div>
-                <small>{status}</small>
+                <small className={`crm-main-status ${row.status}`}><i />{row.label}</small>
               </article>
             ))}
           </section>
@@ -653,7 +639,7 @@ export default function CrmPrincipalPage() {
           <section className="crm-main-panel crm-main-analytics">
             <div className="crm-main-panel-head">
               <div>
-                <span>Analitica & KPIs</span>
+                <span>Dashboard</span>
                 <h2>Rendimiento semanal</h2>
               </div>
               <Link className="crm-main-action-link" href="/dashboard">Ver reporte</Link>

@@ -1027,6 +1027,50 @@ a {
   display: block;
 }
 
+.crm-main-status-row {
+  align-items: center;
+}
+
+.crm-main-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(139, 92, 246, 0.18);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: rgba(139, 92, 246, 0.10);
+  color: var(--crm-main-muted);
+  white-space: nowrap;
+}
+
+.crm-main-status i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+}
+
+.crm-main-status.active {
+  color: var(--crm-main-green);
+  border-color: rgba(34, 197, 94, 0.24);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.crm-main-status.pending {
+  color: var(--crm-main-gold);
+  border-color: rgba(251, 191, 36, 0.24);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.crm-main-status.error {
+  color: #fb7185;
+  border-color: rgba(251, 113, 133, 0.28);
+  background: rgba(251, 113, 133, 0.10);
+}
+
 .crm-main-dev-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
