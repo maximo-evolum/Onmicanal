@@ -41,6 +41,7 @@ type AgentCatalogItem = {
   minPlan: AccountLevel;
   rubros: string[];
   module?: string;
+  moduleKey?: ModuleAccessKey;
   href: string;
   initials: string;
   description: string;
@@ -87,6 +88,7 @@ const agentCatalog: AgentCatalogItem[] = [
     minPlan: "STARTER",
     rubros: ["Todos"],
     module: "inbox",
+    moduleKey: "inbox",
     href: "/inbox",
     initials: "AC",
     implemented: true,
@@ -100,10 +102,25 @@ const agentCatalog: AgentCatalogItem[] = [
     minPlan: "PRO",
     rubros: ["Todos"],
     module: "marketing",
+    moduleKey: "campaigns",
     href: "/campaigns",
     initials: "AM",
     implemented: true,
     description: "Genera copys, piezas, variantes y publicaciones para marketing segun el negocio."
+  },
+  {
+    id: "crm_ops",
+    name: "Agente CRM Operativo",
+    team: "Pipeline, pagos y agenda",
+    status: "Activo",
+    minPlan: "STARTER",
+    rubros: ["Todos"],
+    module: "crm",
+    moduleKey: "crm",
+    href: "/pipeline",
+    initials: "CO",
+    implemented: true,
+    description: "Actualiza estados comerciales, coordina reservas, detecta pagos pendientes y mantiene el pipeline sincronizado."
   },
   {
     id: "support",
@@ -113,6 +130,7 @@ const agentCatalog: AgentCatalogItem[] = [
     minPlan: "PRO",
     rubros: ["Todos"],
     module: "inbox",
+    moduleKey: "inbox",
     href: "/inbox",
     initials: "AS",
     implemented: false,
@@ -126,6 +144,7 @@ const agentCatalog: AgentCatalogItem[] = [
     minPlan: "BUSINESS",
     rubros: ["Inmobiliaria", "Realty"],
     module: "realty",
+    moduleKey: "pipeline",
     href: "/pipeline",
     initials: "AI",
     implemented: false,
@@ -139,6 +158,7 @@ const agentCatalog: AgentCatalogItem[] = [
     minPlan: "BUSINESS",
     rubros: ["Todos"],
     module: "payments",
+    moduleKey: "payments",
     href: "/payments",
     initials: "AF",
     implemented: false,
@@ -152,6 +172,7 @@ const agentCatalog: AgentCatalogItem[] = [
     minPlan: "ENTERPRISE",
     rubros: ["Hospitality", "Servicios", "Retail", "Manufactura"],
     module: "bookings",
+    moduleKey: "agenda",
     href: "/agenda",
     initials: "AO",
     implemented: false,
@@ -209,6 +230,13 @@ function accountLevelFromPlan(plan?: string | null): AccountLevel {
 
 function planAllows(current: AccountLevel, required: AccountLevel) {
   return planOrder.indexOf(current) >= planOrder.indexOf(required);
+}
+
+function agentAllowed(agent: AgentCatalogItem, state: LoadState, isDeveloper: boolean) {
+  if (isDeveloper) return true;
+  if (!planAllows(state.plan, agent.minPlan)) return false;
+  if (!agent.moduleKey) return !agent.module || state.modules.includes(agent.module);
+  return moduleAllowed(agent.moduleKey, state.modules, state.session?.role);
 }
 
 function planLabel(plan: AccountLevel) {
@@ -299,10 +327,7 @@ export default function CrmPrincipalPage() {
   const estimatedRevenue = state.crm?.forecasts?.expectedRevenue ?? state.leadMetrics?.estimatedRevenue ?? 0;
   const enabledAgents = agentCatalog.filter((agent) => (
     agent.implemented &&
-    (
-      isDeveloper ||
-      (planAllows(state.plan, agent.minPlan) && (!agent.module || state.modules.includes(agent.module)))
-    )
+    agentAllowed(agent, state, isDeveloper)
   ));
   const agentCount = isDeveloper ? agentCatalog.length : enabledAgents.length;
 
@@ -315,13 +340,19 @@ export default function CrmPrincipalPage() {
 
   const activeAgents = useMemo(() => enabledAgents.map((agent) => ({
     ...agent,
-    work: agent.id === "chat" ? `${openConversations} conversaciones abiertas` : `${state.campaigns.length} campañas`,
+    work: agent.id === "chat"
+      ? `${openConversations} conversaciones abiertas`
+      : agent.id === "crm_ops"
+        ? `${state.crm?.kpis?.readyToClose ?? 0} cierres priorizados`
+        : `${state.campaigns.length} campañas`,
     result: agent.id === "chat"
       ? `${totalLeads} leads registrados`
+      : agent.id === "crm_ops"
+        ? `${state.crm?.kpis?.paymentPending ?? 0} pagos pendientes / ${state.crm?.kpis?.bookingsPending ?? 0} reservas`
       : state.campaigns[0]
         ? `Ultima: ${statusLabel(state.campaigns[0].status)}`
         : "Listo para usar"
-  })), [enabledAgents, openConversations, totalLeads, state.campaigns]);
+  })), [enabledAgents, openConversations, totalLeads, state.campaigns, state.crm]);
 
   const activity = state.conversations.slice(0, 5).map((conversation) => ({
     channel: conversation.contact?.channel || "whatsapp",
@@ -595,27 +626,6 @@ export default function CrmPrincipalPage() {
               </div>
             </section>
           ) : null}
-
-          <section className="crm-main-panel crm-main-modules">
-            <div className="crm-main-panel-head">
-              <div>
-                <span>Modulos conectados</span>
-                <h2>Multiempresa y multirubro</h2>
-              </div>
-              {isDeveloper ? <Link className="crm-main-action-link" href="/saas">Configurar</Link> : null}
-            </div>
-            <div className="crm-main-module-grid">
-              {modules.map((module) => (
-                <Link className="crm-main-module" href={module.href} key={module.title}>
-                  <div>
-                    <strong>{module.title}</strong>
-                    <p>{module.text}</p>
-                  </div>
-                  <span>{module.value}</span>
-                </Link>
-              ))}
-            </div>
-          </section>
 
           <section className="crm-main-panel crm-main-knowledge">
             <div className="crm-main-panel-head">
