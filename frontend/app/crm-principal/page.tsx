@@ -331,13 +331,6 @@ export default function CrmPrincipalPage() {
   ));
   const agentCount = isDeveloper ? agentCatalog.length : enabledAgents.length;
 
-  const summary = [
-    { label: "Agentes visibles", value: `${agentCount}`, delta: isDeveloper ? "Catalogo global" : `Plan ${planLabel(state.plan)}`, tone: "success" },
-    { label: "Conversaciones abiertas", value: openConversations, delta: "Inbox omnicanal", tone: "info" },
-    { label: "Leads detectados", value: totalLeads, delta: `${hotLeads} calientes`, tone: "primary" },
-    { label: "Valor estimado", value: money(estimatedRevenue), delta: "Forecast comercial", tone: "warning" }
-  ];
-
   const activeAgents = useMemo(() => enabledAgents.map((agent) => ({
     ...agent,
     work: agent.id === "chat"
@@ -353,6 +346,36 @@ export default function CrmPrincipalPage() {
         ? `Ultima: ${statusLabel(state.campaigns[0].status)}`
         : "Listo para usar"
   })), [enabledAgents, openConversations, totalLeads, state.campaigns, state.crm]);
+  const primaryAgent = activeAgents.find((agent) => agent.id === "crm_ops") || activeAgents[0];
+  const secondaryAgents = activeAgents.filter((agent) => agent.id !== primaryAgent?.id);
+  const radarScore = Math.max(0, Math.min(100, Math.round(
+    state.leadMetrics?.averageCloseProbability ??
+    state.crm?.kpis?.averageCloseScore ??
+    state.crm?.kpis?.conversionRate ??
+    0
+  )));
+  const operationsLive = Math.max(openConversations, totalLeads, state.crm?.kpis?.readyToClose ?? 0);
+  const operationsSummary = [
+    { code: "LC", label: "Leads calientes", value: String(hotLeads), detail: `${totalLeads} leads detectados`, tone: "green" },
+    { code: "CH", label: "Chats activos", value: String(openConversations), detail: "Conversaciones omnicanal", tone: "cyan" },
+    { code: "CI", label: "Cierres listos", value: String(state.crm?.kpis?.readyToClose ?? 0), detail: "Prioridad comercial", tone: "pink" },
+    { code: "$", label: "Revenue operativo", value: money(estimatedRevenue), detail: `${money(state.crm?.revenue?.pending ?? 0)} pendiente`, tone: "gold" }
+  ];
+  const weeklyValues = [
+    Math.max(1, Math.round(openConversations * 0.45)),
+    Math.max(1, Math.round(totalLeads * 0.58)),
+    Math.max(1, Math.round((state.crm?.kpis?.readyToClose ?? 0) + 2)),
+    Math.max(1, Math.round((state.crm?.kpis?.conversations ?? openConversations) * 0.72)),
+    Math.max(1, Math.round((state.crm?.kpis?.hotLeads ?? hotLeads) + 4)),
+    Math.max(1, Math.round((state.crm?.kpis?.leads ?? totalLeads) + 2)),
+    Math.max(1, Math.round((state.crm?.kpis?.paidCount ?? 0) + operationsLive))
+  ];
+  const maxWeeklyValue = Math.max(...weeklyValues, 1);
+  const weeklyPerformance = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"].map((day, index) => ({
+    day,
+    value: weeklyValues[index],
+    height: Math.max(18, Math.round((weeklyValues[index] / maxWeeklyValue) * 100))
+  }));
 
   const activity = state.conversations.slice(0, 5).map((conversation) => ({
     channel: conversation.contact?.channel || "whatsapp",
@@ -533,15 +556,27 @@ export default function CrmPrincipalPage() {
               </div>
               <button onClick={load}>Actualizar</button>
             </div>
-            <div className="crm-main-kpi-grid">
-              {summary.map((item) => (
-                <article className={`crm-main-kpi ${item.tone}`} key={item.label}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                  <small>{item.delta}</small>
-                  <div className="crm-main-line"><i /><i /><i /><i /><i /><i /></div>
-                </article>
-              ))}
+            <div className="crm-main-radar">
+              <div className="crm-main-radar-core">
+                <div className="crm-main-radar-orbit" style={{ background: `radial-gradient(circle at center, rgba(18, 11, 33, 1) 0 47%, transparent 48%), conic-gradient(var(--crm-main-green) 0 ${radarScore}%, rgba(139, 92, 246, 0.28) ${radarScore}% 100%)` }}>
+                  <strong>{operationsLive}</strong>
+                  <span>operaciones vivas</span>
+                </div>
+                <div className="crm-main-radar-score">
+                  <small>Score IA promedio</small>
+                  <strong>{radarScore}%</strong>
+                </div>
+              </div>
+              <div className="crm-main-radar-tiles">
+                {operationsSummary.map((item) => (
+                  <article className={`crm-main-radar-tile ${item.tone}`} key={item.label}>
+                    <b>{item.code}</b>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    <small>{item.detail}</small>
+                  </article>
+                ))}
+              </div>
             </div>
           </section>
 
@@ -573,29 +608,49 @@ export default function CrmPrincipalPage() {
               </div>
               {isDeveloper ? <Link className="crm-main-action-link" href="/admin">Gestionar catalogo</Link> : null}
             </div>
-            <div className="crm-main-agent-grid">
-              {activeAgents.map((agent) => (
-                <Link className="crm-main-agent-card" href={agent.href} key={agent.name}>
-                  <div className="crm-main-agent-top">
-                    <div className="crm-main-avatar">{agent.initials}</div>
-                    <div>
-                      <strong>{agent.name}</strong>
-                      <span>{agent.team}</span>
-                    </div>
-                    <small>{agent.status}</small>
+            <div className="crm-main-agent-hybrid">
+              {primaryAgent ? (
+                <Link className="crm-main-agent-primary" href={primaryAgent.href}>
+                  <div className="crm-main-agent-primary-orb">{primaryAgent.initials}</div>
+                  <div className="crm-main-agent-primary-copy">
+                    <span>Agente principal</span>
+                    <h3>{primaryAgent.name}</h3>
+                    <p>{primaryAgent.description}</p>
                   </div>
-                  <p className="crm-main-agent-description">{agent.description}</p>
-                  <div className="crm-main-agent-rules">
-                    <span>Desde {planLabel(agent.minPlan)}</span>
-                    <span>{agent.rubros.join(", ")}</span>
+                  <div className="crm-main-agent-primary-metrics">
+                    <article>
+                      <strong>{primaryAgent.work}</strong>
+                      <span>Trabajo activo</span>
+                    </article>
+                    <article>
+                      <strong>{primaryAgent.result}</strong>
+                      <span>Estado operativo</span>
+                    </article>
+                    <article>
+                      <strong>{planLabel(primaryAgent.minPlan)}</strong>
+                      <span>Plan minimo</span>
+                    </article>
+                    <article>
+                      <strong>{primaryAgent.status}</strong>
+                      <span>Estado agente</span>
+                    </article>
                   </div>
-                  <div className="crm-main-agent-metrics">
-                    <span>{agent.work}</span>
-                    <span>{agent.result}</span>
-                  </div>
-                  <div className="crm-main-wave" />
                 </Link>
-              ))}
+              ) : null}
+              <div className="crm-main-agent-board">
+                {secondaryAgents.map((agent) => (
+                  <Link className="crm-main-mini-agent" href={agent.href} key={agent.name}>
+                    <div className="crm-main-mini-agent-top">
+                      <div className="crm-main-mini-avatar">{agent.initials}</div>
+                      <small>{agent.status}</small>
+                    </div>
+                    <strong>{agent.name.replace("Agente de ", "")}</strong>
+                    <span>{agent.team}</span>
+                    <p>{agent.description}</p>
+                    <div className="crm-main-mini-progress"><i style={{ width: agent.status === "Activo" ? "86%" : agent.status === "Preparado" ? "48%" : "24%" }} /></div>
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
 
@@ -654,14 +709,18 @@ export default function CrmPrincipalPage() {
               </div>
               <Link className="crm-main-action-link" href="/dashboard">Ver reporte</Link>
             </div>
-            <div className="crm-main-bars">
-              {[42, 58, 50, 72, 64, 86, 78, 94].map((height, index) => (
-                <i style={{ height: `${height}%` }} key={index} />
+            <div className="crm-main-pro-chart">
+              {weeklyPerformance.map((item) => (
+                <article key={item.day}>
+                  <span>{item.value}</span>
+                  <i style={{ height: `${item.height}%` }} />
+                  <small>{item.day}</small>
+                </article>
               ))}
             </div>
             <div className="crm-main-score">
-              <strong>{state.leadMetrics?.averageCloseProbability ? `${Math.round(state.leadMetrics.averageCloseProbability)}%` : "4.8/5"}</strong>
-              <span>{state.leadMetrics?.averageCloseProbability ? "Probabilidad promedio" : "Satisfaccion clientes"}</span>
+              <strong>{radarScore}%</strong>
+              <span>Probabilidad promedio</span>
             </div>
           </section>
         </div>
