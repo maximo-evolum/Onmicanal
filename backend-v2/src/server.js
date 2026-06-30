@@ -24,6 +24,8 @@ import { paymentsRouter } from "./routes/payments.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { modulesRouter } from "./routes/modules.routes.js";
+import { industriesRouter } from "./routes/industries.routes.js";
+import { industryRecordsRouter } from "./routes/industry-records.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
 import { saasRouter } from "./routes/saas.routes.js";
 import { requireModule, tenantContext } from "./middleware/tenant-access.js";
@@ -122,6 +124,8 @@ app.get("/api/debug/session", ...protectedApi, async (req, res) => {
 });
 
 app.use("/api", ...protectedApi, modulesRouter);
+app.use("/api", ...protectedApi, industriesRouter);
+app.use("/api", ...protectedApi, industryRecordsRouter);
 app.use("/api", ...protectedApi, adminRouter);
 app.use("/api", ...protectedApi, saasRouter);
 if (env.enableDevTools) {

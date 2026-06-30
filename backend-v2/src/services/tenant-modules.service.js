@@ -1,5 +1,6 @@
 import { prisma } from "../lib/db.js";
 import { PLAN_DEFINITIONS, getModulesForPlan, normalizePlanCode } from "../lib/modules.js";
+import { getAnyIndustryTemplate, getTemplateModules } from "./industry-templates.service.js";
 
 export async function syncPlans() {
   const plans = Object.values(PLAN_DEFINITIONS);
@@ -62,7 +63,18 @@ export async function ensureTenantSubscriptionAndModules({ tenantId, planCode = 
     return getTenantModules(tenantId);
   }
 
-  const modules = getModulesForPlan(normalized);
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { industry: true }
+  }).catch(() => null);
+
+  const industryTemplate = await getAnyIndustryTemplate(tenant?.industry || "GENERAL");
+  const modules = [
+    ...new Set([
+      ...getModulesForPlan(normalized),
+      ...getTemplateModules(industryTemplate, normalized)
+    ])
+  ];
 
   // En sincronización forzada de plan, el plan vuelve a ser la fuente de verdad.
   if (forcePlanSync) {
@@ -102,6 +114,18 @@ export async function hasTenantModule(tenantId, module) {
 export async function setTenantModules({ tenantId, modules = [], source = "MANUAL" }) {
   const normalized = [...new Set(modules.map((m) => String(m).trim()).filter(Boolean))];
   await prisma.tenantModule.updateMany({ where: { tenantId }, data: { enabled: false, source } });
+  for (const module of normalized) {
+    await prisma.tenantModule.upsert({
+      where: { tenantId_module: { tenantId, module } },
+      update: { enabled: true, source },
+      create: { tenantId, module, enabled: true, source }
+    });
+  }
+  return getTenantModules(tenantId);
+}
+
+export async function enableTenantModules({ tenantId, modules = [], source = "INDUSTRY" }) {
+  const normalized = [...new Set(modules.map((m) => String(m).trim()).filter(Boolean))];
   for (const module of normalized) {
     await prisma.tenantModule.upsert({
       where: { tenantId_module: { tenantId, module } },

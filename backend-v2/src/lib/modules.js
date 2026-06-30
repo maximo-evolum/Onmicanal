@@ -6,7 +6,15 @@ export const MODULES = Object.freeze({
   PAYMENTS: "payments",
   FOLLOWUPS: "followups",
   ANALYTICS: "analytics",
-  BOT_LAB: "bot_lab"
+  BOT_LAB: "bot_lab",
+  PROPERTIES: "properties",
+  PROPERTY_ASSIGNMENTS: "property_assignments",
+  CUSTOMERS: "customers",
+  REVENUE: "revenue",
+  VEHICLES: "vehicles",
+  PARTS_INVENTORY: "parts_inventory",
+  MECHANIC_ASSIGNMENTS: "mechanic_assignments",
+  READY_NOTIFICATIONS: "ready_notifications"
 });
 
 export const PLAN_DEFINITIONS = Object.freeze({

@@ -27,7 +27,13 @@ import multer from "multer";
 import { prisma } from "../lib/db.js";
 import { requireRole } from "../middleware/tenant-access.js";
 import { PLAN_DEFINITIONS, normalizePlanCode } from "../lib/modules.js";
-import { ensureTenantSubscriptionAndModules, getTenantModules, setTenantModules } from "../services/tenant-modules.service.js";
+import {
+  createCustomIndustryTemplate,
+  getAnyIndustryTemplate,
+  getTemplateModules,
+  listAllIndustryTemplates
+} from "../services/industry-templates.service.js";
+import { ensureTenantSubscriptionAndModules, enableTenantModules, getTenantModules, setTenantModules } from "../services/tenant-modules.service.js";
 import { extractOnboardingKnowledge } from "../services/onboarding-intelligence.service.js";
 
 export const adminRouter = Router();
@@ -158,6 +164,10 @@ async function getOrCreateActiveSubscription({ tenantId, planCode }) {
 function adminError(res, error, fallback = "Error en el panel de desarrollador") {
   console.error(fallback, error);
 
+  if (error?.statusCode) {
+    return res.status(error.statusCode).json({ error: error.message || fallback });
+  }
+
   if (error?.code === "P2002") {
     const fields = Array.isArray(error?.meta?.target) ? error.meta.target.join(", ") : String(error?.meta?.target || "campo único");
     return res.status(409).json({ error: `Ya existe un registro con ese ${fields}` });
@@ -186,6 +196,23 @@ adminRouter.get("/admin/tenants", async (_req, res) => {
     res.json(tenants);
   } catch (error) {
     return adminError(res, error, "No se pudieron cargar los clientes");
+  }
+});
+
+adminRouter.get("/admin/industries", async (_req, res) => {
+  try {
+    res.json({ templates: await listAllIndustryTemplates() });
+  } catch (error) {
+    return adminError(res, error, "No se pudieron cargar los rubros");
+  }
+});
+
+adminRouter.post("/admin/industries", async (req, res) => {
+  try {
+    const template = await createCustomIndustryTemplate(req.body || {});
+    res.status(201).json({ template, templates: await listAllIndustryTemplates() });
+  } catch (error) {
+    return adminError(res, error, error?.message || "No se pudo crear el rubro");
   }
 });
 
@@ -324,6 +351,11 @@ adminRouter.post("/admin/tenants", async (req, res) => {
     });
 
     await ensureTenantSubscriptionAndModules({ tenantId: tenant.id, planCode });
+    const createdIndustryTemplate = await getAnyIndustryTemplate(industry || "GENERAL");
+    const industryModules = getTemplateModules(createdIndustryTemplate, planCode);
+    if (industryModules.length) {
+      await enableTenantModules({ tenantId: tenant.id, modules: industryModules, source: "INDUSTRY" });
+    }
     const fullTenant = await getFullTenant(tenant.id);
     res.status(201).json(fullTenant);
   } catch (error) {
@@ -641,11 +673,50 @@ adminRouter.patch("/admin/tenants/:tenantId/plan", async (req, res) => {
     const { tenantId } = req.params;
     const planCode = normalizePlanCode(req.body.plan || "STARTER");
     await prisma.tenant.update({ where: { id: tenantId }, data: { plan: planCode } });
-    const modules = await ensureTenantSubscriptionAndModules({ tenantId, planCode, forcePlanSync: true });
+    await ensureTenantSubscriptionAndModules({ tenantId, planCode, forcePlanSync: true });
+    const tenantForIndustry = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    const templateForIndustry = await getAnyIndustryTemplate(tenantForIndustry?.industry || "GENERAL");
+    const industryModules = getTemplateModules(templateForIndustry, planCode);
+    if (industryModules.length) await enableTenantModules({ tenantId, modules: industryModules, source: "INDUSTRY" });
+    const modules = await getTenantModules(tenantId);
     const tenant = await getFullTenant(tenantId);
     res.json({ tenant, modules });
   } catch (error) {
     return adminError(res, error, "No se pudo actualizar el plan");
+  }
+});
+
+adminRouter.patch("/admin/tenants/:tenantId/industry-template", async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const existing = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!existing) return res.status(404).json({ error: "Cliente no encontrado" });
+
+    const template = await getAnyIndustryTemplate(req.body.industry || req.body.code || existing.industry || "GENERAL");
+    const planCode = normalizePlanCode(req.body.plan || existing.plan || "STARTER");
+    const modules = getTemplateModules(template, planCode);
+
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        industry: template.custom ? template.code : template.name,
+        plan: planCode,
+        businessPrompt: existing.businessPrompt || `Negocio ${existing.name} del rubro ${template.name}.`
+      }
+    });
+
+    await ensureTenantSubscriptionAndModules({ tenantId, planCode });
+    await enableTenantModules({ tenantId, modules, source: "INDUSTRY" });
+
+    const tenant = await getFullTenant(tenantId);
+    res.json({
+      tenant,
+      industry: template.code,
+      template,
+      modules
+    });
+  } catch (error) {
+    return adminError(res, error, "No se pudo aplicar la plantilla de rubro");
   }
 });
 

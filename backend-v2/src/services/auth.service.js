@@ -28,6 +28,8 @@ function sanitizeUser(user) {
     tenantId: user.tenantId,
     name: user.name,
     email: user.email,
+    jobTitle: user.jobTitle || null,
+    avatarUrl: user.avatarUrl || null,
     role: user.role
   };
 }

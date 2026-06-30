@@ -94,6 +94,7 @@ model Tenant {
   aiProfiles          TenantAiProfile[]
   channelConfigs      TenantChannelConfig[]
   onboardingImports      TenantOnboardingImport[]
+  industryRecords        IndustryRecord[]
 }
 
 
@@ -165,6 +166,8 @@ model WorkspaceUser {
   name                  String
   email                 String            @unique
   passwordHash          String?
+  jobTitle              String?
+  avatarUrl             String?
   role                  WorkspaceUserRole @default(AGENT)
   isActive              Boolean           @default(true)
   createdAt             DateTime          @default(now())
@@ -172,6 +175,7 @@ model WorkspaceUser {
 
   tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignedConversations Conversation[]    @relation("AssignedConversations")
+  assignedIndustryRecords IndustryRecord[] @relation("AssignedIndustryRecords")
 }
 
 
@@ -223,6 +227,40 @@ model TenantModule {
 
   @@unique([tenantId, module])
   @@index([tenantId, enabled])
+}
+
+model CustomIndustryTemplate {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  summary     String?
+  modules     Json
+  entities    Json?
+  workflows   Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, name])
+}
+
+model IndustryRecord {
+  id            String   @id @default(cuid())
+  tenantId      String
+  recordType    String
+  title         String
+  status        String   @default("ACTIVE")
+  assignedToId  String?
+  data          Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedTo    WorkspaceUser? @relation("AssignedIndustryRecords", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, recordType, status])
+  @@index([tenantId, assignedToId])
+  @@index([tenantId, updatedAt])
 }
 
 model Contact {

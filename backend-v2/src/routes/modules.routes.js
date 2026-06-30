@@ -1,13 +1,14 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { MODULES, PLAN_DEFINITIONS } from "../lib/modules.js";
+import { listIndustryTemplates } from "../lib/industries.js";
 import { getTenantModules, setTenantModules, ensureTenantSubscriptionAndModules } from "../services/tenant-modules.service.js";
 import { requireRole } from "../middleware/tenant-access.js";
 
 export const modulesRouter = Router();
 
 modulesRouter.get("/modules/catalog", (_req, res) => {
-  res.json({ modules: MODULES, plans: PLAN_DEFINITIONS });
+  res.json({ modules: MODULES, plans: PLAN_DEFINITIONS, industries: listIndustryTemplates() });
 });
 
 modulesRouter.get("/modules/me", async (req, res) => {
