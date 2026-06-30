@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getMyModules } from "@/lib/api";
 import { LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
+import { ThemePalettePicker } from "./theme-palette-picker";
 
 type EvolumSidebarProps = {
   active: string;
@@ -32,6 +33,10 @@ const baseItems: SidebarItem[] = [
   ["Planes y modulos", "/saas", "Plan, modulos, usuarios y limites", "PM", "saas"],
   ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI", "ai_ops"],
+  ["Propiedades", "/properties", "Ficha inmobiliaria y asignaciones", "PR", "properties"],
+  ["Clientes / Pacientes", "/customers", "Fichas, historial y seguimiento", "CP", "customers"],
+  ["Ganancias", "/revenue", "Ingresos, pagos y forecast", "GA", "revenue"],
+  ["Taller", "/workshop", "Vehiculos, repuestos y mecanicos", "TA", "vehicles"],
 ];
 
 const developerItems: SidebarItem[] = [
@@ -65,6 +70,14 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     );
   }, [enabledModules, isDeveloper]);
 
+  if (!isOpen) {
+    return (
+      <button className="evolum-menu-bubble" type="button" onClick={onToggle} aria-label="Abrir menu EVOLUM">
+        EV
+      </button>
+    );
+  }
+
   return (
     <aside className="inbox-unified-nav evolum-unified-nav">
       <div className="inbox-nav-head">
@@ -72,8 +85,8 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
           <span>EV</span>
           <strong>EVOLUM</strong>
         </div>
-        <button className="inbox-nav-toggle" type="button" onClick={onToggle} aria-label={isOpen ? "Cerrar menu" : "Abrir menu"}>
-          {isOpen ? "<" : ">"}
+        <button className="inbox-nav-toggle" type="button" onClick={onToggle} aria-label="Cerrar menu">
+          x
         </button>
       </div>
 
@@ -90,6 +103,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
       </nav>
 
       <div className="inbox-nav-footer">
+        <ThemePalettePicker />
         <div className="inbox-nav-logout">
           <LogoutButton />
         </div>

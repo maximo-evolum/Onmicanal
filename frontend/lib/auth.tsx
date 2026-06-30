@@ -37,6 +37,20 @@ function setStoredAuth(session: AgentSession, token: string) {
   }
 }
 
+export function mergeStoredSession(patch: Partial<AgentSession>) {
+  const current = getStoredSession();
+  if (!current) return null;
+  const next = { ...current, ...patch };
+  const serializedSession = JSON.stringify(next);
+  setCookie(SESSION_COOKIE, serializedSession);
+
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
+  }
+
+  return next;
+}
+
 function clearStoredAuth() {
   clearCookie(SESSION_COOKIE);
   clearCookie(TOKEN_COOKIE);

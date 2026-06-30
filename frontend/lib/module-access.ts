@@ -16,7 +16,15 @@ export type ModuleAccessKey =
   | "dashboard"
   | "ai_ops"
   | "admin"
-  | "bot_lab";
+  | "bot_lab"
+  | "properties"
+  | "property_assignments"
+  | "customers"
+  | "revenue"
+  | "vehicles"
+  | "parts_inventory"
+  | "mechanic_assignments"
+  | "ready_notifications";
 
 const moduleAliases: Record<ModuleAccessKey, string[]> = {
   crm: ["crm", "crm_principal"],
@@ -31,6 +39,14 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   ai_ops: ["ai_ops", "ai-ops", "followups", "sales"],
   admin: ["admin", "developer", "desarrollador"],
   bot_lab: ["bot_lab", "bot-lab"],
+  properties: ["properties", "propiedades"],
+  property_assignments: ["property_assignments", "seller_assignments", "asignacion_ventas"],
+  customers: ["customers", "clientes", "pacientes"],
+  revenue: ["revenue", "ganancias", "ingresos"],
+  vehicles: ["vehicles", "vehiculos"],
+  parts_inventory: ["parts_inventory", "repuestos", "inventario_repuestos"],
+  mechanic_assignments: ["mechanic_assignments", "asignacion_mecanicos"],
+  ready_notifications: ["ready_notifications", "avisos_retiro"],
 };
 
 const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas"]);
@@ -89,4 +105,3 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
 
   return { allowed, loading, error, modules: modules || [], role: session?.role };
 }
-

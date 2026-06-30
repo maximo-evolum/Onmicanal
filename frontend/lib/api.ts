@@ -111,6 +111,17 @@ export async function getMe(): Promise<{ user: AgentSession; tenant: TenantSessi
   return request<{ user: AgentSession; tenant: TenantSession }>("/auth/me");
 }
 
+export async function updateMyProfile(input: {
+  name: string;
+  jobTitle?: string;
+  avatarUrl?: string;
+}): Promise<{ user: AgentSession; tenant: TenantSession }> {
+  return request<{ user: AgentSession; tenant: TenantSession }>("/auth/me/profile", {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function getConversations(): Promise<Conversation[]> {
   return request<Conversation[]>("/conversations");
 }
@@ -597,12 +608,102 @@ export type TenantModulesResponse = {
   subscription?: unknown;
 };
 
+export type IndustryTemplate = {
+  code: string;
+  name: string;
+  summary: string;
+  custom?: boolean;
+  modules: Array<{ key: string; label: string; description: string; minPlan: string }>;
+  entities: Array<{ key: string; label: string; purpose?: string; fields?: string[] }>;
+  workflows: string[];
+};
+
+export type IndustryUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+export type IndustryRecord = {
+  id: string;
+  tenantId: string;
+  recordType: string;
+  title: string;
+  status: string;
+  assignedToId?: string | null;
+  data?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+  assignedTo?: IndustryUser | null;
+};
+
 export async function getMyModules(): Promise<TenantModulesResponse> {
   return request<TenantModulesResponse>("/modules/me");
 }
 
 export async function getModuleCatalog(): Promise<{ modules: Record<string, string>; plans: Record<string, unknown> }> {
   return request<{ modules: Record<string, string>; plans: Record<string, unknown> }>("/modules/catalog");
+}
+
+export async function getIndustryTemplates(): Promise<{ templates: IndustryTemplate[] }> {
+  return request<{ templates: IndustryTemplate[] }>("/admin/industries");
+}
+
+export async function createIndustryTemplate(input: {
+  code?: string;
+  name: string;
+  summary?: string;
+  modules: Array<{ key: string; label?: string; description?: string; minPlan?: string }>;
+  entities?: Array<{ key: string; label: string; purpose?: string; fields?: string[] }>;
+  workflows?: string[];
+}): Promise<{ template: IndustryTemplate; templates: IndustryTemplate[] }> {
+  return request<{ template: IndustryTemplate; templates: IndustryTemplate[] }>("/admin/industries", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function getIndustryUsers(): Promise<IndustryUser[]> {
+  return request<IndustryUser[]>("/industry-records/users");
+}
+
+export async function getIndustryRecords(type?: string): Promise<IndustryRecord[]> {
+  const query = type ? `?type=${encodeURIComponent(type)}` : "";
+  return request<IndustryRecord[]>(`/industry-records${query}`);
+}
+
+export async function createIndustryRecord(input: {
+  recordType: string;
+  title: string;
+  status?: string;
+  assignedToId?: string | null;
+  data?: Record<string, unknown>;
+}): Promise<IndustryRecord> {
+  return request<IndustryRecord>("/industry-records", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateIndustryRecord(
+  id: string,
+  input: Partial<Pick<IndustryRecord, "title" | "status" | "assignedToId">> & { data?: Record<string, unknown> | null }
+): Promise<IndustryRecord> {
+  return request<IndustryRecord>(`/industry-records/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function getBalancedIndustryAssignments(input: {
+  recordType: string;
+  assigneeRole?: string;
+}): Promise<{ recordType: string; assigneeRole: string; assignments: Array<{ item: IndustryRecord; assignee: IndustryUser; order: number; mode: string }> }> {
+  return request<{ recordType: string; assigneeRole: string; assignments: Array<{ item: IndustryRecord; assignee: IndustryUser; order: number; mode: string }> }>(`/industry-records/assignments/balance`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export type TenantAiProfile = {
@@ -779,6 +880,16 @@ export async function updateAdminTenantModules(tenantId: string, modules: string
   return request<{ tenant: AdminTenant; modules: string[] }>(`/admin/tenants/${tenantId}/modules`, {
     method: "PATCH",
     body: JSON.stringify({ modules })
+  });
+}
+
+export async function applyAdminTenantIndustryTemplate(
+  tenantId: string,
+  input: { industry: string; plan?: string }
+): Promise<{ tenant: AdminTenant; template: IndustryTemplate; modules: string[] }> {
+  return request<{ tenant: AdminTenant; template: IndustryTemplate; modules: string[] }>(`/admin/tenants/${tenantId}/industry-template`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
   });
 }
 

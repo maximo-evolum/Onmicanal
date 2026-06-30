@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getSaasOverview, getTeamManagement, SaasOverview } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";
+import { getStoredSession, mergeStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 function money(value?: number, currency = "CLP") {
@@ -25,6 +25,13 @@ export default function SaasPage() {
   const [users, setUsers] = useState<Array<{ id: string; name: string; email: string; role: string; isActive: boolean }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [profileForm, setProfileForm] = useState({
+    name: agent?.name || "",
+    jobTitle: agent?.jobTitle || "",
+    avatarUrl: agent?.avatarUrl || ""
+  });
+  const [profileStatus, setProfileStatus] = useState<string | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -37,6 +44,43 @@ export default function SaasPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "No se pudo cargar SaaS Center"));
   }, []);
+
+  async function handleProfileSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      setSavingProfile(true);
+      setProfileStatus(null);
+      const result = await updateMyProfile(profileForm);
+      mergeStoredSession(result.user);
+      setProfileForm({
+        name: result.user.name || "",
+        jobTitle: result.user.jobTitle || "",
+        avatarUrl: result.user.avatarUrl || ""
+      });
+      setProfileStatus("Perfil actualizado");
+    } catch (err) {
+      setProfileStatus(err instanceof Error ? err.message : "No se pudo guardar el perfil");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  function handleAvatarFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 700_000) {
+      setProfileStatus("La imagen debe pesar menos de 700 KB para guardarla en el perfil.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setProfileForm((value) => ({ ...value, avatarUrl: result }));
+      setProfileStatus("Foto cargada, guarda el perfil para aplicarla.");
+    };
+    reader.readAsDataURL(file);
+  }
 
   return (
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
@@ -72,6 +116,53 @@ export default function SaasPage() {
         {error ? <div className="admin-notice error">{error}</div> : null}
         {!data ? <div className="empty-state">Cargando centro SaaS...</div> : (
           <>
+            <section className="phase5-panel profile-settings-panel">
+              <div className="phase5-panel-head">
+                <div>
+                  <h2>Mi perfil</h2>
+                  <p>Nombre, cargo y foto que se muestran en cada cuenta y sesion del workspace.</p>
+                </div>
+                <div className="profile-avatar-preview">
+                  {profileForm.avatarUrl ? (
+                    <img src={profileForm.avatarUrl} alt={profileForm.name || "Perfil"} />
+                  ) : (
+                    <span>{(profileForm.name || agent?.name || "EV").slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
+              </div>
+              <form className="profile-settings-form" onSubmit={handleProfileSubmit}>
+                <label>
+                  <span>Nombre</span>
+                  <input
+                    value={profileForm.name}
+                    onChange={(event) => setProfileForm((value) => ({ ...value, name: event.target.value }))}
+                    placeholder="Nombre visible"
+                  />
+                </label>
+                <label>
+                  <span>Cargo</span>
+                  <input
+                    value={profileForm.jobTitle}
+                    onChange={(event) => setProfileForm((value) => ({ ...value, jobTitle: event.target.value }))}
+                    placeholder="Ej: Gerente comercial, Owner, Vendedor"
+                  />
+                </label>
+                <label>
+                  <span>Foto de perfil</span>
+                  <input
+                    value={profileForm.avatarUrl}
+                    onChange={(event) => setProfileForm((value) => ({ ...value, avatarUrl: event.target.value }))}
+                    placeholder="URL publica o imagen cargada"
+                  />
+                  <input className="profile-file-input" type="file" accept="image/*" onChange={handleAvatarFile} />
+                </label>
+                <button className="primary-btn" type="submit" disabled={savingProfile || !profileForm.name.trim()}>
+                  {savingProfile ? "Guardando..." : "Guardar perfil"}
+                </button>
+              </form>
+              {profileStatus ? <div className="meta-line">{profileStatus}</div> : null}
+            </section>
+
             <section className="phase5-grid four">
               <Card title="Plan actual" value={normalizePlanLabel(data.plan?.name || data.tenant?.plan)} detail={data.plan?.description || "Plan activo"} />
               <Card title="Precio mensual" value={money(data.plan?.priceMonthly, data.plan?.currency)} detail="Referencia comercial" />

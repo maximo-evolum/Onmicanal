@@ -86,7 +86,9 @@ export async function loginWithEmail(email: string, password?: string) {
 }
 
 export async function getMe() {
-  return request<any>("/auth/me");
+  const data = await request<any>("/auth/me");
+  await saveMobileSession(data);
+  return data;
 }
 
 export async function getMyModules(): Promise<TenantModulesResponse> {

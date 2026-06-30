@@ -4,9 +4,12 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AdminTenant,
   createAdminTenant,
+  createIndustryTemplate,
   createAdminTenantUser,
   getAdminTenants,
+  getIndustryTemplates,
   getModuleCatalog,
+  applyAdminTenantIndustryTemplate,
   updateAdminTenant,
   updateAdminTenantBilling,
   updateAdminTenantAiProfile,
@@ -18,6 +21,7 @@ import {
   applyAdminTenantOnboardingExtraction,
   deleteAdminTenant,
   deleteAdminUser,
+  type IndustryTemplate,
   type OnboardingExtraction,
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
@@ -25,6 +29,7 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 
 const PLANS = ["STARTER", "PRO", "BUSINESS", "ENTERPRISE"];
 const ROLES = ["OWNER", "ADMIN", "AGENT", "SELLER", "VIEWER"];
+const PLAN_RANK: Record<string, number> = { STARTER: 1, PRO: 2, BUSINESS: 3, ENTERPRISE: 4 };
 const MODULE_LABELS: Record<string, string> = {
   inbox: "Inbox",
   sales: "Ventas",
@@ -44,6 +49,14 @@ const MODULE_LABELS: Record<string, string> = {
   users: "Usuarios y roles",
   integrations: "Integraciones",
   developer: "Desarrollador",
+  properties: "Propiedades",
+  property_assignments: "Asignacion de ventas",
+  customers: "Clientes",
+  revenue: "Ganancias",
+  vehicles: "Vehiculos",
+  parts_inventory: "Repuestos",
+  mechanic_assignments: "Asignacion de mecanicos",
+  ready_notifications: "Aviso de retiro",
 };
 
 const PROJECT_MODULE_CATALOG = [
@@ -58,6 +71,14 @@ const PROJECT_MODULE_CATALOG = [
   "dashboard",
   "ai_ops",
   "integrations",
+  "properties",
+  "property_assignments",
+  "customers",
+  "revenue",
+  "vehicles",
+  "parts_inventory",
+  "mechanic_assignments",
+  "ready_notifications",
   "sales",
   "marketing",
   "bookings",
@@ -91,6 +112,14 @@ const emptyUser = {
   email: "",
   role: "AGENT",
   password: "",
+};
+
+const emptyIndustryForm = {
+  name: "",
+  code: "",
+  summary: "",
+  workflowsText: "",
+  entitiesText: "",
 };
 
 const emptyWhatsAppConfig = {
@@ -184,6 +213,25 @@ function numberOrEmpty(value: unknown) {
   return String(value);
 }
 
+function planAllows(moduleMinPlan: string | undefined, currentPlan: string) {
+  const minRank = PLAN_RANK[normalizePlanLabel(moduleMinPlan)] || PLAN_RANK.STARTER;
+  const currentRank = PLAN_RANK[normalizePlanLabel(currentPlan)] || PLAN_RANK.STARTER;
+  return minRank <= currentRank;
+}
+
+function templateModulesForPlan(template: IndustryTemplate | null, plan: string) {
+  return (template?.modules || []).filter((module) => planAllows(module.minPlan, plan));
+}
+
+function moduleToTemplateItem(module: string) {
+  return {
+    key: module,
+    label: MODULE_LABELS[module] || module,
+    description: "",
+    minPlan: "STARTER"
+  };
+}
+
 
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
@@ -202,9 +250,11 @@ export default function AdminPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moduleCatalog, setModuleCatalog] = useState<string[]>([]);
+  const [industryTemplates, setIndustryTemplates] = useState<IndustryTemplate[]>([]);
   const [pendingModules, setPendingModules] = useState<string[]>([]);
   const [clientForm, setClientForm] = useState(emptyClient);
   const [userForm, setUserForm] = useState(emptyUser);
+  const [industryForm, setIndustryForm] = useState(emptyIndustryForm);
   const [whatsappForm, setWhatsappForm] = useState(emptyWhatsAppConfig);
   const [instagramForm, setInstagramForm] = useState(emptyInstagramConfig);
   const [facebookForm, setFacebookForm] = useState(emptyFacebookConfig);
@@ -221,13 +271,15 @@ export default function AdminPage() {
     try {
       setLoading(true);
       setError(null);
-      const [tenantData, catalog] = await Promise.all([
+      const [tenantData, catalog, industries] = await Promise.all([
         getAdminTenants(),
         getModuleCatalog().catch(() => null),
+        getIndustryTemplates().catch(() => null),
       ]);
       setTenants(tenantData);
       if (!selectedId && tenantData[0]) setSelectedId(tenantData[0].id);
       if (catalog?.modules) setModuleCatalog(Object.values(catalog.modules));
+      if (industries?.templates) setIndustryTemplates(industries.templates);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el panel admin");
     } finally {
@@ -354,9 +406,26 @@ export default function AdminPage() {
   }, [selectedTenant, pendingModules]);
 
   const availableModules = useMemo(() => {
-    const merged = new Set([...PROJECT_MODULE_CATALOG, ...moduleCatalog]);
+    const industryModules = industryTemplates.flatMap((template) => template.modules.map((module) => module.key));
+    const merged = new Set([...PROJECT_MODULE_CATALOG, ...moduleCatalog, ...industryModules]);
     return Array.from(merged);
-  }, [moduleCatalog]);
+  }, [industryTemplates, moduleCatalog]);
+
+  const selectedIndustryTemplate = useMemo(() => {
+    if (!selectedTenant) return null;
+    const industry = String(selectedTenant.industry || "").toLowerCase();
+    return industryTemplates.find((template) =>
+      template.code.toLowerCase() === industry ||
+      template.name.toLowerCase() === industry ||
+      industry.includes(template.name.toLowerCase())
+    ) || industryTemplates.find((template) => template.code === "GENERAL") || null;
+  }, [industryTemplates, selectedTenant]);
+
+  const selectedPlanCode = normalizePlanLabel(billingForm.planCode || selectedTenant?.plan || "STARTER");
+  const selectedIndustryModules = useMemo(
+    () => templateModulesForPlan(selectedIndustryTemplate, selectedPlanCode),
+    [selectedIndustryTemplate, selectedPlanCode],
+  );
 
   function updateTenantLocal(updated: AdminTenant) {
     setTenants((items) => items.map((item) => (item.id === updated.id ? updated : item)));
@@ -562,6 +631,54 @@ export default function AdminPage() {
     setError(null);
   }
 
+  function addModulesToPending(modules: string[]) {
+    setPendingModules((current) => Array.from(new Set([...current, ...modules])));
+    setSuccess("Modulos sugeridos cargados en el selector. Presiona Guardar modulos para aplicarlos.");
+    setError(null);
+  }
+
+  function replacePendingWithModules(modules: string[]) {
+    setPendingModules(Array.from(new Set(modules)));
+    setSuccess("Selector reemplazado con los modulos del rubro. Presiona Guardar modulos para aplicarlos.");
+    setError(null);
+  }
+
+  async function handleCreateIndustryTemplate() {
+    if (!industryForm.name.trim()) {
+      setError("Escribe un nombre para el nuevo rubro.");
+      return;
+    }
+    if (!pendingModules.length) {
+      setError("Activa al menos un modulo antes de crear un rubro.");
+      return;
+    }
+    try {
+      setSavingId("custom-industry");
+      setError(null);
+      setSuccess(null);
+      const workflows = industryForm.workflowsText.split("\n").map((item) => item.trim()).filter(Boolean);
+      const entities = industryForm.entitiesText.split("\n").map((item) => item.trim()).filter(Boolean).map((label) => ({
+        key: label.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "_").replace(/(^_|_$)/g, ""),
+        label
+      }));
+      const result = await createIndustryTemplate({
+        name: industryForm.name,
+        code: industryForm.code || undefined,
+        summary: industryForm.summary,
+        modules: pendingModules.map(moduleToTemplateItem),
+        workflows,
+        entities,
+      });
+      setIndustryTemplates(result.templates);
+      setIndustryForm(emptyIndustryForm);
+      setSuccess(`Rubro ${result.template.name} creado. Ya puedes aplicarlo a cualquier cuenta.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo crear el rubro personalizado");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function handleSaveModules() {
     if (!selectedTenant) return;
     try {
@@ -576,6 +693,28 @@ export default function AdminPage() {
       setSuccess("Módulos guardados en la base de datos. Los usuarios del cliente verán el cambio al recargar o volver a iniciar sesión.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron guardar los módulos");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function handleApplyIndustryTemplate(template: IndustryTemplate) {
+    if (!selectedTenant) return;
+    try {
+      setSavingId(`industry-${template.code}`);
+      setError(null);
+      setSuccess(null);
+      const result = await applyAdminTenantIndustryTemplate(selectedTenant.id, {
+        industry: template.code,
+        plan: billingForm.planCode || selectedTenant.plan || "STARTER",
+      });
+      if (result.tenant) {
+        updateTenantLocal(result.tenant);
+        setPendingModules(enabledModulesOf(result.tenant));
+      }
+      setSuccess(`Plantilla ${template.name} aplicada. MÃ³dulos, entidades y flujos base quedaron listos para este cliente.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo aplicar la plantilla de rubro");
     } finally {
       setSavingId(null);
     }
@@ -799,6 +938,112 @@ export default function AdminPage() {
                     <span className="meta-line">Instagram Business Account ID</span>
                     <input defaultValue={selectedTenant.instagramBusinessAccountId || ""} onBlur={(e) => handleTenantField("instagramBusinessAccountId", e.target.value)} placeholder="ID de Instagram Business" />
                   </label>
+                </div>
+
+                <div className="admin-industry-section">
+                  <div className="admin-panel-header slim">
+                    <div>
+                      <strong>Motor multirubro</strong>
+                      <div className="meta-line">
+                        Crea rubros con módulos propios. Al aplicar una plantilla se habilitan sus servicios según el plan actual del cliente.
+                      </div>
+                    </div>
+                    <span className="admin-industry-pill">
+                      {selectedIndustryTemplate?.custom ? "Custom" : "Base"} / {selectedIndustryTemplate?.name || selectedTenant.industry || "General"} / {selectedPlanCode}
+                    </span>
+                  </div>
+
+                  <div className="industry-builder-panel">
+                    <div className="industry-builder-summary">
+                      <span>Plantilla activa</span>
+                      <h3>{selectedIndustryTemplate?.name || "General"}</h3>
+                      <p>{selectedIndustryTemplate?.summary || "Operacion comercial omnicanal."}</p>
+                      <div className="industry-builder-actions">
+                        <button
+                          className="ghost-btn"
+                          type="button"
+                          onClick={() => addModulesToPending(selectedIndustryModules.map((module) => module.key))}
+                          disabled={!selectedIndustryModules.length}
+                        >
+                          Sumar sugeridos
+                        </button>
+                        <button
+                          className="ghost-btn"
+                          type="button"
+                          onClick={() => replacePendingWithModules(selectedIndustryModules.map((module) => module.key))}
+                          disabled={!selectedIndustryModules.length}
+                        >
+                          Usar solo rubro
+                        </button>
+                      </div>
+                    </div>
+                    <div className="industry-plan-matrix">
+                      {PLANS.map((plan) => {
+                        const modulesForPlan = templateModulesForPlan(selectedIndustryTemplate, plan);
+                        return (
+                          <article key={plan} className={plan === selectedPlanCode ? "active" : ""}>
+                            <strong>{plan}</strong>
+                            <span>{modulesForPlan.length} modulos</span>
+                            <small>{modulesForPlan.map((module) => module.label).slice(0, 4).join(", ") || "Sin modulos"}</small>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="industry-custom-builder">
+                    <div>
+                      <span className="eyebrow">Nuevo rubro</span>
+                      <h3>Crear plantilla desde modulos activos</h3>
+                      <p className="meta-line">Usa el selector de modulos de abajo como base. Ideal para futuros rubros como retail, legaltech, gimnasios o clinicas especializadas.</p>
+                    </div>
+                    <div className="industry-custom-form">
+                      <input value={industryForm.name} onChange={(e) => setIndustryForm({ ...industryForm, name: e.target.value })} placeholder="Nombre del rubro" />
+                      <input value={industryForm.code} onChange={(e) => setIndustryForm({ ...industryForm, code: e.target.value })} placeholder="Codigo opcional, ej: PETSHOP" />
+                      <input value={industryForm.summary} onChange={(e) => setIndustryForm({ ...industryForm, summary: e.target.value })} placeholder="Resumen del rubro" />
+                      <textarea value={industryForm.entitiesText} onChange={(e) => setIndustryForm({ ...industryForm, entitiesText: e.target.value })} placeholder="Entidades, una por linea" rows={3} />
+                      <textarea value={industryForm.workflowsText} onChange={(e) => setIndustryForm({ ...industryForm, workflowsText: e.target.value })} placeholder="Flujos, uno por linea" rows={3} />
+                      <button className="primary-btn" type="button" onClick={handleCreateIndustryTemplate} disabled={savingId === "custom-industry"}>
+                        {savingId === "custom-industry" ? "Creando rubro..." : "Crear rubro"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="industry-template-grid">
+                    {industryTemplates.map((template) => {
+                      const active = selectedIndustryTemplate?.code === template.code;
+                      const modulesForPlan = templateModulesForPlan(template, selectedPlanCode);
+                      return (
+                        <article key={template.code} className={`industry-template-card ${active ? "active" : ""}`}>
+                          <div className="industry-card-head">
+                            <div>
+                              <strong>{template.name}</strong>
+                              <p>{template.summary}</p>
+                            </div>
+                            <span>{modulesForPlan.length}</span>
+                          </div>
+                          <div className="industry-card-meta">
+                            <small>Entidades: {template.entities.map((entity) => entity.label).join(", ")}</small>
+                            <small>Flujo: {template.workflows.join(" -> ")}</small>
+                          </div>
+                          <div className="industry-module-chips">
+                            {modulesForPlan.slice(0, 7).map((module) => (
+                              <span key={module.key}>{module.label}</span>
+                            ))}
+                            {modulesForPlan.length > 7 ? <span>+{modulesForPlan.length - 7}</span> : null}
+                          </div>
+                          <button
+                            className={active ? "ghost-btn" : "primary-btn"}
+                            type="button"
+                            onClick={() => handleApplyIndustryTemplate(template)}
+                            disabled={savingId === `industry-${template.code}`}
+                          >
+                            {savingId === `industry-${template.code}` ? "Aplicando..." : active ? "Reaplicar plantilla" : "Aplicar rubro"}
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="admin-module-section">

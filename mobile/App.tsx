@@ -551,6 +551,7 @@ function SideNav({
               <Text style={styles.menuAccountName}>{session.tenant?.name || session.user.name}</Text>
               <Text style={styles.muted}>Nivel: {session.tenant?.plan || session.tenant?.type || "STARTER"}</Text>
               <Text style={styles.muted}>Usuario: {session.user.name}</Text>
+              {session.user.jobTitle ? <Text style={styles.muted}>Cargo: {session.user.jobTitle}</Text> : null}
             </View>
             <ScrollView style={styles.menuItems} contentContainerStyle={styles.menuItemsContent} showsVerticalScrollIndicator={false}>
               {items.map((item) => (

@@ -3,6 +3,8 @@ export type AgentSession = {
   tenantId?: string;
   name: string;
   email: string;
+  jobTitle?: string | null;
+  avatarUrl?: string | null;
   role?: string;
 };
 

@@ -69,7 +69,11 @@ const navItems: NavItem[] = [
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA", moduleKey: "onboarding" },
   { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites", moduleKey: "saas" },
   { label: "Dashboard", href: "/dashboard", description: "Metricas operativas", moduleKey: "dashboard" },
-  { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA", moduleKey: "ai_ops" }
+  { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA", moduleKey: "ai_ops" },
+  { label: "Propiedades", href: "/properties", description: "Ficha inmobiliaria, vendedores y pipeline por propiedad", moduleKey: "properties" },
+  { label: "Clientes / Pacientes", href: "/customers", description: "Fichas por rubro, historial y proxima accion", moduleKey: "customers" },
+  { label: "Ganancias", href: "/revenue", description: "Ingresos, pendientes y conversion financiera", moduleKey: "revenue" },
+  { label: "Taller", href: "/workshop", description: "Vehiculos, repuestos y asignacion de mecanicos", moduleKey: "vehicles" }
 ];
 
 const developerOnlyItems: NavItem[] = [
@@ -189,7 +193,11 @@ const connectedModuleCatalog: Array<NavItem & { value: (state: LoadState, comput
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA.", moduleKey: "onboarding", value: (state) => String((state.onboarding?.rules || []).length) },
   { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites activos.", moduleKey: "saas", value: (state) => planLabel(state.plan) },
   { label: "Dashboard", href: "/dashboard", description: "Metricas operativas en tiempo real.", moduleKey: "dashboard", value: (state) => String(state.crm?.kpis?.conversionRate ?? 0) + "%" },
-  { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA.", moduleKey: "ai_ops", value: (state) => String(state.crm?.kpis?.readyToClose ?? 0) }
+  { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA.", moduleKey: "ai_ops", value: (state) => String(state.crm?.kpis?.readyToClose ?? 0) },
+  { label: "Propiedades", href: "/properties", description: "Inventario inmobiliario, asignacion de vendedores y pipeline por propiedad.", moduleKey: "properties", value: () => "Vertical" },
+  { label: "Clientes / Pacientes", href: "/customers", description: "Fichas por rubro, historial, preferencias y seguimiento.", moduleKey: "customers", value: () => "Fichas" },
+  { label: "Ganancias", href: "/revenue", description: "Ingresos confirmados, pendientes y forecast operativo.", moduleKey: "revenue", value: () => "$" },
+  { label: "Taller", href: "/workshop", description: "Vehiculos, repuestos, mecanicos y aviso de retiro.", moduleKey: "vehicles", value: () => "Taller" }
 ];
 
 function money(value = 0) {
