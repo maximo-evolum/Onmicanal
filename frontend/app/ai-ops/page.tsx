@@ -6,6 +6,7 @@ import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, getAiBadgeClass, getConversationState, isReadyToClose, riskLabel } from "@/lib/ai-ops";
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 
 function openInbox(conversationId: string) {
@@ -81,7 +82,7 @@ export default function AiOpsPage() {
             <span className="badge sales-alert-critical">🚨 {summary?.metrics.critical ?? critical.length} críticos</span>
             <span className="badge sales-alert-hot">🔥 {summary?.metrics.opportunities ?? strategic.length} oportunidades</span>
             <span className="badge sales-alert-action">🧠 {summary?.metrics.averageScore ?? avg}% score prom.</span>
-            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <AccountPill fallbackName={agent?.name || "Usuario"} />
           </div>
         </header>
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, getConversations, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
@@ -341,7 +342,7 @@ export default function CampaignsPage() {
             <div className="meta-line">Crea imagenes, titulos y textos listos para publicar en los canales del cliente.</div>
           </div>
           <div className="module-app-actions">
-            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <AccountPill fallbackName={agent?.name || "Usuario"} />
           </div>
         </header>
 

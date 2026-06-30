@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";
 import { getStoredSession, mergeStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
+import { ThemePalettePicker } from "@/components/theme-palette-picker";
 
 function money(value?: number, currency = "CLP") {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency, maximumFractionDigits: 0 }).format(value || 0);
@@ -98,7 +100,7 @@ export default function SaasPage() {
             <div className="meta-line">Plan de cuenta, limites, modulos habilitados, onboarding y usuarios del workspace.</div>
           </div>
           <div className="module-app-actions">
-            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <AccountPill fallbackName={agent?.name || "Usuario"} />
           </div>
         </header>
         <section className="phase5-hero">
@@ -161,6 +163,7 @@ export default function SaasPage() {
                 </button>
               </form>
               {profileStatus ? <div className="meta-line">{profileStatus}</div> : null}
+              <ThemePalettePicker />
             </section>
 
             <section className="phase5-grid four">

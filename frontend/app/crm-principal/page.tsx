@@ -13,6 +13,7 @@ import {
   getOnboardingKnowledge,
   type CrmOperationalDashboard
 } from "@/lib/api";
+import { AccountPill } from "@/components/account-pill";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
@@ -72,7 +73,6 @@ const navItems: NavItem[] = [
   { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA", moduleKey: "ai_ops" },
   { label: "Propiedades", href: "/properties", description: "Ficha inmobiliaria, vendedores y pipeline por propiedad", moduleKey: "properties" },
   { label: "Clientes / Pacientes", href: "/customers", description: "Fichas por rubro, historial y proxima accion", moduleKey: "customers" },
-  { label: "Ganancias", href: "/revenue", description: "Ingresos, pendientes y conversion financiera", moduleKey: "revenue" },
   { label: "Taller", href: "/workshop", description: "Vehiculos, repuestos y asignacion de mecanicos", moduleKey: "vehicles" }
 ];
 
@@ -196,7 +196,6 @@ const connectedModuleCatalog: Array<NavItem & { value: (state: LoadState, comput
   { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA.", moduleKey: "ai_ops", value: (state) => String(state.crm?.kpis?.readyToClose ?? 0) },
   { label: "Propiedades", href: "/properties", description: "Inventario inmobiliario, asignacion de vendedores y pipeline por propiedad.", moduleKey: "properties", value: () => "Vertical" },
   { label: "Clientes / Pacientes", href: "/customers", description: "Fichas por rubro, historial, preferencias y seguimiento.", moduleKey: "customers", value: () => "Fichas" },
-  { label: "Ganancias", href: "/revenue", description: "Ingresos confirmados, pendientes y forecast operativo.", moduleKey: "revenue", value: () => "$" },
   { label: "Taller", href: "/workshop", description: "Vehiculos, repuestos, mecanicos y aviso de retiro.", moduleKey: "vehicles", value: () => "Taller" }
 ];
 
@@ -547,7 +546,7 @@ export default function CrmPrincipalPage() {
             ) : null}
           </form>
           <div className="crm-main-profile">
-            <strong>{currentSession?.name || "Usuario"}</strong>
+            <AccountPill fallbackName={currentSession?.name || "Usuario"} />
             <span>{isDeveloper ? "Desarrollador" : currentSession?.role || "Cliente"}</span>
           </div>
           <LogoutButton />
@@ -567,12 +566,12 @@ export default function CrmPrincipalPage() {
             <div className="crm-main-radar">
               <div className="crm-main-radar-core">
                 <div className="crm-main-radar-orbit" style={{ background: `radial-gradient(circle at center, rgba(18, 11, 33, 1) 0 47%, transparent 48%), conic-gradient(var(--crm-main-green) 0 ${radarScore}%, rgba(139, 92, 246, 0.28) ${radarScore}% 100%)` }}>
-                  <strong>{operationsLive}</strong>
-                  <span>operaciones vivas</span>
+                  <strong>{radarScore}%</strong>
+                  <span>indice ejecutivo</span>
                 </div>
                 <div className="crm-main-radar-score">
-                  <small>Score IA promedio</small>
-                  <strong>{radarScore}%</strong>
+                  <small>Actividad comercial</small>
+                  <strong>{operationsLive}</strong>
                 </div>
               </div>
               <div className="crm-main-radar-tiles">
@@ -585,6 +584,29 @@ export default function CrmPrincipalPage() {
                   </article>
                 ))}
               </div>
+            </div>
+          </section>
+
+          <section className="crm-main-panel crm-main-analytics">
+            <div className="crm-main-panel-head">
+              <div>
+                <span>Dashboard</span>
+                <h2>Rendimiento semanal</h2>
+              </div>
+              <Link className="crm-main-action-link" href="/dashboard">Ver reporte</Link>
+            </div>
+            <div className="crm-main-pro-chart">
+              {weeklyPerformance.map((item) => (
+                <article key={item.day}>
+                  <span>{item.value}</span>
+                  <i style={{ height: `${item.height}%` }} />
+                  <small>{item.day}</small>
+                </article>
+              ))}
+            </div>
+            <div className="crm-main-score">
+              <strong>{radarScore}%</strong>
+              <span>Probabilidad promedio</span>
             </div>
           </section>
 
@@ -707,29 +729,6 @@ export default function CrmPrincipalPage() {
                 <small className={`crm-main-status ${row.status}`}><i />{row.label}</small>
               </article>
             ))}
-          </section>
-
-          <section className="crm-main-panel crm-main-analytics">
-            <div className="crm-main-panel-head">
-              <div>
-                <span>Dashboard</span>
-                <h2>Rendimiento semanal</h2>
-              </div>
-              <Link className="crm-main-action-link" href="/dashboard">Ver reporte</Link>
-            </div>
-            <div className="crm-main-pro-chart">
-              {weeklyPerformance.map((item) => (
-                <article key={item.day}>
-                  <span>{item.value}</span>
-                  <i style={{ height: `${item.height}%` }} />
-                  <small>{item.day}</small>
-                </article>
-              ))}
-            </div>
-            <div className="crm-main-score">
-              <strong>{radarScore}%</strong>
-              <span>Probabilidad promedio</span>
-            </div>
           </section>
         </div>
       </section>

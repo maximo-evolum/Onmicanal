@@ -499,21 +499,6 @@ a {
 }
 
 .crm-main-profile {
-  display: grid;
-  place-content: center;
-  text-align: center;
-}
-
-.crm-main-profile strong,
-.crm-main-profile span {
-  display: block;
-}
-
-.crm-main-profile span {
-  color: var(--crm-main-muted);
-}
-
-.crm-main-profile {
   min-height: 0;
   width: fit-content;
   min-width: 0;
@@ -525,19 +510,15 @@ a {
   padding: 10px 14px;
   border: 0;
   border-radius: 999px;
-  background: linear-gradient(135deg, #8b5cf6, #a855f7);
-  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.28);
-}
-
-.crm-main-profile strong {
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
+  background: transparent;
+  box-shadow: none;
 }
 
 .crm-main-profile span {
+  color: var(--crm-main-muted);
+}
+
+.crm-main-profile > span:not(.account-pill-with-avatar) {
   display: none;
 }
 
@@ -3874,6 +3855,7 @@ button.primary-btn {
 
 .industry-builder-summary,
 .industry-plan-matrix article,
+.industry-plan-card,
 .industry-custom-builder {
   border: 1px solid rgba(168, 85, 247, 0.16);
   border-radius: 18px;
@@ -3922,14 +3904,18 @@ button.primary-btn {
   gap: 10px;
 }
 
-.industry-plan-matrix article {
+.industry-plan-matrix article,
+.industry-plan-card {
   display: grid;
   gap: 6px;
   min-height: 120px;
   padding: 12px;
+  text-align: left;
+  cursor: pointer;
 }
 
-.industry-plan-matrix article.active {
+.industry-plan-matrix article.active,
+.industry-plan-card.active {
   border-color: rgba(168, 85, 247, 0.52);
   background:
     linear-gradient(135deg, rgba(124, 58, 237, 0.22), rgba(192, 132, 252, 0.08)),
@@ -3948,6 +3934,11 @@ button.primary-btn {
 .industry-plan-matrix small {
   color: var(--text-muted);
   line-height: 1.35;
+}
+
+.industry-plan-card:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .industry-custom-builder {
@@ -9281,7 +9272,7 @@ body {
 
 .evolum-menu-bubble {
   position: fixed;
-  top: max(18px, calc(env(safe-area-inset-top) + 12px));
+  top: max(86px, calc(env(safe-area-inset-top) + 72px));
   left: max(18px, calc(env(safe-area-inset-left) + 12px));
   z-index: 100;
   width: 54px;
@@ -9295,6 +9286,130 @@ body {
   font-weight: 900;
   letter-spacing: 0;
   cursor: pointer;
+}
+
+.account-pill-with-avatar {
+  gap: 9px;
+  padding: 7px 13px 7px 7px;
+}
+
+.account-pill-with-avatar img,
+.account-pill-with-avatar i {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  object-fit: cover;
+}
+
+.account-pill-with-avatar strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-main-profile .account-pill-with-avatar {
+  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.28);
+}
+
+.file-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.file-picker-button {
+  position: relative;
+  min-height: 46px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.file-picker-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.document-upload-box {
+  min-height: 92px;
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  padding: 14px 16px;
+  border: 1px dashed color-mix(in srgb, var(--theme-primary-2) 42%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--theme-primary) 9%, rgba(11, 8, 20, 0.68));
+  color: var(--text);
+  cursor: pointer;
+}
+
+.document-upload-box span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.document-upload-box input {
+  display: none;
+}
+
+.document-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.document-chip-list span {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.crm-main-agent-board {
+  align-content: start;
+}
+
+.crm-main-mini-agent {
+  min-height: 138px;
+  gap: 7px;
+  padding: 12px;
+}
+
+.crm-main-mini-agent p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.crm-main-mini-avatar {
+  width: 36px;
+  height: 36px;
+}
+
+@media (max-width: 900px) {
+  .file-picker-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .inbox-nav-toggle {

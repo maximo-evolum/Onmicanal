@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { getMyModules } from "@/lib/api";
 import { LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
-import { ThemePalettePicker } from "./theme-palette-picker";
 
 type EvolumSidebarProps = {
   active: string;
@@ -35,7 +34,6 @@ const baseItems: SidebarItem[] = [
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI", "ai_ops"],
   ["Propiedades", "/properties", "Ficha inmobiliaria y asignaciones", "PR", "properties"],
   ["Clientes / Pacientes", "/customers", "Fichas, historial y seguimiento", "CP", "customers"],
-  ["Ganancias", "/revenue", "Ingresos, pagos y forecast", "GA", "revenue"],
   ["Taller", "/workshop", "Vehiculos, repuestos y mecanicos", "TA", "vehicles"],
 ];
 
@@ -103,7 +101,6 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
       </nav>
 
       <div className="inbox-nav-footer">
-        <ThemePalettePicker />
         <div className="inbox-nav-logout">
           <LogoutButton />
         </div>

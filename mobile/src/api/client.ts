@@ -5,6 +5,7 @@ import {
   Campaign,
   Conversation,
   CrmOperationalDashboard,
+  IndustryRecord,
   Message,
   PaymentMetrics,
   TenantModulesResponse
@@ -195,6 +196,24 @@ export async function createBooking(payload: {
 
 export async function getCampaigns(): Promise<Campaign[]> {
   return request<Campaign[]>("/campaigns");
+}
+
+export async function getIndustryRecords(type?: string): Promise<IndustryRecord[]> {
+  const query = type ? `?type=${encodeURIComponent(type)}` : "";
+  return request<IndustryRecord[]>(`/industry-records${query}`);
+}
+
+export async function createIndustryRecord(input: {
+  recordType: string;
+  title: string;
+  status?: string;
+  assignedToId?: string | null;
+  data?: Record<string, unknown>;
+}): Promise<IndustryRecord> {
+  return request<IndustryRecord>("/industry-records", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export async function generateCampaignCopy(payload: {

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { cancelPayment, confirmPayment, createPayment, getPaymentMetrics, getPayments, Payment, PaymentMetrics } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 
 function money(value = 0, currency = "CLP") {
@@ -113,7 +114,7 @@ export default function PaymentsPage() {
             <div className="meta-line">Links manuales y pagos conectados a conversaciones, leads o reservas.</div>
           </div>
           <div className="module-app-actions">
-            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <AccountPill fallbackName={agent?.name || "Usuario"} />
           </div>
         </header>
 

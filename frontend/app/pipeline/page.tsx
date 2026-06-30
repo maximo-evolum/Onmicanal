@@ -5,6 +5,7 @@ import { getLeads, updateLeadApi } from "@/lib/api";
 import { Lead } from "@/lib/types";
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 
 const columns = [
@@ -124,7 +125,7 @@ export default function PipelinePage() {
             <span className="badge signal-followup">🤖 {stats.followups} follow-ups</span>
             <span className="badge">🔮 {stats.avgClose}% cierre prom.</span>
           </div>
-          <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+          <AccountPill fallbackName={agent?.name || "Usuario"} />
         </header>
 
         {error ? <div className="sales-queue-error">{error}</div> : null}

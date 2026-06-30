@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import {
@@ -13,6 +13,12 @@ import {
 import { getStoredSession } from "@/lib/auth";
 
 type CustomerMode = "GASTRONOMY" | "DENTAL" | "VETERINARY" | "GENERAL";
+type CustomerDocument = {
+  name: string;
+  type: string;
+  size: number;
+  dataUrl: string;
+};
 
 const emptyForm = {
   title: "",
@@ -22,7 +28,8 @@ const emptyForm = {
   segment: "",
   nextAction: "",
   notes: "",
-  status: "ACTIVE"
+  status: "ACTIVE",
+  documents: [] as CustomerDocument[]
 };
 
 const modeConfig: Record<CustomerMode, {
@@ -147,7 +154,8 @@ export default function CustomersPage() {
           preference: form.preference,
           segment: form.segment,
           nextAction: form.nextAction,
-          notes: form.notes
+          notes: form.notes,
+          documents: form.documents
         }
       });
       setForm(emptyForm);
@@ -158,6 +166,34 @@ export default function CustomersPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleCustomerFiles(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const accepted = files.slice(0, 6);
+    const oversized = accepted.find((file) => file.size > 2_500_000);
+    if (oversized) {
+      setError("Cada documento debe pesar menos de 2.5 MB para adjuntarlo a la ficha.");
+      return;
+    }
+
+    Promise.all(accepted.map((file) => new Promise<CustomerDocument>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size,
+        dataUrl: typeof reader.result === "string" ? reader.result : "",
+      });
+      reader.onerror = () => reject(new Error(`No se pudo leer ${file.name}`));
+      reader.readAsDataURL(file);
+    })))
+      .then((documents) => {
+        setForm((current) => ({ ...current, documents: [...current.documents, ...documents].slice(0, 8) }));
+        setMessage("Documentos adjuntados. Guarda la ficha para dejarlos disponibles.");
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "No se pudieron adjuntar documentos"));
   }
 
   async function updateStatus(record: IndustryRecord, status: string) {
@@ -208,6 +244,16 @@ export default function CustomersPage() {
               </div>
               <input value={form.nextAction} onChange={(e) => setForm({ ...form, nextAction: e.target.value })} placeholder="Proxima accion / recordatorio" />
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Notas de contexto, historial o preferencias" rows={4} />
+              <label className="document-upload-box">
+                <strong>Subir examenes / presupuestos</strong>
+                <span>PDF, imagenes o documentos para enviar luego por WhatsApp o email.</span>
+                <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onChange={handleCustomerFiles} />
+              </label>
+              {form.documents.length ? (
+                <div className="document-chip-list">
+                  {form.documents.map((document) => <span key={`${document.name}-${document.size}`}>{document.name}</span>)}
+                </div>
+              ) : null}
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                 <option value="ACTIVE">Activa</option>
                 <option value="PENDING">Pendiente</option>

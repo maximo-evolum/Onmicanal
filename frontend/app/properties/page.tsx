@@ -34,6 +34,7 @@ const emptyProperty = {
   parking: "",
   meters: "",
   photoUrl: "",
+  photoFileName: "",
   observations: "",
   assignedToId: "",
   stage: "PROSPECTING"
@@ -139,6 +140,7 @@ export default function PropertiesPage() {
           parking: Number(form.parking || 0),
           meters: Number(form.meters || 0),
           photoUrl: form.photoUrl,
+          photoFileName: form.photoFileName,
           observations: form.observations,
           stage: form.stage
         }
@@ -151,6 +153,22 @@ export default function PropertiesPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handlePhotoFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 1_800_000) {
+      setError("La foto debe pesar menos de 1.8 MB para adjuntarla a la ficha.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setForm((current) => ({ ...current, photoUrl: result, photoFileName: file.name }));
+      setMessage("Foto cargada en la ficha. Guarda la propiedad para aplicarla.");
+    };
+    reader.readAsDataURL(file);
   }
 
   async function calculateAssignments() {
@@ -294,7 +312,14 @@ export default function PropertiesPage() {
                 <input value={form.bathrooms} onChange={(e) => setForm({ ...form, bathrooms: e.target.value })} placeholder="Banos" inputMode="numeric" />
                 <input value={form.parking} onChange={(e) => setForm({ ...form, parking: e.target.value })} placeholder="Estac." inputMode="numeric" />
               </div>
-              <input value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} placeholder="URL foto principal" />
+              <div className="file-picker-row">
+                <input value={form.photoUrl} onChange={(e) => setForm({ ...form, photoUrl: e.target.value })} placeholder="URL foto principal" />
+                <label className="ghost-btn file-picker-button">
+                  Subir foto
+                  <input type="file" accept="image/*" onChange={handlePhotoFile} />
+                </label>
+              </div>
+              {form.photoFileName ? <span className="meta-line">Foto seleccionada: {form.photoFileName}</span> : null}
               <textarea value={form.observations} onChange={(e) => setForm({ ...form, observations: e.target.value })} placeholder="Observaciones generales" rows={4} />
               <div className="vertical-two">
                 <select value={form.assignedToId} onChange={(e) => setForm({ ...form, assignedToId: e.target.value })}>

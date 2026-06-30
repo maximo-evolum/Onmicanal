@@ -1,4 +1,7 @@
 import { StatusBar } from "expo-status-bar";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -25,6 +28,7 @@ import {
   clearMobileSession,
   createBooking,
   createCampaignDraft,
+  createIndustryRecord,
   generateCampaignCopy,
   generateCampaignImages,
   getAdminTenants,
@@ -33,6 +37,7 @@ import {
   getCampaigns,
   getConversations,
   getCrmOperationalDashboard,
+  getIndustryRecords,
   getMe,
   getMessages,
   getMobileSession,
@@ -48,9 +53,9 @@ import {
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
-import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, Message, TenantSession } from "./src/types";
+import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, IndustryRecord, Message, TenantSession } from "./src/types";
 
-type ScreenKey = "dashboard" | "inbox" | "agenda" | "pipeline" | "campaigns" | "admin";
+type ScreenKey = "dashboard" | "inbox" | "agenda" | "pipeline" | "properties" | "customers" | "campaigns" | "admin";
 
 type SessionState = {
   user: AgentSession;
@@ -79,6 +84,8 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "inbox", label: "Inbox", short: "IO", module: "inbox" },
   { key: "agenda", label: "Agenda", short: "AG", module: "bookings" },
   { key: "pipeline", label: "Pipeline", short: "PI", module: "sales" },
+  { key: "properties", label: "Propiedades", short: "PR", module: "properties" },
+  { key: "customers", label: "Clientes", short: "CL", module: "customers" },
   { key: "campaigns", label: "Campañas", short: "CA", module: "marketing" },
   { key: "admin", label: "Admin", short: "SA" }
 ];
@@ -161,6 +168,18 @@ function extractCampaignVariants(source: any): CampaignVariant[] {
   return Array.isArray(variants) ? variants : [];
 }
 
+function recordText(record: IndustryRecord, key: string, fallback = "-") {
+  const value = record.data?.[key];
+  if (value === null || value === undefined || value === "") return fallback;
+  return String(value);
+}
+
+function dataUrlFromFile(name?: string | null, mimeType?: string | null, base64?: string | null) {
+  if (!base64) return "";
+  const safeType = mimeType || (name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
+  return `data:${safeType};base64,${base64}`;
+}
+
 export default function App() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [modules, setModules] = useState<string[]>([]);
@@ -177,6 +196,8 @@ export default function App() {
   const [reply, setReply] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [properties, setProperties] = useState<IndustryRecord[]>([]);
+  const [customers, setCustomers] = useState<IndustryRecord[]>([]);
   const [adminTenants, setAdminTenants] = useState<AdminTenant[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -248,7 +269,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.allSettled([loadModules(), loadDashboard(false), loadConversations(false), loadBookings(false), loadCampaigns(false)]);
+    await Promise.allSettled([loadModules(), loadDashboard(false), loadConversations(false), loadBookings(false), loadCampaigns(false), loadProperties(false), loadCustomers(false)]);
   }
 
   async function loadModules() {
@@ -290,6 +311,20 @@ export default function App() {
     if (showLoading) setRefreshing(false);
   }
 
+  async function loadProperties(showLoading = true) {
+    if (showLoading) setRefreshing(true);
+    const data = await getIndustryRecords("property").catch(() => []);
+    setProperties(data);
+    if (showLoading) setRefreshing(false);
+  }
+
+  async function loadCustomers(showLoading = true) {
+    if (showLoading) setRefreshing(true);
+    const data = await getIndustryRecords("customer").catch(() => []);
+    setCustomers(data);
+    if (showLoading) setRefreshing(false);
+  }
+
   async function loadAdminTenants() {
     const data = await getAdminTenants().catch(() => []);
     setAdminTenants(data);
@@ -328,6 +363,8 @@ export default function App() {
     setConversations([]);
     setMessages([]);
     setBookings([]);
+    setProperties([]);
+    setCustomers([]);
   }
 
   async function refreshCurrent() {
@@ -338,6 +375,8 @@ export default function App() {
       return;
     }
     if (screen === "agenda") return loadBookings();
+    if (screen === "properties") return loadProperties();
+    if (screen === "customers") return loadCustomers();
     if (screen === "campaigns") return loadCampaigns();
     if (screen === "admin") return loadAdminTenants();
   }
@@ -503,6 +542,8 @@ export default function App() {
         )}
         {screen === "agenda" && <AgendaScreen bookings={bookings} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadBookings(false); await loadDashboard(false); }} />}
         {screen === "pipeline" && <PipelineScreen dashboard={dashboard} profile={profile} conversations={conversations} refreshing={refreshing} onRefresh={refreshCurrent} onOpenConversation={(conversation) => { setSelectedConversationId(conversation.id); setScreen("inbox"); }} />}
+        {screen === "properties" && <PropertiesScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
+        {screen === "customers" && <CustomersScreen records={customers} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadCustomers(false); await loadDashboard(false); }} />}
         {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} campaigns={campaigns} onRefresh={loadCampaigns} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
       </View>

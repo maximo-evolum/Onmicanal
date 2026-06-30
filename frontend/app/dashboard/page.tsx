@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 import { getCrmOperationalDashboard, getLeadMetrics, type CrmOperationalDashboard } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
@@ -97,7 +98,7 @@ export default function DashboardPage() {
             <p>Bienvenido, {agent?.name || "Usuario"}. Resumen operativo en tiempo real.</p>
           </div>
           <div className="executive-top-actions">
-            <span className="module-account-pill">{agent?.name || "Usuario"}</span>
+            <AccountPill fallbackName={agent?.name || "Usuario"} />
           </div>
         </header>
 

@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
 
 const PLANS = ["STARTER", "PRO", "BUSINESS", "ENTERPRISE"];
 const ROLES = ["OWNER", "ADMIN", "AGENT", "SELLER", "VIEWER"];
@@ -52,7 +53,6 @@ const MODULE_LABELS: Record<string, string> = {
   properties: "Propiedades",
   property_assignments: "Asignacion de ventas",
   customers: "Clientes",
-  revenue: "Ganancias",
   vehicles: "Vehiculos",
   parts_inventory: "Repuestos",
   mechanic_assignments: "Asignacion de mecanicos",
@@ -74,7 +74,6 @@ const PROJECT_MODULE_CATALOG = [
   "properties",
   "property_assignments",
   "customers",
-  "revenue",
   "vehicles",
   "parts_inventory",
   "mechanic_assignments",
@@ -698,6 +697,40 @@ export default function AdminPage() {
     }
   }
 
+  async function handleApplyPlanPreset(plan: string) {
+    if (!selectedTenant) return;
+    const normalizedPlan = normalizePlanLabel(plan);
+    const modulesForPlan = templateModulesForPlan(selectedIndustryTemplate, normalizedPlan).map((module) => module.key);
+    try {
+      setSavingId(`plan-preset-${normalizedPlan}`);
+      setError(null);
+      setSuccess(null);
+      setBillingForm((current) => ({
+        ...current,
+        planCode: normalizedPlan,
+        planName: normalizedPlan,
+      }));
+      setPendingModules(modulesForPlan);
+
+      const [planResult, moduleResult] = await Promise.all([
+        updateTenantPlan(selectedTenant.id, normalizedPlan),
+        updateAdminTenantModules(selectedTenant.id, modulesForPlan),
+      ]);
+
+      const updatedTenant = moduleResult.tenant || planResult.tenant;
+      if (updatedTenant) {
+        updateTenantLocal(updatedTenant as AdminTenant);
+        setPendingModules(enabledModulesOf(updatedTenant as AdminTenant));
+      }
+      await load();
+      setSuccess(`${normalizedPlan} aplicado con ${modulesForPlan.length} modulos del rubro.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `No se pudo aplicar ${normalizedPlan}`);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function handleApplyIndustryTemplate(template: IndustryTemplate) {
     if (!selectedTenant) return;
     try {
@@ -827,7 +860,7 @@ export default function AdminPage() {
             <div className="meta-line">Crea clientes, asigna planes, habilita módulos y administra usuarios desde un solo lugar.</div>
           </div>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar cliente, slug, rubro o plan..." />
-          <span className="module-account-pill">{agent?.name || "Super Admin"}</span>
+          <AccountPill fallbackName={agent?.name || "Super Admin"} />
         </header>
 
         <div className="admin-stats-grid">
@@ -981,11 +1014,17 @@ export default function AdminPage() {
                       {PLANS.map((plan) => {
                         const modulesForPlan = templateModulesForPlan(selectedIndustryTemplate, plan);
                         return (
-                          <article key={plan} className={plan === selectedPlanCode ? "active" : ""}>
+                          <button
+                            key={plan}
+                            className={`industry-plan-card ${plan === selectedPlanCode ? "active" : ""}`}
+                            type="button"
+                            onClick={() => handleApplyPlanPreset(plan)}
+                            disabled={savingId === `plan-preset-${plan}`}
+                          >
                             <strong>{plan}</strong>
                             <span>{modulesForPlan.length} modulos</span>
                             <small>{modulesForPlan.map((module) => module.label).slice(0, 4).join(", ") || "Sin modulos"}</small>
-                          </article>
+                          </button>
                         );
                       })}
                     </div>

@@ -90,6 +90,27 @@ export type Campaign = {
   updatedAt?: string;
 };
 
+export type IndustryUser = {
+  id: string;
+  name: string;
+  email?: string | null;
+  role?: string | null;
+  isActive?: boolean;
+};
+
+export type IndustryRecord = {
+  id: string;
+  tenantId: string;
+  recordType: string;
+  title: string;
+  status: string;
+  assignedToId?: string | null;
+  data?: Record<string, any> | null;
+  createdAt: string;
+  updatedAt: string;
+  assignedTo?: IndustryUser | null;
+};
+
 export type PaymentMetrics = {
   count: number;
   total: number;

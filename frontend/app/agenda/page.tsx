@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 import { createBookingApi, getBookingSlots, getBookings, getMe, markBookingPaymentReady, updateBookingApi } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
@@ -402,7 +403,7 @@ export default function AgendaPage() {
             <div className="meta-line">{mode.note}</div>
           </div>
           <div className="agenda-app-actions">
-            <span className="agenda-account-pill">{session?.name || agent?.name || "Usuario"}</span>
+            <AccountPill className="agenda-account-pill" fallbackName={session?.name || agent?.name || "Usuario"} />
           </div>
         </header>
 

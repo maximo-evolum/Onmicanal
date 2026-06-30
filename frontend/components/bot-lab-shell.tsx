@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { simulateLeadUtf8, testBot, type BotLabResult } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
+import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "./evolum-sidebar";
 
 const TENANTS = [
@@ -175,7 +176,7 @@ export function BotLabShell() {
             <h1>Laboratorio de agentes</h1>
             <span>Prueba respuestas, escenarios y trazas antes de publicar cambios.</span>
           </div>
-          <span className="module-account-pill">{agent?.name || "Super Admin"}</span>
+          <AccountPill fallbackName={agent?.name || "Super Admin"} />
         </header>
 
         <div className="bot-lab-layout">
