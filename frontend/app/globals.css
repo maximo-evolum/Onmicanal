@@ -98,6 +98,20 @@
   --border-strong: rgba(16, 185, 129, 0.36);
 }
 
+:root[data-theme="sapphire"] {
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --accent: #38bdf8;
+  --highlight: #14b8a6;
+  --success: #38bdf8;
+  --theme-primary: #2563eb;
+  --theme-primary-2: #38bdf8;
+  --theme-accent: #14b8a6;
+  --theme-glow: rgba(37, 99, 235, 0.22);
+  --border: rgba(56, 189, 248, 0.18);
+  --border-strong: rgba(56, 189, 248, 0.38);
+}
+
 html,
 body {
   margin: 0;
@@ -9267,13 +9281,13 @@ body {
 .pipeline-pro-shell.nav-collapsed,
 .module-with-menu-shell.nav-collapsed,
 .inbox-unified-shell.nav-collapsed {
-  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-columns: 82px minmax(0, 1fr) !important;
 }
 
 .evolum-menu-bubble {
   position: fixed;
-  top: max(86px, calc(env(safe-area-inset-top) + 72px));
-  left: max(18px, calc(env(safe-area-inset-left) + 12px));
+  top: max(112px, calc(env(safe-area-inset-top) + 96px));
+  left: max(20px, calc(env(safe-area-inset-left) + 14px));
   z-index: 100;
   width: 54px;
   height: 54px;
@@ -9286,6 +9300,14 @@ body {
   font-weight: 900;
   letter-spacing: 0;
   cursor: pointer;
+}
+
+.nav-collapsed .main,
+.nav-collapsed .vertical-page,
+.nav-collapsed .pipeline-pro-main,
+.nav-collapsed .inbox-unified-main,
+.nav-collapsed .crm-main-page {
+  min-width: 0;
 }
 
 .account-pill-with-avatar {
@@ -9344,6 +9366,45 @@ body {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+.workshop-part-preview {
+  min-height: 120px;
+  overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--theme-primary-2) 38%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--theme-primary) 9%, rgba(11, 8, 20, 0.74));
+}
+
+.workshop-part-preview img {
+  width: 100%;
+  max-height: 220px;
+  display: block;
+  object-fit: cover;
+}
+
+.workshop-part-row-info {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workshop-part-row-info img,
+.workshop-part-row-info i {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2));
+  color: #fff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+  object-fit: cover;
 }
 
 .document-upload-box {

@@ -21,6 +21,15 @@ function normalizePlanLabel(plan?: string | null) {
   return value || "STARTER";
 }
 
+function normalizeAvatarUrl(value?: string | null) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("data:image") && raw.includes(";base64") && !raw.includes(";base64,")) {
+    return raw.replace(";base64", ";base64,");
+  }
+  return raw.replace("base64,,", "base64,");
+}
+
 export default function SaasPage() {
   const agent = getStoredSession();
   const [data, setData] = useState<SaasOverview | null>(null);
@@ -78,7 +87,7 @@ export default function SaasPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
-      setProfileForm((value) => ({ ...value, avatarUrl: result }));
+      setProfileForm((value) => ({ ...value, avatarUrl: normalizeAvatarUrl(result) }));
       setProfileStatus("Foto cargada, guarda el perfil para aplicarla.");
     };
     reader.readAsDataURL(file);
@@ -125,8 +134,8 @@ export default function SaasPage() {
                   <p>Nombre, cargo y foto que se muestran en cada cuenta y sesion del workspace.</p>
                 </div>
                 <div className="profile-avatar-preview">
-                  {profileForm.avatarUrl ? (
-                    <img src={profileForm.avatarUrl} alt={profileForm.name || "Perfil"} />
+                  {normalizeAvatarUrl(profileForm.avatarUrl) ? (
+                    <img src={normalizeAvatarUrl(profileForm.avatarUrl)} alt={profileForm.name || "Perfil"} />
                   ) : (
                     <span>{(profileForm.name || agent?.name || "EV").slice(0, 2).toUpperCase()}</span>
                   )}

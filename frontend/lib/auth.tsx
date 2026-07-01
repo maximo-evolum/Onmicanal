@@ -46,6 +46,7 @@ export function mergeStoredSession(patch: Partial<AgentSession>) {
 
   if (typeof window !== "undefined") {
     window.localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
+    window.dispatchEvent(new Event("evolum-session-updated"));
   }
 
   return next;

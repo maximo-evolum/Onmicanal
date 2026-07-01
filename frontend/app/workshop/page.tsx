@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ChangeEvent } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { createIndustryRecord, getIndustryRecords, getIndustryUsers, updateIndustryRecord, type IndustryRecord, type IndustryUser } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 
 const emptyVehicle = { title: "", plate: "", client: "", mileage: "", diagnosis: "", assignedToId: "" };
-const emptyPart = { title: "", sku: "", stock: "", location: "", cost: "", photoUrl: "", compatibility: "" };
+const emptyPart = { title: "", sku: "", stock: "", location: "", cost: "", photoUrl: "", photoFileName: "", compatibility: "" };
 const emptyWorkOrder = { title: "", vehicleId: "", dueDate: "", notes: "", assignedToId: "", status: "RECEIVED" };
 
 const WORKSHOP_STAGES = [
@@ -114,6 +114,7 @@ export default function WorkshopPage() {
           location: partForm.location,
           cost: Number(partForm.cost || 0),
           photoUrl: partForm.photoUrl,
+          photoFileName: partForm.photoFileName,
           compatibility: partForm.compatibility
         }
       });
@@ -125,6 +126,25 @@ export default function WorkshopPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handlePartPhotoFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1_800_000) {
+      setError("La foto del repuesto debe pesar menos de 1.8 MB.");
+      event.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setPartForm((current) => ({ ...current, photoUrl: result, photoFileName: file.name }));
+      setMessage("Foto cargada en el inventario. Guarda el repuesto para aplicarla.");
+    };
+    reader.readAsDataURL(file);
   }
 
   async function createWorkOrder(event: FormEvent<HTMLFormElement>) {
@@ -236,7 +256,19 @@ export default function WorkshopPage() {
                 <input value={partForm.cost} onChange={(e) => setPartForm({ ...partForm, cost: e.target.value })} placeholder="Costo" inputMode="numeric" />
               </div>
               <input value={partForm.location} onChange={(e) => setPartForm({ ...partForm, location: e.target.value })} placeholder="Ubicacion en taller" />
-              <input value={partForm.photoUrl} onChange={(e) => setPartForm({ ...partForm, photoUrl: e.target.value })} placeholder="URL foto" />
+              <div className="file-picker-row">
+                <input value={partForm.photoUrl} onChange={(e) => setPartForm({ ...partForm, photoUrl: e.target.value })} placeholder="URL foto del repuesto" />
+                <label className="ghost-btn file-picker-button">
+                  Subir foto
+                  <input type="file" accept="image/*" onChange={handlePartPhotoFile} />
+                </label>
+              </div>
+              {partForm.photoFileName ? <span className="meta-line">Foto seleccionada: {partForm.photoFileName}</span> : null}
+              {partForm.photoUrl ? (
+                <div className="workshop-part-preview">
+                  <img src={partForm.photoUrl} alt={partForm.title || "Repuesto"} />
+                </div>
+              ) : null}
               <textarea value={partForm.compatibility} onChange={(e) => setPartForm({ ...partForm, compatibility: e.target.value })} placeholder="Compatibilidad / observaciones" rows={4} />
               <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar repuesto"}</button>
             </form>
@@ -286,7 +318,10 @@ export default function WorkshopPage() {
               <div className="vertical-record-list">
                 {parts.map((part) => (
                   <div className="vertical-record-row" key={part.id}>
-                    <div><strong>{part.title}</strong><span>{valueOf(part, "location") || "Sin ubicacion"} / stock {String(valueOf(part, "stock") || 0)}</span></div>
+                    <div className="workshop-part-row-info">
+                      {valueOf(part, "photoUrl") ? <img src={String(valueOf(part, "photoUrl"))} alt="" /> : <i>RP</i>}
+                      <div><strong>{part.title}</strong><span>{valueOf(part, "location") || "Sin ubicacion"} / stock {String(valueOf(part, "stock") || 0)}</span></div>
+                    </div>
                     <small>{money(valueOf(part, "cost"))}</small>
                   </div>
                 ))}

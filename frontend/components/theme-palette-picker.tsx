@@ -8,7 +8,8 @@ const palettes = [
   { id: "purple", label: "Neon", colors: ["#7c3aed", "#a855f7", "#22d3ee"] },
   { id: "cyan", label: "Cian", colors: ["#0891b2", "#22d3ee", "#34d399"] },
   { id: "ember", label: "Amber", colors: ["#ea580c", "#f59e0b", "#fb7185"] },
-  { id: "emerald", label: "Verde", colors: ["#059669", "#10b981", "#38bdf8"] }
+  { id: "emerald", label: "Verde", colors: ["#059669", "#10b981", "#38bdf8"] },
+  { id: "sapphire", label: "Azul", colors: ["#2563eb", "#38bdf8", "#14b8a6"] }
 ] as const;
 
 export type ThemePalette = (typeof palettes)[number]["id"];
