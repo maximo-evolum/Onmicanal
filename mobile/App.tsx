@@ -375,6 +375,11 @@ export default function App() {
       return;
     }
     if (screen === "agenda") return loadBookings();
+    if (screen === "pipeline") {
+      await loadDashboard();
+      await loadConversations(false);
+      return;
+    }
     if (screen === "properties") return loadProperties();
     if (screen === "customers") return loadCustomers();
     if (screen === "campaigns") return loadCampaigns();
@@ -914,6 +919,271 @@ function PipelineScreen({
           );
         })}
       </View>
+    </ScrollView>
+  );
+}
+
+function PropertiesScreen({
+  records,
+  profile,
+  refreshing,
+  onRefresh,
+  onCreated
+}: {
+  records: IndustryRecord[];
+  profile: IndustryProfile;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onCreated: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [price, setPrice] = useState("");
+  const [location, setLocation] = useState("");
+  const [rooms, setRooms] = useState("");
+  const [bathrooms, setBathrooms] = useState("");
+  const [parking, setParking] = useState("");
+  const [meters, setMeters] = useState("");
+  const [material, setMaterial] = useState("");
+  const [notes, setNotes] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [photoFileName, setPhotoFileName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function pickPhoto() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permiso necesario", "Autoriza acceso a tus fotos para cargar imagenes de propiedades.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.72,
+      base64: true
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    const base64 = asset.base64 || await FileSystem.readAsStringAsync(asset.uri, { encoding: "base64" as any });
+    setPhotoUrl(dataUrlFromFile(asset.fileName || "propiedad.jpg", asset.mimeType || "image/jpeg", base64));
+    setPhotoFileName(asset.fileName || "foto-propiedad.jpg");
+  }
+
+  async function saveProperty() {
+    if (!title.trim()) {
+      Alert.alert("Falta nombre", "Agrega un nombre o direccion para la propiedad.");
+      return;
+    }
+    try {
+      setSaving(true);
+      await createIndustryRecord({
+        recordType: "property",
+        title: title.trim(),
+        status: "available",
+        data: {
+          price,
+          location,
+          rooms,
+          bathrooms,
+          parking,
+          meters,
+          material,
+          notes,
+          photoUrl,
+          photoFileName,
+          source: "mobile"
+        }
+      });
+      Alert.alert("Propiedad guardada", "La ficha quedo disponible en EVOLUM.");
+      setTitle("");
+      setPrice("");
+      setLocation("");
+      setRooms("");
+      setBathrooms("");
+      setParking("");
+      setMeters("");
+      setMaterial("");
+      setNotes("");
+      setPhotoUrl("");
+      setPhotoFileName("");
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Revisa los datos.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Rubro {profile.label}</Text>
+      <Text style={styles.screenTitle}>Propiedades</Text>
+      <Text style={styles.screenSubtitle}>Carga viviendas, fotos y atributos comerciales para asignarlas al equipo.</Text>
+      <Panel title="Nueva propiedad">
+        <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Nombre, direccion o codigo" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={price} onChangeText={setPrice} placeholder="Valor o rango" placeholderTextColor={colors.muted} keyboardType="numeric" />
+        <TextInput style={styles.input} value={location} onChangeText={setLocation} placeholder="Comuna, sucursal o ubicacion" placeholderTextColor={colors.muted} />
+        <View style={styles.formRow}>
+          <TextInput style={[styles.input, styles.formHalf]} value={rooms} onChangeText={setRooms} placeholder="Piezas" placeholderTextColor={colors.muted} keyboardType="number-pad" />
+          <TextInput style={[styles.input, styles.formHalf]} value={bathrooms} onChangeText={setBathrooms} placeholder="Banos" placeholderTextColor={colors.muted} keyboardType="number-pad" />
+        </View>
+        <View style={styles.formRow}>
+          <TextInput style={[styles.input, styles.formHalf]} value={parking} onChangeText={setParking} placeholder="Estac." placeholderTextColor={colors.muted} keyboardType="number-pad" />
+          <TextInput style={[styles.input, styles.formHalf]} value={meters} onChangeText={setMeters} placeholder="M2" placeholderTextColor={colors.muted} keyboardType="numeric" />
+        </View>
+        <TextInput style={styles.input} value={material} onChangeText={setMaterial} placeholder="Material de vivienda" placeholderTextColor={colors.muted} />
+        <TouchableOpacity style={styles.uploadButton} onPress={pickPhoto}>
+          <Text style={styles.uploadButtonText}>{photoFileName || "Subir foto desde el telefono"}</Text>
+        </TouchableOpacity>
+        {!!photoUrl && <Image source={{ uri: photoUrl }} style={styles.propertyPreview} resizeMode="cover" />}
+        <TextInput style={[styles.input, styles.textArea]} value={notes} onChangeText={setNotes} placeholder="Observaciones generales" placeholderTextColor={colors.muted} multiline />
+        <TouchableOpacity style={styles.primaryButton} onPress={saveProperty} disabled={saving}>
+          <Text style={styles.primaryButtonText}>{saving ? "Guardando..." : "Guardar propiedad"}</Text>
+        </TouchableOpacity>
+      </Panel>
+      <Panel title="Propiedades activas">
+        {records.slice(0, 12).map((record) => (
+          <View key={record.id} style={styles.recordCard}>
+            <View style={styles.recordMedia}>
+              {recordText(record, "photoUrl", "") ? <Image source={{ uri: recordText(record, "photoUrl", "") }} style={styles.recordImage} resizeMode="cover" /> : <Text style={styles.avatarText}>PR</Text>}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>{record.title}</Text>
+              <Text style={styles.muted}>{recordText(record, "location", "Sin ubicacion")} / {recordText(record, "meters", "0")} m2</Text>
+              <Text style={styles.greenText}>{recordText(record, "price", "Sin precio")}</Text>
+            </View>
+          </View>
+        ))}
+        {!records.length && <Text style={styles.muted}>Aun no hay propiedades cargadas.</Text>}
+      </Panel>
+    </ScrollView>
+  );
+}
+
+function CustomersScreen({
+  records,
+  profile,
+  refreshing,
+  onRefresh,
+  onCreated
+}: {
+  records: IndustryRecord[];
+  profile: IndustryProfile;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [interest, setInterest] = useState("");
+  const [segment, setSegment] = useState("");
+  const [nextAction, setNextAction] = useState("");
+  const [notes, setNotes] = useState("");
+  const [documents, setDocuments] = useState<Array<{ name: string; type?: string; size?: number; dataUrl?: string }>>([]);
+  const [saving, setSaving] = useState(false);
+
+  async function pickDocuments() {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ["application/pdf", "image/*", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      multiple: true,
+      copyToCacheDirectory: true
+    });
+    if (result.canceled || !result.assets?.length) return;
+    const nextDocs: Array<{ name: string; type?: string; size?: number; dataUrl?: string }> = [];
+    for (const asset of result.assets.slice(0, 6)) {
+      if (asset.size && asset.size > 2.5 * 1024 * 1024) {
+        Alert.alert("Documento muy pesado", `${asset.name} supera 2.5 MB.`);
+        continue;
+      }
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: "base64" as any });
+      nextDocs.push({
+        name: asset.name,
+        type: asset.mimeType,
+        size: asset.size,
+        dataUrl: dataUrlFromFile(asset.name, asset.mimeType, base64)
+      });
+    }
+    setDocuments((current) => [...current, ...nextDocs].slice(0, 6));
+  }
+
+  async function saveCustomer() {
+    if (!name.trim()) {
+      Alert.alert("Falta cliente", "Agrega el nombre del cliente o paciente.");
+      return;
+    }
+    try {
+      setSaving(true);
+      await createIndustryRecord({
+        recordType: "customer",
+        title: name.trim(),
+        status: "active",
+        data: {
+          phone,
+          email,
+          interest,
+          segment,
+          nextAction,
+          notes,
+          documents,
+          source: "mobile"
+        }
+      });
+      Alert.alert("Ficha guardada", "El cliente quedo disponible para seguimiento e inbox.");
+      setName("");
+      setPhone("");
+      setEmail("");
+      setInterest("");
+      setSegment("");
+      setNextAction("");
+      setNotes("");
+      setDocuments([]);
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Revisa los datos.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Clientes / pacientes</Text>
+      <Text style={styles.screenTitle}>Clientes</Text>
+      <Text style={styles.screenSubtitle}>Ficha comercial con documentos para enviar por WhatsApp o email.</Text>
+      <Panel title="Nueva ficha">
+        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Nombre del cliente" placeholderTextColor={colors.muted} />
+        <View style={styles.formRow}>
+          <TextInput style={[styles.input, styles.formHalf]} value={phone} onChangeText={setPhone} placeholder="Telefono" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
+          <TextInput style={[styles.input, styles.formHalf]} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor={colors.muted} keyboardType="email-address" autoCapitalize="none" />
+        </View>
+        <TextInput style={styles.input} value={interest} onChangeText={setInterest} placeholder="Interes, tratamiento o presupuesto" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={segment} onChangeText={setSegment} placeholder="Segmento o rubro" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={nextAction} onChangeText={setNextAction} placeholder="Proxima accion / recordatorio" placeholderTextColor={colors.muted} />
+        <TouchableOpacity style={styles.uploadButton} onPress={pickDocuments}>
+          <Text style={styles.uploadButtonText}>Subir examenes o presupuestos</Text>
+        </TouchableOpacity>
+        {documents.map((doc, index) => (
+          <View key={`${doc.name}-${index}`} style={styles.documentChip}>
+            <Text style={styles.documentChipText} numberOfLines={1}>{doc.name}</Text>
+            <TouchableOpacity onPress={() => setDocuments((current) => current.filter((_, docIndex) => docIndex !== index))}><Text style={styles.rowRight}>Quitar</Text></TouchableOpacity>
+          </View>
+        ))}
+        <TextInput style={[styles.input, styles.textArea]} value={notes} onChangeText={setNotes} placeholder="Notas de contexto, historial o preferencias" placeholderTextColor={colors.muted} multiline />
+        <TouchableOpacity style={styles.primaryButton} onPress={saveCustomer} disabled={saving}>
+          <Text style={styles.primaryButtonText}>{saving ? "Guardando..." : "Guardar ficha"}</Text>
+        </TouchableOpacity>
+      </Panel>
+      <Panel title={`Clientes ${profile.label}`}>
+        {records.slice(0, 12).map((record) => (
+          <ListRow
+            key={record.id}
+            left="CL"
+            title={record.title}
+            subtitle={`${recordText(record, "phone", "Sin telefono")} / ${recordText(record, "interest", "Sin interes registrado")}`}
+            right={record.status}
+          />
+        ))}
+        {!records.length && <Text style={styles.muted}>Aun no hay clientes cargados.</Text>}
+      </Panel>
     </ScrollView>
   );
 }
@@ -1687,6 +1957,60 @@ const styles = StyleSheet.create({
   calendarOutside: { opacity: 0.38 },
   calendarNumber: { color: colors.text, fontWeight: "900", fontSize: 11 },
   calendarBooking: { color: colors.green, fontSize: 8, marginTop: 3 },
+  formRow: { flexDirection: "row", gap: 10 },
+  formHalf: { flex: 1 },
+  uploadButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    borderRadius: 16,
+    backgroundColor: "rgba(139,63,244,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12
+  },
+  uploadButtonText: { color: colors.text, fontWeight: "900", textAlign: "center" },
+  propertyPreview: {
+    width: "100%",
+    height: 170,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.panel2
+  },
+  recordCard: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.18)",
+    borderRadius: 16,
+    padding: 10,
+    backgroundColor: "rgba(255,255,255,0.035)"
+  },
+  recordMedia: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "rgba(139,63,244,0.26)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  recordImage: { width: "100%", height: "100%" },
+  documentChip: {
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.18)",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    backgroundColor: "rgba(255,255,255,0.035)"
+  },
+  documentChipText: { color: colors.text, fontWeight: "800", flex: 1 },
   moduleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   moduleToggle: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, minHeight: 36, justifyContent: "center" },
   moduleToggleOn: { backgroundColor: colors.purple, borderColor: colors.borderStrong },

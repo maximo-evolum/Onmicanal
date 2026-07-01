@@ -1,6 +1,7 @@
 Terminal 1
 cd "E:\Onmicanal\backend-v2"
 npm install
+npx prisma migrate deploy
 npx prisma generate
 npx prisma db push
 npm start
