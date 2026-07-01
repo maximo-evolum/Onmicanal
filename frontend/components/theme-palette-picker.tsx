@@ -6,18 +6,18 @@ const THEME_KEY = "evolum_theme";
 const BACKGROUND_THEME_KEY = "evolum_background_theme";
 
 const palettes = [
-  { id: "purple", label: "Neon", colors: ["#7c3aed", "#a855f7", "#22d3ee"] },
-  { id: "cyan", label: "Cian", colors: ["#0891b2", "#22d3ee", "#34d399"] },
-  { id: "ember", label: "Amber", colors: ["#ea580c", "#f59e0b", "#fb7185"] },
-  { id: "emerald", label: "Verde", colors: ["#059669", "#10b981", "#38bdf8"] },
-  { id: "sapphire", label: "Azul", colors: ["#2563eb", "#38bdf8", "#14b8a6"] }
+  { id: "purple", label: "Neon", colors: ["#7c3aed", "#d946ef", "#22d3ee"] },
+  { id: "cyan", label: "Aurora", colors: ["#06b6d4", "#22c55e", "#facc15"] },
+  { id: "ember", label: "Sunset", colors: ["#f97316", "#ef4444", "#facc15"] },
+  { id: "emerald", label: "Verde", colors: ["#10b981", "#14b8a6", "#84cc16"] },
+  { id: "sapphire", label: "Azul", colors: ["#2563eb", "#06b6d4", "#a78bfa"] }
 ] as const;
 
 const backgroundPalettes = [
-  { id: "nocturne", label: "Nocturno", colors: ["#0a0712", "#140f25", "#21183a"] },
-  { id: "graphite", label: "Grafito", colors: ["#05070d", "#101827", "#1f2937"] },
-  { id: "ocean", label: "Oceano", colors: ["#06111f", "#0b2239", "#123b5d"] },
-  { id: "forest", label: "Bosque", colors: ["#06120e", "#0b2219", "#12362a"] }
+  { id: "nocturne", label: "Nocturno", colors: ["#070611", "#120b22", "#21133d"] },
+  { id: "graphite", label: "Grafito", colors: ["#05070d", "#101827", "#253044"] },
+  { id: "ocean", label: "Oceano", colors: ["#04111f", "#082a44", "#0f5f7a"] },
+  { id: "forest", label: "Bosque", colors: ["#05130f", "#0a2d21", "#146c4a"] }
 ] as const;
 
 export type ThemePalette = (typeof palettes)[number]["id"];

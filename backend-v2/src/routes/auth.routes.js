@@ -11,6 +11,11 @@ function cleanText(value, fallback = "") {
   return value.trim().slice(0, 240);
 }
 
+function cleanAvatarUrl(value) {
+  if (typeof value !== "string") return "";
+  return value.trim().slice(0, 3_500_000);
+}
+
 authRouter.post("/auth/register", async (req, res) => {
   try {
     const { companyName, name, email, password, type = "PERSONAL", industry = "" } = req.body;
@@ -67,7 +72,7 @@ authRouter.patch("/auth/me/profile", authMiddleware, async (req, res) => {
 
   const name = cleanText(req.body?.name, current.name);
   const jobTitle = cleanText(req.body?.jobTitle, "");
-  const avatarUrl = cleanText(req.body?.avatarUrl, "");
+  const avatarUrl = cleanAvatarUrl(req.body?.avatarUrl);
 
   if (!name) return res.status(400).json({ error: "El nombre no puede quedar vacio" });
 

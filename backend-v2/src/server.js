@@ -38,7 +38,7 @@ const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
 
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use(requestContext);
 app.use(basicRateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 300) }));
 

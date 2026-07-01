@@ -24,10 +24,22 @@ function normalizePlanLabel(plan?: string | null) {
 function normalizeAvatarUrl(value?: string | null) {
   const raw = String(value || "").trim();
   if (!raw) return "";
-  if (raw.startsWith("data:image") && raw.includes(";base64") && !raw.includes(";base64,")) {
-    return raw.replace(";base64", ";base64,");
+  if (raw.startsWith("data:")) {
+    const withComma = raw.includes(";base64") && !raw.includes(";base64,")
+      ? raw.replace(";base64", ";base64,")
+      : raw;
+    const commaIndex = withComma.indexOf(",");
+    if (commaIndex >= 0 && withComma.slice(0, commaIndex).includes("base64")) {
+      return `${withComma.slice(0, commaIndex + 1)}${withComma.slice(commaIndex + 1).replace(/\s/g, "")}`.replace("base64,,", "base64,");
+    }
+    return withComma.replace("base64,,", "base64,");
   }
   return raw.replace("base64,,", "base64,");
+}
+
+function isAvatarFile(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+  return file.type.startsWith("image/") || ["svg", "gif", "webp", "avif", "ico", "heic", "heif", "jpg", "jpeg", "png"].includes(extension);
 }
 
 function roleOptionsForIndustry(industry?: string | null) {
@@ -103,13 +115,18 @@ export default function SaasPage() {
     try {
       setSavingProfile(true);
       setProfileStatus(null);
-      const result = await updateMyProfile(profileForm);
+      const payload = {
+        ...profileForm,
+        avatarUrl: normalizeAvatarUrl(profileForm.avatarUrl)
+      };
+      const result = await updateMyProfile(payload);
       mergeStoredSession(result.user);
       setProfileForm({
         name: result.user.name || "",
         jobTitle: result.user.jobTitle || "",
-        avatarUrl: result.user.avatarUrl || ""
+        avatarUrl: normalizeAvatarUrl(result.user.avatarUrl || "")
       });
+      setProfileAvatarFailed(false);
       setProfileStatus("Perfil actualizado");
     } catch (err) {
       setProfileStatus(err instanceof Error ? err.message : "No se pudo guardar el perfil");
@@ -121,8 +138,12 @@ export default function SaasPage() {
   function handleAvatarFile(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (file.size > 700_000) {
-      setProfileStatus("La imagen debe pesar menos de 700 KB para guardarla en el perfil.");
+    if (!isAvatarFile(file)) {
+      setProfileStatus("El archivo debe ser una imagen, gif, icono o foto de perfil.");
+      return;
+    }
+    if (file.size > 2_500_000) {
+      setProfileStatus("La imagen debe pesar menos de 2.5 MB para guardarla en el perfil.");
       return;
     }
 
@@ -130,8 +151,10 @@ export default function SaasPage() {
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
       setProfileForm((value) => ({ ...value, avatarUrl: normalizeAvatarUrl(result) }));
+      setProfileAvatarFailed(false);
       setProfileStatus("Foto cargada, guarda el perfil para aplicarla.");
     };
+    reader.onerror = () => setProfileStatus("No se pudo leer la imagen seleccionada.");
     reader.readAsDataURL(file);
   }
 
@@ -234,10 +257,13 @@ export default function SaasPage() {
                   <span>Foto de perfil</span>
                   <input
                     value={profileForm.avatarUrl}
-                    onChange={(event) => setProfileForm((value) => ({ ...value, avatarUrl: event.target.value }))}
+                    onChange={(event) => {
+                      setProfileAvatarFailed(false);
+                      setProfileForm((value) => ({ ...value, avatarUrl: normalizeAvatarUrl(event.target.value) }));
+                    }}
                     placeholder="URL publica o imagen cargada"
                   />
-                  <input className="profile-file-input" type="file" accept="image/*" onChange={handleAvatarFile} />
+                  <input className="profile-file-input" type="file" accept="image/*,.svg,.gif,.webp,.avif,.ico,.heic,.heif" onChange={handleAvatarFile} />
                 </label>
                 <button className="primary-btn" type="submit" disabled={savingProfile || !profileForm.name.trim()}>
                   {savingProfile ? "Guardando..." : "Guardar perfil"}

@@ -17,8 +17,15 @@ function normalizeAvatarUrl(value?: string | null) {
   const raw = String(value || "").trim();
   if (!raw) return "";
 
-  if (raw.startsWith("data:image") && raw.includes(";base64") && !raw.includes(";base64,")) {
-    return raw.replace(";base64", ";base64,");
+  if (raw.startsWith("data:")) {
+    const withComma = raw.includes(";base64") && !raw.includes(";base64,")
+      ? raw.replace(";base64", ";base64,")
+      : raw;
+    const commaIndex = withComma.indexOf(",");
+    if (commaIndex >= 0 && withComma.slice(0, commaIndex).includes("base64")) {
+      return `${withComma.slice(0, commaIndex + 1)}${withComma.slice(commaIndex + 1).replace(/\s/g, "")}`.replace("base64,,", "base64,");
+    }
+    return withComma.replace("base64,,", "base64,");
   }
 
   return raw.replace("base64,,", "base64,");

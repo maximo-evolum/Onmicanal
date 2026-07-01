@@ -22,9 +22,12 @@
   --accent: #a78bfa;
   --highlight: #e879f9;
   --theme-primary: #7c3aed;
-  --theme-primary-2: #a855f7;
+  --theme-primary-2: #d946ef;
   --theme-accent: #22d3ee;
   --theme-glow: rgba(124, 58, 237, 0.24);
+  --theme-surface: rgba(26, 19, 43, 0.82);
+  --theme-surface-strong: rgba(33, 24, 58, 0.92);
+  --theme-surface-soft: rgba(124, 58, 237, 0.10);
 
   --text: #ede9fe;
   --text-strong: #f5f3ff;
@@ -57,59 +60,71 @@
 }
 
 :root[data-theme="cyan"] {
-  --primary: #0891b2;
-  --primary-hover: #0e7490;
-  --accent: #22d3ee;
-  --highlight: #34d399;
-  --success: #34d399;
-  --theme-primary: #0891b2;
-  --theme-primary-2: #22d3ee;
-  --theme-accent: #34d399;
-  --theme-glow: rgba(34, 211, 238, 0.22);
-  --border: rgba(34, 211, 238, 0.18);
-  --border-strong: rgba(34, 211, 238, 0.38);
+  --primary: #06b6d4;
+  --primary-hover: #0891b2;
+  --accent: #22c55e;
+  --highlight: #facc15;
+  --success: #22c55e;
+  --theme-primary: #06b6d4;
+  --theme-primary-2: #22c55e;
+  --theme-accent: #facc15;
+  --theme-glow: rgba(6, 182, 212, 0.24);
+  --theme-surface: rgba(10, 39, 53, 0.82);
+  --theme-surface-strong: rgba(9, 56, 70, 0.92);
+  --theme-surface-soft: rgba(6, 182, 212, 0.10);
+  --border: rgba(34, 211, 238, 0.20);
+  --border-strong: rgba(34, 197, 94, 0.38);
 }
 
 :root[data-theme="ember"] {
-  --primary: #ea580c;
-  --primary-hover: #c2410c;
-  --accent: #f59e0b;
-  --highlight: #fb7185;
-  --success: #f59e0b;
-  --theme-primary: #ea580c;
-  --theme-primary-2: #f59e0b;
-  --theme-accent: #fb7185;
-  --theme-glow: rgba(245, 158, 11, 0.20);
-  --border: rgba(245, 158, 11, 0.18);
-  --border-strong: rgba(245, 158, 11, 0.36);
+  --primary: #f97316;
+  --primary-hover: #ea580c;
+  --accent: #ef4444;
+  --highlight: #facc15;
+  --success: #facc15;
+  --theme-primary: #f97316;
+  --theme-primary-2: #ef4444;
+  --theme-accent: #facc15;
+  --theme-glow: rgba(249, 115, 22, 0.22);
+  --theme-surface: rgba(48, 24, 18, 0.82);
+  --theme-surface-strong: rgba(69, 31, 22, 0.92);
+  --theme-surface-soft: rgba(249, 115, 22, 0.11);
+  --border: rgba(249, 115, 22, 0.20);
+  --border-strong: rgba(239, 68, 68, 0.38);
 }
 
 :root[data-theme="emerald"] {
-  --primary: #059669;
-  --primary-hover: #047857;
-  --accent: #10b981;
-  --highlight: #38bdf8;
-  --success: #10b981;
-  --theme-primary: #059669;
-  --theme-primary-2: #10b981;
-  --theme-accent: #38bdf8;
-  --theme-glow: rgba(16, 185, 129, 0.22);
-  --border: rgba(16, 185, 129, 0.18);
-  --border-strong: rgba(16, 185, 129, 0.36);
+  --primary: #10b981;
+  --primary-hover: #059669;
+  --accent: #14b8a6;
+  --highlight: #84cc16;
+  --success: #84cc16;
+  --theme-primary: #10b981;
+  --theme-primary-2: #14b8a6;
+  --theme-accent: #84cc16;
+  --theme-glow: rgba(16, 185, 129, 0.24);
+  --theme-surface: rgba(13, 42, 31, 0.82);
+  --theme-surface-strong: rgba(17, 60, 43, 0.92);
+  --theme-surface-soft: rgba(16, 185, 129, 0.10);
+  --border: rgba(16, 185, 129, 0.20);
+  --border-strong: rgba(20, 184, 166, 0.38);
 }
 
 :root[data-theme="sapphire"] {
   --primary: #2563eb;
   --primary-hover: #1d4ed8;
-  --accent: #38bdf8;
-  --highlight: #14b8a6;
-  --success: #38bdf8;
+  --accent: #06b6d4;
+  --highlight: #a78bfa;
+  --success: #06b6d4;
   --theme-primary: #2563eb;
-  --theme-primary-2: #38bdf8;
-  --theme-accent: #14b8a6;
+  --theme-primary-2: #06b6d4;
+  --theme-accent: #a78bfa;
   --theme-glow: rgba(37, 99, 235, 0.22);
-  --border: rgba(56, 189, 248, 0.18);
-  --border-strong: rgba(56, 189, 248, 0.38);
+  --theme-surface: rgba(12, 27, 56, 0.82);
+  --theme-surface-strong: rgba(19, 39, 78, 0.92);
+  --theme-surface-soft: rgba(37, 99, 235, 0.10);
+  --border: rgba(37, 99, 235, 0.20);
+  --border-strong: rgba(6, 182, 212, 0.38);
 }
 
 :root[data-bg-theme="graphite"] {
@@ -122,21 +137,21 @@
 }
 
 :root[data-bg-theme="ocean"] {
-  --bg: #0b2239;
-  --bg-deep: #06111f;
-  --bg-soft: #0f2d49;
-  --card: #10263f;
-  --card-soft: #163554;
-  --card-hover: #1d456b;
+  --bg: #082a44;
+  --bg-deep: #04111f;
+  --bg-soft: #0f5f7a;
+  --card: #0b243d;
+  --card-soft: #123b5d;
+  --card-hover: #175579;
 }
 
 :root[data-bg-theme="forest"] {
-  --bg: #0b2219;
-  --bg-deep: #06120e;
-  --bg-soft: #102d23;
-  --card: #10271f;
-  --card-soft: #17382c;
-  --card-hover: #1d4939;
+  --bg: #0a2d21;
+  --bg-deep: #05130f;
+  --bg-soft: #146c4a;
+  --card: #0d261d;
+  --card-soft: #14392b;
+  --card-hover: #1b563f;
 }
 
 html,
@@ -146,8 +161,8 @@ body {
   height: 100%;
   font-family: Arial, Helvetica, sans-serif;
   background:
-    radial-gradient(circle at 12% 10%, rgba(124, 58, 237, 0.18), transparent 34%),
-    radial-gradient(circle at 88% 0%, rgba(232, 121, 249, 0.08), transparent 34%),
+    radial-gradient(circle at 12% 10%, color-mix(in srgb, var(--theme-primary) 22%, transparent), transparent 34%),
+    radial-gradient(circle at 88% 0%, color-mix(in srgb, var(--theme-primary-2) 12%, transparent), transparent 34%),
     linear-gradient(180deg, var(--bg-deep) 0%, var(--bg) 45%, var(--bg-soft) 100%);
   color: var(--text);
 }
@@ -219,33 +234,33 @@ a {
    ========================= */
 
 .crm-main {
-  --crm-main-bg: #0b0714;
-  --crm-main-bg-soft: #120c21;
-  --crm-main-panel: rgba(24, 17, 39, 0.86);
-  --crm-main-panel-strong: rgba(31, 22, 52, 0.96);
-  --crm-main-panel-soft: rgba(124, 58, 237, 0.08);
+  --crm-main-bg: var(--bg-deep);
+  --crm-main-bg-soft: var(--bg-soft);
+  --crm-main-panel: var(--theme-surface);
+  --crm-main-panel-strong: var(--theme-surface-strong);
+  --crm-main-panel-soft: var(--theme-surface-soft);
   --crm-main-text: #f5f3ff;
   --crm-main-muted: #aaa2c8;
   --crm-main-faint: #736b91;
-  --crm-main-primary: #8b5cf6;
-  --crm-main-primary-strong: #7c3aed;
-  --crm-main-accent: #c084fc;
-  --crm-main-pink: #e879f9;
-  --crm-main-cyan: #22d3ee;
+  --crm-main-primary: var(--theme-primary);
+  --crm-main-primary-strong: var(--primary-hover);
+  --crm-main-accent: var(--theme-primary-2);
+  --crm-main-pink: var(--theme-accent);
+  --crm-main-cyan: var(--theme-accent);
   --crm-main-green: #34d399;
   --crm-main-gold: #fbbf24;
   --crm-main-danger: #fb7185;
-  --crm-main-border: rgba(139, 92, 246, 0.20);
-  --crm-main-border-strong: rgba(192, 132, 252, 0.34);
+  --crm-main-border: var(--border);
+  --crm-main-border-strong: var(--border-strong);
   --crm-main-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
-  --crm-main-glow: 0 0 0 1px rgba(139, 92, 246, 0.16), 0 0 42px rgba(139, 92, 246, 0.14);
+  --crm-main-glow: 0 0 0 1px color-mix(in srgb, var(--theme-primary) 18%, transparent), 0 0 42px var(--theme-glow);
   min-height: 100dvh;
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   background:
-    radial-gradient(circle at 18% 4%, rgba(139, 92, 246, 0.20), transparent 31%),
-    radial-gradient(circle at 78% 0%, rgba(232, 121, 249, 0.10), transparent 28%),
-    linear-gradient(145deg, #070610 0%, #0b0714 44%, #120c21 100%);
+    radial-gradient(circle at 18% 4%, color-mix(in srgb, var(--theme-primary) 24%, transparent), transparent 31%),
+    radial-gradient(circle at 78% 0%, color-mix(in srgb, var(--theme-primary-2) 12%, transparent), transparent 28%),
+    linear-gradient(145deg, var(--bg-deep) 0%, var(--bg) 44%, var(--bg-soft) 100%);
   color: var(--crm-main-text);
   overflow: visible;
 }
@@ -8981,8 +8996,8 @@ html, body {
   border-radius: 12px;
   color: #fff !important;
   font-size: 12px !important;
-  background: linear-gradient(135deg, #7c3aed, #c084fc);
-  box-shadow: 0 12px 26px rgba(124, 58, 237, 0.32);
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2));
+  box-shadow: 0 12px 26px var(--theme-glow);
 }
 
 .inbox-nav-brand strong {
@@ -8999,18 +9014,18 @@ html, body {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(168, 85, 247, 0.26);
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 26%, transparent);
   border-radius: 9px;
   color: #f8f3ff;
-  background: rgba(124, 58, 237, 0.12);
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
   box-shadow: none;
   font-size: 22px;
   line-height: 1;
 }
 
 .inbox-nav-toggle:hover {
-  border-color: rgba(168, 85, 247, 0.44);
-  background: rgba(124, 58, 237, 0.20);
+  border-color: color-mix(in srgb, var(--theme-primary-2) 44%, transparent);
+  background: color-mix(in srgb, var(--theme-primary) 20%, transparent);
 }
 
 .inbox-unified-nav-list {
@@ -9043,8 +9058,8 @@ html, body {
   display: grid;
   place-items: center;
   border-radius: 10px;
-  color: #c4b5fd !important;
-  background: rgba(124, 58, 237, 0.10);
+  color: var(--theme-primary-2) !important;
+  background: color-mix(in srgb, var(--theme-primary) 10%, transparent);
   font-size: 10px !important;
   font-weight: 900;
 }
@@ -9077,12 +9092,12 @@ html, body {
 .inbox-unified-nav-list a:hover,
 .inbox-unified-nav-list a.active,
 .inbox-nav-action:hover {
-  border-color: rgba(168, 85, 247, 0.28);
-  background: rgba(124, 58, 237, 0.14);
+  border-color: color-mix(in srgb, var(--theme-primary-2) 28%, transparent);
+  background: color-mix(in srgb, var(--theme-primary) 14%, transparent);
 }
 
 .inbox-unified-nav-list a.active {
-  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2));
 }
 
 .inbox-unified-nav-list a.active span {
@@ -9094,7 +9109,7 @@ html, body {
   display: grid;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid rgba(168, 85, 247, 0.14);
+  border-top: 1px solid color-mix(in srgb, var(--theme-primary-2) 14%, transparent);
 }
 
 .inbox-nav-logout button {
@@ -9310,7 +9325,7 @@ body {
 
 .evolum-menu-bubble {
   position: fixed;
-  top: max(112px, calc(env(safe-area-inset-top) + 96px));
+  top: max(26px, calc(env(safe-area-inset-top) + 24px));
   left: max(20px, calc(env(safe-area-inset-left) + 14px));
   z-index: 100;
   width: 54px;
@@ -9361,6 +9376,7 @@ body {
 
 .account-pill-with-avatar img {
   display: block;
+  object-position: center;
 }
 
 .account-pill-with-avatar strong {
@@ -9375,7 +9391,7 @@ body {
 }
 
 .crm-main-profile .account-pill-with-avatar {
-  box-shadow: 0 12px 28px rgba(139, 92, 246, 0.28);
+  box-shadow: 0 12px 28px var(--theme-glow);
 }
 
 .file-picker-row {
@@ -9516,12 +9532,125 @@ body {
 .account-pill,
 .mobile-account-pill {
   background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)) !important;
+  box-shadow: 0 14px 32px var(--theme-glow) !important;
 }
 
 .inbox-unified-nav-list a:hover,
 .inbox-nav-action:hover,
 .ghost-btn:hover {
   border-color: color-mix(in srgb, var(--theme-primary-2) 42%, transparent) !important;
+}
+
+.module-with-menu-shell,
+.executive-shell,
+.pipeline-pro-shell,
+.inbox-unified-shell,
+.crm-main {
+  background:
+    radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--theme-primary) 18%, transparent), transparent 32%),
+    radial-gradient(circle at 86% 4%, color-mix(in srgb, var(--theme-primary-2) 10%, transparent), transparent 30%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg) 52%, var(--bg-soft) 100%) !important;
+}
+
+.phase5-page {
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--theme-primary) 12%, transparent), transparent 28%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%) !important;
+}
+
+.module-app-header,
+.phase5-hero,
+.crm-main-header,
+.inbox-app-header,
+.sales-queue-header,
+.campaign-mobile-hero,
+.pipeline-pro-topbar,
+.executive-topbar {
+  border-color: var(--border) !important;
+  background:
+    radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--theme-primary) 16%, transparent), transparent 34%),
+    linear-gradient(135deg, var(--theme-surface), color-mix(in srgb, var(--bg-deep) 78%, var(--theme-primary) 8%)) !important;
+}
+
+.phase5-card,
+.phase5-panel,
+.admin-panel,
+.crm-main-panel,
+.executive-kpi-card,
+.executive-panel,
+.pipeline-column-pro,
+.pipeline-summary-panel,
+.inbox-thread-shell,
+.inbox-conversation-sidebar,
+.inbox-recent-card,
+.mobile-module-card,
+.agenda-calendar-panel,
+.industry-card,
+.vertical-card,
+.service-card {
+  border-color: var(--border) !important;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-surface-strong) 76%, transparent), color-mix(in srgb, var(--bg-deep) 88%, var(--theme-primary) 6%)) !important;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.035) !important;
+}
+
+.phase5-chip,
+.metric-chip,
+.crm-main-chip,
+.module-pill,
+.executive-date,
+.pipeline-pro-pill,
+.inbox-channel-tab,
+.theme-palette-picker button.active {
+  border-color: color-mix(in srgb, var(--theme-primary-2) 42%, transparent) !important;
+  background: color-mix(in srgb, var(--theme-primary) 18%, var(--bg-deep)) !important;
+}
+
+.executive-sidebar a.active,
+.pipeline-pro-sidebar a.active,
+.inbox-unified-nav a.active,
+.crm-main-nav a.active,
+.crm-main-nav a:hover {
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)) !important;
+  border-color: color-mix(in srgb, var(--theme-primary-2) 46%, transparent) !important;
+  box-shadow: 0 14px 34px var(--theme-glow) !important;
+}
+
+.executive-new-btn,
+.crm-main-mark,
+.workspace-logo,
+.mobile-nav-fab,
+.profile-avatar-preview,
+.executive-kpi-icon,
+.phase5-icon,
+.agent-avatar {
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)) !important;
+  box-shadow: 0 16px 36px var(--theme-glow) !important;
+}
+
+.executive-sparkline i,
+.executive-line-chart i,
+.crm-main-bars i,
+.mini-bars i {
+  background: linear-gradient(180deg, var(--theme-primary-2), var(--theme-primary)) !important;
+}
+
+.eyebrow,
+.crm-main-kicker,
+.crm-main-panel-head span,
+.executive-panel-head span,
+.executive-panel-head a,
+.pipeline-insight-head span,
+.phase5-panel-head span,
+.theme-palette-picker > strong {
+  color: var(--theme-primary-2) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: color-mix(in srgb, var(--theme-primary-2) 52%, transparent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary) 18%, transparent) !important;
 }
 
 .theme-palette-picker {
