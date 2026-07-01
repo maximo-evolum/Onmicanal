@@ -112,6 +112,33 @@
   --border-strong: rgba(56, 189, 248, 0.38);
 }
 
+:root[data-bg-theme="graphite"] {
+  --bg: #101827;
+  --bg-deep: #05070d;
+  --bg-soft: #151f2e;
+  --card: #172033;
+  --card-soft: #202b40;
+  --card-hover: #2a3650;
+}
+
+:root[data-bg-theme="ocean"] {
+  --bg: #0b2239;
+  --bg-deep: #06111f;
+  --bg-soft: #0f2d49;
+  --card: #10263f;
+  --card-soft: #163554;
+  --card-hover: #1d456b;
+}
+
+:root[data-bg-theme="forest"] {
+  --bg: #0b2219;
+  --bg-deep: #06120e;
+  --bg-soft: #102d23;
+  --card: #10271f;
+  --card-soft: #17382c;
+  --card-hover: #1d4939;
+}
+
 html,
 body {
   margin: 0;
@@ -6865,14 +6892,11 @@ body {
   transition: grid-template-columns 180ms ease;
 }
 
-.inbox-unified-shell.nav-collapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
-}
-
+.inbox-unified-shell.nav-collapsed,
 .executive-shell.nav-collapsed,
 .pipeline-pro-shell.nav-collapsed,
 .module-with-menu-shell.nav-collapsed {
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .executive-shell,
@@ -9281,7 +9305,7 @@ body {
 .pipeline-pro-shell.nav-collapsed,
 .module-with-menu-shell.nav-collapsed,
 .inbox-unified-shell.nav-collapsed {
-  grid-template-columns: 82px minmax(0, 1fr) !important;
+  grid-template-columns: minmax(0, 1fr) !important;
 }
 
 .evolum-menu-bubble {
@@ -9308,11 +9332,14 @@ body {
 .nav-collapsed .inbox-unified-main,
 .nav-collapsed .crm-main-page {
   min-width: 0;
+  padding-left: max(96px, calc(env(safe-area-inset-left) + 92px));
 }
 
 .account-pill-with-avatar {
   gap: 9px;
   padding: 7px 13px 7px 7px;
+  max-width: 240px;
+  overflow: hidden;
 }
 
 .account-pill-with-avatar img,
@@ -9330,6 +9357,10 @@ body {
   font-style: normal;
   font-weight: 900;
   object-fit: cover;
+}
+
+.account-pill-with-avatar img {
+  display: block;
 }
 
 .account-pill-with-avatar strong {
@@ -9609,8 +9640,44 @@ body {
   font-size: 12px;
 }
 
+.team-create-inline-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.team-create-inline-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.team-create-inline-form input,
+.team-create-inline-form select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 0 12px;
+  color: var(--text);
+  background: rgba(11, 8, 20, 0.68);
+  outline: none;
+}
+
 @media (max-width: 900px) {
   .profile-settings-form {
+    grid-template-columns: 1fr;
+  }
+
+  .team-create-inline-form {
     grid-template-columns: 1fr;
   }
 }

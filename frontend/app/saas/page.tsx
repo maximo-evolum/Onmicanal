@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";
+import { createTeamUser, getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";
 import { getStoredSession, mergeStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
@@ -30,6 +30,44 @@ function normalizeAvatarUrl(value?: string | null) {
   return raw.replace("base64,,", "base64,");
 }
 
+function roleOptionsForIndustry(industry?: string | null) {
+  const value = String(industry || "").toLowerCase();
+  if (value.includes("real") || value.includes("inm")) {
+    return [
+      { label: "Vendedor inmobiliario", value: "SELLER" },
+      { label: "Coordinador", value: "AGENT" },
+      { label: "Administrador", value: "ADMIN" }
+    ];
+  }
+  if (value.includes("auto") || value.includes("taller")) {
+    return [
+      { label: "Mecanico", value: "AGENT" },
+      { label: "Jefe de taller", value: "ADMIN" },
+      { label: "Recepcion", value: "VIEWER" }
+    ];
+  }
+  if (value.includes("veter")) {
+    return [
+      { label: "Veterinario", value: "AGENT" },
+      { label: "Asistente veterinario", value: "VIEWER" },
+      { label: "Administrador", value: "ADMIN" }
+    ];
+  }
+  if (value.includes("dental") || value.includes("salud") || value.includes("clinic")) {
+    return [
+      { label: "Doctor", value: "AGENT" },
+      { label: "Asistente clinico", value: "VIEWER" },
+      { label: "Administrador", value: "ADMIN" }
+    ];
+  }
+  return [
+    { label: "Agente operativo", value: "AGENT" },
+    { label: "Vendedor", value: "SELLER" },
+    { label: "Administrador", value: "ADMIN" },
+    { label: "Solo lectura", value: "VIEWER" }
+  ];
+}
+
 export default function SaasPage() {
   const agent = getStoredSession();
   const [data, setData] = useState<SaasOverview | null>(null);
@@ -43,6 +81,10 @@ export default function SaasPage() {
   });
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
+  const [teamForm, setTeamForm] = useState({ name: "", email: "", role: "AGENT", password: "" });
+  const [teamStatus, setTeamStatus] = useState<string | null>(null);
+  const [savingTeam, setSavingTeam] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -93,6 +135,36 @@ export default function SaasPage() {
     reader.readAsDataURL(file);
   }
 
+  useEffect(() => {
+    setProfileAvatarFailed(false);
+  }, [profileForm.avatarUrl]);
+
+  async function handleCreateTeamUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!teamForm.name.trim() || !teamForm.email.trim()) return;
+    try {
+      setSavingTeam(true);
+      setTeamStatus(null);
+      const result = await createTeamUser({
+        name: teamForm.name.trim(),
+        email: teamForm.email.trim(),
+        role: teamForm.role,
+        password: teamForm.password.trim() || undefined
+      });
+      setUsers((current) => [...current, result.user]);
+      setTeamForm({ name: "", email: "", role: "AGENT", password: "" });
+      setTeamStatus("Usuario operativo creado");
+    } catch (err) {
+      setTeamStatus(err instanceof Error ? err.message : "No se pudo crear el usuario");
+    } finally {
+      setSavingTeam(false);
+    }
+  }
+
+  const roleOptions = roleOptionsForIndustry(data?.tenant?.industry);
+  const industryLabel = data?.tenant?.industry || "General";
+  const normalizedAvatar = normalizeAvatarUrl(profileForm.avatarUrl);
+
   return (
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
@@ -134,8 +206,8 @@ export default function SaasPage() {
                   <p>Nombre, cargo y foto que se muestran en cada cuenta y sesion del workspace.</p>
                 </div>
                 <div className="profile-avatar-preview">
-                  {normalizeAvatarUrl(profileForm.avatarUrl) ? (
-                    <img src={normalizeAvatarUrl(profileForm.avatarUrl)} alt={profileForm.name || "Perfil"} />
+                  {normalizedAvatar && !profileAvatarFailed ? (
+                    <img src={normalizedAvatar} alt={profileForm.name || "Perfil"} onError={() => setProfileAvatarFailed(true)} />
                   ) : (
                     <span>{(profileForm.name || agent?.name || "EV").slice(0, 2).toUpperCase()}</span>
                   )}
@@ -206,9 +278,33 @@ export default function SaasPage() {
               <div className="phase5-panel-head">
                 <div>
                   <h2>Usuarios y roles</h2>
-                  <p>Equipo operativo incluido en este workspace. Este bloque reemplaza el modulo Equipo independiente.</p>
+                  <p>Equipo operativo incluido en este workspace. Rubro actual: {industryLabel}.</p>
                 </div>
               </div>
+              <form className="team-create-inline-form" onSubmit={handleCreateTeamUser}>
+                <label>
+                  <span>Nombre</span>
+                  <input value={teamForm.name} onChange={(event) => setTeamForm((value) => ({ ...value, name: event.target.value }))} placeholder="Ej: Maria Gonzalez" />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input value={teamForm.email} onChange={(event) => setTeamForm((value) => ({ ...value, email: event.target.value }))} placeholder="correo@empresa.cl" type="email" />
+                </label>
+                <label>
+                  <span>Rol operativo</span>
+                  <select value={teamForm.role} onChange={(event) => setTeamForm((value) => ({ ...value, role: event.target.value }))}>
+                    {roleOptions.map((option) => <option key={option.label} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Clave opcional</span>
+                  <input value={teamForm.password} onChange={(event) => setTeamForm((value) => ({ ...value, password: event.target.value }))} placeholder="Crear clave temporal" type="password" />
+                </label>
+                <button className="primary-btn" type="submit" disabled={savingTeam || !teamForm.name.trim() || !teamForm.email.trim()}>
+                  {savingTeam ? "Creando..." : "Crear usuario"}
+                </button>
+              </form>
+              {teamStatus ? <div className="meta-line">{teamStatus}</div> : null}
               <div className="phase5-table">
                 {users.map((user) => (
                   <div className="phase5-table-row" key={user.id}>

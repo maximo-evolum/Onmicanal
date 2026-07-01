@@ -872,6 +872,11 @@ export default function AdminPage() {
 
         {error ? <div className="admin-notice error">{error}</div> : null}
         {success ? <div className="admin-notice success">{success}</div> : null}
+        <datalist id="industry-presets">
+          {industryTemplates.map((template) => (
+            <option key={template.code} value={template.code}>{template.name}</option>
+          ))}
+        </datalist>
 
         <div className="admin-layout-grid">
           <section className="admin-panel">
@@ -887,7 +892,7 @@ export default function AdminPage() {
               <input value={clientForm.name} onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })} placeholder="Nombre del negocio" required />
               <div className="admin-form-row">
                 <input value={clientForm.slug} onChange={(e) => setClientForm({ ...clientForm, slug: e.target.value })} placeholder="slug opcional" />
-                <input value={clientForm.industry} onChange={(e) => setClientForm({ ...clientForm, industry: e.target.value })} placeholder="rubro" />
+                <input list="industry-presets" value={clientForm.industry} onChange={(e) => setClientForm({ ...clientForm, industry: e.target.value })} placeholder="rubro" />
               </div>
               <select value={clientForm.plan} onChange={(e) => setClientForm({ ...clientForm, plan: e.target.value })}>
                 {PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
@@ -955,7 +960,7 @@ export default function AdminPage() {
                   </label>
                   <label>
                     <span className="meta-line">Rubro</span>
-                    <input defaultValue={selectedTenant.industry || ""} onBlur={(e) => handleTenantField("industry", e.target.value)} />
+                    <input list="industry-presets" defaultValue={selectedTenant.industry || ""} onBlur={(e) => handleTenantField("industry", e.target.value)} />
                   </label>
                   <label>
                     <span className="meta-line">Plan</span>
@@ -1238,7 +1243,7 @@ export default function AdminPage() {
                     </label>
                     <label>
                       <span className="meta-line">Rubro IA</span>
-                      <input value={aiForm.industry} onChange={(e) => setAiForm({ ...aiForm, industry: e.target.value })} />
+                      <input list="industry-presets" value={aiForm.industry} onChange={(e) => setAiForm({ ...aiForm, industry: e.target.value })} />
                     </label>
                     <label>
                       <span className="meta-line">Tono</span>
@@ -1281,7 +1286,7 @@ export default function AdminPage() {
                     </label>
                     <label>
                       <span className="meta-line">Rubro</span>
-                      <input value={importManual.industry} onChange={(e) => setImportManual({ ...importManual, industry: e.target.value })} />
+                      <input list="industry-presets" value={importManual.industry} onChange={(e) => setImportManual({ ...importManual, industry: e.target.value })} />
                     </label>
                     <label>
                       <span className="meta-line">Tono sugerido</span>

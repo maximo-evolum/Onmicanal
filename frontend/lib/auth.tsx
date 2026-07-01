@@ -20,9 +20,16 @@ function clearCookie(name: string) {
   document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
 }
 
+function cookieSafeSession(session: AgentSession) {
+  return JSON.stringify({
+    ...session,
+    avatarUrl: session.avatarUrl?.startsWith("data:") ? "" : session.avatarUrl
+  });
+}
+
 function setStoredAuth(session: AgentSession, token: string) {
   const serializedSession = JSON.stringify(session);
-  setCookie(SESSION_COOKIE, serializedSession);
+  setCookie(SESSION_COOKIE, cookieSafeSession(session));
   setCookie(TOKEN_COOKIE, token);
 
   if (typeof window !== "undefined") {
@@ -42,7 +49,7 @@ export function mergeStoredSession(patch: Partial<AgentSession>) {
   if (!current) return null;
   const next = { ...current, ...patch };
   const serializedSession = JSON.stringify(next);
-  setCookie(SESSION_COOKIE, serializedSession);
+  setCookie(SESSION_COOKIE, cookieSafeSession(next));
 
   if (typeof window !== "undefined") {
     window.localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
@@ -68,8 +75,8 @@ function clearStoredAuth() {
 
 export function getStoredSession(): AgentSession | null {
   const raw =
-    getCookie(SESSION_COOKIE) ||
-    (typeof window !== "undefined" ? window.localStorage.getItem(SESSION_STORAGE_KEY) : null);
+    (typeof window !== "undefined" ? window.localStorage.getItem(SESSION_STORAGE_KEY) : null) ||
+    getCookie(SESSION_COOKIE);
 
   if (!raw) return null;
 
