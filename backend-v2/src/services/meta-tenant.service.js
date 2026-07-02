@@ -3,6 +3,11 @@ import { env } from "../lib/env.js";
 import { getDefaultTenant } from "./conversation.service.js";
 import { findTenantByInboundMetaIds } from "./tenant-channel-config.service.js";
 
+function logMetaTenant(message, data) {
+  if (env.nodeEnv === "production" && !env.enableTraceLogs) return;
+  console.log(message, data);
+}
+
 export function extractMetaRoutingIds(body = {}) {
   const entry = body?.entry?.[0] || null;
   const change = entry?.changes?.[0] || null;
@@ -29,11 +34,11 @@ export function extractMetaRoutingIds(body = {}) {
 
 export async function resolveTenantFromMetaWebhook(body = {}) {
   const ids = extractMetaRoutingIds(body);
-  console.log("[META_TENANT] extracted ids", ids);
+  logMetaTenant("[META_TENANT] extracted ids", ids);
 
   const byConfig = await findTenantByInboundMetaIds(ids);
   if (byConfig.tenant) {
-    console.log("[META_TENANT] tenant found by channel config", {
+    logMetaTenant("[META_TENANT] tenant found by channel config", {
       source: byConfig.source,
       tenantId: byConfig.tenant.id,
       tenantSlug: byConfig.tenant.slug
@@ -47,7 +52,7 @@ export async function resolveTenantFromMetaWebhook(body = {}) {
       where: { whatsappPhoneNumberId: ids.whatsappPhoneNumberId }
     });
     if (tenant) {
-      console.log("[META_TENANT] tenant found by legacy whatsappPhoneNumberId", {
+      logMetaTenant("[META_TENANT] tenant found by legacy whatsappPhoneNumberId", {
         tenantId: tenant.id,
         tenantSlug: tenant.slug,
         whatsappPhoneNumberId: ids.whatsappPhoneNumberId
@@ -59,7 +64,7 @@ export async function resolveTenantFromMetaWebhook(body = {}) {
       select: { id: true, slug: true, name: true, whatsappPhoneNumberId: true },
       take: 10
     }).catch(() => []);
-    console.log("[META_TENANT] no legacy whatsapp tenant match. Candidates:", legacyCandidates);
+    logMetaTenant("[META_TENANT] no legacy whatsapp tenant match. Candidates:", legacyCandidates);
   }
 
   if (ids.instagramBusinessAccountId) {
@@ -67,7 +72,7 @@ export async function resolveTenantFromMetaWebhook(body = {}) {
       where: { instagramBusinessAccountId: ids.instagramBusinessAccountId }
     });
     if (tenant) {
-      console.log("[META_TENANT] tenant found by legacy instagramBusinessAccountId", {
+      logMetaTenant("[META_TENANT] tenant found by legacy instagramBusinessAccountId", {
         tenantId: tenant.id,
         tenantSlug: tenant.slug,
         instagramBusinessAccountId: ids.instagramBusinessAccountId
@@ -79,7 +84,7 @@ export async function resolveTenantFromMetaWebhook(body = {}) {
       select: { id: true, slug: true, name: true, instagramBusinessAccountId: true },
       take: 10
     }).catch(() => []);
-    console.log("[META_TENANT] no legacy instagram tenant match. Candidates:", instagramCandidates);
+    logMetaTenant("[META_TENANT] no legacy instagram tenant match. Candidates:", instagramCandidates);
   }
 
   // Fallback controlado solo para desarrollo/local. En producción debe existir mapeo.
@@ -88,6 +93,6 @@ export async function resolveTenantFromMetaWebhook(body = {}) {
     return { tenant, source: "default_tenant_dev_fallback", ids };
   }
 
-  console.log("[META_TENANT] tenant not found for ids", ids);
+  logMetaTenant("[META_TENANT] tenant not found for ids", ids);
   return { tenant: null, source: "not_found", ids };
 }

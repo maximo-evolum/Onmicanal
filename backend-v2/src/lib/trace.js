@@ -1,9 +1,16 @@
+import { env } from "./env.js";
+
 export function createTrace(scope = "TRACE") {
   const id = `${scope}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
   return { id, scope, startedAt: Date.now() };
 }
 
+function shouldLogTrace() {
+  return env.nodeEnv !== "production" || env.enableTraceLogs;
+}
+
 export function traceStep(trace, step, data = undefined) {
+  if (!shouldLogTrace()) return;
   const prefix = trace?.id ? `[${trace.id}]` : "[TRACE]";
   if (data !== undefined) {
     try {
@@ -22,7 +29,7 @@ export function traceError(trace, step, error) {
     name: error?.name,
     message: error?.message,
     code: error?.code,
-    stack: error?.stack
+    stack: env.nodeEnv === "production" ? undefined : error?.stack
   });
 }
 

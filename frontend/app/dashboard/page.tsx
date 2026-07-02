@@ -71,11 +71,11 @@ export default function DashboardPage() {
   const pipeline = crm?.pipeline || [];
   const pipelineValue = pipeline.reduce((sum, stage) => sum + stage.value, 0);
   const sources = [
-    { label: "WhatsApp", value: Math.max(42, Math.round((crm?.kpis.conversations || 1) * 0.42)), color: "#8b5cf6" },
-    { label: "Portal Web", value: Math.max(24, Math.round((crm?.kpis.leads || 1) * 0.24)), color: "#c084fc" },
+    { label: "WhatsApp", value: Math.max(42, Math.round((crm?.kpis.conversations || 1) * 0.42)), color: "var(--theme-primary)" },
+    { label: "Portal Web", value: Math.max(24, Math.round((crm?.kpis.leads || 1) * 0.24)), color: "var(--theme-primary-2)" },
     { label: "Instagram", value: 15, color: "#f97316" },
     { label: "Referidos", value: 10, color: "#ec4899" },
-    { label: "Otros", value: 9, color: "#a855f7" }
+    { label: "Otros", value: 9, color: "var(--theme-accent)" }
   ];
   const sourceTotal = sources.reduce((sum, source) => sum + source.value, 0) || 1;
   const whatsappEnd = Math.round((sources[0].value / sourceTotal) * 100);
@@ -137,7 +137,7 @@ export default function DashboardPage() {
             <div className="executive-donut-row">
               <div
                 className="executive-donut"
-                style={{ background: `conic-gradient(#8b5cf6 0 ${whatsappEnd}%, #c084fc ${whatsappEnd}% ${portalEnd}%, #f97316 0 76%, #ec4899 0 88%, #a855f7 0 100%)` }}
+                style={{ background: `conic-gradient(var(--theme-primary) 0 ${whatsappEnd}%, var(--theme-primary-2) ${whatsappEnd}% ${portalEnd}%, #f97316 0 76%, #ec4899 0 88%, var(--theme-accent) 0 100%)` }}
               >
                 <strong>{crm?.kpis.leads || metrics?.total || 0}</strong>
                 <span>Leads</span>

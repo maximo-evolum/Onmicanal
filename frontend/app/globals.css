@@ -9210,14 +9210,14 @@ html, body {
 
 .analytics-evolum-shell .executive-dashboard {
   background:
-    radial-gradient(circle at 16% 0%, rgba(124, 58, 237, 0.18), transparent 32%),
-    linear-gradient(180deg, #0a0614 0%, #10081e 100%);
+    radial-gradient(circle at 16% 0%, color-mix(in srgb, var(--theme-primary) 18%, transparent), transparent 32%),
+    linear-gradient(180deg, var(--bg-deep) 0%, var(--bg) 100%);
 }
 
 .analytics-evolum-shell .executive-kpi-card,
 .analytics-evolum-shell .executive-panel {
-  border-color: rgba(168, 85, 247, 0.22);
-  background: linear-gradient(180deg, rgba(25, 14, 43, 0.92), rgba(11, 7, 20, 0.96));
+  border-color: color-mix(in srgb, var(--theme-primary-2) 22%, transparent);
+  background: linear-gradient(180deg, var(--theme-surface), color-mix(in srgb, var(--bg-deep) 88%, var(--theme-primary) 7%));
 }
 
 .analytics-evolum-shell .executive-kpi-card.blue .executive-kpi-icon,
@@ -9225,7 +9225,7 @@ html, body {
 .analytics-evolum-shell .executive-kpi-card.gold .executive-kpi-icon,
 .analytics-evolum-shell .executive-kpi-card.cyan .executive-kpi-icon,
 .analytics-evolum-shell .executive-kpi-icon {
-  background: linear-gradient(135deg, #7c3aed, #c084fc);
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2));
 }
 
 .analytics-loading-strip {

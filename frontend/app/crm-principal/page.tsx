@@ -565,7 +565,7 @@ export default function CrmPrincipalPage() {
             </div>
             <div className="crm-main-radar">
               <div className="crm-main-radar-core">
-                <div className="crm-main-radar-orbit" style={{ background: `radial-gradient(circle at center, rgba(18, 11, 33, 1) 0 47%, transparent 48%), conic-gradient(var(--crm-main-green) 0 ${radarScore}%, rgba(139, 92, 246, 0.28) ${radarScore}% 100%)` }}>
+                <div className="crm-main-radar-orbit" style={{ background: `radial-gradient(circle at center, var(--bg-deep) 0 47%, transparent 48%), conic-gradient(var(--crm-main-green) 0 ${radarScore}%, color-mix(in srgb, var(--theme-primary) 28%, transparent) ${radarScore}% 100%)` }}>
                   <strong>{radarScore}%</strong>
                   <span>indice ejecutivo</span>
                 </div>

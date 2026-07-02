@@ -86,6 +86,9 @@ export const env = {
   enableDevTools:
     firstEnv("ENABLE_DEV_TOOLS", "enableDevTools") === "true",
 
+  enableTraceLogs:
+    firstEnv("ENABLE_TRACE_LOGS", "enableTraceLogs") === "true",
+
   metaAppSecret: firstEnv(
     "META_APP_SECRET",
     "metaAppSecret"
