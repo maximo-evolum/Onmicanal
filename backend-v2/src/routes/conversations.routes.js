@@ -3,12 +3,13 @@ import { prisma } from "../lib/db.js";
 import { releaseConversation, takeConversation } from "../services/conversation.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { deriveCommercialState } from "../lib/commercial-state.js";
+import { pickMetadataValue } from "../lib/metadata.js";
 
 export const conversationsRouter = Router();
 
 function channelDisplayNumber(config) {
-  if (!config?.metadata || typeof config.metadata !== "object") return null;
-  return config.metadata.displayNumber || config.metadata.whatsappDisplayNumber || null;
+  return pickMetadataValue(config?.metadata, "displayNumber")
+    || pickMetadataValue(config?.metadata, "whatsappDisplayNumber");
 }
 
 async function enrichConversation(conversation) {

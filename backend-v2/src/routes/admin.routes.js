@@ -27,6 +27,7 @@ import multer from "multer";
 import { prisma } from "../lib/db.js";
 import { requireRole } from "../middleware/tenant-access.js";
 import { PLAN_DEFINITIONS, normalizePlanCode } from "../lib/modules.js";
+import { mergeMetadata, metadataOrNull, normalizeMetadata } from "../lib/metadata.js";
 import {
   createCustomIndustryTemplate,
   getAnyIndustryTemplate,
@@ -135,7 +136,7 @@ function cleanNumber(value, fallback = 0) {
 }
 
 function getSubscriptionMetadata(subscription) {
-  return subscription?.metadata && typeof subscription.metadata === "object" ? subscription.metadata : {};
+  return normalizeMetadata(subscription?.metadata, {});
 }
 
 async function getOrCreateActiveSubscription({ tenantId, planCode }) {
@@ -486,17 +487,13 @@ adminRouter.put("/admin/tenants/:tenantId/channel-configs/:channel", async (req,
       where: { tenantId_channel: { tenantId, channel: normalizedChannel } }
     });
 
-    const existingMetadata = existingConfig?.metadata && typeof existingConfig.metadata === "object"
-      ? existingConfig.metadata
-      : {};
-
-    const nextMetadata = {
-      ...existingMetadata,
-      ...(metadata && typeof metadata === "object" ? metadata : {}),
-      ...(normalizedChannel === "whatsapp" && cleanText(displayNumber)
+    const nextMetadata = mergeMetadata(
+      existingConfig?.metadata,
+      metadata,
+      normalizedChannel === "whatsapp" && cleanText(displayNumber)
         ? { displayNumber: cleanText(displayNumber), whatsappDisplayNumber: cleanText(displayNumber) }
-        : {})
-    };
+        : {}
+    );
 
     const data = {
       label: cleanText(label) || `${normalizedChannel} principal`,
@@ -505,7 +502,7 @@ adminRouter.put("/admin/tenants/:tenantId/channel-configs/:channel", async (req,
       externalAccountId: cleanOptionalUnique(externalAccountId),
       accessToken: cleanText(accessToken),
       verifyToken: cleanText(verifyToken),
-      metadata: Object.keys(nextMetadata).length ? nextMetadata : null,
+      metadata: metadataOrNull(nextMetadata),
       isActive: Boolean(isActive)
     };
 

@@ -11,6 +11,18 @@ export const messagesRouter = Router();
 const DEFAULT_REENGAGEMENT_TEMPLATE = "reactivar_conversacion_evolum";
 const DEFAULT_REENGAGEMENT_LANGUAGE = "es";
 
+function firstProviderMessageId(sendResult) {
+  return Array.isArray(sendResult?.messages)
+    ? sendResult.messages.map((message) => message.id).filter(Boolean)[0] || null
+    : null;
+}
+
+function providerContactIds(sendResult) {
+  return Array.isArray(sendResult?.contacts)
+    ? sendResult.contacts.map((contact) => contact.wa_id || contact.input || null).filter(Boolean)
+    : [];
+}
+
 async function sendManualMessageHandler(req, res) {
   try {
     const conversationId = req.body?.conversationId || req.params?.id || req.params?.conversationId;
@@ -50,15 +62,11 @@ async function sendManualMessageHandler(req, res) {
       });
 
       rawPayload = sendResult || null;
-      externalMessageId = Array.isArray(sendResult?.messages)
-        ? sendResult.messages.map((message) => message.id).filter(Boolean)[0] || null
-        : null;
+      externalMessageId = firstProviderMessageId(sendResult);
       metadata = {
         metaAccepted: true,
         recipient: conversation.contact.externalId,
-        contactWaIds: Array.isArray(sendResult?.contacts)
-          ? sendResult.contacts.map((contact) => contact.wa_id || contact.input || null).filter(Boolean)
-          : []
+        contactWaIds: providerContactIds(sendResult)
       };
     } catch (error) {
       status = "FAILED";
@@ -149,16 +157,12 @@ async function sendReengagementTemplateHandler(req, res) {
       });
 
       rawPayload = sendResult || null;
-      externalMessageId = Array.isArray(sendResult?.messages)
-        ? sendResult.messages.map((message) => message.id).filter(Boolean)[0] || null
-        : null;
+      externalMessageId = firstProviderMessageId(sendResult);
       metadata = {
         templateName,
         languageCode,
         recipient: conversation.contact.externalId,
-        contactWaIds: Array.isArray(sendResult?.contacts)
-          ? sendResult.contacts.map((contact) => contact.wa_id || contact.input || null).filter(Boolean)
-          : []
+        contactWaIds: providerContactIds(sendResult)
       };
     } catch (error) {
       status = "FAILED";

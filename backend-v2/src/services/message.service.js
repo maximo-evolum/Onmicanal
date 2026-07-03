@@ -19,6 +19,7 @@ import { buildAutonomousFollowUpPlan } from "./autonomous-followup-strategy.serv
 import { recordUsageEvent } from "./saas-commercial.service.js";
 import { registerSalesSignal } from "./sales-engine.service.js";
 import { traceError, traceStep } from "../lib/trace.js";
+import { metadataOrNull } from "../lib/metadata.js";
 
 function mapMessageType(type) {
   switch ((type || "").toLowerCase()) {
@@ -85,7 +86,7 @@ export async function persistInboundMessage({
       type: mapMessageType(type),
       status: "RECEIVED",
       rawPayload: normalizeObjectStrings(rawPayload),
-      metadata: metadata ? normalizeObjectStrings(metadata) : undefined
+      metadata: metadataOrNull(metadata) || undefined
     }
   });
 
@@ -184,7 +185,7 @@ export async function persistOutboundMessage({
       status,
       externalMessageId,
       rawPayload: rawPayload ? normalizeObjectStrings(rawPayload) : undefined,
-      metadata: metadata ? normalizeObjectStrings(metadata) : undefined,
+      metadata: metadataOrNull(metadata) || undefined,
       errorMessage
     }
   });

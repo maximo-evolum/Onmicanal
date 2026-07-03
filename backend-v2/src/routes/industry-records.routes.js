@@ -4,6 +4,7 @@ import { MODULES } from "../lib/modules.js";
 import { buildBalancedAssignments } from "../lib/industries.js";
 import { hasTenantModule } from "../services/tenant-modules.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { mergeMetadata, normalizeMetadata } from "../lib/metadata.js";
 
 export const industryRecordsRouter = Router();
 
@@ -105,7 +106,7 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
         title,
         status: cleanText(req.body?.status, "ACTIVE").toUpperCase(),
         assignedToId,
-        data: req.body?.data && typeof req.body.data === "object" ? req.body.data : {}
+        data: normalizeMetadata(req.body?.data, {})
       },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
@@ -137,9 +138,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       }
       data.assignedToId = assignedToId;
     }
-    if (req.body?.data !== undefined) {
-      data.data = req.body.data && typeof req.body.data === "object" ? req.body.data : {};
-    }
+    if (req.body?.data !== undefined) data.data = normalizeMetadata(req.body.data, {});
 
     const record = await prisma.industryRecord.update({
       where: { id: existing.id },
@@ -150,6 +149,29 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
   } catch (error) {
     console.error("Update industry record error:", error);
     res.status(500).json({ error: "No se pudo actualizar el registro" });
+  }
+});
+
+industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const existing = await prisma.industryRecord.findFirst({
+      where: { id: req.params.id, tenantId: req.tenantId }
+    });
+    if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
+    if (!(await assertRecordModule(req, existing.recordType))) {
+      return res.status(403).json({ error: `Modulo no habilitado para ${existing.recordType}` });
+    }
+
+    const patch = normalizeMetadata(req.body?.metadata ?? req.body?.data, {});
+    const record = await prisma.industryRecord.update({
+      where: { id: existing.id },
+      data: { data: mergeMetadata(existing.data, patch) },
+      include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
+    });
+    res.json(record);
+  } catch (error) {
+    console.error("Update industry metadata error:", error);
+    res.status(500).json({ error: "No se pudieron actualizar los metadatos" });
   }
 });
 

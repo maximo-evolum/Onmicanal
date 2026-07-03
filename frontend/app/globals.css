@@ -9887,3 +9887,308 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* Theme and EV menu hardening. Keep this block last so every module follows the active palette. */
+:root {
+  --ev-rail-width: max(96px, calc(env(safe-area-inset-left) + 92px));
+  --ev-bubble-size: 54px;
+  --ev-bubble-top: max(30px, calc(env(safe-area-inset-top) + 28px));
+  --ev-bubble-left: max(20px, calc(env(safe-area-inset-left) + 18px));
+  --theme-page-bg: radial-gradient(circle at top right, color-mix(in srgb, var(--theme-primary) 12%, transparent), transparent 34%),
+    linear-gradient(180deg, var(--bg-deep) 0%, color-mix(in srgb, var(--bg) 82%, var(--bg-deep)) 52%, var(--bg-deep) 100%);
+  --theme-card-bg: linear-gradient(180deg, color-mix(in srgb, var(--theme-surface-strong) 78%, transparent), color-mix(in srgb, var(--bg-deep) 86%, var(--theme-primary) 6%));
+  --theme-panel-bg: linear-gradient(135deg, color-mix(in srgb, var(--theme-surface) 84%, transparent), color-mix(in srgb, var(--bg) 74%, var(--theme-primary) 8%));
+  --theme-header-bg: linear-gradient(135deg, color-mix(in srgb, var(--theme-surface-strong) 84%, transparent), color-mix(in srgb, var(--bg) 78%, var(--theme-primary) 10%));
+  --theme-input-bg: color-mix(in srgb, var(--bg-deep) 86%, var(--theme-primary) 7%);
+  --theme-border-strong: color-mix(in srgb, var(--theme-primary) 34%, var(--border));
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--bg-deep) !important;
+}
+
+body {
+  background: var(--theme-page-bg) !important;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#__next,
+[data-nextjs-scroll-focus-boundary] {
+  min-height: 100%;
+  background: transparent !important;
+}
+
+.module-with-menu-shell,
+.executive-shell,
+.pipeline-pro-shell,
+.inbox-unified-shell,
+.crm-main,
+.phase5-page {
+  min-height: 100dvh !important;
+  background: var(--theme-page-bg) !important;
+  color: var(--text) !important;
+  overflow-x: hidden !important;
+}
+
+.inbox-unified-shell {
+  height: 100dvh !important;
+}
+
+.nav-collapsed.module-with-menu-shell,
+.nav-collapsed.executive-shell,
+.nav-collapsed.pipeline-pro-shell,
+.nav-collapsed.inbox-unified-shell,
+.inbox-unified-shell.nav-collapsed,
+.executive-shell.nav-collapsed,
+.pipeline-pro-shell.nav-collapsed,
+.module-with-menu-shell.nav-collapsed {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.nav-collapsed > main,
+.nav-collapsed .main,
+.nav-collapsed .vertical-page,
+.nav-collapsed .pipeline-pro-main,
+.nav-collapsed .inbox-unified-main,
+.nav-collapsed .inbox-unified-workspace,
+.nav-collapsed .executive-main,
+.nav-collapsed .executive-dashboard,
+.nav-collapsed .crm-main-page,
+.nav-collapsed .phase5-page,
+.nav-collapsed .module-page,
+.nav-collapsed .dashboard-page {
+  padding-left: var(--ev-rail-width) !important;
+}
+
+.evolum-menu-bubble {
+  position: fixed !important;
+  top: var(--ev-bubble-top) !important;
+  left: var(--ev-bubble-left) !important;
+  z-index: 1200 !important;
+  width: var(--ev-bubble-size) !important;
+  height: var(--ev-bubble-size) !important;
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 42%, var(--border)) !important;
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)) !important;
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--theme-primary) 26%, transparent) !important;
+}
+
+.evolum-unified-nav,
+.inbox-unified-nav.evolum-unified-nav {
+  position: sticky !important;
+  top: 0 !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  min-height: 100dvh !important;
+  overflow: hidden !important;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-deep) 90%, var(--theme-primary) 6%), color-mix(in srgb, var(--bg) 86%, var(--theme-primary) 8%)) !important;
+  border-right: 1px solid var(--theme-border-strong) !important;
+  scrollbar-gutter: stable;
+}
+
+.evolum-unified-nav .inbox-unified-nav-list {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 8px !important;
+}
+
+.evolum-unified-nav .inbox-unified-nav-list::-webkit-scrollbar {
+  width: 7px;
+}
+
+.evolum-unified-nav .inbox-unified-nav-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--theme-primary), var(--theme-primary-2));
+}
+
+.evolum-unified-nav .inbox-nav-footer {
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--bg-deep) 88%, var(--theme-primary) 6%));
+}
+
+.module-app-header,
+.phase5-hero,
+.crm-main-header,
+.inbox-app-header,
+.inbox-unified-header,
+.sales-queue-header,
+.campaign-mobile-hero,
+.pipeline-pro-topbar,
+.pipeline-pro-header-main,
+.executive-topbar,
+.vertical-hero,
+.module-hero,
+.analytics-evolum-shell .executive-topbar {
+  background: var(--theme-header-bg) !important;
+  border-color: var(--theme-border-strong) !important;
+}
+
+.phase5-card,
+.phase5-panel,
+.admin-panel,
+.crm-main-panel,
+.crm-main-kpi,
+.crm-main-agent-card,
+.crm-main-mini-agent,
+.crm-main-agent-primary,
+.crm-main-radar-core,
+.crm-main-radar-tile,
+.crm-main-pro-chart,
+.executive-kpi-card,
+.executive-panel,
+.pipeline-column,
+.pipeline-column-pro,
+.pipeline-summary-panel,
+.pipeline-metric,
+.pipeline-card,
+.pipeline-lead-card,
+.inbox-thread-shell,
+.inbox-conversation-sidebar,
+.inbox-recent-card,
+.mobile-module-card,
+.agenda-calendar-panel,
+.agenda-day,
+.industry-card,
+.vertical-card,
+.service-card,
+.module-card,
+.module-panel,
+.module-stat,
+.module-tile,
+.module-form,
+.module-field,
+.module-section,
+.profile-settings-panel,
+.team-create-inline-form,
+.document-upload-box,
+.campaign-preview,
+.campaign-composer,
+.campaign-card,
+.campaign-panel,
+.bot-lab-panel,
+.saas-panel,
+.developer-panel,
+.onboarding-panel,
+.payments-panel {
+  background: var(--theme-card-bg) !important;
+  border-color: var(--theme-border-strong) !important;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent), 0 24px 70px color-mix(in srgb, var(--bg-deep) 62%, transparent) !important;
+}
+
+.vertical-card,
+.service-card,
+.module-section,
+.module-card,
+.phase5-panel,
+.executive-panel,
+.agenda-calendar-panel,
+.campaign-preview,
+.campaign-composer,
+.payments-panel {
+  background: var(--theme-panel-bg) !important;
+}
+
+input,
+select,
+textarea,
+.profile-settings-form input,
+.team-create-inline-form input,
+.team-create-inline-form select,
+.crm-search-input,
+.pipeline-pro-search,
+.module-input,
+.module-select,
+.module-textarea {
+  color: var(--text) !important;
+  background: var(--theme-input-bg) !important;
+  border-color: var(--theme-border-strong) !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: color-mix(in srgb, var(--theme-primary-2) 58%, transparent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary) 18%, transparent) !important;
+}
+
+.primary-btn,
+.module-account-pill,
+.account-pill,
+.mobile-account-pill,
+.workspace-logo,
+.profile-avatar-preview,
+.crm-main-mark,
+.inbox-nav-brand span,
+.inbox-unified-nav-list a.active,
+.executive-sidebar a.active,
+.pipeline-pro-sidebar a.active,
+.theme-palette-picker button.active,
+.phase5-chip.active,
+.pipeline-pro-pill.active,
+.inbox-channel-tab.active {
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)) !important;
+  border-color: color-mix(in srgb, var(--theme-primary-2) 50%, transparent) !important;
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--theme-primary) 20%, transparent) !important;
+}
+
+.phase5-chip,
+.metric-chip,
+.crm-main-chip,
+.module-pill,
+.executive-date,
+.pipeline-pro-pill,
+.inbox-channel-tab,
+.status-pill,
+.tag-pill {
+  background: color-mix(in srgb, var(--theme-primary) 14%, var(--bg-deep)) !important;
+  border-color: color-mix(in srgb, var(--theme-primary-2) 32%, var(--border)) !important;
+}
+
+.module-kicker,
+.crm-main-kicker,
+.phase5-panel-head span,
+.eyebrow,
+.section-eyebrow,
+.vertical-eyebrow,
+.pipeline-pro-breadcrumb,
+.inbox-unified-header .eyebrow {
+  color: var(--theme-accent) !important;
+}
+
+.agenda-weekend,
+.agenda-day.weekend {
+  background: color-mix(in srgb, var(--theme-accent) 10%, var(--bg-deep)) !important;
+  border-color: color-mix(in srgb, var(--theme-accent) 30%, var(--border)) !important;
+}
+
+.agenda-holiday,
+.agenda-day.holiday {
+  background: color-mix(in srgb, #ff4f7b 13%, var(--bg-deep)) !important;
+  border-color: color-mix(in srgb, #ff4f7b 38%, var(--border)) !important;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --ev-rail-width: max(82px, calc(env(safe-area-inset-left) + 78px));
+    --ev-bubble-size: 50px;
+    --ev-bubble-top: max(22px, calc(env(safe-area-inset-top) + 18px));
+    --ev-bubble-left: max(14px, calc(env(safe-area-inset-left) + 12px));
+  }
+
+  .nav-collapsed > main,
+  .nav-collapsed .main,
+  .nav-collapsed .vertical-page,
+  .nav-collapsed .pipeline-pro-main,
+  .nav-collapsed .inbox-unified-main,
+  .nav-collapsed .inbox-unified-workspace,
+  .nav-collapsed .executive-main,
+  .nav-collapsed .executive-dashboard,
+  .nav-collapsed .crm-main-page,
+  .nav-collapsed .phase5-page,
+  .nav-collapsed .module-page,
+  .nav-collapsed .dashboard-page {
+    padding-left: var(--ev-rail-width) !important;
+  }
+}

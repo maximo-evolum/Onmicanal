@@ -696,6 +696,16 @@ export async function updateIndustryRecord(
   });
 }
 
+export async function updateIndustryRecordMetadata(
+  id: string,
+  metadata: Record<string, unknown>
+): Promise<IndustryRecord> {
+  return request<IndustryRecord>(`/industry-records/${id}/metadata`, {
+    method: "PATCH",
+    body: JSON.stringify({ metadata })
+  });
+}
+
 export async function getBalancedIndustryAssignments(input: {
   recordType: string;
   assigneeRole?: string;
