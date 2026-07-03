@@ -90,8 +90,8 @@ export async function tenantContext(req, res, next) {
  * Control de módulos por tenant.
  *
  * Regla SaaS:
- * - SUPER_ADMIN, OWNER y ADMIN nunca deben quedar bloqueados por un falso negativo de módulos.
- * - AGENT/SELLER sí dependen de que el módulo esté habilitado para el tenant.
+ * - SUPER_ADMIN mantiene bypass global porque administra la plataforma.
+ * - Los usuarios del tenant dependen de que el módulo esté habilitado.
  * - Si el tenant no tiene módulos sincronizados, se autorepara con el plan activo.
  */
 export function requireModule(module) {
@@ -99,7 +99,7 @@ export function requireModule(module) {
     try {
       const role = req.user?.role;
 
-      if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) {
+      if (role === "SUPER_ADMIN") {
         return next();
       }
 

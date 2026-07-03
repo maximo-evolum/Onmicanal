@@ -1128,3 +1128,272 @@ export async function applyAdminTenantOnboardingExtraction(input: {
     body: JSON.stringify(input)
   });
 }
+
+export type MetadataCatalog = {
+  tenantId: string;
+  industry: string;
+  activeModules: string[];
+  modules: Record<string, string>;
+  plans: Record<string, unknown>;
+  entities: Array<{
+    recordType?: string;
+    label?: string;
+    fields: Array<{ name: string; type: string; required: boolean; options?: unknown[] }>;
+  }>;
+  industries: unknown[];
+};
+
+export type TenantDocument = {
+  id: string;
+  tenantId: string;
+  recordType: "document";
+  title: string;
+  status: string;
+  data?: {
+    category?: string;
+    description?: string | null;
+    originalName?: string;
+    fileName?: string;
+    mimeType?: string;
+    size?: number;
+    url?: string;
+    source?: string;
+    uploadedByUserId?: string | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkflowDefinition = {
+  id: string;
+  tenantId: string;
+  recordType: "workflow_definition";
+  title: string;
+  status: string;
+  data?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type IntegrationStatus = {
+  id: string;
+  channel: string;
+  label?: string | null;
+  phoneNumberId?: string | null;
+  businessAccountId?: string | null;
+  externalAccountId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  isActive: boolean;
+  hasAccessToken: boolean;
+  hasVerifyToken: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TenantAuditLog = {
+  id: string;
+  tenantId: string;
+  action: string;
+  entity?: string | null;
+  entityId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  actor?: { id: string; name: string; email: string; role: string } | null;
+};
+
+export type GlobalSearchResult = {
+  type: "contact" | "message" | "lead" | "booking" | "payment" | "campaign" | "industry_record";
+  id: string;
+  title: string;
+  subtitle?: string;
+  href?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type TenantNotification = {
+  id: string;
+  title: string;
+  status: "UNREAD" | "READ" | string;
+  assignedToId?: string | null;
+  body?: string;
+  severity?: "info" | "success" | "warning" | "critical" | string;
+  targetUrl?: string | null;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BackupSummary = {
+  tenantId: string;
+  counts: Record<string, number>;
+  generatedAt: string;
+};
+
+export async function getMetadataCatalog(industry?: string): Promise<MetadataCatalog> {
+  const suffix = industry ? `?industry=${encodeURIComponent(industry)}` : "";
+  return request<MetadataCatalog>(`/metadata/catalog${suffix}`);
+}
+
+export async function validateMetadata(input: { industry?: string; recordType: string; data: Record<string, unknown> }) {
+  return request<{ ok: boolean; recordType: string; missing: string[]; data: Record<string, unknown> }>("/metadata/validate", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function normalizeMetadataApi(metadata: Record<string, unknown>) {
+  return request<{ metadata: Record<string, unknown>; maxDepth: number }>("/metadata/normalize", {
+    method: "POST",
+    body: JSON.stringify({ metadata })
+  });
+}
+
+export async function getTenantDocuments(status?: string): Promise<{ documents: TenantDocument[] }> {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<{ documents: TenantDocument[] }>(`/documents${suffix}`);
+}
+
+export async function uploadTenantDocuments(input: {
+  files: File[];
+  title?: string;
+  category?: string;
+  description?: string;
+}): Promise<{ documents: TenantDocument[] }> {
+  const token = getAuthToken();
+  const form = new FormData();
+  for (const file of input.files) form.append("files", file);
+  if (input.title) form.append("title", input.title);
+  if (input.category) form.append("category", input.category);
+  if (input.description) form.append("description", input.description);
+
+  const response = await fetch(`${API_BASE_URL}/documents`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error || "No se pudieron subir documentos");
+  }
+
+  return response.json();
+}
+
+export async function getWorkflows(status?: string): Promise<{ workflows: WorkflowDefinition[] }> {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<{ workflows: WorkflowDefinition[] }>(`/workflows${suffix}`);
+}
+
+export async function createWorkflow(input: {
+  name: string;
+  description?: string;
+  trigger?: string;
+  entityType?: string;
+  steps?: unknown[];
+  conditions?: unknown[];
+  actions?: unknown[];
+  status?: string;
+}): Promise<{ workflow: WorkflowDefinition }> {
+  return request<{ workflow: WorkflowDefinition }>("/workflows", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateWorkflow(id: string, input: Partial<WorkflowDefinition["data"]> & { name?: string; title?: string; status?: string }) {
+  return request<{ workflow: WorkflowDefinition }>(`/workflows/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function runWorkflow(id: string, input: { input?: Record<string, unknown>; target?: Record<string, unknown> }) {
+  return request<{ run: { id: string; status: string; data?: Record<string, unknown> | null } }>(`/workflows/${id}/run`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function getIntegrationsStatus(): Promise<{ integrations: IntegrationStatus[]; summary: { active: number; configured: number; channels: string[] } }> {
+  return request<{ integrations: IntegrationStatus[]; summary: { active: number; configured: number; channels: string[] } }>("/integrations/status");
+}
+
+export async function configureIntegration(channel: string, input: Partial<IntegrationStatus> & {
+  accessToken?: string;
+  verifyToken?: string;
+}): Promise<{ integration: IntegrationStatus }> {
+  return request<{ integration: IntegrationStatus }>(`/integrations/${encodeURIComponent(channel)}`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function getTenantAuditTrail(input: { tenantId?: string; action?: string; entity?: string; entityId?: string; limit?: number } = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<{ logs: TenantAuditLog[] }>(`/audit/logs${suffix}`);
+}
+
+export async function globalSearch(q: string, limit?: number): Promise<{ query: string; results: GlobalSearchResult[] }> {
+  const params = new URLSearchParams();
+  params.set("q", q);
+  if (limit) params.set("limit", String(limit));
+  return request<{ query: string; results: GlobalSearchResult[] }>(`/search?${params.toString()}`);
+}
+
+export async function getNotifications(input: { status?: string; limit?: number } = {}): Promise<{ notifications: TenantNotification[] }> {
+  const params = new URLSearchParams();
+  if (input.status) params.set("status", input.status);
+  if (input.limit) params.set("limit", String(input.limit));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<{ notifications: TenantNotification[] }>(`/notifications${suffix}`);
+}
+
+export async function createNotification(input: {
+  title: string;
+  body?: string;
+  severity?: string;
+  targetUrl?: string;
+  assignedToId?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<{ notification: TenantNotification }> {
+  return request<{ notification: TenantNotification }>("/notifications", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function markNotificationRead(id: string): Promise<{ notification: TenantNotification }> {
+  return request<{ notification: TenantNotification }>(`/notifications/${id}/read`, {
+    method: "PATCH"
+  });
+}
+
+export async function markAllNotificationsRead(): Promise<{ updated: number }> {
+  return request<{ updated: number }>("/notifications/read-all", {
+    method: "PATCH"
+  });
+}
+
+export async function getBackupSummary(): Promise<BackupSummary> {
+  return request<BackupSummary>("/backups/summary");
+}
+
+export async function exportTenantBackup(): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/backups/export`, {
+    headers: buildHeaders(),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error || "No se pudo exportar el respaldo");
+  }
+
+  return response.blob();
+}

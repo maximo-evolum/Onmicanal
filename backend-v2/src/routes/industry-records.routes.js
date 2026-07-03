@@ -5,6 +5,7 @@ import { buildBalancedAssignments } from "../lib/industries.js";
 import { hasTenantModule } from "../services/tenant-modules.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { mergeMetadata, normalizeMetadata } from "../lib/metadata.js";
+import { recordAuditLog } from "../lib/audit.js";
 
 export const industryRecordsRouter = Router();
 
@@ -16,7 +17,10 @@ const RECORD_MODULES = Object.freeze({
   vehicle: MODULES.VEHICLES,
   part: MODULES.PARTS_INVENTORY,
   work_order: MODULES.MECHANIC_ASSIGNMENTS,
-  ready_notification: MODULES.READY_NOTIFICATIONS
+  ready_notification: MODULES.READY_NOTIFICATIONS,
+  document: MODULES.DOCUMENTS,
+  workflow_definition: MODULES.WORKFLOWS,
+  workflow_run: MODULES.WORKFLOWS
 });
 
 function cleanText(value, fallback = "") {
@@ -30,7 +34,7 @@ function normalizeRecordType(value) {
 
 async function assertRecordModule(req, recordType) {
   const role = req.user?.role;
-  if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(role)) return true;
+  if (role === "SUPER_ADMIN") return true;
   const module = RECORD_MODULES[recordType];
   if (!module) return true;
   return hasTenantModule(req.tenantId, module);
@@ -110,6 +114,7 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
       },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
+    await recordAuditLog(req, "INDUSTRY_RECORD_CREATED", recordType, record.id, { recordType, status: record.status });
     res.status(201).json(record);
   } catch (error) {
     console.error("Create industry record error:", error);
@@ -145,6 +150,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       data,
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
+    await recordAuditLog(req, "INDUSTRY_RECORD_UPDATED", existing.recordType, record.id, { recordType: existing.recordType, status: record.status });
     res.json(record);
   } catch (error) {
     console.error("Update industry record error:", error);
@@ -168,6 +174,7 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
       data: { data: mergeMetadata(existing.data, patch) },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
+    await recordAuditLog(req, "INDUSTRY_RECORD_METADATA_UPDATED", existing.recordType, record.id, { recordType: existing.recordType });
     res.json(record);
   } catch (error) {
     console.error("Update industry metadata error:", error);
@@ -180,6 +187,7 @@ industryRecordsRouter.delete("/industry-records/:id", requireRole(ROLE_GROUPS.MA
     const existing = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
     await prisma.industryRecord.delete({ where: { id: existing.id } });
+    await recordAuditLog(req, "INDUSTRY_RECORD_DELETED", existing.recordType, existing.id, { recordType: existing.recordType, title: existing.title });
     res.json({ ok: true });
   } catch (error) {
     console.error("Delete industry record error:", error);

@@ -24,7 +24,10 @@ export type ModuleAccessKey =
   | "vehicles"
   | "parts_inventory"
   | "mechanic_assignments"
-  | "ready_notifications";
+  | "ready_notifications"
+  | "documents"
+  | "workflows"
+  | "integrations";
 
 const moduleAliases: Record<ModuleAccessKey, string[]> = {
   crm: ["crm", "crm_principal"],
@@ -47,6 +50,9 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   parts_inventory: ["parts_inventory", "repuestos", "inventario_repuestos"],
   mechanic_assignments: ["mechanic_assignments", "asignacion_mecanicos"],
   ready_notifications: ["ready_notifications", "avisos_retiro"],
+  documents: ["documents", "documentos", "archivos"],
+  workflows: ["workflows", "workflow", "automatizaciones"],
+  integrations: ["integrations", "integraciones", "conectores"],
 };
 
 const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas"]);

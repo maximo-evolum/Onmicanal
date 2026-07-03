@@ -4,6 +4,7 @@ import { MODULES, PLAN_DEFINITIONS } from "../lib/modules.js";
 import { listIndustryTemplates } from "../lib/industries.js";
 import { getTenantModules, setTenantModules, ensureTenantSubscriptionAndModules } from "../services/tenant-modules.service.js";
 import { requireRole } from "../middleware/tenant-access.js";
+import { recordAuditLog } from "../lib/audit.js";
 
 export const modulesRouter = Router();
 
@@ -25,13 +26,11 @@ modulesRouter.get("/modules/me", async (req, res) => {
   }
 });
 
-modulesRouter.patch("/modules/tenant/:tenantId", requireRole("OWNER", "ADMIN"), async (req, res) => {
+modulesRouter.patch("/modules/tenant/:tenantId", requireRole("SUPER_ADMIN"), async (req, res) => {
   try {
     const { tenantId } = req.params;
-    if (req.user.role !== "SUPER_ADMIN" && req.tenantId !== tenantId) {
-      return res.status(403).json({ error: "No puedes modificar otro tenant" });
-    }
     const modules = await setTenantModules({ tenantId, modules: req.body.modules || [], source: "MANUAL" });
+    await recordAuditLog(req, "TENANT_MODULES_UPDATED", "tenant", tenantId, { auditTenantId: tenantId, modules: modules.map((item) => item.module), targetTenantId: tenantId });
     res.json({ tenantId, modules });
   } catch (error) {
     console.error("Set modules error:", error);

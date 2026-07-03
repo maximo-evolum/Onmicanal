@@ -5,9 +5,21 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import {
   applyOnboardingExtraction,
+  createWorkflow,
+  getIntegrationsStatus,
+  getMetadataCatalog,
   getOnboardingKnowledge,
+  getTenantAuditTrail,
+  getTenantDocuments,
+  getWorkflows,
+  IntegrationStatus,
+  MetadataCatalog,
   OnboardingExtraction,
   saveOnboardingProfile,
+  TenantAuditLog,
+  TenantDocument,
+  uploadTenantDocuments,
+  WorkflowDefinition,
   uploadOnboardingFiles
 } from "../../lib/api";
 import { getStoredSession } from "@/lib/auth";
@@ -83,6 +95,40 @@ function formatMoney(value?: number) {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(number);
 }
 
+function formatBytes(value?: number) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatShortDate(value?: string) {
+  if (!value) return "Sin fecha";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+  return date.toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function integrationTone(integration: IntegrationStatus) {
+  if (integration.isActive) return "active";
+  if (integration.hasAccessToken || integration.hasVerifyToken || integration.phoneNumberId || integration.externalAccountId) return "pending";
+  return "error";
+}
+
+function integrationLabel(channel: string) {
+  const labels: Record<string, string> = {
+    whatsapp: "WhatsApp",
+    instagram: "Instagram",
+    facebook: "Facebook",
+    google: "Google",
+    stripe: "Stripe",
+    hubspot: "HubSpot",
+    notion: "Notion",
+    email: "Email"
+  };
+  return labels[channel] || channel;
+}
+
 export default function OnboardingPage() {
   const agent = getStoredSession();
   const [step, setStep] = useState(1);
@@ -97,6 +143,14 @@ export default function OnboardingPage() {
   const [replaceProducts, setReplaceProducts] = useState(false);
   const [replaceFaqs, setReplaceFaqs] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [documents, setDocuments] = useState<TenantDocument[]>([]);
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationStatus[]>([]);
+  const [auditLogs, setAuditLogs] = useState<TenantAuditLog[]>([]);
+  const [metadataCatalog, setMetadataCatalog] = useState<MetadataCatalog | null>(null);
+  const [opsLoading, setOpsLoading] = useState(false);
+  const [documentFiles, setDocumentFiles] = useState<File[]>([]);
+  const [documentStatus, setDocumentStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -132,6 +186,31 @@ export default function OnboardingPage() {
         setError(err instanceof Error ? err.message : "No se pudo cargar el estado actual del onboarding.");
       });
     return () => { mounted = false; };
+  }, []);
+
+  async function loadOperationalLayer() {
+    setOpsLoading(true);
+    try {
+      const [documentsResult, workflowsResult, integrationsResult, auditResult, metadataResult] = await Promise.allSettled([
+        getTenantDocuments(),
+        getWorkflows(),
+        getIntegrationsStatus(),
+        getTenantAuditTrail({ limit: 8 }),
+        getMetadataCatalog()
+      ]);
+
+      if (documentsResult.status === "fulfilled") setDocuments(documentsResult.value.documents || []);
+      if (workflowsResult.status === "fulfilled") setWorkflows(workflowsResult.value.workflows || []);
+      if (integrationsResult.status === "fulfilled") setIntegrations(integrationsResult.value.integrations || []);
+      if (auditResult.status === "fulfilled") setAuditLogs(auditResult.value.logs || []);
+      if (metadataResult.status === "fulfilled") setMetadataCatalog(metadataResult.value);
+    } finally {
+      setOpsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadOperationalLayer();
   }, []);
 
   const stats = useMemo(() => ({
@@ -239,6 +318,59 @@ export default function OnboardingPage() {
     }
   }
 
+  async function uploadKnowledgeDocuments() {
+    if (!documentFiles.length) {
+      setDocumentStatus("Selecciona uno o mas documentos para subirlos al motor de conocimiento.");
+      return;
+    }
+    setOpsLoading(true);
+    setDocumentStatus(null);
+    try {
+      const result = await uploadTenantDocuments({
+        files: documentFiles,
+        title: "Conocimiento operativo",
+        category: "agent_knowledge",
+        description: "Documentos usados por el agente para responder con informacion real del tenant."
+      });
+      setDocumentFiles([]);
+      setDocumentStatus(`${result.documents?.length || 0} documento(s) cargados al motor de conocimiento.`);
+      await loadOperationalLayer();
+    } catch (err) {
+      setDocumentStatus(err instanceof Error ? err.message : "No se pudieron subir los documentos.");
+    } finally {
+      setOpsLoading(false);
+    }
+  }
+
+  async function createStarterWorkflow() {
+    setOpsLoading(true);
+    setDocumentStatus(null);
+    try {
+      await createWorkflow({
+        name: "Derivacion comercial IA",
+        description: "Flujo base para detectar intencion alta, crear oportunidad y pedir intervencion humana.",
+        trigger: "conversation.ready_to_close",
+        entityType: "conversation",
+        steps: [
+          { title: "Evaluar intencion", owner: "Agente de Chat" },
+          { title: "Actualizar pipeline", owner: "Agente CRM Operativo" },
+          { title: "Notificar vendedor", owner: "Equipo humano" }
+        ],
+        actions: [
+          { type: "set_status", status: "READY_TO_CLOSE" },
+          { type: "create_notification", title: "Lead listo para cierre" }
+        ],
+        status: "active"
+      });
+      setDocumentStatus("Workflow base creado y disponible para el agente CRM.");
+      await loadOperationalLayer();
+    } catch (err) {
+      setDocumentStatus(err instanceof Error ? err.message : "No se pudo crear el workflow base.");
+    } finally {
+      setOpsLoading(false);
+    }
+  }
+
   function resetWizard() {
     setStep(1);
     setFiles([]);
@@ -277,6 +409,136 @@ export default function OnboardingPage() {
         <article><strong>{stats.existingProducts}</strong><span>Productos/servicios cargados</span></article>
         <article><strong>{stats.existingRules}</strong><span>Reglas / FAQs activas</span></article>
         <article><strong>{stats.imports}</strong><span>Importaciones recientes</span></article>
+      </section>
+
+      <section className="onboarding-core-panel">
+        <div className="section-heading-row">
+          <div>
+            <p className="eyebrow">Core conectado</p>
+            <h2>Motor de conocimiento, flujos y trazabilidad</h2>
+            <p className="meta-line">Capas base para que el agente trabaje con documentos, metadata, integraciones y auditoria real.</p>
+          </div>
+          <button className="ghost-btn" type="button" onClick={loadOperationalLayer} disabled={opsLoading}>
+            {opsLoading ? "Sincronizando..." : "Sincronizar"}
+          </button>
+        </div>
+
+        {documentStatus && <div className="status success onboarding-status-message">{documentStatus}</div>}
+
+        <div className="onboarding-core-grid">
+          <article className="onboarding-core-card span-2">
+            <div className="section-heading-row compact-row">
+              <div>
+                <p className="eyebrow">Document Engine</p>
+                <h3>Base de documentos RAG</h3>
+              </div>
+              <span className="badge accent">{documents.length} archivos</span>
+            </div>
+            <label className="document-upload-box compact">
+              <strong>Subir documentos al agente</strong>
+              <span>PDF, Excel, CSV, TXT o imagenes de apoyo operativo.</span>
+              <input
+                type="file"
+                multiple
+                accept=".pdf,.csv,.xlsx,.xls,.txt,.doc,.docx,image/*"
+                onChange={(event) => setDocumentFiles(Array.from(event.target.files || []))}
+              />
+            </label>
+            <div className="onboarding-selected-files">
+              {documentFiles.length ? documentFiles.map((file) => (
+                <span key={`${file.name}-${file.size}`}>{file.name} · {formatBytes(file.size)}</span>
+              )) : <span>Sin archivos seleccionados.</span>}
+            </div>
+            <button className="primary-btn" type="button" onClick={uploadKnowledgeDocuments} disabled={opsLoading || !documentFiles.length}>
+              Guardar documentos
+            </button>
+            <div className="onboarding-core-list">
+              {documents.slice(0, 4).map((document) => (
+                <a key={document.id} href={document.data?.url || "#"} target="_blank" rel="noreferrer">
+                  <strong>{document.title || document.data?.originalName || "Documento"}</strong>
+                  <span>{document.data?.category || "conocimiento"} · {formatBytes(document.data?.size)} · {formatShortDate(document.createdAt)}</span>
+                </a>
+              ))}
+              {!documents.length && <p className="meta-line">Aun no hay documentos del tenant en esta capa.</p>}
+            </div>
+          </article>
+
+          <article className="onboarding-core-card">
+            <div className="section-heading-row compact-row">
+              <div>
+                <p className="eyebrow">Workflow Engine</p>
+                <h3>Flujos operativos</h3>
+              </div>
+              <span className="badge">{workflows.length}</span>
+            </div>
+            <div className="onboarding-core-list compact-list">
+              {workflows.slice(0, 5).map((workflow) => (
+                <article key={workflow.id}>
+                  <strong>{workflow.title}</strong>
+                  <span>{workflow.status} · {String(workflow.data?.trigger || "sin trigger")}</span>
+                </article>
+              ))}
+              {!workflows.length && <p className="meta-line">Sin workflows activos todavia.</p>}
+            </div>
+            <button className="ghost-btn" type="button" onClick={createStarterWorkflow} disabled={opsLoading}>Crear flujo base</button>
+          </article>
+
+          <article className="onboarding-core-card">
+            <div className="section-heading-row compact-row">
+              <div>
+                <p className="eyebrow">Integration Engine</p>
+                <h3>Canales y conectores</h3>
+              </div>
+              <span className="badge">{integrations.filter((item) => item.isActive).length} activos</span>
+            </div>
+            <div className="integration-status-list">
+              {integrations.slice(0, 7).map((integration) => (
+                <article key={integration.id || integration.channel}>
+                  <span className={`status-light ${integrationTone(integration)}`} />
+                  <strong>{integration.label || integrationLabel(integration.channel)}</strong>
+                  <small>{integration.isActive ? "Activo" : integration.hasAccessToken ? "Pendiente" : "Sin configurar"}</small>
+                </article>
+              ))}
+              {!integrations.length && <p className="meta-line">Sin integraciones configuradas.</p>}
+            </div>
+          </article>
+
+          <article className="onboarding-core-card">
+            <div className="section-heading-row compact-row">
+              <div>
+                <p className="eyebrow">Metadata Engine</p>
+                <h3>Modelo dinamico</h3>
+              </div>
+              <span className="badge">{metadataCatalog?.entities?.length || 0} entidades</span>
+            </div>
+            <div className="metadata-chip-grid">
+              {(metadataCatalog?.entities || []).slice(0, 8).map((entity) => (
+                <span key={entity.recordType || entity.label}>{entity.label || entity.recordType}</span>
+              ))}
+              {!(metadataCatalog?.entities || []).length && <p className="meta-line">Sin catalogo de metadata cargado.</p>}
+            </div>
+            <p className="meta-line">Modulos activos: {metadataCatalog?.activeModules?.length || 0}</p>
+          </article>
+
+          <article className="onboarding-core-card">
+            <div className="section-heading-row compact-row">
+              <div>
+                <p className="eyebrow">Audit & Logging</p>
+                <h3>Trazabilidad</h3>
+              </div>
+              <span className="badge">{auditLogs.length}</span>
+            </div>
+            <div className="onboarding-core-list compact-list">
+              {auditLogs.slice(0, 5).map((log) => (
+                <article key={log.id}>
+                  <strong>{log.action}</strong>
+                  <span>{log.entity || "sistema"} · {formatShortDate(log.createdAt)}</span>
+                </article>
+              ))}
+              {!auditLogs.length && <p className="meta-line">Sin actividad auditada aun.</p>}
+            </div>
+          </article>
+        </div>
       </section>
 
       <section className="onboarding-steps">

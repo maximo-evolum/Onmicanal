@@ -26,6 +26,14 @@ import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { modulesRouter } from "./routes/modules.routes.js";
 import { industriesRouter } from "./routes/industries.routes.js";
 import { industryRecordsRouter } from "./routes/industry-records.routes.js";
+import { documentsRouter } from "./routes/documents.routes.js";
+import { workflowsRouter } from "./routes/workflows.routes.js";
+import { integrationsRouter } from "./routes/integrations.routes.js";
+import { metadataRouter } from "./routes/metadata.routes.js";
+import { auditRouter } from "./routes/audit.routes.js";
+import { searchRouter } from "./routes/search.routes.js";
+import { notificationsRouter } from "./routes/notifications.routes.js";
+import { backupsRouter } from "./routes/backups.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
 import { saasRouter } from "./routes/saas.routes.js";
 import { requireModule, tenantContext } from "./middleware/tenant-access.js";
@@ -37,6 +45,7 @@ import { runAutonomousSalesFollowUps } from "./services/autonomous-sales-followu
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
+const tenantDocumentsDir = path.resolve(__dirname, "../public/tenant-documents");
 
 app.use(express.json({ limit: "5mb" }));
 app.use(requestContext);
@@ -68,7 +77,7 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
-  if (!req.path.startsWith("/campaign-assets/")) {
+  if (!req.path.startsWith("/campaign-assets/") && !req.path.startsWith("/tenant-documents/")) {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
   }
   next();
@@ -77,6 +86,11 @@ app.use((req, res, next) => {
 app.use("/campaign-assets", express.static(campaignAssetsDir, {
   immutable: true,
   maxAge: "30d"
+}));
+
+app.use("/tenant-documents", express.static(tenantDocumentsDir, {
+  immutable: false,
+  maxAge: "1h"
 }));
 
 app.get("/health", async (_req, res) => {
@@ -136,6 +150,11 @@ app.get("/api/debug/session", ...protectedApi, async (req, res) => {
 });
 
 app.use("/api", ...protectedApi, modulesRouter);
+app.use("/api", ...protectedApi, metadataRouter);
+app.use("/api", ...protectedApi, auditRouter);
+app.use("/api", ...protectedApi, searchRouter);
+app.use("/api", ...protectedApi, notificationsRouter);
+app.use("/api", ...protectedApi, backupsRouter);
 app.use("/api", ...protectedApi, industriesRouter);
 app.use("/api", ...protectedApi, industryRecordsRouter);
 app.use("/api", ...protectedApi, adminRouter);
@@ -148,6 +167,9 @@ app.use("/api", ...protectedApi, conversationsRouter); // Inbox: auth + tenant, 
 app.use("/api", ...protectedApi, messagesRouter); // Mensajes manuales del inbox: auth + tenant
 app.use("/api", ...protectedApi, leadsRouter); // Lead panel universal usado desde Inbox
 app.use("/api", ...protectedApi, requireModule(MODULES.SALES), productRoutes);
+app.use("/api", ...protectedApi, requireModule(MODULES.DOCUMENTS), documentsRouter);
+app.use("/api", ...protectedApi, requireModule(MODULES.WORKFLOWS), workflowsRouter);
+app.use("/api", ...protectedApi, requireModule(MODULES.INTEGRATIONS), integrationsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.MARKETING), campaignsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), servicesRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), bookingsRouter);

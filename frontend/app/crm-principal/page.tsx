@@ -11,7 +11,13 @@ import {
   getMe,
   getMyModules,
   getOnboardingKnowledge,
-  type CrmOperationalDashboard
+  getNotifications,
+  globalSearch,
+  markAllNotificationsRead,
+  exportTenantBackup,
+  type CrmOperationalDashboard,
+  type GlobalSearchResult,
+  type TenantNotification
 } from "@/lib/api";
 import { AccountPill } from "@/components/account-pill";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
@@ -29,6 +35,7 @@ type LoadState = {
   onboarding: any | null;
   plan: AccountLevel;
   tenant: TenantSession | null;
+  notifications: TenantNotification[];
   error: string | null;
 };
 
@@ -275,9 +282,14 @@ export default function CrmPrincipalPage() {
     onboarding: null,
     plan: "STARTER",
     tenant: null,
+    notifications: [],
     error: null
   });
   const [searchTerm, setSearchTerm] = useState("");
+  const [remoteResults, setRemoteResults] = useState<GlobalSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [backupStatus, setBackupStatus] = useState("");
 
   const isDeveloper = state.session?.role === "SUPER_ADMIN";
   const visibleNav = (isDeveloper ? [...navItems, ...developerOnlyItems] : navItems).filter((item) => {
@@ -298,6 +310,8 @@ export default function CrmPrincipalPage() {
       getOnboardingKnowledge()
     ]);
 
+    const notifications = await getNotifications({ limit: 6 }).catch(() => ({ notifications: [] }));
+
     setState({
       session,
       conversations: conversations.status === "fulfilled" ? conversations.value : [],
@@ -309,6 +323,7 @@ export default function CrmPrincipalPage() {
       onboarding: onboarding.status === "fulfilled" ? onboarding.value : null,
       plan: modules.status === "fulfilled" ? accountLevelFromPlan(modules.value.plan) : accountLevelFromPlan(me.status === "fulfilled" ? me.value.tenant?.plan : null),
       tenant: me.status === "fulfilled" ? me.value.tenant : null,
+      notifications: notifications.notifications || [],
       error: [me, conversations, leadMetrics, crm, campaigns, modules, onboarding].some((item) => item.status === "rejected")
         ? "Algunos datos reales no pudieron cargarse. Se muestran datos disponibles y estructura base."
         : null
@@ -325,6 +340,35 @@ export default function CrmPrincipalPage() {
       }));
     });
   }, []);
+
+  useEffect(() => {
+    const query = searchTerm.trim();
+    if (query.length < 2) {
+      setRemoteResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      globalSearch(query, 8)
+        .then((data) => {
+          if (!cancelled) setRemoteResults(data.results || []);
+        })
+        .catch(() => {
+          if (!cancelled) setRemoteResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSearchLoading(false);
+        });
+    }, 220);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [searchTerm]);
 
   const currentSession = state.session;
 
@@ -463,15 +507,55 @@ export default function CrmPrincipalPage() {
   const searchResults = normalizedSearch
     ? searchIndex.filter((item) => item.label.trim().toLowerCase().startsWith(normalizedSearch)).slice(0, 8)
     : homeAccessItems.map((item) => ({ ...item, group: "Modulo" })).slice(0, 6);
+  const remoteSearchResults = normalizedSearch
+    ? remoteResults
+      .filter((item) => item.title.trim().toLowerCase().startsWith(normalizedSearch) || normalizedSearch.length > 1)
+      .slice(0, 6)
+    : [];
+  const unreadNotifications = state.notifications.filter((item) => item.status !== "READ").length;
+
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const first = searchResults[0];
+    const remoteFirst = remoteSearchResults[0];
+    if (!first && !remoteFirst) return;
+    if (!first && remoteFirst?.href) {
+      router.push(remoteFirst.href);
+      return;
+    }
     if (!first) return;
     if (first.href.startsWith("#")) {
       window.location.hash = first.href;
       return;
     }
     router.push(first.href);
+  }
+
+  async function readAllNotifications() {
+    await markAllNotificationsRead().catch(() => null);
+    setState((current) => ({
+      ...current,
+      notifications: current.notifications.map((item) => ({ ...item, status: "READ" }))
+    }));
+  }
+
+  async function downloadBackup() {
+    setBackupStatus("Generando respaldo...");
+    try {
+      const blob = await exportTenantBackup();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `evolum-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setBackupStatus("Respaldo descargado");
+      window.setTimeout(() => setBackupStatus(""), 2600);
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : "No se pudo descargar");
+    }
   }
 
   return (
@@ -527,24 +611,55 @@ export default function CrmPrincipalPage() {
             <button type="submit" aria-label="Buscar">Buscar</button>
             {normalizedSearch ? (
               <div className="crm-main-search-results">
-                {searchResults.length ? searchResults.map((result) => (
+                {searchResults.map((result) => (
                   result.href.startsWith("#") ? (
-                    <a href={result.href} key={`${result.group}-${result.label}`} onClick={() => setSearchTerm("")}>
-                      <small>{result.group}</small>
-                      <strong>{result.label}</strong>
-                      <span>{result.description}</span>
-                    </a>
-                  ) : (
-                    <Link href={result.href} key={`${result.group}-${result.label}`} onClick={() => setSearchTerm("")}>
-                      <small>{result.group}</small>
-                      <strong>{result.label}</strong>
-                      <span>{result.description}</span>
-                    </Link>
-                  )
-                )) : <div className="crm-main-search-empty">Sin resultados disponibles para esta cuenta.</div>}
+                  <a href={result.href} key={`${result.group}-${result.label}`} onClick={() => setSearchTerm("")}>
+                    <small>{result.group}</small>
+                    <strong>{result.label}</strong>
+                    <span>{result.description}</span>
+                  </a>
+                ) : (
+                  <Link href={result.href} key={`${result.group}-${result.label}`} onClick={() => setSearchTerm("")}>
+                    <small>{result.group}</small>
+                    <strong>{result.label}</strong>
+                    <span>{result.description}</span>
+                  </Link>
+                )
+                ))}
+                {remoteSearchResults.map((result) => (
+                  <Link href={result.href || "/crm-principal"} key={`${result.type}-${result.id}`} onClick={() => setSearchTerm("")}>
+                    <small>{result.type.replace("_", " ")}</small>
+                    <strong>{result.title}</strong>
+                    <span>{result.subtitle || "Resultado del workspace"}</span>
+                  </Link>
+                ))}
+                {searchLoading ? <div className="crm-main-search-empty">Buscando datos del workspace...</div> : null}
+                {!searchResults.length && !remoteSearchResults.length && !searchLoading ? <div className="crm-main-search-empty">Sin resultados disponibles para esta cuenta.</div> : null}
               </div>
             ) : null}
           </form>
+          <div className="crm-main-ops">
+            <button type="button" className="crm-main-ops-button" onClick={() => setNotificationsOpen((value) => !value)}>
+              Alertas <b>{unreadNotifications}</b>
+            </button>
+            {notificationsOpen ? (
+              <div className="crm-main-notification-popover">
+                <div>
+                  <strong>Notificaciones</strong>
+                  <button type="button" onClick={readAllNotifications}>Marcar leidas</button>
+                </div>
+                {state.notifications.length ? state.notifications.map((item) => (
+                  <Link href={item.targetUrl || "/crm-principal"} key={item.id} onClick={() => setNotificationsOpen(false)}>
+                    <small>{item.severity || "info"}</small>
+                    <strong>{item.title}</strong>
+                    <span>{item.body || "Evento operativo del workspace"}</span>
+                  </Link>
+                )) : <p>Sin notificaciones pendientes.</p>}
+              </div>
+            ) : null}
+            <button type="button" className="crm-main-ops-button" onClick={downloadBackup}>Respaldo</button>
+            {backupStatus ? <span className="crm-main-backup-status">{backupStatus}</span> : null}
+          </div>
           <div className="crm-main-profile">
             <AccountPill fallbackName={currentSession?.name || "Usuario"} />
             <span>{isDeveloper ? "Desarrollador" : currentSession?.role || "Cliente"}</span>
