@@ -16,7 +16,9 @@ function inferFieldType(value) {
 }
 
 function entityToSchema(entity = {}) {
-  const fields = entity.fields && typeof entity.fields === "object" ? entity.fields : {};
+  const fields = Array.isArray(entity.fields)
+    ? Object.fromEntries(entity.fields.map((field) => [field, { type: "string" }]))
+    : entity.fields && typeof entity.fields === "object" ? entity.fields : {};
   return {
     recordType: entity.type || entity.code || entity.name,
     label: entity.label || entity.name || entity.type,
@@ -69,7 +71,9 @@ metadataRouter.post("/metadata/validate", async (req, res) => {
       ? template.entities
       : Object.entries(template?.entities || {}).map(([type, config]) => ({ type, ...(config || {}) }));
     const schema = rawEntities.find((entity) => [entity.type, entity.code, entity.name].includes(recordType));
-    const fields = schema?.fields && typeof schema.fields === "object" ? schema.fields : {};
+    const fields = Array.isArray(schema?.fields)
+      ? Object.fromEntries(schema.fields.map((field) => [field, { type: "string" }]))
+      : schema?.fields && typeof schema.fields === "object" ? schema.fields : {};
     const missing = Object.entries(fields)
       .filter(([, config]) => Boolean(config?.required))
       .map(([key]) => key)

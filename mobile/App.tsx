@@ -2,6 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
+import * as XLSX from "xlsx";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -32,12 +33,14 @@ import {
   generateCampaignCopy,
   generateCampaignImages,
   getAdminTenants,
+  getBalancedIndustryAssignments,
   getBookings,
   getCampaignJob,
   getCampaigns,
   getConversations,
   getCrmOperationalDashboard,
   getIndustryRecords,
+  getIndustryUsers,
   getMe,
   getMessages,
   getMobileSession,
@@ -49,11 +52,12 @@ import {
   sendManualMessage,
   sendReengagementTemplate,
   takeConversation,
-  updateAdminTenantModules
+  updateAdminTenantModules,
+  updateIndustryRecord
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
-import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, IndustryRecord, Message, TenantSession } from "./src/types";
+import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, IndustryRecord, IndustryUser, Message, TenantSession } from "./src/types";
 
 type ScreenKey = "dashboard" | "inbox" | "agenda" | "pipeline" | "properties" | "customers" | "campaigns" | "admin";
 
@@ -77,6 +81,31 @@ type CampaignVariant = {
   mediaUrl?: string;
   publicUrl?: string;
   generationStage?: string;
+};
+
+type PropertyImportRow = {
+  rowNumber: number;
+  title: string;
+  propertyType: string;
+  operation: string;
+  price: number;
+  address: string;
+  material: string;
+  bedrooms: number;
+  bathrooms: number;
+  parking: number;
+  meters: number;
+  photoUrl: string;
+  observations: string;
+  ownerName: string;
+  ownerPhone: string;
+  ownerEmail: string;
+  captureOrigin: string;
+  captureDate: string;
+  assignedToName: string;
+  stage: string;
+  recognizedFields: number;
+  errors: string[];
 };
 
 const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: string }> = [
@@ -174,10 +203,132 @@ function recordText(record: IndustryRecord, key: string, fallback = "-") {
   return String(value);
 }
 
+function recordNumber(record: IndustryRecord, key: string, fallback = 0) {
+  const value = record.data?.[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const parsed = Number(String(value || "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+const REALTY_STAGES = ["Prospeccion", "Contacto", "Propuesta", "Negociacion", "Cierre"];
+
+function realtyStage(record: IndustryRecord) {
+  const value = recordText(record, "stage", record.status || REALTY_STAGES[0]);
+  return REALTY_STAGES.includes(value) ? value : REALTY_STAGES[0];
+}
+
+function realtyPrice(record: IndustryRecord) {
+  return recordNumber(record, "price") || recordNumber(record, "value") || recordNumber(record, "askingPrice");
+}
+
+function commissionProjection(value: number) {
+  const total = Math.round(value * 0.02);
+  return {
+    total,
+    seller: Math.round(total * 0.65),
+    platform: Math.round(total * 0.35)
+  };
+}
+
 function dataUrlFromFile(name?: string | null, mimeType?: string | null, base64?: string | null) {
   if (!base64) return "";
   const safeType = mimeType || (name?.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
   return `data:${safeType};base64,${base64}`;
+}
+
+function normalizeImportKey(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function normalizedImportRow(row: Record<string, unknown>) {
+  return Object.entries(row || {}).reduce<Record<string, unknown>>((acc, [key, value]) => {
+    acc[normalizeImportKey(key)] = value;
+    return acc;
+  }, {});
+}
+
+function importValue(row: Record<string, unknown>, aliases: string[]) {
+  const normalized = normalizedImportRow(row);
+  for (const alias of aliases) {
+    const value = normalized[normalizeImportKey(alias)];
+    if (value !== undefined && value !== null && String(value).trim() !== "") return value;
+  }
+  return "";
+}
+
+function importText(row: Record<string, unknown>, aliases: string[], fallback = "") {
+  const value = importValue(row, aliases);
+  return String(value ?? fallback).trim();
+}
+
+function importNumber(row: Record<string, unknown>, aliases: string[]) {
+  const value = importValue(row, aliases);
+  const parsed = Number(String(value || "0").replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizePropertyStage(value: string) {
+  const key = normalizeImportKey(value);
+  if (key.includes("contact")) return "Contacto";
+  if (key.includes("propuesta")) return "Propuesta";
+  if (key.includes("negoci")) return "Negociacion";
+  if (key.includes("cierre") || key.includes("ganad")) return "Cierre";
+  return "Prospeccion";
+}
+
+function parsePropertyImportRow(row: Record<string, unknown>, index: number): PropertyImportRow {
+  const title = importText(row, ["Nombre propiedad", "Propiedad", "Titulo", "Nombre", "Codigo"]);
+  const address = importText(row, ["Direccion", "Ubicacion", "Comuna", "Direccion / comuna"]);
+  const price = importNumber(row, ["Precio", "Valor", "Precio CLP", "Valor cartera"]);
+  const propertyType = importText(row, ["Tipo propiedad", "Tipo", "Clase"], "casa").toLowerCase();
+  const operation = importText(row, ["Operacion", "Tipo operacion", "Venta/arriendo"], "venta").toLowerCase();
+  const assignedToName = importText(row, ["Corredor", "Vendedor", "Asignado a", "Ejecutivo"]);
+  const recognizedFields = [
+    title,
+    address,
+    price,
+    propertyType,
+    operation,
+    importText(row, ["Material", "Material principal"]),
+    importNumber(row, ["Piezas", "Dormitorios", "Habitaciones"]),
+    importNumber(row, ["Banos", "Baños"]),
+    importNumber(row, ["Estacionamientos", "Estac"]),
+    importNumber(row, ["M2", "Metros", "Metros cuadrados"]),
+    assignedToName,
+    importText(row, ["Observaciones", "Notas"])
+  ].filter(Boolean).length;
+  const errors = [];
+  if (!title && !address) errors.push("Falta nombre o direccion");
+  if (!price) errors.push("Falta precio");
+
+  return {
+    rowNumber: index + 2,
+    title: title || address || `Propiedad fila ${index + 2}`,
+    propertyType,
+    operation: operation.includes("arriendo") ? "arriendo" : "venta",
+    price,
+    address,
+    material: importText(row, ["Material", "Material principal"]),
+    bedrooms: importNumber(row, ["Piezas", "Dormitorios", "Habitaciones"]),
+    bathrooms: importNumber(row, ["Banos", "Baños"]),
+    parking: importNumber(row, ["Estacionamientos", "Estac"]),
+    meters: importNumber(row, ["M2", "Metros", "Metros cuadrados"]),
+    photoUrl: importText(row, ["Foto", "URL foto", "URL foto principal"]),
+    observations: importText(row, ["Observaciones", "Notas", "Descripcion"]),
+    ownerName: importText(row, ["Propietario", "Nombre propietario", "Dueño"]),
+    ownerPhone: importText(row, ["Telefono propietario", "Fono propietario", "Telefono"]),
+    ownerEmail: importText(row, ["Email propietario", "Correo propietario", "Email"]),
+    captureOrigin: importText(row, ["Origen captacion", "Origen"], "excel_import"),
+    captureDate: importText(row, ["Fecha captacion", "Fecha"]),
+    assignedToName,
+    stage: normalizePropertyStage(importText(row, ["Etapa", "Estado comercial", "Pipeline"])),
+    recognizedFields,
+    errors
+  };
 }
 
 export default function App() {
@@ -934,7 +1085,7 @@ function PropertiesScreen({
   profile: IndustryProfile;
   refreshing: boolean;
   onRefresh: () => void;
-  onCreated: () => void;
+  onCreated: () => void | Promise<void>;
 }) {
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
@@ -948,6 +1099,66 @@ function PropertiesScreen({
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoFileName, setPhotoFileName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [importFileName, setImportFileName] = useState("");
+  const [importPreview, setImportPreview] = useState<PropertyImportRow[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState("");
+  const [workspaceLoading, setWorkspaceLoading] = useState(false);
+  const [industryUsers, setIndustryUsers] = useState<IndustryUser[]>([]);
+  const [leads, setLeads] = useState<IndustryRecord[]>([]);
+  const [visits, setVisits] = useState<IndustryRecord[]>([]);
+  const [deals, setDeals] = useState<IndustryRecord[]>([]);
+  const [forecasts, setForecasts] = useState<IndustryRecord[]>([]);
+  const [assignmentPreview, setAssignmentPreview] = useState<Array<{ item: IndustryRecord; assignee: IndustryUser; order: number; mode: string }>>([]);
+  const [leadName, setLeadName] = useState("");
+  const [leadPhone, setLeadPhone] = useState("");
+  const [leadInterest, setLeadInterest] = useState("");
+  const [visitClient, setVisitClient] = useState("");
+  const [visitDate, setVisitDate] = useState("");
+  const [dealValue, setDealValue] = useState("");
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const validImportRows = useMemo(() => importPreview.filter((row) => !row.errors.length), [importPreview]);
+  const sellers = useMemo(() => {
+    const activeUsers = industryUsers.filter((user) => user.isActive !== false);
+    const sellerUsers = activeUsers.filter((user) => String(user.role || "").toUpperCase().includes("SELLER"));
+    return sellerUsers.length ? sellerUsers : activeUsers;
+  }, [industryUsers]);
+  const selectedProperty = records.find((record) => record.id === selectedPropertyId) || records[0];
+  const portfolioValue = records.reduce((sum, record) => sum + realtyPrice(record), 0);
+  const readyRecords = records.filter((record) => ["Contacto", "Propuesta", "Negociacion", "Cierre"].includes(realtyStage(record)));
+  const predictiveScore = records.length
+    ? Math.min(100, Math.round((readyRecords.length / records.length) * 45 + Math.min(visits.length * 7, 25) + Math.min(deals.length * 15, 30)))
+    : 0;
+  const assignedCount = records.filter((record) => record.assignedToId || record.data?.assignedToName).length;
+
+  async function loadRealtyWorkspace() {
+    try {
+      setWorkspaceLoading(true);
+      const [usersData, leadsData, visitsData, dealsData, forecastData] = await Promise.all([
+        getIndustryUsers().catch(() => [] as IndustryUser[]),
+        getIndustryRecords("lead").catch(() => [] as IndustryRecord[]),
+        getIndustryRecords("visit").catch(() => [] as IndustryRecord[]),
+        getIndustryRecords("deal").catch(() => [] as IndustryRecord[]),
+        getIndustryRecords("forecast").catch(() => [] as IndustryRecord[])
+      ]);
+      setIndustryUsers(usersData);
+      setLeads(leadsData);
+      setVisits(visitsData);
+      setDeals(dealsData);
+      setForecasts(forecastData);
+      if (!selectedPropertyId && records[0]) setSelectedPropertyId(records[0].id);
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadRealtyWorkspace();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedPropertyId && records[0]) setSelectedPropertyId(records[0].id);
+  }, [records.length, selectedPropertyId]);
 
   async function pickPhoto() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -965,6 +1176,148 @@ function PropertiesScreen({
     const base64 = asset.base64 || await FileSystem.readAsStringAsync(asset.uri, { encoding: "base64" as any });
     setPhotoUrl(dataUrlFromFile(asset.fileName || "propiedad.jpg", asset.mimeType || "image/jpeg", base64));
     setPhotoFileName(asset.fileName || "foto-propiedad.jpg");
+  }
+
+  async function pickPropertyExcel() {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: [
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+        "text/csv",
+        "text/comma-separated-values"
+      ],
+      copyToCacheDirectory: true,
+      multiple: false
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    if (asset.size && asset.size > 6 * 1024 * 1024) {
+      Alert.alert("Archivo muy grande", "Sube un Excel de hasta 6 MB para mantener la app rapida.");
+      return;
+    }
+
+    try {
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: "base64" as any });
+      const workbook = XLSX.read(base64, { type: "base64", cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) {
+        Alert.alert("Excel sin datos", "No se encontro una hoja valida.");
+        return;
+      }
+
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
+      const preview = rows.slice(0, 250).map((row, index) => parsePropertyImportRow(row, index));
+      setImportFileName(asset.name || "propiedades.xlsx");
+      setImportPreview(preview);
+      setImportSummary(`${preview.filter((row) => !row.errors.length).length} listas / ${preview.length} filas leidas`);
+    } catch (error) {
+      setImportPreview([]);
+      setImportSummary("");
+      Alert.alert("No se pudo leer el Excel", error instanceof Error ? error.message : "Revisa el formato del archivo.");
+    }
+  }
+
+  async function importPropertiesFromExcel() {
+    if (!validImportRows.length) {
+      Alert.alert("Sin filas validas", "Primero selecciona un Excel con propiedades completas.");
+      return;
+    }
+
+    const importBatchId = `mobile-property-import-${Date.now()}`;
+    const importedIds: string[] = [];
+    let skippedRows = importPreview.length - validImportRows.length;
+
+    try {
+      setImporting(true);
+      for (const row of validImportRows) {
+        let ownerId = "";
+        if (row.ownerName) {
+          const owner = await createIndustryRecord({
+            recordType: "owner",
+            title: row.ownerName,
+            status: "active",
+            data: {
+              name: row.ownerName,
+              phone: row.ownerPhone,
+              email: row.ownerEmail,
+              origin: row.captureOrigin,
+              source: "mobile_excel_import",
+              importBatchId,
+              importFileName,
+              importRowNumber: row.rowNumber
+            }
+          });
+          ownerId = owner.id;
+        }
+
+        const property = await createIndustryRecord({
+          recordType: "property",
+          title: row.title,
+          status: "available",
+          data: {
+            propertyType: row.propertyType,
+            operation: row.operation,
+            price: row.price,
+            location: row.address,
+            address: row.address,
+            material: row.material,
+            rooms: row.bedrooms,
+            bedrooms: row.bedrooms,
+            bathrooms: row.bathrooms,
+            parking: row.parking,
+            meters: row.meters,
+            photoUrl: row.photoUrl,
+            notes: row.observations,
+            observations: row.observations,
+            ownerId,
+            ownerName: row.ownerName,
+            captureOrigin: row.captureOrigin,
+            captureDate: row.captureDate,
+            assignedToName: row.assignedToName,
+            stage: row.stage,
+            source: "mobile_excel_import",
+            importBatchId,
+            importFileName,
+            importRowNumber: row.rowNumber,
+            recognizedFields: row.recognizedFields,
+            predictiveLearning: {
+              enabled: true,
+              source: "mobile_bulk_property_upload",
+              confidenceBase: Math.min(100, row.recognizedFields * 8)
+            }
+          }
+        });
+        importedIds.push(property.id);
+      }
+
+      await createIndustryRecord({
+        recordType: "ai_interaction",
+        title: `Aprendizaje inmobiliario movil ${new Date().toLocaleDateString("es-CL")}`,
+        status: "processed",
+        data: {
+          agentType: "realty_mobile_excel_learning",
+          context: "Importacion masiva de propiedades desde app movil para acelerar aprendizaje predictivo.",
+          result: `${importedIds.length} propiedades importadas`,
+          requiresSupervision: false,
+          importBatchId,
+          importFileName,
+          importedPropertyIds: importedIds,
+          skippedRows
+        }
+      });
+
+      Alert.alert("Excel importado", `${importedIds.length} propiedades quedaron cargadas para la IA predictiva.`);
+      setImportPreview([]);
+      setImportFileName("");
+      setImportSummary("");
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo importar", error instanceof Error ? error.message : "Revisa la conexion y el formato.");
+    } finally {
+      setImporting(false);
+    }
   }
 
   async function saveProperty() {
@@ -989,6 +1342,7 @@ function PropertiesScreen({
           notes,
           photoUrl,
           photoFileName,
+          stage: "Prospeccion",
           source: "mobile"
         }
       });
@@ -1012,11 +1366,324 @@ function PropertiesScreen({
     }
   }
 
+  async function calculateAssignments() {
+    try {
+      setWorkspaceLoading(true);
+      const result = await getBalancedIndustryAssignments({ recordType: "property", assigneeRole: "SELLER" });
+      setAssignmentPreview(result.assignments || []);
+      if (!result.assignments?.length) Alert.alert("Sin reparto pendiente", "No hay propiedades o vendedores disponibles para repartir.");
+    } catch (error) {
+      Alert.alert("No se pudo calcular", error instanceof Error ? error.message : "Revisa vendedores y propiedades.");
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function applyAssignments() {
+    if (!assignmentPreview.length) {
+      Alert.alert("Primero calcula", "Genera una propuesta de reparto antes de aplicarla.");
+      return;
+    }
+    try {
+      setWorkspaceLoading(true);
+      await Promise.all(assignmentPreview.map(({ item, assignee }) => updateIndustryRecord(item.id, {
+        assignedToId: assignee.id,
+        data: {
+          ...(item.data || {}),
+          assignedToName: assignee.name,
+          assignmentMode: "mobile_balanced",
+          assignedAt: new Date().toISOString()
+        }
+      })));
+      Alert.alert("Reparto aplicado", "Las propiedades quedaron asignadas al equipo comercial.");
+      setAssignmentPreview([]);
+      await onCreated();
+      await loadRealtyWorkspace();
+    } catch (error) {
+      Alert.alert("No se pudo aplicar", error instanceof Error ? error.message : "Intenta nuevamente.");
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function updatePropertyStage(record: IndustryRecord, stage: string) {
+    try {
+      await updateIndustryRecord(record.id, {
+        status: stage === "Cierre" ? "closed" : "active",
+        data: { ...(record.data || {}), stage, updatedFrom: "mobile_realty" }
+      });
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo mover etapa", error instanceof Error ? error.message : "Revisa la conexion.");
+    }
+  }
+
+  async function assignProperty(record: IndustryRecord, assigneeId: string) {
+    const assignee = sellers.find((user) => user.id === assigneeId);
+    try {
+      await updateIndustryRecord(record.id, {
+        assignedToId: assigneeId || null,
+        data: {
+          ...(record.data || {}),
+          assignedToName: assignee?.name || "",
+          assignmentMode: assigneeId ? "mobile_manual" : "unassigned",
+          assignedAt: assigneeId ? new Date().toISOString() : null
+        }
+      });
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo asignar", error instanceof Error ? error.message : "Revisa la conexion.");
+    }
+  }
+
+  async function createPredictiveSnapshot() {
+    try {
+      setWorkspaceLoading(true);
+      const projectedValue = readyRecords.reduce((sum, record) => sum + Math.round(realtyPrice(record) * 0.65), 0);
+      await createIndustryRecord({
+        recordType: "forecast",
+        title: `Forecast inmobiliario movil ${new Date().toLocaleDateString("es-CL")}`,
+        status: "active",
+        data: {
+          source: "mobile_realty_predictive_snapshot",
+          properties: records.length,
+          assigned: assignedCount,
+          visits: visits.length,
+          deals: deals.length,
+          readyRecords: readyRecords.length,
+          portfolioValue,
+          projectedValue,
+          predictiveScore
+        }
+      });
+      await createIndustryRecord({
+        recordType: "ai_interaction",
+        title: "Snapshot IA inmobiliaria",
+        status: "processed",
+        data: {
+          agentType: "realty_predictive_mobile",
+          context: "La app consolido propiedades, visitas, asignaciones y cierres para mejorar prediccion comercial.",
+          predictiveScore,
+          requiresSupervision: predictiveScore < 45
+        }
+      });
+      Alert.alert("IA actualizada", "Se guardo un snapshot predictivo para la vertical inmobiliaria.");
+      await loadRealtyWorkspace();
+    } catch (error) {
+      Alert.alert("No se pudo actualizar IA", error instanceof Error ? error.message : "Intenta nuevamente.");
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function createCaptureOpportunity() {
+    if (!leadName.trim()) {
+      Alert.alert("Falta contacto", "Agrega el nombre del interesado o propietario.");
+      return;
+    }
+    try {
+      setWorkspaceLoading(true);
+      await createIndustryRecord({
+        recordType: "lead",
+        title: leadName.trim(),
+        status: "new",
+        data: {
+          name: leadName.trim(),
+          phone: leadPhone,
+          interest: leadInterest,
+          propertyId: selectedProperty?.id,
+          propertyTitle: selectedProperty?.title,
+          source: "mobile_realty_capture",
+          stage: "Prospeccion"
+        }
+      });
+      Alert.alert("Lead creado", "La oportunidad quedo disponible para seguimiento inmobiliario.");
+      setLeadName("");
+      setLeadPhone("");
+      setLeadInterest("");
+      await loadRealtyWorkspace();
+    } catch (error) {
+      Alert.alert("No se pudo crear lead", error instanceof Error ? error.message : "Revisa la conexion.");
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function createVisit() {
+    if (!selectedProperty) {
+      Alert.alert("Sin propiedad", "Carga o selecciona una propiedad primero.");
+      return;
+    }
+    if (!visitClient.trim() || !visitDate.trim()) {
+      Alert.alert("Faltan datos", "Agrega cliente y fecha/hora de visita.");
+      return;
+    }
+    try {
+      setWorkspaceLoading(true);
+      await createIndustryRecord({
+        recordType: "visit",
+        title: `Visita ${selectedProperty.title}`,
+        status: "scheduled",
+        assignedToId: selectedProperty.assignedToId || null,
+        data: {
+          client: visitClient.trim(),
+          scheduledAt: visitDate.trim(),
+          propertyId: selectedProperty.id,
+          propertyTitle: selectedProperty.title,
+          location: recordText(selectedProperty, "location", ""),
+          assignedToName: recordText(selectedProperty, "assignedToName", ""),
+          source: "mobile_realty_visit"
+        }
+      });
+      Alert.alert("Visita agendada", "La visita quedo registrada en la vertical inmobiliaria.");
+      setVisitClient("");
+      setVisitDate("");
+      await loadRealtyWorkspace();
+    } catch (error) {
+      Alert.alert("No se pudo crear visita", error instanceof Error ? error.message : "Revisa los datos.");
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
+  async function createDeal() {
+    if (!selectedProperty) {
+      Alert.alert("Sin propiedad", "Selecciona una propiedad para cerrar.");
+      return;
+    }
+    const value = Number(String(dealValue || realtyPrice(selectedProperty)).replace(/[^\d.-]/g, ""));
+    if (!Number.isFinite(value) || value <= 0) {
+      Alert.alert("Valor invalido", "Agrega un valor de cierre valido.");
+      return;
+    }
+    const commission = commissionProjection(value);
+    try {
+      setWorkspaceLoading(true);
+      await createIndustryRecord({
+        recordType: "deal",
+        title: `Cierre ${selectedProperty.title}`,
+        status: "open",
+        assignedToId: selectedProperty.assignedToId || null,
+        data: {
+          propertyId: selectedProperty.id,
+          propertyTitle: selectedProperty.title,
+          value,
+          commission,
+          assignedToName: recordText(selectedProperty, "assignedToName", ""),
+          source: "mobile_realty_deal"
+        }
+      });
+      await updateIndustryRecord(selectedProperty.id, {
+        status: "closed",
+        data: {
+          ...(selectedProperty.data || {}),
+          stage: "Cierre",
+          dealValue: value,
+          commission
+        }
+      });
+      Alert.alert("Cierre registrado", `Comision estimada: ${money(commission.total)}.`);
+      setDealValue("");
+      await onCreated();
+      await loadRealtyWorkspace();
+    } catch (error) {
+      Alert.alert("No se pudo crear cierre", error instanceof Error ? error.message : "Revisa la conexion.");
+    } finally {
+      setWorkspaceLoading(false);
+    }
+  }
+
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>Rubro {profile.label}</Text>
       <Text style={styles.screenTitle}>Propiedades</Text>
       <Text style={styles.screenSubtitle}>Carga viviendas, fotos y atributos comerciales para asignarlas al equipo.</Text>
+      <View style={styles.compactMetrics}>
+        <Kpi label="Propiedades" value={records.length} detail={`${assignedCount} asignadas`} />
+        <Kpi label="Cartera" value={portfolioValue ? money(portfolioValue) : "Sin precio"} detail={`${sellers.length} vendedores`} />
+      </View>
+      <View style={styles.compactMetrics}>
+        <Kpi label="Visitas" value={visits.length} detail={`${leads.length} leads`} />
+        <Kpi label="Score IA" value={`${predictiveScore}%`} detail={`${forecasts.length} forecasts`} />
+      </View>
+      <Panel title="Importar Excel para IA">
+        <Text style={styles.muted}>Sube una planilla con propiedades, propietarios, atributos y vendedor sugerido. EVOLUM creara fichas y dejara metadata para el aprendizaje predictivo.</Text>
+        <View style={styles.importActionRow}>
+          <TouchableOpacity style={styles.secondaryButton} onPress={pickPropertyExcel} disabled={importing}>
+            <Text style={styles.secondaryButtonText}>{importFileName || "Seleccionar Excel"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.primaryButton} onPress={importPropertiesFromExcel} disabled={importing || !validImportRows.length}>
+            <Text style={styles.primaryButtonText}>{importing ? "Importando..." : "Importar"}</Text>
+          </TouchableOpacity>
+        </View>
+        {!!importSummary && <Text style={styles.greenText}>{importSummary}</Text>}
+        {!!importPreview.length && (
+          <View style={styles.importPreviewBox}>
+            {importPreview.slice(0, 5).map((row) => (
+              <View key={`${row.rowNumber}-${row.title}`} style={[styles.importPreviewRow, row.errors.length ? styles.importPreviewRowError : null]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>{row.title}</Text>
+                  <Text style={styles.muted} numberOfLines={1}>{row.address || "Sin direccion"} / {row.assignedToName || "Sin vendedor"}</Text>
+                </View>
+                <Text style={row.errors.length ? styles.dangerText : styles.greenText}>{row.errors.length ? "Revisar" : money(row.price)}</Text>
+              </View>
+            ))}
+            {importPreview.length > 5 && <Text style={styles.muted}>Vista previa de 5 filas. Se importaran todas las filas validas.</Text>}
+          </View>
+        )}
+      </Panel>
+      <Panel title="Reparto por vendedor">
+        <Text style={styles.muted}>Distribuye propiedades sin vendedor de forma balanceada y deja metadata para auditoria comercial.</Text>
+        <View style={styles.formRow}>
+          <TouchableOpacity style={[styles.secondaryButton, styles.formHalf]} onPress={calculateAssignments} disabled={workspaceLoading}>
+            <Text style={styles.secondaryButtonText}>{workspaceLoading ? "Calculando..." : "Calcular reparto"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.primaryButton, styles.formHalf]} onPress={applyAssignments} disabled={!assignmentPreview.length || workspaceLoading}>
+            <Text style={styles.primaryButtonText}>Aplicar</Text>
+          </TouchableOpacity>
+        </View>
+        {!!assignmentPreview.length && assignmentPreview.slice(0, 6).map(({ item, assignee }) => (
+          <ListRow key={`${item.id}-${assignee.id}`} left="RE" title={item.title} subtitle={`Asignar a ${assignee.name}`} right={recordText(item, "location", "")} />
+        ))}
+        {!assignmentPreview.length && <Text style={styles.muted}>{sellers.length ? `${sellers.length} vendedores disponibles.` : "Crea usuarios vendedores para activar reparto automatico."}</Text>}
+      </Panel>
+      <Panel title="IA predictiva inmobiliaria">
+        <Text style={styles.muted}>Consolida propiedades, visitas, cierres y asignaciones para acelerar aprendizaje comercial de la vertical.</Text>
+        <View style={styles.compactMetrics}>
+          <Kpi label="Listas" value={readyRecords.length} detail="contacto o mas" />
+          <Kpi label="Forecast" value={portfolioValue ? money(Math.round(portfolioValue * 0.65)) : "$0"} detail="ponderado" />
+        </View>
+        <TouchableOpacity style={styles.primaryButton} onPress={createPredictiveSnapshot} disabled={workspaceLoading}>
+          <Text style={styles.primaryButtonText}>{workspaceLoading ? "Actualizando..." : "Crear snapshot IA"}</Text>
+        </TouchableOpacity>
+      </Panel>
+      <Panel title="Captacion y seguimiento">
+        <TextInput style={styles.input} value={leadName} onChangeText={setLeadName} placeholder="Nombre del cliente o propietario" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={leadPhone} onChangeText={setLeadPhone} placeholder="Telefono" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
+        <TextInput style={styles.input} value={leadInterest} onChangeText={setLeadInterest} placeholder="Interes, presupuesto o zona" placeholderTextColor={colors.muted} />
+        <TouchableOpacity style={styles.primaryButton} onPress={createCaptureOpportunity} disabled={workspaceLoading}>
+          <Text style={styles.primaryButtonText}>Crear lead inmobiliario</Text>
+        </TouchableOpacity>
+      </Panel>
+      <Panel title="Visitas y cierres">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+          {records.slice(0, 10).map((record) => (
+            <TouchableOpacity key={record.id} style={[styles.filterPill, selectedProperty?.id === record.id && styles.filterPillActive]} onPress={() => setSelectedPropertyId(record.id)}>
+              <Text style={[styles.filterText, selectedProperty?.id === record.id && styles.filterTextActive]} numberOfLines={1}>{record.title}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <Text style={styles.muted}>{selectedProperty ? `Seleccionada: ${selectedProperty.title}` : "Selecciona una propiedad"}</Text>
+        <TextInput style={styles.input} value={visitClient} onChangeText={setVisitClient} placeholder="Cliente para visita" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={visitDate} onChangeText={setVisitDate} placeholder="Fecha y hora visita ej: 2026-07-10 16:00" placeholderTextColor={colors.muted} />
+        <TouchableOpacity style={styles.secondaryButton} onPress={createVisit} disabled={workspaceLoading}>
+          <Text style={styles.secondaryButtonText}>Agendar visita</Text>
+        </TouchableOpacity>
+        <TextInput style={styles.input} value={dealValue} onChangeText={setDealValue} placeholder="Valor de cierre CLP" placeholderTextColor={colors.muted} keyboardType="numeric" />
+        <TouchableOpacity style={styles.primaryButton} onPress={createDeal} disabled={workspaceLoading}>
+          <Text style={styles.primaryButtonText}>Registrar cierre</Text>
+        </TouchableOpacity>
+      </Panel>
       <Panel title="Nueva propiedad">
         <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="Nombre, direccion o codigo" placeholderTextColor={colors.muted} />
         <TextInput style={styles.input} value={price} onChangeText={setPrice} placeholder="Valor o rango" placeholderTextColor={colors.muted} keyboardType="numeric" />
@@ -1041,14 +1708,37 @@ function PropertiesScreen({
       </Panel>
       <Panel title="Propiedades activas">
         {records.slice(0, 12).map((record) => (
-          <View key={record.id} style={styles.recordCard}>
-            <View style={styles.recordMedia}>
-              {recordText(record, "photoUrl", "") ? <Image source={{ uri: recordText(record, "photoUrl", "") }} style={styles.recordImage} resizeMode="cover" /> : <Text style={styles.avatarText}>PR</Text>}
+          <View key={record.id} style={styles.propertyCardMobile}>
+            <View style={styles.recordCard}>
+              <View style={styles.recordMedia}>
+                {recordText(record, "photoUrl", "") ? <Image source={{ uri: recordText(record, "photoUrl", "") }} style={styles.recordImage} resizeMode="cover" /> : <Text style={styles.avatarText}>PR</Text>}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>{record.title}</Text>
+                <Text style={styles.muted}>{recordText(record, "location", "Sin ubicacion")} / {recordText(record, "meters", "0")} m2</Text>
+                <Text style={styles.greenText}>{realtyPrice(record) ? money(realtyPrice(record)) : recordText(record, "price", "Sin precio")}</Text>
+                <Text style={styles.muted}>Vendedor: {record.assignedTo?.name || recordText(record, "assignedToName", "Sin asignar")}</Text>
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{record.title}</Text>
-              <Text style={styles.muted}>{recordText(record, "location", "Sin ubicacion")} / {recordText(record, "meters", "0")} m2</Text>
-              <Text style={styles.greenText}>{recordText(record, "price", "Sin precio")}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+              {REALTY_STAGES.map((stage) => (
+                <TouchableOpacity key={stage} style={[styles.filterPill, realtyStage(record) === stage && styles.filterPillActive]} onPress={() => updatePropertyStage(record, stage)}>
+                  <Text style={[styles.filterText, realtyStage(record) === stage && styles.filterTextActive]}>{stage}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            {!!sellers.length && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+                {sellers.slice(0, 8).map((seller) => (
+                  <TouchableOpacity key={seller.id} style={[styles.filterPill, record.assignedToId === seller.id && styles.filterPillActive]} onPress={() => assignProperty(record, seller.id)}>
+                    <Text style={[styles.filterText, record.assignedToId === seller.id && styles.filterTextActive]}>{seller.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <View style={styles.compactMetrics}>
+              <Kpi label="Etapa" value={realtyStage(record)} detail="pipeline" />
+              <Kpi label="Comision" value={realtyPrice(record) ? money(commissionProjection(realtyPrice(record)).total) : "$0"} detail="estimada" />
             </View>
           </View>
         ))}
@@ -1749,6 +2439,30 @@ const styles = StyleSheet.create({
   },
   kpiValue: { color: colors.text, fontSize: 28, fontWeight: "900", marginVertical: 6 },
   greenText: { color: colors.green, fontSize: 12 },
+  dangerText: { color: "#ff6b8a", fontSize: 12, fontWeight: "900" },
+  importActionRow: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "stretch"
+  },
+  importPreviewBox: {
+    gap: 8,
+    marginTop: 2
+  },
+  importPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    backgroundColor: colors.panel2,
+    padding: 12
+  },
+  importPreviewRowError: {
+    borderColor: "rgba(255,107,138,0.65)",
+    backgroundColor: "rgba(255,107,138,0.1)"
+  },
   compactMetrics: { flexDirection: "row", gap: 10 },
   panel: {
     borderWidth: 1,
@@ -1998,6 +2712,14 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   recordImage: { width: "100%", height: "100%" },
+  propertyCardMobile: {
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(168,85,247,0.18)",
+    borderRadius: 18,
+    padding: 10,
+    backgroundColor: "rgba(255,255,255,0.025)"
+  },
   documentChip: {
     minHeight: 42,
     borderWidth: 1,

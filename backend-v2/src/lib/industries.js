@@ -34,7 +34,7 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
   REAL_ESTATE: {
     code: "REAL_ESTATE",
     name: "Inmobiliaria",
-    summary: "Propiedades, vendedores, visitas, pipeline inmobiliario y campanas.",
+    summary: "Broker inmobiliario con propiedades, propietarios, corredores, visitas, negocios, comisiones y base para IA.",
     modules: [
       moduleItem(MODULES.INBOX, "Inbox inmobiliario", "Consultas y seguimientos por propiedad."),
       moduleItem(MODULES.PROPERTIES, "Propiedades", "Ficha con fotos, material, banos, piezas, estacionamientos, m2 y observaciones.", "PRO"),
@@ -47,14 +47,145 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     ],
     entities: [
       {
-        key: "property",
+        type: "property",
         label: "Vivienda / propiedad",
-        fields: ["fotos", "material", "banos", "piezas", "estacionamientos", "m2", "precio", "direccion", "observaciones"]
+        fields: {
+          address: { type: "string", required: true },
+          propertyType: { type: "string", required: true, options: ["casa", "departamento", "terreno", "oficina", "local"] },
+          operation: { type: "string", required: true, options: ["venta", "arriendo"] },
+          price: { type: "number", required: true },
+          stage: { type: "string", required: true },
+          status: { type: "string", required: true },
+          meters: "number",
+          bedrooms: "number",
+          bathrooms: "number",
+          parking: "number",
+          material: "string",
+          photoUrl: "string",
+          captureDate: "string",
+          captureOrigin: { type: "string", options: ["TGI", "referido", "captacion_evolum"] },
+          observations: "string",
+          source: { type: "string", options: ["manual", "excel_import", "api", "agent"] },
+          importBatchId: "string",
+          importFileName: "string",
+          importRowNumber: "number",
+          recognizedFields: "number",
+          predictiveLearning: "json"
+        }
       },
-      { key: "seller_assignment", label: "Asignacion vendedor-propiedad", fields: ["vendedor", "propiedad", "estado", "carga_actual"] },
-      { key: "visit", label: "Visita", fields: ["cliente", "propiedad", "fecha", "hora", "direccion"] }
+      {
+        type: "owner",
+        label: "Propietario",
+        fields: {
+          name: { type: "string", required: true },
+          phone: "string",
+          email: "string",
+          origin: { type: "string", options: ["referido", "captacion_evolum", "base_tgi", "web"] }
+        }
+      },
+      {
+        type: "lead",
+        label: "Contacto / lead",
+        fields: {
+          name: { type: "string", required: true },
+          phone: "string",
+          interestType: { type: "string", options: ["compra", "arriendo"] },
+          budget: "number",
+          pipelineStage: "string",
+          interestedPropertyId: "string"
+        }
+      },
+      {
+        type: "seller_assignment",
+        label: "Asignacion vendedor-propiedad",
+        fields: {
+          sellerId: { type: "string", required: true },
+          propertyId: { type: "string", required: true },
+          assignmentMode: { type: "string", options: ["manual", "balanceada"] },
+          brokerLevel: { type: "string", options: ["STARTER", "MEDIO", "SENIOR"] }
+        }
+      },
+      {
+        type: "visit",
+        label: "Visita",
+        fields: {
+          client: { type: "string", required: true },
+          propertyId: { type: "string", required: true },
+          scheduledAt: { type: "string", required: true },
+          address: "string",
+          result: "string"
+        }
+      },
+      {
+        type: "deal",
+        label: "Negocio",
+        fields: {
+          dealType: { type: "string", required: true, options: ["venta", "arriendo"] },
+          value: { type: "number", required: true },
+          propertyId: { type: "string", required: true },
+          brokerLevel: { type: "string", required: true, options: ["STARTER", "MEDIO", "SENIOR"] },
+          closeDate: "string",
+          commissionTotal: "number",
+          brokerShare: "number",
+          evolumShare: "number",
+          tgiShare: "number",
+          captureCommission: "number"
+        }
+      },
+      {
+        type: "commission_distribution",
+        label: "Distribucion de comision",
+        fields: {
+          dealId: { type: "string", required: true },
+          brokerLevel: { type: "string", required: true, options: ["STARTER", "MEDIO", "SENIOR"] },
+          commissionTotal: { type: "number", required: true },
+          brokerShare: "number",
+          evolumShare: "number",
+          tgiShare: "number",
+          captureCommission: "number",
+          lockedAtClose: "boolean"
+        }
+      },
+      {
+        type: "forecast",
+        label: "Forecast predictivo",
+        fields: {
+          predictiveScore: "number",
+          projectedValue: "number",
+          highIntent: "number",
+          totalProperties: "number",
+          openVisits: "number",
+          recommendation: "string"
+        }
+      },
+      {
+        type: "ai_interaction",
+        label: "Interaccion agente IA",
+        fields: {
+          agentType: { type: "string", required: true },
+          context: "string",
+          result: "string",
+          requiresSupervision: "boolean",
+          linkedRecordId: "string",
+          importBatchId: "string",
+          importFileName: "string",
+          importedPropertyIds: "json",
+          skippedRows: "number"
+        }
+      }
     ],
-    workflows: ["cargar propiedad", "asignar vendedor", "publicar campana", "agendar visita", "negociar", "cerrar"]
+    workflows: [
+      "captar propiedad",
+      "cargar propiedad",
+      "asignar vendedor",
+      "publicar campana",
+      "registrar lead",
+      "agendar visita",
+      "negociar",
+      "calcular comision",
+      "cerrar",
+      "postventa"
+    ]
   },
   GASTRONOMY: {
     code: "GASTRONOMY",

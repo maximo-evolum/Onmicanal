@@ -11,7 +11,14 @@ export const industryRecordsRouter = Router();
 
 const RECORD_MODULES = Object.freeze({
   property: MODULES.PROPERTIES,
+  owner: MODULES.PROPERTIES,
   seller_assignment: MODULES.PROPERTY_ASSIGNMENTS,
+  lead: MODULES.SALES,
+  visit: MODULES.BOOKINGS,
+  deal: MODULES.SALES,
+  commission_distribution: MODULES.SALES,
+  forecast: MODULES.AI_OPS,
+  ai_interaction: MODULES.AI_OPS,
   customer: MODULES.CUSTOMERS,
   revenue: MODULES.REVENUE,
   vehicle: MODULES.VEHICLES,

@@ -6,6 +6,7 @@ export const MODULES = Object.freeze({
   PAYMENTS: "payments",
   FOLLOWUPS: "followups",
   ANALYTICS: "analytics",
+  AI_OPS: "ai_ops",
   BOT_LAB: "bot_lab",
   DOCUMENTS: "documents",
   WORKFLOWS: "workflows",
@@ -36,7 +37,7 @@ export const PLAN_DEFINITIONS = Object.freeze({
     description: "Ventas, pipeline, scoring, follow-up y reservas.",
     priceMonthly: 49000,
     currency: "CLP",
-    modules: [MODULES.INBOX, MODULES.SALES, MODULES.BOOKINGS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.BOT_LAB, MODULES.DOCUMENTS, MODULES.WORKFLOWS],
+    modules: [MODULES.INBOX, MODULES.SALES, MODULES.BOOKINGS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.AI_OPS, MODULES.BOT_LAB, MODULES.DOCUMENTS, MODULES.WORKFLOWS],
     limits: { messagesMonthly: 3000, users: 5 }
   },
   BUSINESS: {
@@ -45,7 +46,7 @@ export const PLAN_DEFINITIONS = Object.freeze({
     description: "Automatización completa con marketing, pagos y analítica.",
     priceMonthly: 99000,
     currency: "CLP",
-    modules: [MODULES.INBOX, MODULES.SALES, MODULES.MARKETING, MODULES.BOOKINGS, MODULES.PAYMENTS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.BOT_LAB, MODULES.DOCUMENTS, MODULES.WORKFLOWS, MODULES.INTEGRATIONS],
+    modules: [MODULES.INBOX, MODULES.SALES, MODULES.MARKETING, MODULES.BOOKINGS, MODULES.PAYMENTS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.AI_OPS, MODULES.BOT_LAB, MODULES.DOCUMENTS, MODULES.WORKFLOWS, MODULES.INTEGRATIONS],
     limits: { messagesMonthly: 10000, users: 15 }
   },
   ENTERPRISE: {

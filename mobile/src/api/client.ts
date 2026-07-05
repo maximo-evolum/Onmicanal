@@ -6,6 +6,7 @@ import {
   Conversation,
   CrmOperationalDashboard,
   IndustryRecord,
+  IndustryUser,
   Message,
   PaymentMetrics,
   TenantModulesResponse
@@ -211,6 +212,40 @@ export async function createIndustryRecord(input: {
   data?: Record<string, unknown>;
 }): Promise<IndustryRecord> {
   return request<IndustryRecord>("/industry-records", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateIndustryRecord(id: string, input: {
+  title?: string;
+  status?: string;
+  assignedToId?: string | null;
+  data?: Record<string, unknown> | null;
+}): Promise<IndustryRecord> {
+  return request<IndustryRecord>(`/industry-records/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function getIndustryUsers(): Promise<IndustryUser[]> {
+  return request<IndustryUser[]>("/industry-records/users");
+}
+
+export async function getBalancedIndustryAssignments(input: {
+  recordType: string;
+  assigneeRole?: string;
+}): Promise<{
+  recordType: string;
+  assigneeRole: string;
+  assignments: Array<{ item: IndustryRecord; assignee: IndustryUser; order: number; mode: string }>;
+}> {
+  return request<{
+    recordType: string;
+    assigneeRole: string;
+    assignments: Array<{ item: IndustryRecord; assignee: IndustryUser; order: number; mode: string }>;
+  }>("/industry-records/assignments/balance", {
     method: "POST",
     body: JSON.stringify(input)
   });
