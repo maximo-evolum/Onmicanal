@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getLeads, updateLeadApi } from "@/lib/api";
+import { getLeads, updateIndustryRecord, updateLeadApi, type IndustryRecord } from "@/lib/api";
 import { Lead } from "@/lib/types";
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
+import { RealtyPipelineBoard, useRealtyWorkspace } from "@/components/realty-workspace";
 
 const columns = [
   { id: "NEW", label: "Prospeccion", tone: "prospect" },
@@ -51,6 +52,7 @@ function getLeadSignal(lead: Lead) {
 
 export default function PipelinePage() {
   const agent = getStoredSession();
+  const { data: realtyData, reload: reloadRealty } = useRealtyWorkspace();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +97,16 @@ export default function PipelinePage() {
     } catch (err) {
       setLeads(previous);
       setError(err instanceof Error ? err.message : "No se pudo mover el lead");
+    }
+  }
+
+  async function moveProperty(property: IndustryRecord, stage: string) {
+    const current = property.data && typeof property.data === "object" ? property.data : {};
+    try {
+      await updateIndustryRecord(property.id, { data: { ...current, stage } });
+      await reloadRealty();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo mover la propiedad");
     }
   }
 
@@ -222,6 +234,12 @@ export default function PipelinePage() {
           </div>
 
         </div>
+
+        <RealtyPipelineBoard
+          properties={realtyData.properties}
+          brokers={realtyData.brokers}
+          onStageChange={moveProperty}
+        />
       </main>
     </div>
     </ModuleGate>

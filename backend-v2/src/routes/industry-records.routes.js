@@ -11,10 +11,15 @@ export const industryRecordsRouter = Router();
 
 const RECORD_MODULES = Object.freeze({
   property: MODULES.PROPERTIES,
+  property_import: MODULES.REALTY_LOADS,
+  property_training: MODULES.REALTY_LOADS,
   owner: MODULES.PROPERTIES,
+  broker_profile: MODULES.BROKERS,
   seller_assignment: MODULES.PROPERTY_ASSIGNMENTS,
   lead: MODULES.SALES,
   visit: MODULES.BOOKINGS,
+  realty_alert: MODULES.REALTY_ACTIVITY,
+  broker_followup: MODULES.BROKER_PORTAL,
   deal: MODULES.SALES,
   commission_distribution: MODULES.SALES,
   forecast: MODULES.AI_OPS,

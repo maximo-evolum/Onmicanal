@@ -37,8 +37,12 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     summary: "Broker inmobiliario con propiedades, propietarios, corredores, visitas, negocios, comisiones y base para IA.",
     modules: [
       moduleItem(MODULES.INBOX, "Inbox inmobiliario", "Consultas y seguimientos por propiedad."),
-      moduleItem(MODULES.PROPERTIES, "Propiedades", "Ficha con fotos, material, banos, piezas, estacionamientos, m2 y observaciones.", "PRO"),
+      moduleItem(MODULES.REALTY_LOADS, "Cargas inmobiliarias", "Creacion de propiedades, corredores, importacion masiva, capacitacion, recordatorios, agenda comercial y comisiones.", "PRO"),
+      moduleItem(MODULES.PROPERTIES, "Propiedades", "Portal de propiedades cargadas con fichas, fotos, estado comercial y datos relevantes.", "PRO"),
+      moduleItem(MODULES.BROKERS, "Corredores", "Perfiles de corredores y asignacion manual o automatica de propiedades.", "PRO"),
+      moduleItem(MODULES.BROKER_PORTAL, "Portal corredor", "Vista independiente de propiedades asignadas y seguimiento comercial por corredor.", "PRO"),
       moduleItem(MODULES.PROPERTY_ASSIGNMENTS, "Asignacion de ventas", "Distribucion automatica o manual de propiedades entre vendedores.", "PRO"),
+      moduleItem(MODULES.REALTY_ACTIVITY, "Actividad inmobiliaria", "Visitas, propietarios, portal corredor, alertas y propiedades activas.", "PRO"),
       moduleItem(MODULES.BOOKINGS, "Agenda de visitas", "Visitas por propiedad, sucursal o direccion.", "PRO"),
       moduleItem(MODULES.SALES, "Pipeline inmobiliario", "Estados comerciales por propiedad y comprador.", "PRO"),
       moduleItem(MODULES.MARKETING, "Campanas inmobiliarias", "Publicaciones y mensajes por propiedad.", "BUSINESS"),

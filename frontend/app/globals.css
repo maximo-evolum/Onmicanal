@@ -5002,6 +5002,100 @@ button.primary-btn {
 .tone-pink .realty-stage-card { border-left-color: #ec4899; }
 .tone-green .realty-stage-card { border-left-color: #22c55e; }
 
+.property-portal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.property-portal-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--theme-surface-strong) 78%, transparent), color-mix(in srgb, var(--bg-deep) 88%, var(--theme-primary) 5%));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.property-portal-media {
+  display: grid;
+  place-items: center;
+  min-height: 190px;
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, var(--theme-primary) 32%, transparent), transparent 40%),
+    color-mix(in srgb, var(--theme-surface) 82%, #000 18%);
+}
+
+.property-portal-media img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  display: block;
+}
+
+.property-portal-media span {
+  display: grid;
+  place-items: center;
+  width: 82px;
+  height: 82px;
+  border-radius: 26px;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2));
+  box-shadow: 0 18px 44px var(--theme-glow);
+}
+
+.property-portal-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.property-portal-body strong,
+.broker-property-wrap strong {
+  color: var(--text);
+}
+
+.property-portal-body p,
+.property-portal-body small,
+.broker-property-wrap small {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.property-portal-price {
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.property-portal-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.property-portal-specs span {
+  padding: 6px 9px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 30%, transparent);
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.broker-property-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-form {
+  display: grid;
+  gap: 10px;
+}
+
 .industry-service-page {
   display: grid;
   gap: 18px;

@@ -19,6 +19,10 @@ export type ModuleAccessKey =
   | "bot_lab"
   | "properties"
   | "property_assignments"
+  | "realty_loads"
+  | "realty_activity"
+  | "broker_portal"
+  | "brokers"
   | "customers"
   | "revenue"
   | "vehicles"
@@ -44,6 +48,10 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   bot_lab: ["bot_lab", "bot-lab"],
   properties: ["properties", "propiedades"],
   property_assignments: ["property_assignments", "seller_assignments", "asignacion_ventas"],
+  realty_loads: ["realty_loads", "cargas_inmobiliarias", "cargas"],
+  realty_activity: ["realty_activity", "actividad_inmobiliaria"],
+  broker_portal: ["broker_portal", "portal_corredor"],
+  brokers: ["brokers", "corredores"],
   customers: ["customers", "clientes", "pacientes"],
   revenue: ["revenue", "ganancias", "ingresos"],
   vehicles: ["vehicles", "vehiculos"],

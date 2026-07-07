@@ -59,7 +59,19 @@ import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfil
 import { colors, shadow } from "./src/theme";
 import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, IndustryRecord, IndustryUser, Message, TenantSession } from "./src/types";
 
-type ScreenKey = "dashboard" | "inbox" | "agenda" | "pipeline" | "properties" | "customers" | "campaigns" | "admin";
+type ScreenKey =
+  | "dashboard"
+  | "inbox"
+  | "agenda"
+  | "pipeline"
+  | "realtyLoads"
+  | "properties"
+  | "realtyActivity"
+  | "brokerPortal"
+  | "brokers"
+  | "customers"
+  | "campaigns"
+  | "admin";
 
 type SessionState = {
   user: AgentSession;
@@ -113,11 +125,44 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "inbox", label: "Inbox", short: "IO", module: "inbox" },
   { key: "agenda", label: "Agenda", short: "AG", module: "bookings" },
   { key: "pipeline", label: "Pipeline", short: "PI", module: "sales" },
+  { key: "realtyLoads", label: "Cargas inmobiliarias", short: "CI", module: "realty_loads" },
   { key: "properties", label: "Propiedades", short: "PR", module: "properties" },
+  { key: "realtyActivity", label: "Actividad inmobiliaria", short: "AC", module: "realty_activity" },
+  { key: "brokerPortal", label: "Portal corredor", short: "PC", module: "broker_portal" },
+  { key: "brokers", label: "Corredores", short: "CO", module: "brokers" },
   { key: "customers", label: "Clientes", short: "CL", module: "customers" },
   { key: "campaigns", label: "Campañas", short: "CA", module: "marketing" },
   { key: "admin", label: "Admin", short: "SA" }
 ];
+
+const moduleAliases: Record<string, string[]> = {
+  analytics: ["analytics", "dashboard"],
+  inbox: ["inbox"],
+  bookings: ["bookings", "agenda"],
+  sales: ["sales", "pipeline"],
+  realty_loads: ["realty_loads", "cargas_inmobiliarias", "cargas"],
+  properties: ["properties", "propiedades"],
+  realty_activity: ["realty_activity", "actividad_inmobiliaria"],
+  broker_portal: ["broker_portal", "portal_corredor"],
+  brokers: ["brokers", "corredores"],
+  customers: ["customers", "clientes", "pacientes"],
+  marketing: ["marketing", "campaigns"],
+  admin: ["admin", "developer", "desarrollador"]
+};
+
+function normalizeModuleName(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function mobileModuleAllowed(item: { key: ScreenKey; module?: string }, modules: string[], role?: string | null) {
+  if (role === "SUPER_ADMIN") return true;
+  if (!item.module) return true;
+  if (item.key === "dashboard") return true;
+  if (!modules.length) return true;
+  const normalized = new Set(modules.map(normalizeModuleName));
+  const aliases = moduleAliases[item.module] || [item.module, item.key];
+  return aliases.some((alias) => normalized.has(normalizeModuleName(alias)));
+}
 
 function money(value?: number | null) {
   return `$${Math.round(Number(value || 0)).toLocaleString("es-CL")}`;
@@ -366,9 +411,7 @@ export default function App() {
     const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
     return navItems.filter((item) => {
       if (item.key === "admin") return isSuperAdmin;
-      if (!item.module) return true;
-      if (!modules.length) return true;
-      return modules.includes(item.module) || modules.includes(item.key);
+      return mobileModuleAllowed(item, modules, session?.user?.role);
     });
   }, [modules, session?.user?.role]);
 
@@ -516,6 +559,7 @@ export default function App() {
     setBookings([]);
     setProperties([]);
     setCustomers([]);
+    setModules([]);
   }
 
   async function refreshCurrent() {
@@ -529,8 +573,13 @@ export default function App() {
     if (screen === "pipeline") {
       await loadDashboard();
       await loadConversations(false);
+      await loadProperties(false);
       return;
     }
+    if (screen === "realtyLoads") return loadProperties();
+    if (screen === "realtyActivity") return loadProperties();
+    if (screen === "brokerPortal") return loadProperties();
+    if (screen === "brokers") return loadProperties();
     if (screen === "properties") return loadProperties();
     if (screen === "customers") return loadCustomers();
     if (screen === "campaigns") return loadCampaigns();
@@ -697,8 +746,12 @@ export default function App() {
           />
         )}
         {screen === "agenda" && <AgendaScreen bookings={bookings} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadBookings(false); await loadDashboard(false); }} />}
-        {screen === "pipeline" && <PipelineScreen dashboard={dashboard} profile={profile} conversations={conversations} refreshing={refreshing} onRefresh={refreshCurrent} onOpenConversation={(conversation) => { setSelectedConversationId(conversation.id); setScreen("inbox"); }} />}
+        {screen === "pipeline" && <PipelineScreen dashboard={dashboard} profile={profile} conversations={conversations} properties={properties} refreshing={refreshing} onRefresh={refreshCurrent} onPropertyUpdated={async () => { await loadProperties(false); await loadDashboard(false); }} onOpenConversation={(conversation) => { setSelectedConversationId(conversation.id); setScreen("inbox"); }} />}
+        {screen === "realtyLoads" && <RealtyLoadsScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
         {screen === "properties" && <PropertiesScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
+        {screen === "realtyActivity" && <RealtyActivityScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />}
+        {screen === "brokerPortal" && <BrokerPortalScreen records={properties} session={session} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
+        {screen === "brokers" && <BrokersScreen records={properties} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
         {screen === "customers" && <CustomersScreen records={customers} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadCustomers(false); await loadDashboard(false); }} />}
         {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} campaigns={campaigns} onRefresh={loadCampaigns} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
@@ -1011,18 +1064,23 @@ function PipelineScreen({
   dashboard,
   profile,
   conversations,
+  properties,
   refreshing,
   onRefresh,
+  onPropertyUpdated,
   onOpenConversation
 }: {
   dashboard: CrmOperationalDashboard | null;
   profile: IndustryProfile;
   conversations: Conversation[];
+  properties: IndustryRecord[];
   refreshing: boolean;
   onRefresh: () => void;
+  onPropertyUpdated: () => void | Promise<void>;
   onOpenConversation: (conversation: Conversation) => void;
 }) {
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const [selectedRealtyStage, setSelectedRealtyStage] = useState<string | null>(null);
   const stageBuckets = profile.pipelineStages.map((stage, index) => {
     const items = conversations.filter((conversation) => {
       const score = conversation.aiCloseScore || 0;
@@ -1035,11 +1093,30 @@ function PipelineScreen({
     return { stage, items, value: dashboard?.pipeline?.[index]?.value || 0 };
   });
   const visibleBuckets = selectedStage ? stageBuckets.filter((bucket) => bucket.stage === selectedStage) : stageBuckets;
+  const realtyBuckets = REALTY_STAGES.map((stage) => ({
+    stage,
+    items: properties.filter((record) => realtyStage(record) === stage),
+    value: properties.filter((record) => realtyStage(record) === stage).reduce((sum, record) => sum + realtyPrice(record), 0)
+  }));
+  const visibleRealtyBuckets = selectedRealtyStage ? realtyBuckets.filter((bucket) => bucket.stage === selectedRealtyStage) : realtyBuckets;
+
+  async function updatePropertyStage(record: IndustryRecord, stage: string) {
+    try {
+      await updateIndustryRecord(record.id, {
+        status: stage === "Cierre" ? "closed" : "active",
+        data: { ...(record.data || {}), stage, updatedFrom: "mobile_pipeline" }
+      });
+      await onPropertyUpdated();
+    } catch (error) {
+      Alert.alert("No se pudo mover propiedad", error instanceof Error ? error.message : "Revisa la conexion.");
+    }
+  }
+
   return (
     <ScrollView horizontal={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>CRM</Text>
       <Text style={styles.screenTitle}>Pipeline</Text>
-      <Text style={styles.screenSubtitle}>{profile.primaryEntity}s y oportunidades por etapa.</Text>
+      <Text style={styles.screenSubtitle}>Pipeline comercial general e inmobiliario dentro de un solo modulo.</Text>
       <Panel title="Resumen comercial">
         <View style={styles.compactMetrics}>
           <Kpi label="Oportunidades" value={conversations.length} detail={`${dashboard?.kpis.readyToClose ?? 0} listas`} />
@@ -1070,11 +1147,46 @@ function PipelineScreen({
           );
         })}
       </View>
+      <Panel title="Pipeline inmobiliario">
+        <View style={styles.compactMetrics}>
+          <Kpi label="Propiedades" value={properties.length} detail="cargadas" />
+          <Kpi label="Valor cartera" value={properties.reduce((sum, record) => sum + realtyPrice(record), 0) ? money(properties.reduce((sum, record) => sum + realtyPrice(record), 0)) : "Sin precio"} detail="inventario" />
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+          <TouchableOpacity style={[styles.filterPill, !selectedRealtyStage && styles.filterPillActive]} onPress={() => setSelectedRealtyStage(null)}><Text style={[styles.filterText, !selectedRealtyStage && styles.filterTextActive]}>Todas</Text></TouchableOpacity>
+          {REALTY_STAGES.map((stage) => (
+            <TouchableOpacity key={stage} style={[styles.filterPill, selectedRealtyStage === stage && styles.filterPillActive]} onPress={() => setSelectedRealtyStage(stage)}><Text style={[styles.filterText, selectedRealtyStage === stage && styles.filterTextActive]}>{stage}</Text></TouchableOpacity>
+          ))}
+        </ScrollView>
+      </Panel>
+      <View style={styles.stageList}>
+        {visibleRealtyBuckets.map(({ stage, items, value }) => (
+          <View key={`realty-${stage}`} style={styles.stageCard}>
+            <View style={styles.stageHeader}><Text style={styles.stageTitle}>{stage}</Text><Text style={styles.stageCount}>{items.length}</Text></View>
+            {!!value && <Text style={styles.muted}>{money(value)} cartera</Text>}
+            {items.slice(0, 6).map((record) => (
+              <View key={record.id} style={styles.opportunityCard}>
+                <Text style={styles.cardTitle}>{record.title}</Text>
+                <Text style={styles.muted}>{recordText(record, "location", "Sin ubicacion")} / {record.assignedTo?.name || recordText(record, "assignedToName", "Sin corredor")}</Text>
+                <Text style={styles.scoreText}>{realtyPrice(record) ? money(realtyPrice(record)) : recordText(record, "price", "Sin precio")}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+                  {REALTY_STAGES.map((nextStage) => (
+                    <TouchableOpacity key={nextStage} style={[styles.filterPill, realtyStage(record) === nextStage && styles.filterPillActive]} onPress={() => updatePropertyStage(record, nextStage)}>
+                      <Text style={[styles.filterText, realtyStage(record) === nextStage && styles.filterTextActive]}>{nextStage}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            ))}
+            {!items.length && <Text style={styles.mutedCenter}>Sin propiedades en esta etapa.</Text>}
+          </View>
+        ))}
+      </View>
     </ScrollView>
   );
 }
 
-function PropertiesScreen({
+function RealtyLoadsScreen({
   records,
   profile,
   refreshing,
@@ -1743,6 +1855,292 @@ function PropertiesScreen({
           </View>
         ))}
         {!records.length && <Text style={styles.muted}>Aun no hay propiedades cargadas.</Text>}
+      </Panel>
+    </ScrollView>
+  );
+}
+
+function PropertiesScreen({
+  records,
+  profile,
+  refreshing,
+  onRefresh,
+  onCreated
+}: {
+  records: IndustryRecord[];
+  profile: IndustryProfile;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onCreated: () => void | Promise<void>;
+}) {
+  async function updatePropertyStage(record: IndustryRecord, stage: string) {
+    try {
+      await updateIndustryRecord(record.id, {
+        status: stage === "Cierre" ? "closed" : "active",
+        data: { ...(record.data || {}), stage, updatedFrom: "mobile_property_portal" }
+      });
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo actualizar", error instanceof Error ? error.message : "Revisa la conexion.");
+    }
+  }
+
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Portal inmobiliario</Text>
+      <Text style={styles.screenTitle}>Propiedades cargadas</Text>
+      <Text style={styles.screenSubtitle}>Vista tipo portal para corredores y jefe comercial.</Text>
+      {records.map((record) => (
+        <View key={record.id} style={styles.portalPropertyCard}>
+          <View style={styles.portalImageWrap}>
+            {recordText(record, "photoUrl", "") ? <Image source={{ uri: recordText(record, "photoUrl", "") }} style={styles.portalImage} resizeMode="cover" /> : <Text style={styles.portalImageInitials}>PR</Text>}
+          </View>
+          <View style={styles.portalBody}>
+            <Text style={styles.cardTitle}>{record.title}</Text>
+            <Text style={styles.portalPrice}>{realtyPrice(record) ? money(realtyPrice(record)) : recordText(record, "price", "Sin precio")}</Text>
+            <Text style={styles.muted}>{recordText(record, "location", "Sin ubicacion")}</Text>
+            <View style={styles.portalSpecs}>
+              <Text style={styles.specPill}>{recordText(record, "rooms", "0")} dorm.</Text>
+              <Text style={styles.specPill}>{recordText(record, "bathrooms", "0")} banos</Text>
+              <Text style={styles.specPill}>{recordText(record, "parking", "0")} estac.</Text>
+              <Text style={styles.specPill}>{recordText(record, "meters", "0")} m2</Text>
+            </View>
+            <Text style={styles.muted}>Corredor: {record.assignedTo?.name || recordText(record, "assignedToName", "Sin asignar")}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+              {REALTY_STAGES.map((stage) => (
+                <TouchableOpacity key={stage} style={[styles.filterPill, realtyStage(record) === stage && styles.filterPillActive]} onPress={() => updatePropertyStage(record, stage)}>
+                  <Text style={[styles.filterText, realtyStage(record) === stage && styles.filterTextActive]}>{stage}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      ))}
+      {!records.length && <Text style={styles.muted}>Aun no hay propiedades cargadas.</Text>}
+    </ScrollView>
+  );
+}
+
+function RealtyActivityScreen({
+  records,
+  profile,
+  refreshing,
+  onRefresh
+}: {
+  records: IndustryRecord[];
+  profile: IndustryProfile;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const [visits, setVisits] = useState<IndustryRecord[]>([]);
+  const [owners, setOwners] = useState<IndustryRecord[]>([]);
+  const [alerts, setAlerts] = useState<IndustryRecord[]>([]);
+
+  async function loadActivity() {
+    const [visitData, ownerData, alertData] = await Promise.all([
+      getIndustryRecords("visit").catch(() => [] as IndustryRecord[]),
+      getIndustryRecords("owner").catch(() => [] as IndustryRecord[]),
+      getIndustryRecords("realty_alert").catch(() => [] as IndustryRecord[])
+    ]);
+    setVisits(visitData);
+    setOwners(ownerData);
+    setAlerts(alertData);
+  }
+
+  useEffect(() => {
+    loadActivity();
+  }, []);
+
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { await onRefresh(); await loadActivity(); }} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Actividad inmobiliaria</Text>
+      <Text style={styles.screenTitle}>Control operativo</Text>
+      <Text style={styles.screenSubtitle}>Visitas, propietarios, portal corredor, alertas y propiedades activas.</Text>
+      <View style={styles.kpiGrid}>
+        <Kpi label="Visitas" value={visits.length} detail="agendadas" />
+        <Kpi label="Propietarios" value={owners.length} detail="registrados" />
+        <Kpi label="Portal corredor" value={records.filter((item) => item.assignedToId || recordText(item, "assignedToName", "")).length} detail="asignadas" />
+        <Kpi label="Alertas" value={alerts.length} detail="pendientes" />
+        <Kpi label="Activas" value={records.filter((item) => item.status !== "closed").length} detail="propiedades" />
+      </View>
+      <Panel title="Visitas">
+        {visits.slice(0, 8).map((visit) => <ListRow key={visit.id} left="VI" title={visit.title} subtitle={recordText(visit, "client", "Sin cliente")} right={dateLabel(recordText(visit, "scheduledAt", visit.createdAt))} />)}
+        {!visits.length && <Text style={styles.muted}>Sin visitas registradas.</Text>}
+      </Panel>
+      <Panel title="Alertas">
+        {alerts.slice(0, 8).map((alert) => <ListRow key={alert.id} left="AL" title={alert.title} subtitle={recordText(alert, "message", "Alerta inmobiliaria")} right={alert.status} />)}
+        {!alerts.length && <Text style={styles.muted}>Sin alertas activas.</Text>}
+      </Panel>
+      <Panel title={`Activas ${profile.label}`}>
+        {records.filter((item) => item.status !== "closed").slice(0, 8).map((record) => <ListRow key={record.id} left="PR" title={record.title} subtitle={recordText(record, "location", "Sin ubicacion")} right={realtyStage(record)} />)}
+      </Panel>
+    </ScrollView>
+  );
+}
+
+function BrokerPortalScreen({
+  records,
+  session,
+  refreshing,
+  onRefresh,
+  onCreated
+}: {
+  records: IndustryRecord[];
+  session: SessionState;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onCreated: () => void | Promise<void>;
+}) {
+  const [note, setNote] = useState("");
+  const isManager = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(String(session.user.role || "").toUpperCase());
+  const visibleRecords = isManager ? records : records.filter((record) => record.assignedToId === session.user.id || recordText(record, "assignedToName", "") === session.user.name);
+
+  async function addFollowUp(record: IndustryRecord) {
+    if (!note.trim()) {
+      Alert.alert("Falta seguimiento", "Escribe una nota corta para esta propiedad.");
+      return;
+    }
+    try {
+      await createIndustryRecord({
+        recordType: "broker_followup",
+        title: `Seguimiento ${record.title}`,
+        status: "active",
+        assignedToId: record.assignedToId || session.user.id,
+        data: {
+          propertyId: record.id,
+          propertyTitle: record.title,
+          note,
+          brokerName: session.user.name,
+          createdFrom: "mobile_broker_portal"
+        }
+      });
+      setNote("");
+      Alert.alert("Seguimiento guardado", "Quedo asociado a la propiedad.");
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Revisa la conexion.");
+    }
+  }
+
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Portal corredor</Text>
+      <Text style={styles.screenTitle}>{isManager ? "Vista jefe de corredores" : "Mis propiedades"}</Text>
+      <Text style={styles.screenSubtitle}>Seguimiento independiente por corredor y acceso total para jefatura.</Text>
+      <TextInput style={styles.input} value={note} onChangeText={setNote} placeholder="Nota de seguimiento para cliente interesado" placeholderTextColor={colors.muted} />
+      {visibleRecords.map((record) => (
+        <View key={record.id} style={styles.propertyCardMobile}>
+          <Text style={styles.cardTitle}>{record.title}</Text>
+          <Text style={styles.muted}>{recordText(record, "location", "Sin ubicacion")} / {realtyStage(record)}</Text>
+          <Text style={styles.greenText}>{realtyPrice(record) ? money(realtyPrice(record)) : recordText(record, "price", "Sin precio")}</Text>
+          <Text style={styles.muted}>Corredor: {record.assignedTo?.name || recordText(record, "assignedToName", "Sin asignar")}</Text>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => addFollowUp(record)}>
+            <Text style={styles.secondaryButtonText}>Guardar seguimiento</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+      {!visibleRecords.length && <Text style={styles.muted}>No hay propiedades asignadas para esta cuenta.</Text>}
+    </ScrollView>
+  );
+}
+
+function BrokersScreen({
+  records,
+  refreshing,
+  onRefresh,
+  onCreated
+}: {
+  records: IndustryRecord[];
+  refreshing: boolean;
+  onRefresh: () => void;
+  onCreated: () => void | Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [brokers, setBrokers] = useState<IndustryRecord[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  async function loadBrokers() {
+    setBrokers(await getIndustryRecords("broker_profile").catch(() => [] as IndustryRecord[]));
+  }
+
+  useEffect(() => {
+    loadBrokers();
+  }, []);
+
+  async function createBroker() {
+    if (!name.trim()) {
+      Alert.alert("Falta corredor", "Agrega el nombre del corredor.");
+      return;
+    }
+    try {
+      setSaving(true);
+      await createIndustryRecord({
+        recordType: "broker_profile",
+        title: name.trim(),
+        status: "active",
+        data: { name, email, phone, role: "SELLER", source: "mobile_brokers" }
+      });
+      Alert.alert("Corredor creado", "Ya puedes asignarle propiedades manual o automaticamente.");
+      setName("");
+      setEmail("");
+      setPhone("");
+      await loadBrokers();
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo crear", error instanceof Error ? error.message : "Revisa la conexion.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function assignToBroker(property: IndustryRecord, broker: IndustryRecord) {
+    try {
+      await updateIndustryRecord(property.id, {
+        data: {
+          ...(property.data || {}),
+          assignedBrokerId: broker.id,
+          assignedToName: broker.title,
+          assignmentMode: "mobile_manual_broker_profile",
+          assignedAt: new Date().toISOString()
+        }
+      });
+      Alert.alert("Propiedad asignada", `${property.title} quedo con ${broker.title}.`);
+      await onCreated();
+    } catch (error) {
+      Alert.alert("No se pudo asignar", error instanceof Error ? error.message : "Revisa la conexion.");
+    }
+  }
+
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { await onRefresh(); await loadBrokers(); }} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Corredores</Text>
+      <Text style={styles.screenTitle}>Perfiles y asignaciones</Text>
+      <Text style={styles.screenSubtitle}>Crea corredores y reparte propiedades desde el celular.</Text>
+      <Panel title="Nuevo corredor">
+        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Nombre del corredor" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor={colors.muted} autoCapitalize="none" />
+        <TextInput style={styles.input} value={phone} onChangeText={setPhone} placeholder="Telefono" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
+        <TouchableOpacity style={styles.primaryButton} onPress={createBroker} disabled={saving}>
+          <Text style={styles.primaryButtonText}>{saving ? "Creando..." : "Crear corredor"}</Text>
+        </TouchableOpacity>
+      </Panel>
+      <Panel title="Corredores activos">
+        {brokers.map((broker) => (
+          <View key={broker.id} style={styles.propertyCardMobile}>
+            <Text style={styles.cardTitle}>{broker.title}</Text>
+            <Text style={styles.muted}>{recordText(broker, "email", "Sin email")} / {recordText(broker, "phone", "Sin telefono")}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+              {records.filter((record) => !recordText(record, "assignedBrokerId", "")).slice(0, 8).map((record) => (
+                <TouchableOpacity key={record.id} style={styles.filterPill} onPress={() => assignToBroker(record, broker)}>
+                  <Text style={styles.filterText}>{record.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ))}
+        {!brokers.length && <Text style={styles.muted}>Aun no hay corredores creados.</Text>}
       </Panel>
     </ScrollView>
   );
@@ -2719,6 +3117,56 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 10,
     backgroundColor: "rgba(255,255,255,0.025)"
+  },
+  portalPropertyCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 24,
+    overflow: "hidden",
+    backgroundColor: colors.panel,
+    marginBottom: 14,
+    ...shadow
+  },
+  portalImageWrap: {
+    width: "100%",
+    height: 190,
+    backgroundColor: "rgba(139,63,244,0.18)",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  portalImage: {
+    width: "100%",
+    height: "100%"
+  },
+  portalImageInitials: {
+    color: colors.text,
+    fontWeight: "900",
+    fontSize: 34,
+    letterSpacing: 1
+  },
+  portalBody: {
+    padding: 14,
+    gap: 8
+  },
+  portalPrice: {
+    color: colors.text,
+    fontWeight: "900",
+    fontSize: 24
+  },
+  portalSpecs: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8
+  },
+  specPill: {
+    color: colors.text,
+    fontWeight: "800",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(168,85,247,0.12)"
   },
   documentChip: {
     minHeight: 42,
