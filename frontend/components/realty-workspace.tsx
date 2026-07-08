@@ -130,6 +130,24 @@ function getBrokerName(property: IndustryRecord, brokers: Broker[]) {
   return brokers.find((broker) => broker.id === id)?.name || text(data.assignedBrokerName, "Corredor asignado");
 }
 
+function assignedPropertyCount(properties: IndustryRecord[], brokerId: string) {
+  return properties.filter((item) => text(asData(item).assignedBrokerId || item.assignedToId) === brokerId).length;
+}
+
+function BrokerProfileCard({ broker, properties }: { broker: Broker; properties: IndustryRecord[] }) {
+  const assigned = assignedPropertyCount(properties, broker.id);
+  return (
+    <article className="broker-profile-card">
+      <div className="broker-profile-avatar">{initials(broker.name)}</div>
+      <div className="broker-profile-body">
+        <strong>{broker.name || "Corredor"}</strong>
+        <span>{broker.email || broker.role || "Corredor"}</span>
+        <small>{assigned} {assigned === 1 ? "propiedad asignada" : "propiedades asignadas"}</small>
+      </div>
+    </article>
+  );
+}
+
 export function useRealtyWorkspace() {
   const [data, setData] = useState<RealtyData>(emptyData);
   const [loading, setLoading] = useState(true);
@@ -473,11 +491,7 @@ export function RealtyLoadsPageContent() {
           </form>
           <div className="seller-load-grid">
             {data.brokers.map((broker) => (
-              <article key={broker.id}>
-                <strong>{broker.name}</strong>
-                <span>{broker.role || "Corredor"}</span>
-                <small>{data.properties.filter((item) => text(asData(item).assignedBrokerId || item.assignedToId) === broker.id).length} propiedades asignadas</small>
-              </article>
+              <BrokerProfileCard key={broker.id} broker={broker} properties={data.properties} />
             ))}
           </div>
         </div>
@@ -655,11 +669,7 @@ export function BrokersPageContent() {
           <div className="vertical-card-head"><div><span>Equipo</span><h2>Corredores activos</h2></div></div>
           <div className="seller-load-grid">
             {data.brokers.map((broker) => (
-              <article key={broker.id}>
-                <strong>{broker.name}</strong>
-                <span>{broker.email || broker.role}</span>
-                <small>{data.properties.filter((item) => text(asData(item).assignedBrokerId || item.assignedToId) === broker.id).length} propiedades</small>
-              </article>
+              <BrokerProfileCard key={broker.id} broker={broker} properties={data.properties} />
             ))}
           </div>
         </article>

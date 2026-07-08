@@ -49,11 +49,30 @@ const MODULE_LABELS: Record<string, string> = {
   saas: "Planes y modulos",
   users: "Usuarios y roles",
   integrations: "Integraciones",
+  gmail: "Gmail",
+  email_imap: "Correo IMAP / SMTP",
+  google_drive: "Google Drive",
+  sharepoint: "SharePoint",
+  backup_provider: "Proveedor de respaldo",
+  offline_sync: "Modo offline y sync",
+  security_replica: "Replica de seguridad",
+  documents: "Documentos",
+  workflows: "Workflows",
+  revenue: "Ganancias",
   developer: "Desarrollador",
+  realty_loads: "Cargas inmobiliarias",
+  realty_activity: "Actividad inmobiliaria",
+  broker_portal: "Portal corredor",
+  brokers: "Corredores",
+  realty_leads: "Leads inmobiliarios",
   properties: "Propiedades",
   property_assignments: "Asignacion de ventas",
   customers: "Clientes",
+  patients: "Pacientes",
+  exams: "Examenes y presupuestos",
+  veterinary: "Veterinaria",
   vehicles: "Vehiculos",
+  workshop: "Taller",
   parts_inventory: "Repuestos",
   mechanic_assignments: "Asignacion de mecanicos",
   ready_notifications: "Aviso de retiro",
@@ -71,10 +90,29 @@ const PROJECT_MODULE_CATALOG = [
   "dashboard",
   "ai_ops",
   "integrations",
+  "gmail",
+  "email_imap",
+  "google_drive",
+  "sharepoint",
+  "backup_provider",
+  "offline_sync",
+  "security_replica",
+  "documents",
+  "workflows",
+  "revenue",
+  "realty_loads",
+  "realty_activity",
+  "broker_portal",
+  "brokers",
+  "realty_leads",
   "properties",
   "property_assignments",
   "customers",
+  "patients",
+  "exams",
+  "veterinary",
   "vehicles",
+  "workshop",
   "parts_inventory",
   "mechanic_assignments",
   "ready_notifications",
@@ -84,6 +122,57 @@ const PROJECT_MODULE_CATALOG = [
   "followups",
   "analytics",
   "bot_lab",
+];
+
+const MODULE_GROUPS = [
+  {
+    title: "Core EVOLUM",
+    description: "Modulos transversales que cualquier cliente puede usar.",
+    modules: ["inbox", "agenda", "pipeline", "campaigns", "payments", "onboarding", "saas", "users", "dashboard", "ai_ops", "documents", "workflows", "revenue", "bot_lab"],
+  },
+  {
+    title: "Integraciones y continuidad",
+    description: "Correo, archivos, respaldo, replica y trabajo offline sincronizable.",
+    modules: ["integrations", "gmail", "email_imap", "google_drive", "sharepoint", "backup_provider", "offline_sync", "security_replica"],
+  },
+  {
+    title: "Inmobiliaria",
+    description: "Carga, portal, corredores, actividad y asignacion de propiedades.",
+    modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "realty_leads", "property_assignments"],
+  },
+  {
+    title: "Salud y veterinaria",
+    description: "Fichas clinicas, pacientes, examenes, presupuestos y seguimiento.",
+    modules: ["customers", "patients", "exams", "veterinary", "bookings", "followups"],
+  },
+  {
+    title: "Automotriz y taller",
+    description: "Vehiculos, repuestos, mecanicos, stock y avisos de retiro.",
+    modules: ["vehicles", "workshop", "parts_inventory", "mechanic_assignments", "ready_notifications"],
+  },
+  {
+    title: "Gastronomia y servicios",
+    description: "Reservas, ventas, marketing, pagos y agenda operativa.",
+    modules: ["sales", "marketing", "bookings", "followups", "analytics"],
+  },
+];
+
+const CONTINUITY_CARDS = [
+  {
+    title: "Correo y documentos",
+    status: "Conectores preparados",
+    items: ["Gmail / Google Workspace", "IMAP / SMTP", "Google Drive", "SharePoint / OneDrive"],
+  },
+  {
+    title: "Respaldo y replica",
+    status: "Proveedor configurable",
+    items: ["Replica secundaria cifrada", "Snapshots programados", "Retencion por plan", "Restauracion controlada"],
+  },
+  {
+    title: "Modo offline",
+    status: "Cola sincronizable",
+    items: ["Trabajo sin conexion", "Sync automatico al volver internet", "Resolucion de conflictos", "Auditoria de reintentos"],
+  },
 ];
 
 const emptyClient = {
@@ -409,6 +498,19 @@ export default function AdminPage() {
     const merged = new Set([...PROJECT_MODULE_CATALOG, ...moduleCatalog, ...industryModules]);
     return Array.from(merged);
   }, [industryTemplates, moduleCatalog]);
+
+  const groupedAvailableModules = useMemo(() => {
+    const available = new Set(availableModules);
+    const grouped = MODULE_GROUPS.map((group) => ({
+      ...group,
+      modules: group.modules.filter((module) => available.has(module)),
+    })).filter((group) => group.modules.length > 0);
+    const used = new Set(grouped.flatMap((group) => group.modules));
+    const otherModules = availableModules.filter((module) => !used.has(module));
+    return otherModules.length
+      ? [...grouped, { title: "Otros modulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules }]
+      : grouped;
+  }, [availableModules]);
 
   const selectedIndustryTemplate = useMemo(() => {
     if (!selectedTenant) return null;
@@ -1360,17 +1462,52 @@ export default function AdminPage() {
                       <button className="ghost-btn danger" type="button" onClick={() => handleDeleteTenant(selectedTenant.id)} disabled={savingId === `delete-tenant-${selectedTenant.id}`}>Eliminar</button>
                     </div>
                   </div>
-                  <div className="module-toggle-grid">
-                    {availableModules.map((module) => {
-                      const active = pendingModules.includes(module);
-                      const saved = enabledModulesOf(selectedTenant).includes(module);
-                      return (
-                        <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => handleModuleToggle(module)}>
-                          <span>{MODULE_LABELS[module] || module}</span>
-                          <small>{active ? "Activo" : "Bloqueado"}{active !== saved ? " · pendiente" : ""}</small>
-                        </button>
-                      );
-                    })}
+                  <div className="module-group-stack">
+                    {groupedAvailableModules.map((group) => (
+                      <section className="module-group-card" key={group.title}>
+                        <div className="module-group-head">
+                          <div>
+                            <strong>{group.title}</strong>
+                            <p>{group.description}</p>
+                          </div>
+                          <small>{group.modules.length} modulos</small>
+                        </div>
+                        <div className="module-toggle-grid compact">
+                          {group.modules.map((module) => {
+                            const active = pendingModules.includes(module);
+                            const saved = enabledModulesOf(selectedTenant).includes(module);
+                            return (
+                              <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => handleModuleToggle(module)}>
+                                <span>{MODULE_LABELS[module] || module}</span>
+                                <small>{active ? "Activo" : "Bloqueado"}{active !== saved ? " - pendiente" : ""}</small>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="admin-module-section">
+                  <div className="admin-panel-header slim">
+                    <div>
+                      <strong>Continuidad, integraciones y respaldo</strong>
+                      <div className="meta-line">Prepara correo, documentos, respaldo, replica y modo offline para no cortar el flujo operativo.</div>
+                    </div>
+                  </div>
+                  <div className="continuity-grid">
+                    {CONTINUITY_CARDS.map((card) => (
+                      <article className="continuity-card" key={card.title}>
+                        <div>
+                          <strong>{card.title}</strong>
+                          <span>{card.status}</span>
+                        </div>
+                        <ul>
+                          {card.items.map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      </article>
+                    ))}
                   </div>
                 </div>
 

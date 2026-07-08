@@ -11,6 +11,13 @@ export const MODULES = Object.freeze({
   DOCUMENTS: "documents",
   WORKFLOWS: "workflows",
   INTEGRATIONS: "integrations",
+  GMAIL: "gmail",
+  EMAIL_IMAP: "email_imap",
+  GOOGLE_DRIVE: "google_drive",
+  SHAREPOINT: "sharepoint",
+  BACKUP_PROVIDER: "backup_provider",
+  OFFLINE_SYNC: "offline_sync",
+  SECURITY_REPLICA: "security_replica",
   PROPERTIES: "properties",
   PROPERTY_ASSIGNMENTS: "property_assignments",
   REALTY_LOADS: "realty_loads",
@@ -50,7 +57,7 @@ export const PLAN_DEFINITIONS = Object.freeze({
     description: "Automatización completa con marketing, pagos y analítica.",
     priceMonthly: 99000,
     currency: "CLP",
-    modules: [MODULES.INBOX, MODULES.SALES, MODULES.MARKETING, MODULES.BOOKINGS, MODULES.PAYMENTS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.AI_OPS, MODULES.BOT_LAB, MODULES.DOCUMENTS, MODULES.WORKFLOWS, MODULES.INTEGRATIONS],
+    modules: [MODULES.INBOX, MODULES.SALES, MODULES.MARKETING, MODULES.BOOKINGS, MODULES.PAYMENTS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.AI_OPS, MODULES.BOT_LAB, MODULES.DOCUMENTS, MODULES.WORKFLOWS, MODULES.INTEGRATIONS, MODULES.GMAIL, MODULES.EMAIL_IMAP, MODULES.GOOGLE_DRIVE],
     limits: { messagesMonthly: 10000, users: 15 }
   },
   ENTERPRISE: {

@@ -6,7 +6,23 @@ import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 
 export const integrationsRouter = Router();
 
-const SUPPORTED_CHANNELS = new Set(["whatsapp", "instagram", "facebook", "email", "google_calendar", "stripe", "mercadopago"]);
+const SUPPORTED_CHANNELS = new Set([
+  "whatsapp",
+  "instagram",
+  "facebook",
+  "email",
+  "email_imap",
+  "gmail",
+  "google_workspace",
+  "google_calendar",
+  "google_drive",
+  "sharepoint",
+  "onedrive",
+  "stripe",
+  "mercadopago",
+  "transbank",
+  "webpay"
+]);
 
 function safeChannel(value) {
   return String(value || "").trim().toLowerCase();

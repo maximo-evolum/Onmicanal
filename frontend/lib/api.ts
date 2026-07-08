@@ -122,6 +122,105 @@ export async function updateMyProfile(input: {
   });
 }
 
+export type ArchitectureSummary = {
+  tenantId: string;
+  generatedAt: string;
+  principles: {
+    metadataDriven: boolean;
+    immutableCore: boolean;
+    tenantScoped: boolean;
+    audited: boolean;
+  };
+  layers: {
+    experience: {
+      tenant: {
+        id: string;
+        name: string;
+        industry: string;
+        plan: string;
+      };
+      modules: Array<{ module: string; enabled: boolean; source?: string }>;
+      roles: string[];
+    };
+    businessCapabilities: Array<{ key: string; label: string; enabled: boolean; status: string }>;
+    core: Array<{ key: string; label: string; status: string }>;
+  };
+  integrations: Array<{
+    channel: string;
+    label: string;
+    enabled: boolean;
+    connected: boolean;
+    status: string;
+    module: string;
+  }>;
+  continuity: {
+    backup: Record<string, unknown>;
+    replica: Record<string, unknown>;
+    offline: {
+      enabled: boolean;
+      pending: number;
+      failed: number;
+      completed: number;
+    };
+  };
+  counts: Record<string, number>;
+};
+
+export async function getArchitectureSummary(): Promise<ArchitectureSummary> {
+  return request<ArchitectureSummary>("/architecture/summary");
+}
+
+export async function configureArchitectureIntegration(
+  channel: string,
+  input: {
+    enabled?: boolean;
+    connected?: boolean;
+    credentials?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  return request(`/architecture/integrations/${encodeURIComponent(channel)}`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function getBackupArchitectureConfig() {
+  return request("/architecture/backups/config");
+}
+
+export async function updateBackupArchitectureConfig(input: {
+  provider?: string;
+  region?: string;
+  schedule?: string;
+  retentionDays?: number;
+  encryption?: string;
+  replica?: Record<string, unknown>;
+}) {
+  return request("/architecture/backups/config", {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function createBackupSnapshot(input?: { reason?: string }) {
+  return request("/architecture/backups/snapshots", {
+    method: "POST",
+    body: JSON.stringify(input || {})
+  });
+}
+
+export async function syncOfflineMutations(input: {
+  clientId?: string;
+  deviceId?: string;
+  mutations: Array<{ entity: string; operation: string; payload?: Record<string, unknown>; createdAt?: string }>;
+}) {
+  return request("/architecture/offline/sync", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function getConversations(): Promise<Conversation[]> {
   return request<Conversation[]>("/conversations");
 }
