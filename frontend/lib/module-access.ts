@@ -31,7 +31,14 @@ export type ModuleAccessKey =
   | "ready_notifications"
   | "documents"
   | "workflows"
-  | "integrations";
+  | "integrations"
+  | "gmail"
+  | "email_imap"
+  | "google_drive"
+  | "sharepoint"
+  | "backup_provider"
+  | "offline_sync"
+  | "security_replica";
 
 const moduleAliases: Record<ModuleAccessKey, string[]> = {
   crm: ["crm", "crm_principal"],
@@ -61,9 +68,20 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   documents: ["documents", "documentos", "archivos"],
   workflows: ["workflows", "workflow", "automatizaciones"],
   integrations: ["integrations", "integraciones", "conectores"],
+  gmail: ["gmail", "google_workspace", "correo_gmail", "correo"],
+  email_imap: ["email_imap", "imap", "smtp", "correo_imap", "correo_smtp"],
+  google_drive: ["google_drive", "drive", "gdrive"],
+  sharepoint: ["sharepoint", "onedrive", "microsoft_drive"],
+  backup_provider: ["backup_provider", "backups", "respaldo", "proveedor_respaldo"],
+  offline_sync: ["offline_sync", "offline", "sync_offline", "modo_offline"],
+  security_replica: ["security_replica", "replica", "replica_seguridad", "drp"],
 };
 
 const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas"]);
+
+const roleModuleAllowlist: Partial<Record<string, Set<ModuleAccessKey>>> = {
+  SELLER: new Set(["crm", "inbox", "agenda", "dashboard", "pipeline", "ai_ops", "properties", "broker_portal"]),
+};
 
 function normalizeModule(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "_");
@@ -75,6 +93,8 @@ function isDeveloperRole(role?: string | null) {
 
 export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null) {
   if (isDeveloperRole(role)) return true;
+  const roleAllowlist = roleModuleAllowlist[String(role || "").toUpperCase()];
+  if (roleAllowlist) return roleAllowlist.has(moduleKey);
   if (alwaysAllowed.has(moduleKey)) return true;
   const normalized = new Set(modules.map(normalizeModule));
   return moduleAliases[moduleKey].some((alias) => normalized.has(normalizeModule(alias)));

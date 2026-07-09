@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
 import * as XLSX from "xlsx";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import {
+  createIndustryBrokerUser,
   createIndustryRecord,
   getIndustryRecords,
   getIndustryUsers,
@@ -80,6 +82,7 @@ const emptyProperty = {
 const emptyBroker = {
   name: "",
   email: "",
+  password: "",
   phone: "",
   role: "Corredor",
   level: "PRO"
@@ -148,6 +151,77 @@ function BrokerProfileCard({ broker, properties }: { broker: Broker; properties:
   );
 }
 
+function RealtyPredictivePanel({ data }: { data: RealtyData }) {
+  const total = data.properties.length;
+  const withPrice = data.properties.filter((property) => numberValue(asData(property).price)).length;
+  const withPhoto = data.properties.filter((property) => text(asData(property).photoUrl)).length;
+  const assigned = data.properties.filter((property) => text(asData(property).assignedBrokerId || property.assignedToId)).length;
+  const withMeters = data.properties.filter((property) => numberValue(asData(property).meters)).length;
+  const comparableProperties = data.properties.filter((property) => {
+    const propertyData = asData(property);
+    return numberValue(propertyData.price) && numberValue(propertyData.meters);
+  });
+  const pricePerM2 = comparableProperties.length
+    ? comparableProperties.reduce((sum, property) => {
+        const propertyData = asData(property);
+        const meters = numberValue(propertyData.meters);
+        return sum + (meters ? numberValue(propertyData.price) / meters : 0);
+      }, 0) / comparableProperties.length
+    : 0;
+  const comunaCounts = data.properties.reduce<Record<string, number>>((acc, property) => {
+    const propertyData = asData(property);
+    const source = text(propertyData.comuna || propertyData.commune || propertyData.address);
+    const comuna = source.split(",")[0]?.trim();
+    if (!comuna) return acc;
+    acc[comuna] = (acc[comuna] || 0) + 1;
+    return acc;
+  }, {});
+  const topComuna = Object.entries(comunaCounts).sort((a, b) => b[1] - a[1])[0];
+  const priorityUnassigned = data.properties
+    .filter((property) => !text(asData(property).assignedBrokerId || property.assignedToId))
+    .sort((a, b) => numberValue(asData(b).price) - numberValue(asData(a).price))[0];
+  const readiness = total ? Math.round(((withPrice + withPhoto + assigned + withMeters) / (total * 4)) * 100) : 0;
+  const avgPrice = withPrice
+    ? data.properties.reduce((sum, property) => sum + numberValue(asData(property).price), 0) / withPrice
+    : 0;
+  const recommendations = [
+    withPhoto < total ? `${total - withPhoto} propiedades sin foto principal` : "Fotos principales completas",
+    assigned < total ? `${total - assigned} propiedades sin corredor asignado` : "Cartera asignada a corredores",
+    withMeters < total ? `${total - withMeters} propiedades sin m2 para forecast` : "M2 listos para comparables",
+    withPrice < total ? `${total - withPrice} propiedades sin precio` : "Precios listos para analisis"
+  ];
+  const marketSignals = [
+    topComuna ? `Mayor inventario en ${topComuna[0]} (${topComuna[1]})` : "Sin comuna para segmentar demanda",
+    pricePerM2 ? `Referencia ${money(pricePerM2)} por m2` : "Faltan precio y m2 para comparables",
+    priorityUnassigned ? `Priorizar asignacion: ${priorityUnassigned.title}` : "Sin propiedades criticas sin corredor"
+  ];
+
+  return (
+    <section className="vertical-card realty-predictive-panel">
+      <div className="vertical-card-head">
+        <div><span>IA predictiva inmobiliaria</span><h2>Calidad de inventario</h2></div>
+        <strong>{readiness}% listo</strong>
+      </div>
+      <div className="realty-predictive-grid">
+        <article><small>Propiedades</small><strong>{total}</strong><span>base activa</span></article>
+        <article><small>Precio promedio</small><strong>{money(avgPrice)}</strong><span>solo fichas con precio</span></article>
+        <article><small>Asignacion</small><strong>{assigned}/{total}</strong><span>corredores vinculados</span></article>
+      </div>
+      <div className="realty-market-grid">
+        <article><small>Comparables</small><strong>{comparableProperties.length}</strong><span>precio + m2</span></article>
+        <article><small>Comuna lider</small><strong>{topComuna?.[0] || "Sin datos"}</strong><span>{topComuna ? `${topComuna[1]} propiedades` : "carga pendiente"}</span></article>
+        <article><small>Matching</small><strong>{assigned}/{total}</strong><span>propiedad-corredor</span></article>
+      </div>
+      <div className="realty-recommendations">
+        {recommendations.map((item) => <span key={item}>{item}</span>)}
+      </div>
+      <div className="realty-market-signals">
+        {marketSignals.map((item) => <span key={item}>{item}</span>)}
+      </div>
+    </section>
+  );
+}
+
 export function useRealtyWorkspace() {
   const [data, setData] = useState<RealtyData>(emptyData);
   const [loading, setLoading] = useState(true);
@@ -171,16 +245,20 @@ export function useRealtyWorkspace() {
       const userBrokers = users
         .filter((user) => ["SELLER", "ADMIN", "OWNER"].includes(String(user.role || "").toUpperCase()))
         .map((user) => ({ id: user.id, name: user.name, email: user.email, role: user.role }));
-      const profileBrokers = brokerProfiles.map((record) => {
-        const recordData = asData(record);
-        return {
-          id: record.id,
-          name: record.title,
-          email: text(recordData.email),
-          role: text(recordData.role, "Corredor"),
-          isProfile: true
-        };
-      });
+      const userBrokerIds = new Set(userBrokers.map((broker) => broker.id));
+      const userBrokerEmails = new Set(userBrokers.map((broker) => String(broker.email || "").toLowerCase()).filter(Boolean));
+      const profileBrokers = brokerProfiles
+        .map((record) => {
+          const recordData = asData(record);
+          return {
+            id: text(recordData.userId, record.id),
+            name: text(recordData.name, record.title),
+            email: text(recordData.email),
+            role: text(recordData.role, "Corredor"),
+            isProfile: true
+          };
+        })
+        .filter((broker) => !userBrokerIds.has(broker.id) && !userBrokerEmails.has(String(broker.email || "").toLowerCase()));
 
       setData({ properties, owners, visits, deals, alerts, followups, users, brokers: [...userBrokers, ...profileBrokers] });
     } catch (err) {
@@ -323,7 +401,6 @@ export function PropertyPortalCards({
 export function RealtyLoadsPageContent() {
   const { data, error, reload } = useRealtyWorkspace();
   const [propertyForm, setPropertyForm] = useState(emptyProperty);
-  const [brokerForm, setBrokerForm] = useState(emptyBroker);
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [message, setMessage] = useState("");
 
@@ -354,19 +431,6 @@ export function RealtyLoadsPageContent() {
     }
     setPropertyForm(emptyProperty);
     setMessage("Propiedad cargada");
-    await reload();
-  }
-
-  async function createBroker(event: FormEvent) {
-    event.preventDefault();
-    await createIndustryRecord({
-      recordType: "broker_profile",
-      title: brokerForm.name || "Corredor sin nombre",
-      status: "ACTIVE",
-      data: brokerForm
-    });
-    setBrokerForm(emptyBroker);
-    setMessage("Corredor creado");
     await reload();
   }
 
@@ -482,13 +546,13 @@ export function RealtyLoadsPageContent() {
         </form>
 
         <div className="vertical-card realty-assignment-panel">
-          <div className="vertical-card-head"><div><span>Corredores</span><h2>Perfiles y reparto</h2></div></div>
-          <form className="compact-form" onSubmit={createBroker}>
-            <input value={brokerForm.name} onChange={(e) => setBrokerForm({ ...brokerForm, name: e.target.value })} placeholder="Nombre corredor" />
-            <input value={brokerForm.email} onChange={(e) => setBrokerForm({ ...brokerForm, email: e.target.value })} placeholder="Email" />
-            <input value={brokerForm.phone} onChange={(e) => setBrokerForm({ ...brokerForm, phone: e.target.value })} placeholder="Telefono" />
-            <button className="primary-btn" type="submit">Crear corredor</button>
-          </form>
+          <div className="vertical-card-head">
+            <div><span>Corredores centralizados</span><h2>Reparto por usuario corredor</h2></div>
+            <Link className="secondary-btn" href="/brokers">Gestionar corredores</Link>
+          </div>
+          <p className="muted-copy">
+            La creacion de corredores vive solo en el modulo Corredores. Desde ahi se genera el usuario con acceso limitado al CRM.
+          </p>
           <div className="seller-load-grid">
             {data.brokers.map((broker) => (
               <BrokerProfileCard key={broker.id} broker={broker} properties={data.properties} />
@@ -536,6 +600,7 @@ export function RealtyPropertiesPageContent() {
       />
       <RealtyKpis data={data} />
       {error ? <div className="sales-queue-error">{error}</div> : null}
+      <RealtyPredictivePanel data={data} />
       <section className="vertical-card">
         <div className="vertical-card-head"><div><span>Inventario</span><h2>Portal de propiedades</h2></div></div>
         <PropertyPortalCards properties={data.properties} brokers={data.brokers} onStageChange={updateStage} />
@@ -633,12 +698,28 @@ export function BrokerPortalPageContent() {
 export function BrokersPageContent() {
   const { data, error, reload } = useRealtyWorkspace();
   const [brokerForm, setBrokerForm] = useState(emptyBroker);
+  const [message, setMessage] = useState("");
 
   async function createBroker(event: FormEvent) {
     event.preventDefault();
-    await createIndustryRecord({ recordType: "broker_profile", title: brokerForm.name || "Corredor", status: "ACTIVE", data: brokerForm });
-    setBrokerForm(emptyBroker);
-    await reload();
+    if (!brokerForm.name.trim() || !brokerForm.email.trim() || brokerForm.password.trim().length < 6) {
+      setMessage("Ingresa nombre, correo y una contrasena de al menos 6 caracteres.");
+      return;
+    }
+    try {
+      setMessage("Creando corredor...");
+      await createIndustryBrokerUser({
+        name: brokerForm.name,
+        email: brokerForm.email,
+        password: brokerForm.password,
+        phone: brokerForm.phone
+      });
+      setBrokerForm(emptyBroker);
+      setMessage("Corredor creado con acceso limitado al CRM.");
+      await reload();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo crear el corredor.");
+    }
   }
 
   async function assignProperty(property: IndustryRecord, brokerId: string) {
@@ -654,16 +735,18 @@ export function BrokersPageContent() {
       <RealtyHeader
         eyebrow="Corredores"
         title="Perfiles y asignacion inmobiliaria"
-        description="Crea corredores y asigna propiedades manualmente o con reparto balanceado."
+        description="Crea usuarios corredores con acceso limitado y asigna propiedades manualmente o con reparto balanceado."
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
+      {message ? <div className="module-toast">{message}</div> : null}
       <section className="realty-ops-grid">
         <form className="vertical-card" onSubmit={createBroker}>
           <div className="vertical-card-head"><div><span>Nuevo corredor</span><h2>Perfil comercial</h2></div></div>
           <input value={brokerForm.name} onChange={(e) => setBrokerForm({ ...brokerForm, name: e.target.value })} placeholder="Nombre" />
           <input value={brokerForm.email} onChange={(e) => setBrokerForm({ ...brokerForm, email: e.target.value })} placeholder="Email" />
+          <input type="password" value={brokerForm.password} onChange={(e) => setBrokerForm({ ...brokerForm, password: e.target.value })} placeholder="Contrasena inicial" />
           <input value={brokerForm.phone} onChange={(e) => setBrokerForm({ ...brokerForm, phone: e.target.value })} placeholder="Telefono" />
-          <button className="primary-btn" type="submit">Crear perfil corredor</button>
+          <button className="primary-btn" type="submit">Crear usuario corredor</button>
         </form>
         <article className="vertical-card">
           <div className="vertical-card-head"><div><span>Equipo</span><h2>Corredores activos</h2></div></div>

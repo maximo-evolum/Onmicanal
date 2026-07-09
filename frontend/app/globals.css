@@ -800,6 +800,65 @@ a {
   grid-column: span 8;
 }
 
+.crm-main-connections {
+  grid-column: span 8;
+}
+
+.crm-main-connection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.crm-main-connection-card {
+  min-height: 118px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--crm-main-border);
+  background: color-mix(in srgb, var(--crm-main-panel-soft) 82%, var(--theme-primary) 8%);
+  border-radius: 8px;
+  padding: 13px;
+  color: var(--crm-main-text);
+  transition: 0.18s ease;
+}
+
+.crm-main-connection-card:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--theme-primary-2) 50%, transparent);
+}
+
+.crm-main-connection-card b {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2));
+  color: #fff;
+  font-weight: 900;
+}
+
+.crm-main-connection-card strong {
+  display: block;
+}
+
+.crm-main-connection-card span {
+  display: block;
+  margin-top: 2px;
+  color: var(--theme-primary-2);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.crm-main-connection-card p {
+  margin: 6px 0 0;
+  color: var(--crm-main-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .crm-main-conversation {
   grid-column: span 4;
 }
@@ -1749,6 +1808,7 @@ a {
   .crm-main-overview,
   .crm-main-live,
   .crm-main-agents,
+  .crm-main-connections,
   .crm-main-conversation,
   .crm-main-developer,
   .crm-main-menu-panel,
@@ -10939,7 +10999,7 @@ textarea:focus {
 }
 
 .vertical-shell.nav-collapsed .vertical-main {
-  padding-left: 0 !important;
+  padding-left: 18px !important;
 }
 
 .vertical-shell .evolum-unified-nav,
@@ -10969,9 +11029,9 @@ textarea:focus {
   grid-column: 1;
   grid-row: 1;
   position: sticky !important;
-  top: 28px !important;
+  top: 22px !important;
   left: auto !important;
-  margin: 28px auto 0 !important;
+  margin: 22px auto 0 !important;
   align-self: start;
   z-index: 40;
 }
@@ -11034,6 +11094,101 @@ textarea:focus {
 .broker-profile-body span,
 .broker-profile-body small {
   color: var(--text-muted);
+}
+
+.realty-predictive-panel {
+  grid-column: 1 / -1;
+}
+
+.realty-predictive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.realty-predictive-grid article {
+  min-width: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  background: var(--theme-card-bg);
+  padding: 14px;
+}
+
+.realty-predictive-grid small,
+.realty-predictive-grid span {
+  display: block;
+  color: var(--text-muted);
+}
+
+.realty-predictive-grid strong {
+  display: block;
+  margin: 6px 0 2px;
+  font-size: clamp(24px, 2.8vw, 36px);
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
+.realty-market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.realty-market-grid article {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 35%, transparent);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--theme-primary) 16%, transparent), transparent 70%),
+    color-mix(in srgb, var(--theme-card-bg) 88%, var(--theme-panel-bg));
+  padding: 12px;
+}
+
+.realty-market-grid small,
+.realty-market-grid span {
+  display: block;
+  color: var(--text-muted);
+}
+
+.realty-market-grid strong {
+  display: block;
+  margin: 5px 0 2px;
+  font-size: clamp(18px, 2vw, 28px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.realty-recommendations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.realty-recommendations span {
+  border: 1px solid var(--theme-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-card-bg) 82%, var(--theme-primary) 12%);
+  color: var(--text-muted);
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.realty-market-signals {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.realty-market-signals span {
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 28%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--theme-panel-bg) 78%, var(--theme-primary) 10%);
+  color: var(--text-main);
+  padding: 10px 12px;
+  font-size: 13px;
 }
 
 .realty-mini-row {

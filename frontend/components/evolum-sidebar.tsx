@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getMyModules } from "@/lib/api";
-import { LogoutButton } from "@/lib/auth";
+import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 
 type EvolumSidebarProps = {
@@ -48,9 +48,11 @@ const developerItems: SidebarItem[] = [
 
 export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
+  const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
+    setRole(getStoredSession()?.role || null);
     getMyModules()
       .then((data) => {
         if (mounted) setEnabledModules(data.modules || []);
@@ -68,9 +70,9 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     const allItems = isDeveloper ? [...baseItems, ...developerItems] : baseItems;
     if (enabledModules === null) return allItems;
     return allItems.filter(([, , , , moduleKey]) =>
-      moduleAllowed(moduleKey, enabledModules, isDeveloper ? "SUPER_ADMIN" : undefined),
+      moduleAllowed(moduleKey, enabledModules, isDeveloper ? "SUPER_ADMIN" : role),
     );
-  }, [enabledModules, isDeveloper]);
+  }, [enabledModules, isDeveloper, role]);
 
   if (!isOpen) {
     return (

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { MODULES } from "../lib/modules.js";
 import { buildBalancedAssignments } from "../lib/industries.js";
@@ -59,6 +60,10 @@ function tenantRecordWhere(req, extra = {}) {
   return { tenantId: req.tenantId, ...extra };
 }
 
+async function hashPassword(password) {
+  return bcrypt.hash(String(password), 10);
+}
+
 industryRecordsRouter.get("/industry-records/users", async (req, res) => {
   try {
     const users = await prisma.workspaceUser.findMany({
@@ -96,6 +101,76 @@ industryRecordsRouter.get("/industry-records", async (req, res) => {
   } catch (error) {
     console.error("List industry records error:", error);
     res.status(500).json({ error: "No se pudieron obtener registros del rubro" });
+  }
+});
+
+industryRecordsRouter.post("/industry-records/brokers", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await assertRecordModule(req, "broker_profile"))) {
+      return res.status(403).json({ error: "Modulo de corredores no habilitado" });
+    }
+
+    const name = cleanText(req.body?.name);
+    const email = cleanText(req.body?.email).toLowerCase();
+    const password = cleanText(req.body?.password);
+    const phone = cleanText(req.body?.phone);
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: "Nombre, email y contrasena son requeridos" });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: "La contrasena debe tener al menos 6 caracteres" });
+    }
+
+    const existing = await prisma.workspaceUser.findUnique({ where: { email } });
+    if (existing) {
+      return res.status(409).json({ error: "Ya existe un usuario con este correo" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.workspaceUser.create({
+        data: {
+          tenantId: req.tenantId,
+          name,
+          email,
+          passwordHash: await hashPassword(password),
+          role: "SELLER",
+          isActive: true
+        },
+        select: { id: true, name: true, email: true, role: true }
+      });
+
+      const profile = await tx.industryRecord.create({
+        data: {
+          tenantId: req.tenantId,
+          recordType: "broker_profile",
+          title: name,
+          status: "ACTIVE",
+          assignedToId: user.id,
+          data: {
+            name,
+            email,
+            phone,
+            role: "Corredor",
+            workspaceRole: "SELLER",
+            userId: user.id,
+            moduleScope: ["crm", "inbox", "agenda", "dashboard", "pipeline", "ai_ops", "properties", "broker_portal"]
+          }
+        },
+        include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
+      });
+
+      return { user, profile };
+    });
+
+    await recordAuditLog(req, "BROKER_USER_CREATED", "broker_profile", result.profile.id, {
+      userId: result.user.id,
+      email: result.user.email
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    console.error("Create broker user error:", error);
+    res.status(500).json({ error: "No se pudo crear el corredor" });
   }
 });
 

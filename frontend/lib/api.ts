@@ -785,6 +785,18 @@ export async function createIndustryRecord(input: {
   });
 }
 
+export async function createIndustryBrokerUser(input: {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+}): Promise<{ user: IndustryUser; profile: IndustryRecord }> {
+  return request<{ user: IndustryUser; profile: IndustryRecord }>("/industry-records/brokers", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function updateIndustryRecord(
   id: string,
   input: Partial<Pick<IndustryRecord, "title" | "status" | "assignedToId">> & { data?: Record<string, unknown> | null }

@@ -206,6 +206,65 @@ const connectedModuleCatalog: Array<NavItem & { value: (state: LoadState, comput
   { label: "Taller", href: "/workshop", description: "Vehiculos, repuestos, mecanicos y aviso de retiro.", moduleKey: "vehicles", value: () => "Taller" }
 ];
 
+const integrationAccessCatalog: Array<NavItem & { badge: string; status: string }> = [
+  {
+    label: "Correo / Gmail",
+    href: "/onboarding",
+    description: "Conecta Gmail, Google Workspace o correo IMAP/SMTP para respuestas, documentos y trazabilidad.",
+    moduleKey: "gmail",
+    badge: "GM",
+    status: "OAuth / IMAP"
+  },
+  {
+    label: "Google Drive",
+    href: "/onboarding",
+    description: "Vincula carpetas de Drive para fichas, imagenes, documentos y respaldos operativos.",
+    moduleKey: "google_drive",
+    badge: "DR",
+    status: "Archivos"
+  },
+  {
+    label: "SharePoint",
+    href: "/onboarding",
+    description: "Prepara bibliotecas SharePoint y OneDrive para clientes empresariales.",
+    moduleKey: "sharepoint",
+    badge: "SP",
+    status: "Empresa"
+  },
+  {
+    label: "WebPay",
+    href: "/payments",
+    description: "Proveedor de pagos para Chile, links de cobro y conciliacion comercial.",
+    moduleKey: "payments",
+    badge: "WP",
+    status: "Pagos"
+  },
+  {
+    label: "Mercado Pago",
+    href: "/payments",
+    description: "Medio de pago alternativo para cobros rapidos y seguimiento desde el CRM.",
+    moduleKey: "payments",
+    badge: "MP",
+    status: "Pagos"
+  },
+  {
+    label: "Enlaces bancarios",
+    href: "/payments",
+    description: "Links manuales o semi-automaticos para transferencias, abonos y reservas.",
+    moduleKey: "payments",
+    badge: "BK",
+    status: "Bancos"
+  },
+  {
+    label: "Otros medios de pago",
+    href: "/payments",
+    description: "Espacio preparado para Flow, Stripe, PayPal u otro proveedor segun el cliente.",
+    moduleKey: "payments",
+    badge: "OP",
+    status: "Flexible"
+  }
+];
+
 function money(value = 0) {
   return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(value || 0);
 }
@@ -453,6 +512,10 @@ export default function CrmPrincipalPage() {
     if (!item.moduleKey || !state.modulesLoaded) return true;
     return moduleAllowed(item.moduleKey, state.modules, state.session?.role);
   });
+  const integrationAccessItems = integrationAccessCatalog.filter((item) => {
+    if (!item.moduleKey || !state.modulesLoaded) return true;
+    return moduleAllowed(item.moduleKey, state.modules, state.session?.role);
+  });
   const latestImport = Array.isArray(state.onboarding?.imports) ? state.onboarding.imports[0] : null;
   const latestImportStatus = String(latestImport?.status || "").toUpperCase();
   const onboardingRows = [
@@ -496,6 +559,12 @@ export default function CrmPrincipalPage() {
       href: module.href,
       description: module.text,
       group: "Operacion"
+    })),
+    ...integrationAccessItems.map((item) => ({
+      label: item.label,
+      href: item.href,
+      description: `${item.status}. ${item.description}`,
+      group: "Integraciones"
     })),
     ...onboardingRows.map((row) => ({
       label: row.title,
@@ -744,6 +813,28 @@ export default function CrmPrincipalPage() {
               </Link>
             ))}
           </aside>
+
+          <section className="crm-main-panel crm-main-connections">
+            <div className="crm-main-panel-head">
+              <div>
+                <span>Conexiones</span>
+                <h2>Integraciones y medios de pago</h2>
+              </div>
+              <Link className="crm-main-action-link" href="/onboarding">Configurar</Link>
+            </div>
+            <div className="crm-main-connection-grid">
+              {integrationAccessItems.map((item) => (
+                <Link className="crm-main-connection-card" href={item.href} key={item.label}>
+                  <b>{item.badge}</b>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <span>{item.status}</span>
+                    <p>{item.description}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
 
           <section className="crm-main-panel crm-main-agents" id="agents">
             <div className="crm-main-panel-head">
