@@ -28,6 +28,7 @@ const baseItems: SidebarItem[] = [
   ["Pipeline", "/pipeline", "Leads, clientes y oportunidades", "PI", "pipeline"],
   ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA", "campaigns"],
   ["Pagos", "/payments", "Cobros, estados y links", "PA", "payments"],
+  ["Centro de Conexiones", "/connections", "Correo, archivos, pagos y respaldo", "CX", "integrations"],
   ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG", "onboarding"],
   ["Planes y modulos", "/saas", "Plan, modulos, usuarios y limites", "PM", "saas"],
   ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],

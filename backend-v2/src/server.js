@@ -29,6 +29,7 @@ import { industryRecordsRouter } from "./routes/industry-records.routes.js";
 import { documentsRouter } from "./routes/documents.routes.js";
 import { workflowsRouter } from "./routes/workflows.routes.js";
 import { integrationsRouter } from "./routes/integrations.routes.js";
+import { connectionsPublicRouter, connectionsRouter } from "./routes/connections.routes.js";
 import { metadataRouter } from "./routes/metadata.routes.js";
 import { auditRouter } from "./routes/audit.routes.js";
 import { searchRouter } from "./routes/search.routes.js";
@@ -127,6 +128,7 @@ app.get("/", (_req, res) => {
 
 app.use("/meta", metaRouter);
 app.use("/api", authRouter);
+app.use("/api", connectionsPublicRouter);
 if (env.enableDevTools) {
   app.use("/api", workspaceUsersRouter); // helper local/demo, deshabilitado en producción por defecto
 }
@@ -172,6 +174,7 @@ app.use("/api", ...protectedApi, requireModule(MODULES.SALES), productRoutes);
 app.use("/api", ...protectedApi, requireModule(MODULES.DOCUMENTS), documentsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.WORKFLOWS), workflowsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.INTEGRATIONS), integrationsRouter);
+app.use("/api", ...protectedApi, requireModule(MODULES.INTEGRATIONS), connectionsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.MARKETING), campaignsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), servicesRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), bookingsRouter);

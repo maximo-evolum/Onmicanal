@@ -22,7 +22,7 @@ http://localhost:3001/login
 
 
 git add .
-git commit -m "cambios app"
+git commit -m "Mejoras"
 git push -u origin main
 git remote add origin https://github.com/maximo-evolum/Onmicanal.git
 

@@ -74,6 +74,7 @@ const navItems: NavItem[] = [
   { label: "Pipeline", href: "/pipeline", description: "Leads, clientes y oportunidades", moduleKey: "pipeline" },
   { label: "Campañas", href: "/campaigns", description: "Marketing IA y publicaciones", moduleKey: "campaigns" },
   { label: "Pagos", href: "/payments", description: "Cobros, estados y links", moduleKey: "payments" },
+  { label: "Centro de Conexiones", href: "/connections", description: "Correo, archivos, pagos, respaldo y OAuth", moduleKey: "integrations" },
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA", moduleKey: "onboarding" },
   { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites", moduleKey: "saas" },
   { label: "Dashboard", href: "/dashboard", description: "Metricas operativas", moduleKey: "dashboard" },
@@ -209,7 +210,7 @@ const connectedModuleCatalog: Array<NavItem & { value: (state: LoadState, comput
 const integrationAccessCatalog: Array<NavItem & { badge: string; status: string }> = [
   {
     label: "Correo / Gmail",
-    href: "/onboarding",
+    href: "/connections",
     description: "Conecta Gmail, Google Workspace o correo IMAP/SMTP para respuestas, documentos y trazabilidad.",
     moduleKey: "gmail",
     badge: "GM",
@@ -217,7 +218,7 @@ const integrationAccessCatalog: Array<NavItem & { badge: string; status: string 
   },
   {
     label: "Google Drive",
-    href: "/onboarding",
+    href: "/connections",
     description: "Vincula carpetas de Drive para fichas, imagenes, documentos y respaldos operativos.",
     moduleKey: "google_drive",
     badge: "DR",
@@ -225,7 +226,7 @@ const integrationAccessCatalog: Array<NavItem & { badge: string; status: string 
   },
   {
     label: "SharePoint",
-    href: "/onboarding",
+    href: "/connections",
     description: "Prepara bibliotecas SharePoint y OneDrive para clientes empresariales.",
     moduleKey: "sharepoint",
     badge: "SP",
@@ -233,7 +234,7 @@ const integrationAccessCatalog: Array<NavItem & { badge: string; status: string 
   },
   {
     label: "WebPay",
-    href: "/payments",
+    href: "/connections",
     description: "Proveedor de pagos para Chile, links de cobro y conciliacion comercial.",
     moduleKey: "payments",
     badge: "WP",
@@ -241,7 +242,7 @@ const integrationAccessCatalog: Array<NavItem & { badge: string; status: string 
   },
   {
     label: "Mercado Pago",
-    href: "/payments",
+    href: "/connections",
     description: "Medio de pago alternativo para cobros rapidos y seguimiento desde el CRM.",
     moduleKey: "payments",
     badge: "MP",
@@ -249,7 +250,7 @@ const integrationAccessCatalog: Array<NavItem & { badge: string; status: string 
   },
   {
     label: "Enlaces bancarios",
-    href: "/payments",
+    href: "/connections",
     description: "Links manuales o semi-automaticos para transferencias, abonos y reservas.",
     moduleKey: "payments",
     badge: "BK",
@@ -257,7 +258,7 @@ const integrationAccessCatalog: Array<NavItem & { badge: string; status: string 
   },
   {
     label: "Otros medios de pago",
-    href: "/payments",
+    href: "/connections",
     description: "Espacio preparado para Flow, Stripe, PayPal u otro proveedor segun el cliente.",
     moduleKey: "payments",
     badge: "OP",

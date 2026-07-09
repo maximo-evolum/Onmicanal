@@ -1441,6 +1441,107 @@ export async function configureIntegration(channel: string, input: Partial<Integ
   });
 }
 
+export type ConnectionStatus = "CONNECTED" | "PENDING" | "DISCONNECTED" | "ERROR";
+
+export type ConnectionPublicConfig = {
+  id: string;
+  channel: string;
+  label?: string | null;
+  phoneNumberId?: string | null;
+  businessAccountId?: string | null;
+  externalAccountId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  isActive: boolean;
+  hasAccessToken: boolean;
+  hasVerifyToken: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ConnectionProvider = {
+  key: string;
+  label: string;
+  group: string;
+  groupKey: string;
+  icon: string;
+  type: "oauth" | "credentials" | "manual" | "local" | string;
+  oauthProvider?: string | null;
+  module: string;
+  description: string;
+  requiredEnv: string[];
+  requiredFields: string[];
+  scopes: string[];
+  missing: string[];
+  status: ConnectionStatus;
+  config: ConnectionPublicConfig | null;
+};
+
+export type ConnectionGroup = {
+  id: string;
+  label: string;
+  description: string;
+  providers: ConnectionProvider[];
+};
+
+export type ConnectionCenterResponse = {
+  tenantId: string;
+  generatedAt: string;
+  summary: {
+    total: number;
+    connected: number;
+    pending: number;
+    errors: number;
+    disconnected: number;
+  };
+  callbacks: {
+    oauthGoogle: string;
+    oauthMicrosoft: string;
+    metaWebhook: string;
+  };
+  groups: ConnectionGroup[];
+};
+
+export async function getConnectionCenter(): Promise<ConnectionCenterResponse> {
+  return request<ConnectionCenterResponse>("/connections");
+}
+
+export async function saveConnectionProvider(
+  key: string,
+  input: {
+    label?: string;
+    phoneNumberId?: string;
+    businessAccountId?: string;
+    externalAccountId?: string;
+    accessToken?: string;
+    verifyToken?: string;
+    metadata?: Record<string, unknown>;
+    isActive?: boolean;
+  }
+): Promise<{ provider: ConnectionProvider }> {
+  return request<{ provider: ConnectionProvider }>(`/connections/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function testConnectionProvider(key: string): Promise<{ ok: boolean; missing: string[]; provider: ConnectionProvider }> {
+  return request<{ ok: boolean; missing: string[]; provider: ConnectionProvider }>(`/connections/${encodeURIComponent(key)}/test`, {
+    method: "POST"
+  });
+}
+
+export async function disconnectConnectionProvider(key: string): Promise<{ ok: boolean; provider: ConnectionProvider }> {
+  return request<{ ok: boolean; provider: ConnectionProvider }>(`/connections/${encodeURIComponent(key)}/disconnect`, {
+    method: "POST"
+  });
+}
+
+export async function getConnectionOAuthUrl(key: string): Promise<{ url: string; provider: string; oauthProvider: string }> {
+  return request<{ url: string; provider: string; oauthProvider: string }>(`/connections/${encodeURIComponent(key)}/oauth-url`, {
+    method: "POST"
+  });
+}
+
 export async function getTenantAuditTrail(input: { tenantId?: string; action?: string; entity?: string; entityId?: string; limit?: number } = {}) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(input)) {
