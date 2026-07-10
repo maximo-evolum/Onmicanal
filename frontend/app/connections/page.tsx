@@ -45,6 +45,64 @@ function providerByKey(data: ConnectionCenterResponse | null, key: string | null
   return data.groups.flatMap((group) => group.providers).find((provider) => provider.key === key) || null;
 }
 
+function providerProgress(provider: ConnectionProvider) {
+  const requiredTotal =
+    (provider.requiredEnv?.length || 0) +
+    (provider.requiredFields?.length || 0) +
+    (provider.oauthProvider ? 1 : 0);
+  const total = Math.max(1, requiredTotal);
+  return Math.max(0, Math.min(100, Math.round(((total - provider.missing.length) / total) * 100)));
+}
+
+function providerActionLabel(provider: ConnectionProvider) {
+  if (provider.status === "CONNECTED") return "Operativo";
+  if (provider.oauthProvider) return "Conectar OAuth";
+  if (provider.missing.length) return "Completar datos";
+  return "Validar conexion";
+}
+
+function providerNextStep(provider: ConnectionProvider) {
+  if (provider.status === "CONNECTED") {
+    return {
+      title: "Monitoreo activo",
+      description: "La conexion ya puede usarse desde los modulos del CRM.",
+    };
+  }
+  if (provider.oauthProvider) {
+    return {
+      title: "Autorizar cuenta",
+      description: "Abre OAuth y confirma permisos para correo, archivos, calendario o pagos.",
+    };
+  }
+  if (provider.missing.length) {
+    return {
+      title: "Completar credenciales",
+      description: `Faltan ${provider.missing.slice(0, 2).join(", ")}${provider.missing.length > 2 ? "..." : ""}.`,
+    };
+  }
+  return {
+    title: "Probar conexion",
+    description: "Ejecuta una prueba y deja trazabilidad operativa antes de usarla.",
+  };
+}
+
+function providerCapabilities(provider: ConnectionProvider) {
+  const haystack = `${provider.key} ${provider.label} ${provider.groupKey} ${provider.module}`.toLowerCase();
+  if (haystack.includes("gmail") || haystack.includes("outlook") || haystack.includes("mail")) {
+    return ["OAuth correo", "Envio y recepcion", "Trazabilidad"];
+  }
+  if (haystack.includes("drive") || haystack.includes("sharepoint") || haystack.includes("storage")) {
+    return ["Archivos", "Permisos", "Plantillas"];
+  }
+  if (haystack.includes("webpay") || haystack.includes("mercado") || haystack.includes("bank") || haystack.includes("payment") || haystack.includes("pago")) {
+    return ["Links de pago", "Estados", "Reconciliacion"];
+  }
+  if (haystack.includes("backup") || haystack.includes("replica") || haystack.includes("offline")) {
+    return ["Continuidad", "Reintentos", "Recuperacion"];
+  }
+  return ["Credenciales por tenant", "Prueba de conexion", "Auditoria operativa"];
+}
+
 export default function ConnectionsPage() {
   const agent = getStoredSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -189,22 +247,53 @@ export default function ConnectionsPage() {
             <div className="module-access-state">Cargando conexiones...</div>
           ) : (
             <>
-              <section className="connection-summary-grid">
+              <section className="connection-command-strip">
                 <article>
-                  <span>Total</span>
-                  <strong>{data?.summary.total || 0}</strong>
+                  <b>1</b>
+                  <strong>Selecciona proveedor</strong>
+                  <span>Correo, archivos, pagos, respaldo o modo offline.</span>
                 </article>
                 <article>
+                  <b>2</b>
+                  <strong>Autoriza o configura</strong>
+                  <span>OAuth cuando exista, credenciales por tenant cuando aplique.</span>
+                </article>
+                <article>
+                  <b>3</b>
+                  <strong>Prueba conexion</strong>
+                  <span>Valida permisos, tokens y disponibilidad antes de operar.</span>
+                </article>
+                <article>
+                  <b>4</b>
+                  <strong>Usa en modulos</strong>
+                  <span>Inbox, campanas, pagos, documentos y continuidad consumen estas conexiones.</span>
+                </article>
+              </section>
+
+              <section className="connection-summary-grid">
+                <article className="connection-summary-card">
+                  <div className="connection-summary-icon">CN</div>
+                  <span>Total proveedores</span>
+                  <strong>{data?.summary.total || 0}</strong>
+                  <small>Catalogo operativo</small>
+                </article>
+                <article className="connection-summary-card">
+                  <div className="connection-summary-icon">OK</div>
                   <span>Conectadas</span>
                   <strong>{data?.summary.connected || 0}</strong>
+                  <small>Listas para usar</small>
                 </article>
-                <article>
+                <article className="connection-summary-card">
+                  <div className="connection-summary-icon">PD</div>
                   <span>Pendientes</span>
                   <strong>{data?.summary.pending || 0}</strong>
+                  <small>Requieren configuracion</small>
                 </article>
-                <article>
+                <article className="connection-summary-card">
+                  <div className="connection-summary-icon">ER</div>
                   <span>Errores</span>
                   <strong>{data?.summary.errors || 0}</strong>
+                  <small>Necesitan revision</small>
                 </article>
               </section>
 
@@ -227,13 +316,17 @@ export default function ConnectionsPage() {
                             onClick={() => setSelectedKey(provider.key)}
                           >
                             <span className="connection-icon">{provider.icon}</span>
-                            <div>
-                              <strong>{provider.label}</strong>
+                            <div className="connection-card-copy">
+                              <div className="connection-card-topline">
+                                <strong>{provider.label}</strong>
+                                <em>{providerActionLabel(provider)}</em>
+                              </div>
                               <small>{provider.description}</small>
                               <span className={`connection-status status-${provider.status.toLowerCase()}`}>
                                 <i />
                                 {statusLabels[provider.status]}
                               </span>
+                              <span className="connection-progress"><i style={{ width: `${providerProgress(provider)}%` }} /></span>
                             </div>
                           </button>
                         ))}
@@ -257,6 +350,21 @@ export default function ConnectionsPage() {
                       <div className={`connection-status-banner status-${selected.status.toLowerCase()}`}>
                         <span>{statusLabels[selected.status]}</span>
                         {selected.missing.length ? <small>Falta: {selected.missing.join(", ")}</small> : <small>Configuracion completa</small>}
+                      </div>
+
+                      {(() => {
+                        const nextStep = providerNextStep(selected);
+                        return (
+                          <div className="connection-next-step">
+                            <span>Siguiente accion</span>
+                            <strong>{nextStep.title}</strong>
+                            <p>{nextStep.description}</p>
+                          </div>
+                        );
+                      })()}
+
+                      <div className="connection-capability-list">
+                        {providerCapabilities(selected).map((item) => <span key={item}>{item}</span>)}
                       </div>
 
                       <div className="connection-form-grid">

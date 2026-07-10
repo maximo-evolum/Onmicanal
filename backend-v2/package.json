@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed": "node seed.js",
+    "seed:realty-demo": "node scripts/seed-realty-demo-properties.mjs",
     "prisma:deploy": "prisma migrate deploy"
   },
   "dependencies": {

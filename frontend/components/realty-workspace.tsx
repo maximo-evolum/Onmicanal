@@ -347,11 +347,13 @@ export function RealtyKpis({ data }: { data: RealtyData }) {
 export function PropertyPortalCards({
   properties,
   brokers,
-  onStageChange
+  onStageChange,
+  onBrokerChange
 }: {
   properties: IndustryRecord[];
   brokers: Broker[];
   onStageChange?: (property: IndustryRecord, stage: string) => Promise<void> | void;
+  onBrokerChange?: (property: IndustryRecord, brokerId: string) => Promise<void> | void;
 }) {
   if (!properties.length) {
     return <p className="empty-state">Aun no hay propiedades cargadas.</p>;
@@ -362,6 +364,7 @@ export function PropertyPortalCards({
       {properties.map((property) => {
         const data = asData(property);
         const photoUrl = text(data.photoUrl);
+        const assignedBrokerId = text(data.assignedBrokerId || property.assignedToId);
         return (
           <article className="property-portal-card" key={property.id}>
             <div className="property-portal-media">
@@ -381,7 +384,17 @@ export function PropertyPortalCards({
               </div>
               <small>{text(data.observations, "Sin observaciones")}</small>
               <div className="property-card-actions">
-                <span>{getBrokerName(property, brokers)}</span>
+                {onBrokerChange ? (
+                  <label className="property-assignment-row">
+                    <small>Corredor</small>
+                    <select value={assignedBrokerId} onChange={(event) => onBrokerChange(property, event.target.value)}>
+                      <option value="">Sin corredor</option>
+                      {brokers.map((broker) => <option key={broker.id} value={broker.id}>{broker.name}</option>)}
+                    </select>
+                  </label>
+                ) : (
+                  <span>{getBrokerName(property, brokers)}</span>
+                )}
                 {onStageChange ? (
                   <select value={text(data.stage, "LEAD")} onChange={(event) => onStageChange(property, event.target.value)}>
                     {REALTY_STAGES.map((stage) => <option key={stage.key} value={stage.key}>{stage.label}</option>)}
@@ -411,6 +424,7 @@ export function RealtyLoadsPageContent() {
       recordType: "property",
       title: propertyForm.title || "Propiedad sin nombre",
       status: "ACTIVE",
+      assignedToId: propertyForm.assignedBrokerId || null,
       data: {
         ...propertyForm,
         price: numberValue(propertyForm.price),
@@ -496,6 +510,7 @@ export function RealtyLoadsPageContent() {
     await Promise.all(unassigned.map((property, index) => {
       const broker = brokers[index % brokers.length];
       return updateIndustryRecord(property.id, {
+        assignedToId: broker.id,
         data: { ...asData(property), assignedBrokerId: broker.id, assignedBrokerName: broker.name, assignmentMode: "automatico" }
       });
     }));
@@ -591,6 +606,20 @@ export function RealtyPropertiesPageContent() {
     await reload();
   }
 
+  async function updateBroker(property: IndustryRecord, brokerId: string) {
+    const broker = data.brokers.find((item) => item.id === brokerId);
+    await updateIndustryRecord(property.id, {
+      assignedToId: brokerId || null,
+      data: {
+        ...asData(property),
+        assignedBrokerId: brokerId,
+        assignedBrokerName: broker?.name || "",
+        assignmentMode: brokerId ? "manual" : "sin_corredor"
+      }
+    });
+    await reload();
+  }
+
   return (
     <>
       <RealtyHeader
@@ -603,7 +632,7 @@ export function RealtyPropertiesPageContent() {
       <RealtyPredictivePanel data={data} />
       <section className="vertical-card">
         <div className="vertical-card-head"><div><span>Inventario</span><h2>Portal de propiedades</h2></div></div>
-        <PropertyPortalCards properties={data.properties} brokers={data.brokers} onStageChange={updateStage} />
+        <PropertyPortalCards properties={data.properties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} />
       </section>
     </>
   );
@@ -725,6 +754,7 @@ export function BrokersPageContent() {
   async function assignProperty(property: IndustryRecord, brokerId: string) {
     const broker = data.brokers.find((item) => item.id === brokerId);
     await updateIndustryRecord(property.id, {
+      assignedToId: brokerId || null,
       data: { ...asData(property), assignedBrokerId: brokerId, assignedBrokerName: broker?.name || "", assignmentMode: "manual" }
     });
     await reload();
