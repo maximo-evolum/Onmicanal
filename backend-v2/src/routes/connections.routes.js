@@ -1,15 +1,45 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { normalizeMetadata } from "../lib/metadata.js";
 import { MODULES } from "../lib/modules.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { encryptSecret, hasSecret } from "../lib/credential-crypto.js";
 
 export const connectionsPublicRouter = Router();
 export const connectionsRouter = Router();
 
 const PROVIDERS = [
+  {
+    key: "meta_whatsapp",
+    label: "WhatsApp Business",
+    group: "Canales Meta",
+    groupKey: "meta_channels",
+    icon: "WA",
+    type: "oauth",
+    oauthProvider: "meta",
+    module: MODULES.INBOX,
+    description: "Conexion guiada para mensajeria, phone number ID, bandeja omnicanal y campañas por WhatsApp.",
+    oauthRequiredEnv: ["META_APP_ID", "META_APP_SECRET", "PUBLIC_BASE_URL"],
+    requiredFields: ["accessToken", "phoneNumberId", "businessAccountId"],
+    scopes: ["business_management", "whatsapp_business_management", "whatsapp_business_messaging"]
+  },
+  {
+    key: "meta_instagram",
+    label: "Instagram / Facebook",
+    group: "Canales Meta",
+    groupKey: "meta_channels",
+    icon: "IG",
+    type: "oauth",
+    oauthProvider: "meta",
+    module: MODULES.MARKETING,
+    description: "Cuentas Meta para mensajes, publicaciones, stories/reels cuando la API y permisos del negocio lo permitan.",
+    oauthRequiredEnv: ["META_APP_ID", "META_APP_SECRET", "PUBLIC_BASE_URL"],
+    requiredFields: ["accessToken", "businessAccountId"],
+    scopes: ["business_management", "pages_show_list", "pages_read_engagement", "pages_manage_posts", "instagram_basic", "instagram_content_publish"]
+  },
   {
     key: "gmail",
     label: "Gmail / Google Workspace",
@@ -77,10 +107,13 @@ const PROVIDERS = [
     group: "Pagos y cobros",
     groupKey: "payments",
     icon: "MP",
-    type: "credentials",
+    type: "oauth",
+    oauthProvider: "mercadopago",
     module: MODULES.PAYMENTS,
     description: "Links, estados y cobros conectados a conversaciones, reservas y oportunidades.",
-    requiredFields: ["externalAccountId", "accessToken"]
+    oauthRequiredEnv: ["MERCADOPAGO_CLIENT_ID", "MERCADOPAGO_CLIENT_SECRET", "PUBLIC_BASE_URL"],
+    requiredFields: ["accessToken"],
+    scopes: ["offline_access", "read", "write"]
   },
   {
     key: "bank_links",
@@ -143,11 +176,17 @@ function publicBaseUrl(req) {
 
 function readEnv(key) {
   if (key === "PUBLIC_BASE_URL") return env.publicBaseUrl || process.env.PUBLIC_BASE_URL || process.env.BACKEND_PUBLIC_URL;
+  if (key === "META_APP_ID") return process.env.META_APP_ID || process.env.FACEBOOK_APP_ID;
+  if (key === "META_APP_SECRET") return process.env.META_APP_SECRET || process.env.FACEBOOK_APP_SECRET || env.metaAppSecret;
   return process.env[key];
 }
 
 function missingEnv(provider) {
   return (provider.requiredEnv || []).filter((key) => !readEnv(key));
+}
+
+function missingOAuthEnv(provider) {
+  return (provider.oauthRequiredEnv || provider.requiredEnv || []).filter((key) => !readEnv(key));
 }
 
 function configMetadata(config) {
@@ -156,8 +195,8 @@ function configMetadata(config) {
 
 function hasField(config, field) {
   const metadata = configMetadata(config);
-  if (field === "accessToken") return Boolean(config?.accessToken);
-  if (field === "verifyToken") return Boolean(config?.verifyToken);
+  if (field === "accessToken") return hasSecret(config?.accessToken);
+  if (field === "verifyToken") return hasSecret(config?.verifyToken);
   if (field === "externalAccountId") return Boolean(config?.externalAccountId);
   if (field === "businessAccountId") return Boolean(config?.businessAccountId);
   return Boolean(metadata[field]);
@@ -189,8 +228,8 @@ function publicConfig(config) {
     externalAccountId: config.externalAccountId,
     metadata: configMetadata(config),
     isActive: config.isActive,
-    hasAccessToken: Boolean(config.accessToken),
-    hasVerifyToken: Boolean(config.verifyToken),
+    hasAccessToken: hasSecret(config.accessToken),
+    hasVerifyToken: hasSecret(config.verifyToken),
     createdAt: config.createdAt,
     updatedAt: config.updatedAt
   };
@@ -210,6 +249,7 @@ function publicProvider(provider, config) {
     module: provider.module,
     description: provider.description,
     requiredEnv: provider.requiredEnv || [],
+    oauthRequiredEnv: provider.oauthRequiredEnv || [],
     requiredFields: provider.requiredFields || [],
     scopes: provider.scopes || [],
     missing: [...envMissing, ...fieldMissing],
@@ -227,11 +267,13 @@ function groupProviders(providers) {
         id: provider.groupKey,
         label: provider.group,
         description:
-          provider.groupKey === "mail_files"
-            ? "Correo, documentos, carpetas y almacenamiento del cliente."
-            : provider.groupKey === "payments"
-              ? "Medios de pago, links, estados de cobro y bancos."
-              : "Backups, replica, alta disponibilidad y trabajo offline.",
+          provider.groupKey === "meta_channels"
+            ? "Cuentas Meta para WhatsApp, Instagram, Facebook y publicaciones."
+            : provider.groupKey === "mail_files"
+              ? "Correo, documentos, carpetas y almacenamiento del cliente."
+              : provider.groupKey === "payments"
+                ? "Medios de pago, links, estados de cobro y bancos."
+                : "Backups, replica, alta disponibilidad y trabajo offline.",
         providers: []
       };
       groups.push(group);
@@ -241,13 +283,26 @@ function groupProviders(providers) {
   return groups;
 }
 
+function oauthStateSecret() {
+  return String(process.env.CONNECTIONS_STATE_SECRET || env.jwtSecret || process.env.DATABASE_URL || "evolum-local-state-secret");
+}
+
+function signOAuthState(body) {
+  return crypto.createHmac("sha256", oauthStateSecret()).update(body).digest("base64url");
+}
+
+function encodeOAuthState(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${body}.${signOAuthState(body)}`;
+}
+
 function buildOAuthUrl(req, provider) {
   const baseUrl = publicBaseUrl(req);
-  const state = Buffer.from(JSON.stringify({
+  const state = encodeOAuthState({
     tenantId: req.tenantId,
     key: provider.key,
     ts: Date.now()
-  })).toString("base64url");
+  });
 
   if (provider.oauthProvider === "google") {
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
@@ -272,12 +327,39 @@ function buildOAuthUrl(req, provider) {
     return url.toString();
   }
 
+  if (provider.oauthProvider === "meta") {
+    const url = new URL("https://www.facebook.com/v23.0/dialog/oauth");
+    url.searchParams.set("client_id", readEnv("META_APP_ID") || "");
+    url.searchParams.set("redirect_uri", `${baseUrl}/api/connections/oauth/meta/callback`);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", (provider.scopes || []).join(","));
+    url.searchParams.set("state", state);
+    return url.toString();
+  }
+
+  if (provider.oauthProvider === "mercadopago") {
+    const url = new URL("https://auth.mercadopago.com/authorization");
+    url.searchParams.set("client_id", process.env.MERCADOPAGO_CLIENT_ID || "");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("platform_id", "mp");
+    url.searchParams.set("redirect_uri", `${baseUrl}/api/connections/oauth/mercadopago/callback`);
+    url.searchParams.set("state", state);
+    return url.toString();
+  }
+
   return null;
 }
 
 function decodeOAuthState(value) {
   try {
-    const decoded = Buffer.from(String(value || ""), "base64url").toString("utf8");
+    const [body, signature] = String(value || "").split(".");
+    if (!body || !signature) return null;
+    const expected = signOAuthState(body);
+    const left = Buffer.from(signature);
+    const right = Buffer.from(expected);
+    if (left.length !== right.length || !crypto.timingSafeEqual(left, right)) return null;
+
+    const decoded = Buffer.from(body, "base64url").toString("utf8");
     const parsed = JSON.parse(decoded);
     const tenantId = cleanText(parsed.tenantId);
     const key = cleanText(parsed.key).toLowerCase();
@@ -339,6 +421,14 @@ async function exchangeOAuthCode(req, provider, code) {
     body.set("client_id", process.env.MICROSOFT_CLIENT_ID || "");
     body.set("client_secret", process.env.MICROSOFT_CLIENT_SECRET || "");
     body.set("scope", (provider.scopes || []).join(" "));
+  } else if (provider.oauthProvider === "meta") {
+    tokenUrl = "https://graph.facebook.com/v23.0/oauth/access_token";
+    body.set("client_id", readEnv("META_APP_ID") || "");
+    body.set("client_secret", readEnv("META_APP_SECRET") || "");
+  } else if (provider.oauthProvider === "mercadopago") {
+    tokenUrl = "https://api.mercadopago.com/oauth/token";
+    body.set("client_id", process.env.MERCADOPAGO_CLIENT_ID || "");
+    body.set("client_secret", process.env.MERCADOPAGO_CLIENT_SECRET || "");
   } else {
     throw new Error("Proveedor OAuth no soportado");
   }
@@ -381,6 +471,8 @@ function oauthCallbackHandler(expectedProvider) {
       const existing = await prisma.tenantChannelConfig.findUnique({
         where: { tenantId_channel: { tenantId: state.tenantId, channel: provider.key } }
       });
+      const encryptedAccessToken = encryptSecret(token.access_token) || existing?.accessToken || null;
+      const encryptedRefreshToken = encryptSecret(token.refresh_token) || existing?.verifyToken || null;
       const metadata = normalizeMetadata({
         ...configMetadata(existing),
         providerType: provider.type,
@@ -389,7 +481,8 @@ function oauthCallbackHandler(expectedProvider) {
         scope: token.scope || (provider.scopes || []).join(" "),
         tokenType: token.token_type || null,
         expiresIn: token.expires_in || null,
-        refreshToken: token.refresh_token || configMetadata(existing).refreshToken || null,
+        hasRefreshToken: Boolean(token.refresh_token || existing?.verifyToken || configMetadata(existing).hasRefreshToken),
+        refreshToken: undefined,
         oauthConnectedAt: new Date().toISOString(),
         lastTestStatus: "OK",
         lastTestMessage: "OAuth conectado"
@@ -401,13 +494,15 @@ function oauthCallbackHandler(expectedProvider) {
           tenantId: state.tenantId,
           channel: provider.key,
           label: provider.label,
-          accessToken: token.access_token || null,
+          accessToken: encryptedAccessToken,
+          verifyToken: encryptedRefreshToken,
           metadata,
           isActive: true
         },
         update: {
           label: provider.label,
-          accessToken: token.access_token || existing?.accessToken || null,
+          accessToken: encryptedAccessToken,
+          verifyToken: encryptedRefreshToken,
           metadata,
           isActive: true
         }
@@ -430,6 +525,8 @@ function oauthCallbackHandler(expectedProvider) {
 
 connectionsPublicRouter.get("/connections/oauth/google/callback", oauthCallbackHandler("google"));
 connectionsPublicRouter.get("/connections/oauth/microsoft/callback", oauthCallbackHandler("microsoft"));
+connectionsPublicRouter.get("/connections/oauth/meta/callback", oauthCallbackHandler("meta"));
+connectionsPublicRouter.get("/connections/oauth/mercadopago/callback", oauthCallbackHandler("mercadopago"));
 
 connectionsRouter.get("/connections", async (req, res, next) => {
   try {
@@ -458,6 +555,8 @@ connectionsRouter.get("/connections", async (req, res, next) => {
       callbacks: {
         oauthGoogle: `${publicBaseUrl(req)}/api/connections/oauth/google/callback`,
         oauthMicrosoft: `${publicBaseUrl(req)}/api/connections/oauth/microsoft/callback`,
+        oauthMeta: `${publicBaseUrl(req)}/api/connections/oauth/meta/callback`,
+        oauthMercadoPago: `${publicBaseUrl(req)}/api/connections/oauth/mercadopago/callback`,
         metaWebhook: `${publicBaseUrl(req)}/meta/webhook`
       },
       groups: groupProviders(providers)
@@ -490,8 +589,8 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
       phoneNumberId: req.body?.phoneNumberId === undefined ? existing?.phoneNumberId || null : cleanText(req.body.phoneNumberId, null),
       businessAccountId: req.body?.businessAccountId === undefined ? existing?.businessAccountId || null : cleanText(req.body.businessAccountId, null),
       externalAccountId: req.body?.externalAccountId === undefined ? existing?.externalAccountId || null : cleanText(req.body.externalAccountId, null),
-      accessToken: req.body?.accessToken === undefined ? existing?.accessToken || null : cleanText(req.body.accessToken, null),
-      verifyToken: req.body?.verifyToken === undefined ? existing?.verifyToken || null : cleanText(req.body.verifyToken, null),
+      accessToken: req.body?.accessToken === undefined ? existing?.accessToken || null : encryptSecret(req.body.accessToken),
+      verifyToken: req.body?.verifyToken === undefined ? existing?.verifyToken || null : encryptSecret(req.body.verifyToken),
       metadata,
       isActive: req.body?.isActive === undefined ? true : Boolean(req.body.isActive)
     };
@@ -596,10 +695,11 @@ connectionsRouter.post("/connections/:key/oauth-url", requireRole(ROLE_GROUPS.MA
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });
     if (!provider.oauthProvider) return res.status(400).json({ error: "Este proveedor no usa OAuth" });
 
-    const missing = missingEnv(provider);
+    const missing = missingOAuthEnv(provider);
     if (missing.length) return res.status(400).json({ error: "Faltan variables de entorno OAuth", missing });
 
     const url = buildOAuthUrl(req, provider);
+    if (!url) return res.status(400).json({ error: "No se pudo construir URL OAuth" });
     res.json({ url, provider: key, oauthProvider: provider.oauthProvider });
   } catch (error) {
     next(error);

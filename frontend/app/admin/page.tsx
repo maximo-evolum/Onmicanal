@@ -27,9 +27,10 @@ import {
 import { getStoredSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
+import { editableRoleValue, roleLabel, ROLE_OPTIONS } from "@/lib/role-labels";
 
 const PLANS = ["STARTER", "PRO", "BUSINESS", "ENTERPRISE"];
-const ROLES = ["OWNER", "ADMIN", "AGENT", "SELLER", "VIEWER"];
+const ROLES = ROLE_OPTIONS;
 const PLAN_RANK: Record<string, number> = { STARTER: 1, PRO: 2, BUSINESS: 3, ENTERPRISE: 4 };
 const MODULE_LABELS: Record<string, string> = {
   inbox: "Inbox",
@@ -45,7 +46,7 @@ const MODULE_LABELS: Record<string, string> = {
   campaigns: "Campañas",
   dashboard: "Dashboard",
   ai_ops: "AI Ops / Cierres IA",
-  onboarding: "Configuracion de Agente",
+  onboarding: "Configuración de Agente",
   saas: "Planes y módulos",
   users: "Usuarios y roles",
   integrations: "Integraciones",
@@ -54,7 +55,7 @@ const MODULE_LABELS: Record<string, string> = {
   google_drive: "Google Drive",
   sharepoint: "SharePoint",
   backup_provider: "Proveedor de respaldo",
-  offline_sync: "Modo offline y sincronizacion",
+  offline_sync: "Modo offline y sincronización",
   security_replica: "Réplica de seguridad",
   documents: "Documentos",
   workflows: "Flujos de trabajo",
@@ -127,12 +128,12 @@ const PROJECT_MODULE_CATALOG = [
 const MODULE_GROUPS = [
   {
     title: "Core EVOLUM",
-    description: "Modulos transversales que cualquier cliente puede usar.",
+    description: "Módulos transversales que cualquier cliente puede usar.",
     modules: ["inbox", "agenda", "pipeline", "campaigns", "payments", "onboarding", "saas", "users", "dashboard", "ai_ops", "documents", "workflows", "revenue", "bot_lab"],
   },
   {
     title: "Integraciones y continuidad",
-    description: "Correo, archivos, respaldo, replica y trabajo offline sincronizable.",
+    description: "Correo, archivos, respaldo, réplica y trabajo offline sincronizable.",
     modules: ["integrations", "gmail", "email_imap", "google_drive", "sharepoint", "backup_provider", "offline_sync", "security_replica"],
   },
   {
@@ -142,16 +143,16 @@ const MODULE_GROUPS = [
   },
   {
     title: "Salud y veterinaria",
-    description: "Fichas clinicas, pacientes, examenes, presupuestos y seguimiento.",
+    description: "Fichas clínicas, pacientes, examenes, presupuestos y seguimiento.",
     modules: ["customers", "patients", "exams", "veterinary", "bookings", "followups"],
   },
   {
     title: "Automotriz y taller",
-    description: "Vehiculos, repuestos, mecanicos, stock y avisos de retiro.",
+    description: "Vehículos, repuestos, mecánicos, stock y avisos de retiro.",
     modules: ["vehicles", "workshop", "parts_inventory", "mechanic_assignments", "ready_notifications"],
   },
   {
-    title: "Gastronomia y servicios",
+    title: "Gastronomía y servicios",
     description: "Reservas, ventas, marketing, pagos y agenda operativa.",
     modules: ["sales", "marketing", "bookings", "followups", "analytics"],
   },
@@ -164,7 +165,7 @@ const CONTINUITY_CARDS = [
     items: ["Gmail / Google Workspace", "IMAP / SMTP", "Google Drive", "SharePoint / OneDrive"],
   },
   {
-    title: "Respaldo y replica",
+    title: "Respaldo y réplica",
     status: "Proveedor configurable",
     items: ["Replica secundaria cifrada", "Snapshots programados", "Retencion por plan", "Restauracion controlada"],
   },
@@ -255,7 +256,7 @@ const emptyAiProfile = {
   basePersona: "",
   tone: "cercano y profesional",
   objective: "resolver dudas, recomendar y avanzar hacia venta/agendamiento",
-  responseStyle: "breve, natural y orientado a acciÃ³n",
+  responseStyle: "breve, natural y orientado a acción",
   businessRulesText: "",
 };
 
@@ -265,7 +266,7 @@ const emptyImportManual = {
   description: "",
   tone: "cercano y profesional",
   objective: "resolver dudas, recomendar productos/servicios y avanzar hacia venta",
-  restrictions: "No inventar precios, stock ni polÃ­ticas. Si falta informaciÃ³n, pedir confirmaciÃ³n."
+  restrictions: "No inventar precios, stock ni políticas. Si falta información, pedir confirmación."
 };
 
 function normalizePlanLabel(plan?: string | null) {
@@ -318,7 +319,7 @@ function normalizeIndustry(value: string) {
 const INDUSTRY_ALIASES: Record<string, string[]> = {
   REALTY: ["realty", "inmobiliaria", "inmobiliario", "propiedades", "corretaje", "bienes raices"],
   GASTRONOMY: ["gastronomia", "gastronomico", "restaurante", "restaurant", "eventos", "catering"],
-  AUTOMOTIVE: ["automotriz", "automotive", "taller", "mecanica", "mecanico", "vehiculos"],
+  AUTOMOTIVE: ["automotriz", "automotive", "taller", "mecanica", "mecanico", "vehículos"],
   HEALTH: ["salud", "health", "clinica", "medica", "medico", "dental", "dentales"],
   VETERINARY: ["veterinaria", "veterinario", "veterinary", "mascotas", "animales"],
   GENERAL: ["general", "saas"]
@@ -446,7 +447,7 @@ export default function AdminPage() {
       displayNumber: String(whatsappMetadata.displayNumber || whatsappMetadata.whatsappDisplayNumber || ""),
       accessToken: whatsapp?.accessToken || "",
       verifyToken: whatsapp?.verifyToken || "",
-      isActive: whatsapp?.isActive ?? true,
+      isActive: whatsapp?.isActive ? true : false,
     });
 
     setInstagramForm({
@@ -456,7 +457,7 @@ export default function AdminPage() {
       accessToken: instagram?.accessToken || "",
       verifyToken: instagram?.verifyToken || "",
       pageId: typeof instagram?.metadata === "object" && instagram?.metadata ? String((instagram.metadata as Record<string, unknown>).pageId || "") : "",
-      isActive: instagram?.isActive ?? true,
+      isActive: instagram?.isActive ? true : false,
     });
 
     const facebookMetadata = typeof facebook?.metadata === "object" && facebook?.metadata
@@ -469,7 +470,7 @@ export default function AdminPage() {
       businessAccountId: facebook?.businessAccountId || "",
       accessToken: facebook?.accessToken || "",
       verifyToken: facebook?.verifyToken || "",
-      isActive: facebook?.isActive ?? true,
+      isActive: facebook?.isActive ? true : false,
     });
 
     setAiForm({
@@ -478,7 +479,7 @@ export default function AdminPage() {
       basePersona: profile?.basePersona || selectedTenant.businessPrompt || "",
       tone: profile?.tone || "cercano y profesional",
       objective: profile?.objective || "resolver dudas, recomendar y avanzar hacia venta/agendamiento",
-      responseStyle: profile?.responseStyle || "breve, natural y orientado a acciÃ³n",
+      responseStyle: profile?.responseStyle || "breve, natural y orientado a acción",
       businessRulesText: asArrayRules(profile?.businessRules).join("\n"),
     });
 
@@ -535,7 +536,7 @@ export default function AdminPage() {
     const used = new Set(grouped.flatMap((group) => group.modules));
     const otherModules = availableModules.filter((module) => !used.has(module));
     return otherModules.length
-      ? [...grouped, { title: "Otros modulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules }]
+      ? [...grouped, { title: "Otros módulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules }]
       : grouped;
   }, [availableModules]);
 
@@ -568,7 +569,7 @@ export default function AdminPage() {
       setTenants((items) => [tenant, ...items]);
       setSelectedId(tenant.id);
       setClientForm(emptyClient);
-      setSuccess("Cliente creado y mÃ³dulos iniciales asignados.");
+      setSuccess("Cliente creado y módulos iniciales asignados.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo crear el cliente");
     } finally {
@@ -607,7 +608,7 @@ export default function AdminPage() {
         users: billingForm.users === "" ? null : Number(billingForm.users),
       });
       if (result.tenant) updateTenantLocal(result.tenant);
-      setSuccess("Precio mensual y lÃ­mites del cliente actualizados.");
+      setSuccess("Precio mensual y límites del cliente actualizados.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el precio mensual");
     } finally {
@@ -666,7 +667,7 @@ export default function AdminPage() {
             };
       const updated = await updateAdminTenantChannelConfig(selectedTenant.id, channel, payload);
       updateTenantLocal(updated);
-      setSuccess(`Configuracion ${channel === "whatsapp" ? "WhatsApp" : channel === "instagram" ? "Instagram" : "Facebook"} guardada.`);
+      setSuccess(`Configuración ${channel === "whatsapp" ? "WhatsApp" : channel === "instagram" ? "Instagram" : "Facebook"} guardada.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el canal");
     } finally {
@@ -716,9 +717,9 @@ export default function AdminPage() {
       });
       setImportId(result.importId);
       setImportExtraction(result.extraction);
-      setSuccess("ExtracciÃ³n IA lista. Revisa productos, FAQs y polÃ­ticas antes de aplicar.");
+      setSuccess("Extracción IA lista. Revisa productos, FAQs y políticas antes de aplicar.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo extraer la informaciÃ³n");
+      setError(err instanceof Error ? err.message : "No se pudo extraer la información");
     } finally {
       setSavingId(null);
     }
@@ -738,7 +739,7 @@ export default function AdminPage() {
         replaceFaqs,
       });
       if (result.tenant) updateTenantLocal(result.tenant);
-      setSuccess(`Onboarding aplicado: ${result.createdProducts || 0} productos, ${result.createdFaqs || 0} FAQs y ${result.policiesCount || 0} polÃ­ticas.`);
+      setSuccess(`Onboarding aplicado: ${result.createdProducts || 0} productos, ${result.createdFaqs || 0} FAQs y ${result.policiesCount || 0} políticas.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo aplicar el onboarding IA");
     } finally {
@@ -759,13 +760,13 @@ export default function AdminPage() {
 
   function addModulesToPending(modules: string[]) {
     setPendingModules((current) => Array.from(new Set([...current, ...modules])));
-    setSuccess("Modulos sugeridos cargados en el selector. Presiona Guardar modulos para aplicarlos.");
+    setSuccess("Módulos sugeridos cargados en el selector. Presiona Guardar módulos para aplicarlos.");
     setError(null);
   }
 
   function replacePendingWithModules(modules: string[]) {
     setPendingModules(Array.from(new Set(modules)));
-    setSuccess("Selector reemplazado con los modulos del rubro. Presiona Guardar modulos para aplicarlos.");
+    setSuccess("Selector reemplazado con los módulos del rubro. Presiona Guardar módulos para aplicarlos.");
     setError(null);
   }
 
@@ -816,9 +817,9 @@ export default function AdminPage() {
         updateTenantLocal(result.tenant);
         setPendingModules(enabledModulesOf(result.tenant as AdminTenant));
       }
-      setSuccess("MÃ³dulos guardados en la base de datos. Los usuarios del cliente verÃ¡n el cambio al recargar o volver a iniciar sesiÃ³n.");
+      setSuccess("Módulos guardados en la base de datos. Los usuarios del cliente verán el cambio al recargar o volver a iniciar sesión.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron guardar los mÃ³dulos");
+      setError(err instanceof Error ? err.message : "No se pudieron guardar los módulos");
     } finally {
       setSavingId(null);
     }
@@ -850,7 +851,7 @@ export default function AdminPage() {
         setPendingModules(enabledModulesOf(updatedTenant as AdminTenant));
       }
       await load();
-      setSuccess(`${normalizedPlan} aplicado con ${modulesForPlan.length} modulos del rubro.`);
+      setSuccess(`${normalizedPlan} aplicado con ${modulesForPlan.length} módulos del rubro.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : `No se pudo aplicar ${normalizedPlan}`);
     } finally {
@@ -872,7 +873,7 @@ export default function AdminPage() {
         updateTenantLocal(result.tenant);
         setPendingModules(enabledModulesOf(result.tenant));
       }
-      setSuccess(`Plantilla ${template.name} aplicada. MÃƒÂ³dulos, entidades y flujos base quedaron listos para este cliente.`);
+      setSuccess(`Plantilla ${template.name} aplicada. Módulos, entidades y flujos base quedaron listos para este cliente.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo aplicar la plantilla de rubro");
     } finally {
@@ -909,10 +910,25 @@ export default function AdminPage() {
     }
   }
 
+  async function handleUserRoleChange(userId: string, role: string) {
+    try {
+      setSavingId(`role-${userId}`);
+      setError(null);
+      setSuccess(null);
+      const updated = await updateAdminUser(userId, { role });
+      updateTenantLocal(updated);
+      setSuccess("Nivel de usuario actualizado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cambiar el nivel del usuario");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function handleDeleteTenant(tenantId: string) {
     const tenant = tenants.find((item) => item.id === tenantId);
     const label = tenant?.name ? `"${tenant.name}"` : "este cliente";
-    if (!window.confirm(`Â¿Eliminar ${label}? Esta acciÃ³n eliminarÃ¡ sus usuarios y datos asociados.`)) return;
+    if (!window.confirm(`¿Eliminar ${label}? Esta acción eliminará sus usuarios y datos asociados.`)) return;
 
     try {
       setSavingId(`delete-tenant-${tenantId}`);
@@ -936,7 +952,7 @@ export default function AdminPage() {
   async function handleDeleteUser(userId: string) {
     const user = selectedTenant?.workspaceUsers?.find((item) => item.id === userId);
     const label = user?.email ? `"${user.email}"` : "este usuario";
-    if (!window.confirm(`Â¿Eliminar ${label}?`)) return;
+    if (!window.confirm(`¿Eliminar ${label}?`)) return;
 
     try {
       setSavingId(`delete-user-${userId}`);
@@ -984,7 +1000,7 @@ export default function AdminPage() {
           <div>
             <span className="eyebrow">Control Center</span>
             <h1>Vista desarrollador</h1>
-            <div className="meta-line">Crea clientes, asigna planes, habilita mÃ³dulos y administra usuarios desde un solo lugar.</div>
+            <div className="meta-line">Crea clientes, asigna planes, habilita módulos y administra usuarios desde un solo lugar.</div>
           </div>
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar cliente, slug, rubro o plan..." />
           <AccountPill fallbackName={agent?.name || "Super Admin"} />
@@ -993,7 +1009,7 @@ export default function AdminPage() {
         <div className="admin-stats-grid">
           <div className="metric-card"><div className="meta-line">Clientes</div><strong>{tenants.length}</strong></div>
           <div className="metric-card"><div className="meta-line">Usuarios</div><strong>{totals.users}</strong></div>
-          <div className="metric-card"><div className="meta-line">MÃ³dulos activos</div><strong>{totals.activeModules}</strong></div>
+          <div className="metric-card"><div className="meta-line">Módulos activos</div><strong>{totals.activeModules}</strong></div>
           <div className="metric-card"><div className="meta-line">Planes altos</div><strong>{totals.business}</strong></div>
         </div>
 
@@ -1025,10 +1041,10 @@ export default function AdminPage() {
                 {PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
               </select>
               <div className="admin-form-row">
-                <input value={clientForm.ownerName} onChange={(e) => setClientForm({ ...clientForm, ownerName: e.target.value })} placeholder="Nombre owner" required />
-                <input value={clientForm.ownerEmail} onChange={(e) => setClientForm({ ...clientForm, ownerEmail: e.target.value })} placeholder="Email owner" required />
+                <input value={clientForm.ownerName} onChange={(e) => setClientForm({ ...clientForm, ownerName: e.target.value })} placeholder="Nombre admin" required />
+                <input value={clientForm.ownerEmail} onChange={(e) => setClientForm({ ...clientForm, ownerEmail: e.target.value })} placeholder="Email admin" required />
               </div>
-              <input value={clientForm.ownerPassword} onChange={(e) => setClientForm({ ...clientForm, ownerPassword: e.target.value })} placeholder="ContraseÃ±a inicial opcional" type="password" />
+              <input value={clientForm.ownerPassword} onChange={(e) => setClientForm({ ...clientForm, ownerPassword: e.target.value })} placeholder="Contraseña inicial opcional" type="password" />
               <div className="admin-form-row">
                 <input value={clientForm.whatsappPhoneNumberId} onChange={(e) => setClientForm({ ...clientForm, whatsappPhoneNumberId: e.target.value })} placeholder="WhatsApp Phone Number ID" />
                 <input value={clientForm.whatsappBusinessAccountId} onChange={(e) => setClientForm({ ...clientForm, whatsappBusinessAccountId: e.target.value })} placeholder="WhatsApp Business Account ID" />
@@ -1057,7 +1073,7 @@ export default function AdminPage() {
                 >
                   <div>
                     <strong>{tenant.name}</strong>
-                    <div className="meta-line">/{tenant.slug} Â· {tenant.industry || "sin rubro"}</div>
+                    <div className="meta-line">/{tenant.slug} ? {tenant.industry || "sin rubro"}</div>
                   </div>
                   <span className="badge accent">{normalizePlanLabel(tenant.plan)}</span>
                 </button>
@@ -1071,7 +1087,7 @@ export default function AdminPage() {
                 <div className="admin-panel-header">
                   <div>
                     <strong>{selectedTenant.name}</strong>
-                    <div className="meta-line">Configura plan, mÃ³dulos, datos y usuarios.</div>
+                    <div className="meta-line">Configura plan, módulos, datos y usuarios.</div>
                   </div>
                   <span className="badge accent">{normalizePlanLabel(selectedTenant.plan)}</span>
                 </div>
@@ -1097,7 +1113,7 @@ export default function AdminPage() {
                   </label>
                   <label>
                     <span className="meta-line">WhatsApp Phone Number ID</span>
-                    <input defaultValue={selectedTenant.whatsappPhoneNumberId || ""} onBlur={(e) => handleTenantField("whatsappPhoneNumberId", e.target.value)} placeholder="ID del nÃºmero Meta" />
+                    <input defaultValue={selectedTenant.whatsappPhoneNumberId || ""} onBlur={(e) => handleTenantField("whatsappPhoneNumberId", e.target.value)} placeholder="ID del número Meta" />
                   </label>
                   <label>
                     <span className="meta-line">Instagram Business Account ID</span>
@@ -1110,7 +1126,7 @@ export default function AdminPage() {
                     <div>
                       <strong>Motor multirubro</strong>
                       <div className="meta-line">
-                        Crea rubros con mÃ³dulos propios. Al aplicar una plantilla se habilitan sus servicios segÃºn el plan actual del cliente.
+                        Crea rubros con módulos propios. Al aplicar una plantilla se habilitan sus servicios según el plan actual del cliente.
                       </div>
                     </div>
                     <span className="admin-industry-pill">
@@ -1122,7 +1138,7 @@ export default function AdminPage() {
                     <div className="industry-builder-summary">
                       <span>Plantilla activa</span>
                       <h3>{selectedIndustryTemplate?.name || "General"}</h3>
-                      <p>{selectedIndustryTemplate?.summary || "Operacion comercial omnicanal."}</p>
+                      <p>{selectedIndustryTemplate?.summary || "Operación comercial omnicanal."}</p>
                       <div className="industry-builder-actions">
                         <button
                           className="ghost-btn"
@@ -1154,8 +1170,8 @@ export default function AdminPage() {
                             disabled={savingId === `plan-preset-${plan}`}
                           >
                             <strong>{plan}</strong>
-                            <span>{modulesForPlan.length} modulos</span>
-                            <small>{modulesForPlan.map((module) => module.label).slice(0, 4).join(", ") || "Sin modulos"}</small>
+                            <span>{modulesForPlan.length} módulos</span>
+                            <small>{modulesForPlan.map((module) => module.label).slice(0, 4).join(", ") || "Sin módulos"}</small>
                           </button>
                         );
                       })}
@@ -1165,8 +1181,8 @@ export default function AdminPage() {
                   <div className="industry-custom-builder">
                     <div>
                       <span className="eyebrow">Nuevo rubro</span>
-                      <h3>Crear plantilla desde modulos activos</h3>
-                      <p className="meta-line">Usa el selector de modulos de abajo como base. Ideal para futuros rubros como retail, legaltech, gimnasios o clinicas especializadas.</p>
+                      <h3>Crear plantilla desde módulos activos</h3>
+                      <p className="meta-line">Usa el selector de módulos de abajo como base. Ideal para futuros rubros como retail, legaltech, gimnasios o clínicas especializadas.</p>
                     </div>
                     <div className="industry-custom-form">
                       <input value={industryForm.name} onChange={(e) => setIndustryForm({ ...industryForm, name: e.target.value })} placeholder="Nombre del rubro" />
@@ -1220,8 +1236,8 @@ export default function AdminPage() {
                 <div className="admin-module-section">
                   <div className="admin-panel-header slim">
                     <div>
-                      <strong>Precio mensual y lÃ­mites comerciales</strong>
-                      <div className="meta-line">Define manualmente el valor que verÃ¡ el cliente en SaaS Center. Ãštil para descuentos, upgrades, downgrade o planes personalizados.</div>
+                      <strong>Precio mensual y límites comerciales</strong>
+                      <div className="meta-line">Define manualmente el valor que verá el cliente en SaaS Center. Útil para descuentos, upgrades, downgrade o planes personalizados.</div>
                     </div>
                     <button className="primary-btn" type="button" onClick={handleSaveBilling} disabled={savingId === `billing-${selectedTenant.id}`}>
                       {savingId === `billing-${selectedTenant.id}` ? "Guardando..." : "Guardar precio"}
@@ -1229,7 +1245,7 @@ export default function AdminPage() {
                   </div>
                   <div className="admin-detail-grid">
                     <label>
-                      <span className="meta-line">CÃ³digo plan</span>
+                      <span className="meta-line">Código plan</span>
                       <select value={normalizePlanLabel(billingForm.planCode)} onChange={(e) => setBillingForm({ ...billingForm, planCode: e.target.value })}>
                         {PLANS.map((plan) => <option key={plan} value={plan}>{plan}</option>)}
                       </select>
@@ -1247,16 +1263,16 @@ export default function AdminPage() {
                       <input value={billingForm.currency} onChange={(e) => setBillingForm({ ...billingForm, currency: e.target.value.toUpperCase() })} placeholder="CLP" />
                     </label>
                     <label>
-                      <span className="meta-line">LÃ­mite mensajes mensual</span>
-                      <input type="number" value={billingForm.messagesMonthly} onChange={(e) => setBillingForm({ ...billingForm, messagesMonthly: e.target.value })} placeholder="10000, vacÃ­o = ilimitado" />
+                      <span className="meta-line">L?mite mensajes mensual</span>
+                      <input type="number" value={billingForm.messagesMonthly} onChange={(e) => setBillingForm({ ...billingForm, messagesMonthly: e.target.value })} placeholder="10000, vacío = ilimitado" />
                     </label>
                     <label>
-                      <span className="meta-line">LÃ­mite usuarios</span>
-                      <input type="number" value={billingForm.users} onChange={(e) => setBillingForm({ ...billingForm, users: e.target.value })} placeholder="15, vacÃ­o = ilimitado" />
+                      <span className="meta-line">L?mite usuarios</span>
+                      <input type="number" value={billingForm.users} onChange={(e) => setBillingForm({ ...billingForm, users: e.target.value })} placeholder="15, vacío = ilimitado" />
                     </label>
                     <label style={{ gridColumn: "1 / -1" }}>
-                      <span className="meta-line">DescripciÃ³n comercial visible</span>
-                      <input value={billingForm.description} onChange={(e) => setBillingForm({ ...billingForm, description: e.target.value })} placeholder="AutomatizaciÃ³n completa con marketing, pagos y analÃ­tica." />
+                      <span className="meta-line">Descripción comercial visible</span>
+                      <input value={billingForm.description} onChange={(e) => setBillingForm({ ...billingForm, description: e.target.value })} placeholder="Automatización completa con marketing, pagos y analítica." />
                     </label>
                   </div>
                 </div>
@@ -1288,7 +1304,7 @@ export default function AdminPage() {
                     </label>
                     <label>
                       <span className="meta-line">WhatsApp Verify Token</span>
-                      <input value={whatsappForm.verifyToken} onChange={(e) => setWhatsappForm({ ...whatsappForm, verifyToken: e.target.value })} placeholder="Token de verificaciÃ³n webhook" />
+                      <input value={whatsappForm.verifyToken} onChange={(e) => setWhatsappForm({ ...whatsappForm, verifyToken: e.target.value })} placeholder="Token de verificación webhook" />
                     </label>
                     <label style={{ gridColumn: "1 / -1" }}>
                       <span className="meta-line">Meta Access Token para WhatsApp</span>
@@ -1318,7 +1334,7 @@ export default function AdminPage() {
                     </label>
                     <label>
                       <span className="meta-line">Instagram Verify Token</span>
-                      <input value={instagramForm.verifyToken} onChange={(e) => setInstagramForm({ ...instagramForm, verifyToken: e.target.value })} placeholder="Token de verificaciÃ³n webhook" />
+                      <input value={instagramForm.verifyToken} onChange={(e) => setInstagramForm({ ...instagramForm, verifyToken: e.target.value })} placeholder="Token de verificación webhook" />
                     </label>
                     <label>
                       <span className="meta-line">Meta Access Token para Instagram</span>
@@ -1360,7 +1376,7 @@ export default function AdminPage() {
                   <div className="admin-panel-header slim">
                     <div>
                       <strong>Perfil IA del cliente</strong>
-                      <div className="meta-line">Define cÃ³mo debe hablar la IA para este negocio antes de responder por WhatsApp o Instagram.</div>
+                      <div className="meta-line">Define c?mo debe hablar la IA para este negocio antes de responder por WhatsApp o Instagram.</div>
                     </div>
                   </div>
                   <div className="admin-detail-grid">
@@ -1389,7 +1405,7 @@ export default function AdminPage() {
                       <input value={aiForm.responseStyle} onChange={(e) => setAiForm({ ...aiForm, responseStyle: e.target.value })} />
                     </label>
                     <label>
-                      <span className="meta-line">Reglas / restricciones, una por lÃ­nea</span>
+                      <span className="meta-line">Reglas / restricciones, una por línea</span>
                       <textarea value={aiForm.businessRulesText} onChange={(e) => setAiForm({ ...aiForm, businessRulesText: e.target.value })} rows={4} />
                     </label>
                   </div>
@@ -1402,7 +1418,7 @@ export default function AdminPage() {
                   <div className="admin-panel-header slim">
                     <div>
                       <strong>Carga IA: Excel, CSV, PDF o TXT</strong>
-                      <div className="meta-line">Sube catÃ¡logo, polÃ­ticas o FAQs. La IA extrae productos, precios, preguntas frecuentes, tono y polÃ­ticas para este cliente.</div>
+                      <div className="meta-line">Sube catálogo, políticas o FAQs. La IA extrae productos, precios, preguntas frecuentes, tono y políticas para este cliente.</div>
                     </div>
                   </div>
 
@@ -1424,7 +1440,7 @@ export default function AdminPage() {
                       <input value={importManual.objective} onChange={(e) => setImportManual({ ...importManual, objective: e.target.value })} />
                     </label>
                     <label style={{ gridColumn: "1 / -1" }}>
-                      <span className="meta-line">DescripciÃ³n del negocio</span>
+                      <span className="meta-line">Descripción del negocio</span>
                       <textarea value={importManual.description} onChange={(e) => setImportManual({ ...importManual, description: e.target.value })} rows={3} />
                     </label>
                     <label style={{ gridColumn: "1 / -1" }}>
@@ -1453,8 +1469,8 @@ export default function AdminPage() {
 
                   {importExtraction ? (
                     <div className="admin-notice success" style={{ marginTop: 12 }}>
-                      <strong>ExtracciÃ³n lista:</strong> {importExtraction.products?.length || 0} productos, {importExtraction.faqs?.length || 0} FAQs y {importExtraction.policies?.length || 0} polÃ­ticas.
-                      <div style={{ marginTop: 8 }}>{importExtraction.summary || "Revisa la informaciÃ³n extraÃ­da antes de aplicarla."}</div>
+                      <strong>Extracción lista:</strong> {importExtraction.products?.length || 0} productos, {importExtraction.faqs?.length || 0} FAQs y {importExtraction.policies?.length || 0} políticas.
+                      <div style={{ marginTop: 8 }}>{importExtraction.summary || "Revisa la información extraída antes de aplicarla."}</div>
                       <button className="primary-btn" type="button" onClick={handleApplyAdminOnboarding} disabled={savingId === `apply-${selectedTenant.id}`} style={{ marginTop: 12 }}>
                         {savingId === `apply-${selectedTenant.id}` ? "Aplicando..." : "Aplicar datos a este cliente"}
                       </button>
@@ -1462,27 +1478,27 @@ export default function AdminPage() {
                   ) : null}
 
                   <div className="meta-line" style={{ marginTop: 12 }}>
-                    Importaciones recientes: {(selectedTenant.onboardingImports || []).length ? selectedTenant.onboardingImports?.map((item) => `${item.status} Â· ${new Date(item.createdAt).toLocaleString()}`).join(" | ") : "sin cargas todavÃ­a"}
+                    Importaciones recientes: {(selectedTenant.onboardingImports || []).length ? selectedTenant.onboardingImports?.map((item) => `${item.status} ? ${new Date(item.createdAt).toLocaleString()}`).join(" | ") : "sin cargas todavía"}
                   </div>
                 </div>
 
                 <div className="admin-module-section">
                   <div className="admin-panel-header slim">
                     <div>
-                      <strong>Servicios / mÃ³dulos habilitados</strong>
+                      <strong>Servicios / módulos habilitados</strong>
                       <div className="meta-line">
-                        Activa solo lo que este cliente paga o necesita. Los cambios quedan pendientes hasta presionar "Guardar mÃ³dulos".
+                        Activa solo lo que este cliente paga o necesita. Los cambios quedan pendientes hasta presionar "Guardar módulos".
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                      {moduleDirty ? <span className="meta-line">Cambios sin guardar</span> : <span className="meta-line">MÃ³dulos sincronizados</span>}
+                      {moduleDirty ? <span className="meta-line">Cambios sin guardar</span> : <span className="meta-line">Módulos sincronizados</span>}
                       <button
                         className="primary-btn"
                         type="button"
                         onClick={handleSaveModules}
                         disabled={!moduleDirty || savingId === `modules-${selectedTenant.id}`}
                       >
-                        {savingId === `modules-${selectedTenant.id}` ? "Guardando..." : "Guardar mÃ³dulos"}
+                        {savingId === `modules-${selectedTenant.id}` ? "Guardando..." : "Guardar módulos"}
                       </button>
                       <button className="ghost-btn danger" type="button" onClick={() => handleDeleteTenant(selectedTenant.id)} disabled={savingId === `delete-tenant-${selectedTenant.id}`}>Eliminar</button>
                     </div>
@@ -1495,7 +1511,7 @@ export default function AdminPage() {
                             <strong>{group.title}</strong>
                             <p>{group.description}</p>
                           </div>
-                          <small>{group.modules.length} modulos</small>
+                          <small>{group.modules.length} módulos</small>
                         </div>
                         <div className="module-toggle-grid compact">
                           {group.modules.map((module) => {
@@ -1518,7 +1534,7 @@ export default function AdminPage() {
                   <div className="admin-panel-header slim">
                     <div>
                       <strong>Continuidad, integraciones y respaldo</strong>
-                      <div className="meta-line">Prepara correo, documentos, respaldo, replica y modo offline para no cortar el flujo operativo.</div>
+                      <div className="meta-line">Prepara correo, documentos, respaldo, réplica y modo offline para no cortar el flujo operativo.</div>
                     </div>
                   </div>
                   <div className="continuity-grid">
@@ -1540,7 +1556,7 @@ export default function AdminPage() {
                   <div className="admin-panel-header slim">
                     <div>
                       <strong>Usuarios del cliente</strong>
-                      <div className="meta-line">Agrega dueÃ±os, agentes o visores para este tenant.</div>
+                      <div className="meta-line">Agrega administradores, corredores, agentes o visores para este cliente.</div>
                     </div>
                   </div>
 
@@ -1549,9 +1565,9 @@ export default function AdminPage() {
                       <input value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value })} placeholder="Nombre" required />
                       <input value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} placeholder="Email" required />
                       <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}>
-                        {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+                        {ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
                       </select>
-                      <input value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} placeholder="ContraseÃ±a opcional" type="password" />
+                      <input value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} placeholder="Contraseña opcional" type="password" />
                     </div>
                     <button className="primary-btn" disabled={savingId === "new-user"}>{savingId === "new-user" ? "Agregando..." : "Agregar usuario"}</button>
                   </form>
@@ -1561,8 +1577,16 @@ export default function AdminPage() {
                       <div key={user.id} className="admin-user-row">
                         <div>
                           <strong>{user.name}</strong>
-                          <div className="meta-line">{user.email} Â· {user.role}</div>
+                          <div className="meta-line">{user.email} · {roleLabel(user.role)}</div>
                         </div>
+                        <select
+                          className="admin-role-select"
+                          value={editableRoleValue(user.role)}
+                          onChange={(event) => handleUserRoleChange(user.id, event.target.value)}
+                          disabled={savingId === `role-${user.id}` || user.role === "SUPER_ADMIN"}
+                        >
+                          {ROLES.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+                        </select>
                         <button className="ghost-btn" type="button" onClick={() => toggleUser(user.id, user.isActive)} disabled={savingId === user.id}>
                           {user.isActive ? "Desactivar" : "Activar"}
                         </button>
@@ -1581,4 +1605,7 @@ export default function AdminPage() {
     </div>
   );
 }
+
+
+
 

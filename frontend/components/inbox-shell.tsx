@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import { getCommercialState } from "@/lib/commercial-state";
+import { roleLabel } from "@/lib/role-labels";
 import { getSocketToken, socket } from "@/lib/socket";
 import { Conversation, Message } from "@/lib/types";
 import { ChatPanel } from "./chat-panel";
@@ -428,7 +429,7 @@ function InboxAppHeader({
         <div className="inbox-account-box">
           <span>Cuenta</span>
           <strong>{agent?.name || "Usuario"}</strong>
-          <small>{agent?.role || "Cliente"}</small>
+          <small>{roleLabel(agent?.role) || "Cliente"}</small>
         </div>
 
         <div className="inbox-app-actions" aria-hidden="true" />
@@ -454,7 +455,7 @@ function ActiveConversationPanel({
     return (
       <section className="active-conversation-panel empty">
         <div>
-          <span className="eyebrow">Conversacion activa</span>
+          <span className="eyebrow">Conversación activa</span>
           <h2>Selecciona un chat</h2>
           <p>Elige una conversacion desde Chats recientes para ver su contexto comercial.</p>
         </div>
@@ -470,7 +471,7 @@ function ActiveConversationPanel({
     ? "Lead listo para cierre humano"
     : closeScore >= 70
       ? "Oportunidad caliente"
-      : "Conversacion activa";
+      : "Conversación activa";
   const handoffReason = conversation.aiHandoffReason || conversation.aiDecisionReason || conversation.aiNextAction || "La IA mantiene el contexto comercial listo para operar.";
 
   return (
@@ -478,7 +479,7 @@ function ActiveConversationPanel({
       <div className="active-conversation-main">
         <div className="avatar">{inboxInitials(name)}</div>
         <div className="active-conversation-copy">
-          <span className="eyebrow">Conversacion activa</span>
+          <span className="eyebrow">Conversación activa</span>
           <h2>{name}</h2>
           <p>
             {conversation.contact.channel || "whatsapp"} / Cliente {conversation.contact.externalId || "sin numero"}
@@ -520,7 +521,7 @@ function chatContactNumber(conversation: Conversation) {
 }
 
 function chatDescription(conversation: Conversation) {
-  const text = conversation.aiSummary || conversation.decisionSummary || conversation.lastMessage?.content || conversation.aiNextAction || "Conversacion activa en el inbox.";
+  const text = conversation.aiSummary || conversation.decisionSummary || conversation.lastMessage?.content || conversation.aiNextAction || "Conversación activa en el inbox.";
   const clean = String(text).replace(/\s+/g, " ").replace(/\*\*/g, "").trim();
   return clean.length > 84 ? `${clean.slice(0, 84).trim()}...` : clean;
 }
@@ -582,3 +583,4 @@ function ChatActivityPanel({
     </aside>
   );
 }
+

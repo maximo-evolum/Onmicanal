@@ -244,11 +244,11 @@ adminRouter.post("/admin/tenants", async (req, res) => {
     const normalizedEmail = cleanEmail(ownerEmail);
 
     if (!tenantName || !ownerFullName || !normalizedEmail) {
-      return res.status(400).json({ error: "Nombre del negocio, nombre del owner y email del owner son requeridos" });
+      return res.status(400).json({ error: "Nombre del negocio, nombre del admin y email del admin son requeridos" });
     }
 
     if (!normalizedEmail.includes("@")) {
-      return res.status(400).json({ error: "El email del owner no es válido" });
+      return res.status(400).json({ error: "El email del admin no es válido" });
     }
 
     const existingUser = await prisma.workspaceUser.findUnique({ where: { email: normalizedEmail } });
@@ -278,7 +278,7 @@ adminRouter.post("/admin/tenants", async (req, res) => {
           name: ownerFullName,
           email: normalizedEmail,
           passwordHash: ownerPassword ? await hashPassword(ownerPassword) : null,
-          role: "OWNER",
+          role: "ADMIN",
           isActive: true
         }
       });

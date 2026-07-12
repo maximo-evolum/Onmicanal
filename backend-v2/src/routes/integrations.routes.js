@@ -3,6 +3,7 @@ import { prisma } from "../lib/db.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { normalizeMetadata } from "../lib/metadata.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { encryptSecret, hasSecret } from "../lib/credential-crypto.js";
 
 export const integrationsRouter = Router();
 
@@ -38,8 +39,8 @@ function publicConfig(config) {
     externalAccountId: config.externalAccountId,
     metadata: config.metadata,
     isActive: config.isActive,
-    hasAccessToken: Boolean(config.accessToken),
-    hasVerifyToken: Boolean(config.verifyToken),
+    hasAccessToken: hasSecret(config.accessToken),
+    hasVerifyToken: hasSecret(config.verifyToken),
     createdAt: config.createdAt,
     updatedAt: config.updatedAt
   };
@@ -80,8 +81,8 @@ integrationsRouter.put("/integrations/:channel", requireRole(ROLE_GROUPS.MANAGER
       phoneNumberId: req.body?.phoneNumberId === undefined ? previous?.phoneNumberId || null : String(req.body.phoneNumberId || "").trim() || null,
       businessAccountId: req.body?.businessAccountId === undefined ? previous?.businessAccountId || null : String(req.body.businessAccountId || "").trim() || null,
       externalAccountId: req.body?.externalAccountId === undefined ? previous?.externalAccountId || null : String(req.body.externalAccountId || "").trim() || null,
-      accessToken: req.body?.accessToken === undefined ? previous?.accessToken || null : String(req.body.accessToken || "").trim() || null,
-      verifyToken: req.body?.verifyToken === undefined ? previous?.verifyToken || null : String(req.body.verifyToken || "").trim() || null,
+      accessToken: req.body?.accessToken === undefined ? previous?.accessToken || null : encryptSecret(req.body.accessToken),
+      verifyToken: req.body?.verifyToken === undefined ? previous?.verifyToken || null : encryptSecret(req.body.verifyToken),
       metadata: normalizeMetadata({ ...(previous?.metadata || {}), ...(req.body?.metadata || {}) }, {}),
       isActive: req.body?.isActive === undefined ? previous?.isActive ?? true : Boolean(req.body.isActive)
     };

@@ -3968,6 +3968,17 @@ button.primary-btn {
   color: var(--text);
 }
 
+.admin-role-select {
+  min-width: 150px;
+  width: auto;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+}
+
 .admin-tenant-row.active,
 .admin-tenant-row:hover {
   border-color: rgba(124, 58, 237, 0.36);

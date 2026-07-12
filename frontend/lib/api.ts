@@ -1469,6 +1469,7 @@ export type ConnectionProvider = {
   module: string;
   description: string;
   requiredEnv: string[];
+  oauthRequiredEnv?: string[];
   requiredFields: string[];
   scopes: string[];
   missing: string[];
@@ -1496,7 +1497,10 @@ export type ConnectionCenterResponse = {
   callbacks: {
     oauthGoogle: string;
     oauthMicrosoft: string;
+    oauthMeta?: string;
+    oauthMercadoPago?: string;
     metaWebhook: string;
+    [key: string]: string | undefined;
   };
   groups: ConnectionGroup[];
 };

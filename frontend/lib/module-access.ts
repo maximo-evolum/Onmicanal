@@ -93,9 +93,9 @@ function isDeveloperRole(role?: string | null) {
 
 export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null) {
   if (isDeveloperRole(role)) return true;
-  const roleAllowlist = roleModuleAllowlist[String(role || "").toUpperCase()];
-  if (roleAllowlist) return roleAllowlist.has(moduleKey);
   if (alwaysAllowed.has(moduleKey)) return true;
+  const roleAllowlist = roleModuleAllowlist[String(role || "").toUpperCase()];
+  if (roleAllowlist && !roleAllowlist.has(moduleKey)) return false;
   const normalized = new Set(modules.map(normalizeModule));
   return moduleAliases[moduleKey].some((alias) => normalized.has(normalizeModule(alias)));
 }
@@ -120,7 +120,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
       .catch((err) => {
         if (!active) return;
         setModules([]);
-        setError(err instanceof Error ? err.message : "No se pudieron cargar los modulos");
+        setError(err instanceof Error ? err.message : "No se pudieron cargar los módulos");
       })
       .finally(() => {
         if (active) setLoading(false);

@@ -411,8 +411,9 @@ export default function ConnectionsPage() {
 
                       <div className="connection-callbacks">
                         <span>Callbacks</span>
-                        <code>{data?.callbacks.oauthGoogle}</code>
-                        <code>{data?.callbacks.oauthMicrosoft}</code>
+                        {Object.entries(data?.callbacks || {}).map(([key, value]) => (
+                          value ? <code key={key}>{key}: {value}</code> : null
+                        ))}
                       </div>
 
                       <div className="connection-actions">

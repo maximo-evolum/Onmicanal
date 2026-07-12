@@ -1,9 +1,10 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createTeamUser, getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";
 import { getStoredSession, mergeStoredSession } from "@/lib/auth";
+import { roleLabel } from "@/lib/role-labels";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ThemePalettePicker } from "@/components/theme-palette-picker";
@@ -191,7 +192,7 @@ export default function SaasPage() {
   return (
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
-        active="Planes y modulos"
+        active="Planes y módulos"
         isDeveloper={agent?.role === "SUPER_ADMIN"}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
@@ -199,9 +200,9 @@ export default function SaasPage() {
       <main className="main dashboard-page phase5-page">
         <header className="module-app-header">
           <div>
-            <span className="eyebrow">Planes y modulos</span>
-            <h1>Planes, modulos y usuarios</h1>
-            <div className="meta-line">Plan de cuenta, limites, modulos habilitados, onboarding y usuarios del workspace.</div>
+            <span className="eyebrow">Planes y módulos</span>
+            <h1>Planes, módulos y usuarios</h1>
+            <div className="meta-line">Plan de cuenta, límites, módulos habilitados, onboarding y usuarios del workspace.</div>
           </div>
           <div className="module-app-actions">
             <AccountPill fallbackName={agent?.name || "Usuario"} />
@@ -250,7 +251,7 @@ export default function SaasPage() {
                   <input
                     value={profileForm.jobTitle}
                     onChange={(event) => setProfileForm((value) => ({ ...value, jobTitle: event.target.value }))}
-                    placeholder="Ej: Gerente comercial, Owner, Vendedor"
+                    placeholder="Ej: Gerente comercial, Admin, Vendedor"
                   />
                 </label>
                 <label>
@@ -276,7 +277,11 @@ export default function SaasPage() {
             <section className="phase5-grid four">
               <Card title="Plan actual" value={normalizePlanLabel(data.plan?.name || data.tenant?.plan)} detail={data.plan?.description || "Plan activo"} />
               <Card title="Precio mensual" value={money(data.plan?.priceMonthly, data.plan?.currency)} detail="Referencia comercial" />
-              <Card title="Uso mensual" value={`${data.usage?.usagePercent || 0}%`} detail={`${data.usage?.messages || 0}/${data.usage?.limits?.messagesMonthly ?? "∞"} mensajes`} />
+              <Card
+                title="Uso mensual"
+                value={`${data.usage?.usagePercent || 0}%`}
+                detail={`${data.usage?.messages || 0}/${data.usage?.limits?.messagesMonthly ?? "?"} mensajes`}
+              />
               <Card title="Onboarding" value={`${data.onboarding?.completedPercent || 0}%`} detail={`${data.onboarding?.completed || 0}/${data.onboarding?.total || 0} pasos`} />
             </section>
 
@@ -336,7 +341,7 @@ export default function SaasPage() {
                   <div className="phase5-table-row" key={user.id}>
                     <strong>{user.name}</strong>
                     <span>{user.email}</span>
-                    <span>{user.role}</span>
+                    <span>{roleLabel(user.role)}</span>
                     <span className={user.isActive ? "badge mode-bot" : "badge danger"}>{user.isActive ? "Activo" : "Inactivo"}</span>
                   </div>
                 ))}
@@ -369,3 +374,7 @@ export default function SaasPage() {
 function Card({ title, value, detail }: { title: string; value: string | number; detail?: string }) {
   return <article className="phase5-card"><span>{title}</span><strong>{value}</strong>{detail ? <small>{detail}</small> : null}</article>;
 }
+
+
+
+

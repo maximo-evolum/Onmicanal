@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+const DEMO_PASSWORD = "Demo1234!";
+const REALTY_TENANT_EMAIL = "inmobiliaria@prueba.cl";
 
 const REALTY_MODULES = [
   "inbox",
@@ -364,8 +366,54 @@ async function findTenant() {
     const tenant = await prisma.tenant.findUnique({ where: { id: process.env.SEED_TENANT_ID } });
     if (tenant) return tenant;
   }
+  const bySlug = await prisma.tenant.findUnique({ where: { slug: "inmobiliaria" } });
+  if (bySlug) return bySlug;
+
+  const byAdmin = await prisma.workspaceUser.findUnique({
+    where: { email: REALTY_TENANT_EMAIL },
+    include: { tenant: true },
+  });
+  if (byAdmin?.tenant) return byAdmin.tenant;
+
   const tenants = await prisma.tenant.findMany({ orderBy: { createdAt: "asc" } });
   return tenants.find(tenantLooksRealty) || tenants[0] || null;
+}
+
+async function ensureRealtyTenant(tenant) {
+  return prisma.tenant.update({
+    where: { id: tenant.id },
+    data: {
+      name: "Inmobiliaria",
+      slug: "inmobiliaria",
+      industry: "REAL_ESTATE",
+      plan: "ENTERPRISE",
+      onboardingCompleted: true,
+    },
+  });
+}
+
+async function ensureOwner(tenantId) {
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  return prisma.workspaceUser.upsert({
+    where: { email: REALTY_TENANT_EMAIL },
+    update: {
+      tenantId,
+      name: "Dueño inmobiliaria",
+      passwordHash,
+      role: "ADMIN",
+      jobTitle: "Administrador inmobiliario",
+      isActive: true,
+    },
+    create: {
+      tenantId,
+      name: "Dueño inmobiliaria",
+      email: REALTY_TENANT_EMAIL,
+      passwordHash,
+      role: "ADMIN",
+      jobTitle: "Administrador inmobiliario",
+      isActive: true,
+    },
+  });
 }
 
 async function ensureModules(tenantId) {
@@ -379,7 +427,7 @@ async function ensureModules(tenantId) {
 }
 
 async function ensureBrokers(tenantId) {
-  const passwordHash = await bcrypt.hash("Demo1234!", 10);
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
   const users = [];
 
   for (const broker of BROKERS) {
@@ -487,23 +535,27 @@ async function main() {
     throw new Error("No hay tenants para cargar propiedades demo.");
   }
 
-  await ensureModules(tenant.id);
-  const brokers = await ensureBrokers(tenant.id);
+  const realtyTenant = await ensureRealtyTenant(tenant);
+  await ensureOwner(realtyTenant.id);
+  await ensureModules(realtyTenant.id);
+  const brokers = await ensureBrokers(realtyTenant.id);
   const properties = [];
 
   for (let index = 0; index < PROPERTIES.length; index += 1) {
-    properties.push(await upsertProperty(tenant.id, PROPERTIES[index], index, brokers));
+    properties.push(await upsertProperty(realtyTenant.id, PROPERTIES[index], index, brokers));
   }
 
   console.log(JSON.stringify({
-    tenant: tenant.name,
-    tenantId: tenant.id,
+    tenant: realtyTenant.name,
+    tenantId: realtyTenant.id,
+    adminEmail: REALTY_TENANT_EMAIL,
+    adminPassword: DEMO_PASSWORD,
     modulesEnabled: REALTY_MODULES.length,
     brokers: brokers.length,
     properties: properties.length,
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,
-    brokerPassword: "Demo1234!",
+    brokerPassword: DEMO_PASSWORD,
   }, null, 2));
 }
 
