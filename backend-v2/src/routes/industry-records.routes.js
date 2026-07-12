@@ -175,6 +175,67 @@ industryRecordsRouter.post("/industry-records/brokers", requireRole(ROLE_GROUPS.
   }
 });
 
+// El perfil de corredor y su usuario son una sola unidad operacional. Al
+// eliminarlo, la cartera queda disponible para reasignacion sin perder fichas.
+industryRecordsRouter.delete("/industry-records/brokers/:userId", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await assertRecordModule(req, "broker_profile"))) {
+      return res.status(403).json({ error: "Modulo de corredores no habilitado" });
+    }
+
+    const broker = await prisma.workspaceUser.findFirst({
+      where: { id: req.params.userId, tenantId: req.tenantId },
+      select: { id: true, name: true, email: true, role: true, jobTitle: true }
+    });
+    if (!broker) return res.status(404).json({ error: "Corredor no encontrado" });
+
+    const jobTitle = String(broker.jobTitle || "").toLowerCase();
+    if (broker.role !== "SELLER" && !jobTitle.includes("corredor")) {
+      return res.status(400).json({ error: "Solo se pueden eliminar perfiles de corredor desde este modulo" });
+    }
+
+    const assignedProperties = await prisma.industryRecord.findMany({
+      where: { tenantId: req.tenantId, recordType: "property", assignedToId: broker.id },
+      select: { id: true, data: true }
+    });
+
+    await prisma.$transaction(async (tx) => {
+      for (const property of assignedProperties) {
+        const currentData = property.data && typeof property.data === "object" && !Array.isArray(property.data)
+          ? property.data
+          : {};
+        await tx.industryRecord.update({
+          where: { id: property.id },
+          data: {
+            assignedToId: null,
+            data: {
+              ...currentData,
+              assignedBrokerId: "",
+              assignedBrokerName: "",
+              assignmentMode: "sin_corredor"
+            }
+          }
+        });
+      }
+
+      await tx.industryRecord.deleteMany({
+        where: { tenantId: req.tenantId, recordType: "broker_profile", assignedToId: broker.id }
+      });
+      await tx.workspaceUser.delete({ where: { id: broker.id } });
+    });
+
+    await recordAuditLog(req, "BROKER_USER_DELETED", "broker_profile", broker.id, {
+      name: broker.name,
+      email: broker.email,
+      unassignedProperties: assignedProperties.length
+    });
+    res.json({ ok: true, unassignedProperties: assignedProperties.length });
+  } catch (error) {
+    console.error("Delete broker user error:", error);
+    res.status(500).json({ error: "No se pudo eliminar el corredor" });
+  }
+});
+
 industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     const recordType = normalizeRecordType(req.body?.recordType);

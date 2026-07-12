@@ -9,6 +9,7 @@ import { ModuleGate } from "@/components/module-gate";
 import {
   createIndustryBrokerUser,
   createIndustryRecord,
+  deleteIndustryBrokerUser,
   getIndustryRecords,
   getIndustryUsers,
   updateIndustryRecord,
@@ -71,6 +72,8 @@ const emptyProperty = {
   parking: "",
   meters: "",
   photoUrl: "",
+  galleryUrls: "",
+  videoUrl: "",
   observations: "",
   ownerName: "",
   ownerPhone: "",
@@ -94,6 +97,37 @@ function asData(record?: IndustryRecord | null) {
 
 function text(value: unknown, fallback = "") {
   return String(value ?? fallback).trim();
+}
+
+function stringList(value: unknown) {
+  if (Array.isArray(value)) return value.map((item) => text(item)).filter(Boolean);
+  const raw = text(value);
+  if (!raw) return [];
+  if (raw.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map((item) => text(item)).filter(Boolean);
+    } catch {
+      // Un valor manual se interpreta como una lista separada por comas o saltos.
+    }
+  }
+  return raw.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function propertyPhotos(data: Record<string, unknown>) {
+  return Array.from(new Set([
+    text(data.photoUrl),
+    ...stringList(data.gallery),
+    ...stringList(data.photoUrls),
+    ...stringList(data.galleryUrls)
+  ].filter(Boolean)));
+}
+
+function propertyVideos(data: Record<string, unknown>) {
+  return Array.from(new Set([
+    text(data.videoUrl),
+    ...stringList(data.videoUrls)
+  ].filter(Boolean)));
 }
 
 function numberValue(value: unknown) {
@@ -137,7 +171,17 @@ function assignedPropertyCount(properties: IndustryRecord[], brokerId: string) {
   return properties.filter((item) => text(asData(item).assignedBrokerId || item.assignedToId) === brokerId).length;
 }
 
-function BrokerProfileCard({ broker, properties }: { broker: Broker; properties: IndustryRecord[] }) {
+function BrokerProfileCard({
+  broker,
+  properties,
+  onDelete,
+  isDeleting
+}: {
+  broker: Broker;
+  properties: IndustryRecord[];
+  onDelete?: (broker: Broker) => void;
+  isDeleting?: boolean;
+}) {
   const assigned = assignedPropertyCount(properties, broker.id);
   return (
     <article className="broker-profile-card">
@@ -146,6 +190,11 @@ function BrokerProfileCard({ broker, properties }: { broker: Broker; properties:
         <strong>{broker.name || "Corredor"}</strong>
         <span>{broker.email || broker.role || "Corredor"}</span>
         <small>{assigned} {assigned === 1 ? "propiedad asignada" : "propiedades asignadas"}</small>
+        {onDelete ? (
+          <button type="button" className="broker-delete-btn" disabled={isDeleting} onClick={() => onDelete(broker)}>
+            {isDeleting ? "Eliminando..." : "Eliminar corredor"}
+          </button>
+        ) : null}
       </div>
     </article>
   );
@@ -242,8 +291,13 @@ export function useRealtyWorkspace() {
         getIndustryRecords("broker_profile")
       ]);
 
+      const profileUserIds = new Set(brokerProfiles.map((record) => text(asData(record).userId || record.assignedToId)).filter(Boolean));
       const userBrokers = users
-        .filter((user) => ["SELLER", "ADMIN", "OWNER"].includes(String(user.role || "").toUpperCase()))
+        .filter((user) => (
+          String(user.role || "").toUpperCase() === "SELLER" ||
+          profileUserIds.has(user.id) ||
+          String(user.jobTitle || "").toLowerCase().includes("corredor")
+        ))
         .map((user) => ({ id: user.id, name: user.name, email: user.email, role: user.role }));
       const userBrokerIds = new Set(userBrokers.map((broker) => broker.id));
       const userBrokerEmails = new Set(userBrokers.map((broker) => String(broker.email || "").toLowerCase()).filter(Boolean));
@@ -348,12 +402,14 @@ export function PropertyPortalCards({
   properties,
   brokers,
   onStageChange,
-  onBrokerChange
+  onBrokerChange,
+  onOpen
 }: {
   properties: IndustryRecord[];
   brokers: Broker[];
   onStageChange?: (property: IndustryRecord, stage: string) => Promise<void> | void;
   onBrokerChange?: (property: IndustryRecord, brokerId: string) => Promise<void> | void;
+  onOpen?: (property: IndustryRecord) => void;
 }) {
   if (!properties.length) {
     return <p className="empty-state">Aun no hay propiedades cargadas.</p>;
@@ -403,10 +459,104 @@ export function PropertyPortalCards({
                   <span>{REALTY_STAGES.find((stage) => stage.key === text(data.stage))?.label || "Lead"}</span>
                 )}
               </div>
+              {onOpen ? <button className="secondary-btn property-open-btn" type="button" onClick={() => onOpen(property)}>Ver ficha completa</button> : null}
             </div>
           </article>
         );
       })}
+    </div>
+  );
+}
+
+export function PropertyDetailModal({
+  property,
+  brokers,
+  onClose
+}: {
+  property: IndustryRecord;
+  brokers: Broker[];
+  onClose: () => void;
+}) {
+  const data = asData(property);
+  const photos = propertyPhotos(data);
+  const videos = propertyVideos(data);
+  const [activePhoto, setActivePhoto] = useState(0);
+  const selectedPhoto = photos[activePhoto] || "";
+  const features = stringList(data.features);
+  const details = [
+    ["Operacion", text(data.operation, "Venta")],
+    ["Tipo", text(data.propertyType, "Propiedad")],
+    ["Dormitorios", text(data.bedrooms, "0")],
+    ["Banos", text(data.bathrooms, "0")],
+    ["Estacionamientos", text(data.parking, "0")],
+    ["Superficie", `${text(data.meters || data.builtM2, "0")} m2`],
+    ["Terreno", `${text(data.landM2, "No informado")}${data.landM2 ? " m2" : ""}`],
+    ["Material", text(data.material, "No informado")],
+    ["Ano construccion", text(data.yearBuilt, "No informado")],
+    ["Orientacion", text(data.orientation, "No informado")],
+    ["Gastos comunes", money(data.commonExpenses)],
+    ["Etapa comercial", REALTY_STAGES.find((stage) => stage.key === text(data.stage))?.label || "Lead"]
+  ];
+
+  return (
+    <div className="property-detail-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="property-detail-modal" role="dialog" aria-modal="true" aria-labelledby={`property-detail-${property.id}`} onMouseDown={(event) => event.stopPropagation()}>
+        <header className="property-detail-header">
+          <div>
+            <span>Ficha inmobiliaria</span>
+            <h2 id={`property-detail-${property.id}`}>{property.title}</h2>
+            <p>{text(data.address, "Direccion por completar")}{data.comuna ? `, ${text(data.comuna)}` : ""}{data.region ? `, ${text(data.region)}` : ""}</p>
+          </div>
+          <button type="button" className="property-detail-close" onClick={onClose} aria-label="Cerrar ficha">x</button>
+        </header>
+
+        <div className="property-detail-layout">
+          <section className="property-detail-media">
+            <div className="property-detail-primary-media">
+              {selectedPhoto ? <img src={selectedPhoto} alt={property.title} /> : <span>{initials(property.title)}</span>}
+              <b>{money(data.price)}</b>
+            </div>
+            {photos.length > 1 ? (
+              <div className="property-detail-thumbnails">
+                {photos.map((photo, index) => <button type="button" className={index === activePhoto ? "active" : ""} onClick={() => setActivePhoto(index)} key={photo}><img src={photo} alt={`${property.title} foto ${index + 1}`} /></button>)}
+              </div>
+            ) : null}
+            {videos.length ? (
+              <div className="property-detail-videos">
+                <strong>Videos y recorridos</strong>
+                {videos.map((video, index) => (
+                  <a href={video} target="_blank" rel="noreferrer" key={video}>Abrir recorrido {index + 1}</a>
+                ))}
+              </div>
+            ) : null}
+          </section>
+
+          <aside className="property-detail-aside">
+            <div className="property-detail-assignee">
+              <span>Corredor responsable</span>
+              <strong>{getBrokerName(property, brokers)}</strong>
+            </div>
+            <div className="property-detail-owner">
+              <span>Propietario</span>
+              <strong>{text(data.ownerName, "Sin propietario informado")}</strong>
+              {data.ownerPhone ? <small>{text(data.ownerPhone)}</small> : null}
+              {data.ownerEmail ? <small>{text(data.ownerEmail)}</small> : null}
+            </div>
+          </aside>
+        </div>
+
+        <section className="property-detail-specs">
+          {details.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}
+        </section>
+
+        <section className="property-detail-description">
+          <div>
+            <span>Descripcion</span>
+            <p>{text(data.observations, "Esta propiedad aun no tiene observaciones cargadas.")}</p>
+          </div>
+          {features.length ? <div className="property-detail-features">{features.map((feature) => <span key={feature}>{feature}</span>)}</div> : null}
+        </section>
+      </section>
     </div>
   );
 }
@@ -427,6 +577,7 @@ export function RealtyLoadsPageContent() {
       assignedToId: propertyForm.assignedBrokerId || null,
       data: {
         ...propertyForm,
+        gallery: stringList(propertyForm.galleryUrls),
         price: numberValue(propertyForm.price),
         bedrooms: numberValue(propertyForm.bedrooms),
         bathrooms: numberValue(propertyForm.bathrooms),
@@ -449,10 +600,17 @@ export function RealtyLoadsPageContent() {
   }
 
   async function onPhotoFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const photoUrl = await fileToDataUrl(file);
-    setPropertyForm((current) => ({ ...current, photoUrl }));
+    const files = Array.from(event.target.files || []).filter((file) => file.type.startsWith("image/"));
+    if (!files.length) return;
+    const photos = await Promise.all(files.map((file) => fileToDataUrl(file)));
+    setPropertyForm((current) => {
+      const gallery = Array.from(new Set([...stringList(current.galleryUrls), ...photos]));
+      return {
+        ...current,
+        photoUrl: current.photoUrl || photos[0],
+        galleryUrls: gallery.join("\n")
+      };
+    });
   }
 
   async function onExcelFile(event: ChangeEvent<HTMLInputElement>) {
@@ -547,8 +705,10 @@ export function RealtyLoadsPageContent() {
           <input value={propertyForm.material} onChange={(e) => setPropertyForm({ ...propertyForm, material: e.target.value })} placeholder="Material principal" />
           <div className="file-picker-row">
             <input value={propertyForm.photoUrl} onChange={(e) => setPropertyForm({ ...propertyForm, photoUrl: e.target.value })} placeholder="URL foto principal o archivo" />
-            <label className="secondary-btn">Subir foto<input type="file" accept="image/*" hidden onChange={onPhotoFile} /></label>
+            <label className="secondary-btn">Subir fotos<input type="file" accept="image/*" multiple hidden onChange={onPhotoFile} /></label>
           </div>
+          <input value={propertyForm.galleryUrls} onChange={(e) => setPropertyForm({ ...propertyForm, galleryUrls: e.target.value })} placeholder="URLs de galeria, una por linea (opcional)" />
+          <input value={propertyForm.videoUrl} onChange={(e) => setPropertyForm({ ...propertyForm, videoUrl: e.target.value })} placeholder="URL de video o recorrido virtual (opcional)" />
           <textarea value={propertyForm.observations} onChange={(e) => setPropertyForm({ ...propertyForm, observations: e.target.value })} placeholder="Observaciones generales" />
           <div className="form-grid-2">
             <input value={propertyForm.ownerName} onChange={(e) => setPropertyForm({ ...propertyForm, ownerName: e.target.value })} placeholder="Propietario" />
@@ -600,6 +760,7 @@ export function RealtyLoadsPageContent() {
 
 export function RealtyPropertiesPageContent() {
   const { data, error, reload } = useRealtyWorkspace();
+  const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
 
   async function updateStage(property: IndustryRecord, stage: string) {
     await updateIndustryRecord(property.id, { data: { ...asData(property), stage } });
@@ -632,8 +793,9 @@ export function RealtyPropertiesPageContent() {
       <RealtyPredictivePanel data={data} />
       <section className="vertical-card">
         <div className="vertical-card-head"><div><span>Inventario</span><h2>Portal de propiedades</h2></div></div>
-        <PropertyPortalCards properties={data.properties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} />
+        <PropertyPortalCards properties={data.properties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
       </section>
+      {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} /> : null}
     </>
   );
 }
@@ -686,6 +848,7 @@ export function RealtyActivityPageContent() {
 export function BrokerPortalPageContent() {
   const session = getStoredSession();
   const { data, error, reload } = useRealtyWorkspace();
+  const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
   const canSeeAll = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(String(session?.role || "").toUpperCase());
   const visibleProperties = canSeeAll
     ? data.properties
@@ -714,12 +877,13 @@ export function BrokerPortalPageContent() {
         <div className="property-portal-grid">
           {visibleProperties.map((property) => (
             <div key={property.id} className="broker-property-wrap">
-              <PropertyPortalCards properties={[property]} brokers={data.brokers} />
+              <PropertyPortalCards properties={[property]} brokers={data.brokers} onOpen={setSelectedProperty} />
               <button className="secondary-btn" onClick={() => createFollowup(property)}>Crear seguimiento</button>
             </div>
           ))}
         </div>
       </section>
+      {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} /> : null}
     </>
   );
 }
@@ -728,6 +892,7 @@ export function BrokersPageContent() {
   const { data, error, reload } = useRealtyWorkspace();
   const [brokerForm, setBrokerForm] = useState(emptyBroker);
   const [message, setMessage] = useState("");
+  const [deletingBrokerId, setDeletingBrokerId] = useState<string | null>(null);
 
   async function createBroker(event: FormEvent) {
     event.preventDefault();
@@ -760,6 +925,21 @@ export function BrokersPageContent() {
     await reload();
   }
 
+  async function removeBroker(broker: Broker) {
+    const confirmed = window.confirm(`Eliminar a ${broker.name} y desasignar sus propiedades? Esta accion no se puede deshacer.`);
+    if (!confirmed) return;
+    try {
+      setDeletingBrokerId(broker.id);
+      const result = await deleteIndustryBrokerUser(broker.id);
+      setMessage(`Corredor eliminado. ${result.unassignedProperties} propiedades quedaron disponibles para reasignar.`);
+      await reload();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo eliminar el corredor.");
+    } finally {
+      setDeletingBrokerId(null);
+    }
+  }
+
   return (
     <>
       <RealtyHeader
@@ -782,7 +962,7 @@ export function BrokersPageContent() {
           <div className="vertical-card-head"><div><span>Equipo</span><h2>Corredores activos</h2></div></div>
           <div className="seller-load-grid">
             {data.brokers.map((broker) => (
-              <BrokerProfileCard key={broker.id} broker={broker} properties={data.properties} />
+              <BrokerProfileCard key={broker.id} broker={broker} properties={data.properties} onDelete={removeBroker} isDeleting={deletingBrokerId === broker.id} />
             ))}
           </div>
         </article>

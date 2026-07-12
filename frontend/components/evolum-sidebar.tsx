@@ -86,9 +86,9 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   return (
     <aside className="inbox-unified-nav evolum-unified-nav">
       <div className="inbox-nav-head">
-        <div className="inbox-nav-brand" title="EVOLUM">
+        <div className="inbox-nav-brand" title="EVOLUM OS">
           <span>EV</span>
-          <strong>EVOLUM</strong>
+          <strong>EVOLUM OS</strong>
         </div>
         <button className="inbox-nav-toggle" type="button" onClick={onToggle} aria-label="Cerrar menu">
           x

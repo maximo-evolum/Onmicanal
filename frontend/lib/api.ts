@@ -722,6 +722,7 @@ export type IndustryUser = {
   name: string;
   email: string;
   role: string;
+  jobTitle?: string | null;
 };
 
 export type IndustryRecord = {
@@ -794,6 +795,12 @@ export async function createIndustryBrokerUser(input: {
   return request<{ user: IndustryUser; profile: IndustryRecord }>("/industry-records/brokers", {
     method: "POST",
     body: JSON.stringify(input)
+  });
+}
+
+export async function deleteIndustryBrokerUser(userId: string): Promise<{ ok: true; unassignedProperties: number }> {
+  return request<{ ok: true; unassignedProperties: number }>(`/industry-records/brokers/${encodeURIComponent(userId)}`, {
+    method: "DELETE"
   });
 }
 
