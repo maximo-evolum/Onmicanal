@@ -1,10 +1,11 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createTeamUser, getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";
 import { getStoredSession, mergeStoredSession } from "@/lib/auth";
 import { roleLabel } from "@/lib/role-labels";
+import { getIndustryRoleOptions } from "@/lib/industry-roles";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ThemePalettePicker } from "@/components/theme-palette-picker";
@@ -43,48 +44,10 @@ function isAvatarFile(file: File) {
   return file.type.startsWith("image/") || ["svg", "gif", "webp", "avif", "ico", "heic", "heif", "jpg", "jpeg", "png"].includes(extension);
 }
 
-function roleOptionsForIndustry(industry?: string | null) {
-  const value = String(industry || "").toLowerCase();
-  if (value.includes("real") || value.includes("inm")) {
-    return [
-      { label: "Vendedor inmobiliario", value: "SELLER" },
-      { label: "Coordinador", value: "AGENT" },
-      { label: "Administrador", value: "ADMIN" }
-    ];
-  }
-  if (value.includes("auto") || value.includes("taller")) {
-    return [
-      { label: "Mecanico", value: "AGENT" },
-      { label: "Jefe de taller", value: "ADMIN" },
-      { label: "Recepcion", value: "VIEWER" }
-    ];
-  }
-  if (value.includes("veter")) {
-    return [
-      { label: "Veterinario", value: "AGENT" },
-      { label: "Asistente veterinario", value: "VIEWER" },
-      { label: "Administrador", value: "ADMIN" }
-    ];
-  }
-  if (value.includes("dental") || value.includes("salud") || value.includes("clinic")) {
-    return [
-      { label: "Doctor", value: "AGENT" },
-      { label: "Asistente clinico", value: "VIEWER" },
-      { label: "Administrador", value: "ADMIN" }
-    ];
-  }
-  return [
-    { label: "Agente operativo", value: "AGENT" },
-    { label: "Vendedor", value: "SELLER" },
-    { label: "Administrador", value: "ADMIN" },
-    { label: "Solo lectura", value: "VIEWER" }
-  ];
-}
-
 export default function SaasPage() {
   const agent = getStoredSession();
   const [data, setData] = useState<SaasOverview | null>(null);
-  const [users, setUsers] = useState<Array<{ id: string; name: string; email: string; role: string; isActive: boolean }>>([]);
+  const [users, setUsers] = useState<Array<{ id: string; name: string; email: string; role: string; jobTitle?: string | null; isActive: boolean }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [profileForm, setProfileForm] = useState({
@@ -95,7 +58,7 @@ export default function SaasPage() {
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
-  const [teamForm, setTeamForm] = useState({ name: "", email: "", role: "AGENT", password: "" });
+  const [teamForm, setTeamForm] = useState({ name: "", email: "", operationalRole: "GENERAL_AGENT", password: "" });
   const [teamStatus, setTeamStatus] = useState<string | null>(null);
   const [savingTeam, setSavingTeam] = useState(false);
 
@@ -169,14 +132,17 @@ export default function SaasPage() {
     try {
       setSavingTeam(true);
       setTeamStatus(null);
+      const selectedRole = roleOptions.find((option) => option.key === teamForm.operationalRole) || roleOptions[0];
       const result = await createTeamUser({
         name: teamForm.name.trim(),
         email: teamForm.email.trim(),
-        role: teamForm.role,
+        role: selectedRole.workspaceRole,
+        operationalRole: selectedRole.key,
+        jobTitle: selectedRole.label,
         password: teamForm.password.trim() || undefined
       });
       setUsers((current) => [...current, result.user]);
-      setTeamForm({ name: "", email: "", role: "AGENT", password: "" });
+      setTeamForm({ name: "", email: "", operationalRole: selectedRole.key, password: "" });
       setTeamStatus("Usuario operativo creado");
     } catch (err) {
       setTeamStatus(err instanceof Error ? err.message : "No se pudo crear el usuario");
@@ -185,9 +151,15 @@ export default function SaasPage() {
     }
   }
 
-  const roleOptions = roleOptionsForIndustry(data?.tenant?.industry);
+  const roleOptions = useMemo(() => getIndustryRoleOptions(data?.tenant?.industry), [data?.tenant?.industry]);
   const industryLabel = data?.tenant?.industry || "General";
   const normalizedAvatar = normalizeAvatarUrl(profileForm.avatarUrl);
+
+  useEffect(() => {
+    if (!roleOptions.some((option) => option.key === teamForm.operationalRole)) {
+      setTeamForm((current) => ({ ...current, operationalRole: roleOptions[0]?.key || "GENERAL_AGENT" }));
+    }
+  }, [data?.tenant?.industry, roleOptions, teamForm.operationalRole]);
 
   return (
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
@@ -323,8 +295,8 @@ export default function SaasPage() {
                 </label>
                 <label>
                   <span>Rol operativo</span>
-                  <select value={teamForm.role} onChange={(event) => setTeamForm((value) => ({ ...value, role: event.target.value }))}>
-                    {roleOptions.map((option) => <option key={option.label} value={option.value}>{option.label}</option>)}
+                  <select value={teamForm.operationalRole} onChange={(event) => setTeamForm((value) => ({ ...value, operationalRole: event.target.value }))}>
+                    {roleOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
                   </select>
                 </label>
                 <label>
@@ -341,7 +313,7 @@ export default function SaasPage() {
                   <div className="phase5-table-row" key={user.id}>
                     <strong>{user.name}</strong>
                     <span>{user.email}</span>
-                    <span>{roleLabel(user.role)}</span>
+                    <span>{user.jobTitle || roleLabel(user.role)}</span>
                     <span className={user.isActive ? "badge mode-bot" : "badge danger"}>{user.isActive ? "Activo" : "Inactivo"}</span>
                   </div>
                 ))}

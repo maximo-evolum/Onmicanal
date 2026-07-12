@@ -11,6 +11,10 @@ import { encryptSecret, hasSecret } from "../lib/credential-crypto.js";
 export const connectionsPublicRouter = Router();
 export const connectionsRouter = Router();
 
+// Solo responsables del tenant pueden gestionar credenciales, respaldos y
+// proveedores. SUPER_ADMIN mantiene el bypass definido por requireRole.
+connectionsRouter.use(requireRole(ROLE_GROUPS.MANAGERS));
+
 const PROVIDERS = [
   {
     key: "meta_whatsapp",

@@ -1,6 +1,46 @@
 import { prisma } from "../lib/db.js";
-import { PLAN_DEFINITIONS, getModulesForPlan, normalizePlanCode } from "../lib/modules.js";
+import { MODULES, PLAN_DEFINITIONS, getModulesForPlan, normalizePlanCode } from "../lib/modules.js";
 import { getAnyIndustryTemplate, getTemplateModules } from "./industry-templates.service.js";
+
+// Tenants creados durante las primeras versiones guardaron nombres visibles
+// (agenda, pipeline, campanas). Las rutas nuevas usan las claves canonicas.
+// Mantener esta compatibilidad evita bloquear cuentas existentes sin volver a
+// habilitar modulos que un administrador desactivo manualmente.
+const MODULE_ALIASES = Object.freeze({
+  [MODULES.SALES]: ["pipeline", "ventas"],
+  [MODULES.BOOKINGS]: ["agenda", "reservas"],
+  [MODULES.MARKETING]: ["campaigns", "campanas", "campañas"],
+  [MODULES.ANALYTICS]: ["dashboard", "analytics"],
+  [MODULES.INTEGRATIONS]: ["integraciones", "conectores"],
+  [MODULES.CUSTOMERS]: ["clientes", "pacientes"],
+  [MODULES.REVENUE]: ["ganancias", "ingresos"],
+  [MODULES.PROPERTIES]: ["propiedades"],
+  [MODULES.REALTY_LOADS]: ["cargas_inmobiliarias", "cargas"],
+  [MODULES.REALTY_ACTIVITY]: ["actividad_inmobiliaria"],
+  [MODULES.BROKER_PORTAL]: ["portal_corredor"],
+  [MODULES.BROKERS]: ["corredores"],
+  [MODULES.PROPERTY_ASSIGNMENTS]: ["asignacion_ventas", "seller_assignments"],
+  [MODULES.VEHICLES]: ["vehiculos"],
+  [MODULES.PARTS_INVENTORY]: ["repuestos", "inventario_repuestos"],
+  [MODULES.MECHANIC_ASSIGNMENTS]: ["asignacion_mecanicos"],
+  [MODULES.READY_NOTIFICATIONS]: ["avisos_retiro"],
+});
+
+function normalizeModuleKey(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+export function getModuleCandidates(module) {
+  const requested = normalizeModuleKey(module);
+  if (!requested) return [];
+
+  const canonical = Object.entries(MODULE_ALIASES).find(([key, aliases]) =>
+    key === requested || aliases.some((alias) => normalizeModuleKey(alias) === requested),
+  );
+
+  if (!canonical) return [requested];
+  return [...new Set([canonical[0], ...canonical[1]].map(normalizeModuleKey))];
+}
 
 export async function syncPlans() {
   const plans = Object.values(PLAN_DEFINITIONS);
@@ -105,10 +145,15 @@ export async function getTenantModules(tenantId) {
 
 export async function hasTenantModule(tenantId, module) {
   if (!module) return true;
-  const found = await prisma.tenantModule.findUnique({
-    where: { tenantId_module: { tenantId, module } }
+  const found = await prisma.tenantModule.findFirst({
+    where: {
+      tenantId,
+      module: { in: getModuleCandidates(module) },
+      enabled: true,
+    },
+    select: { id: true }
   });
-  return Boolean(found?.enabled);
+  return Boolean(found);
 }
 
 export async function setTenantModules({ tenantId, modules = [], source = "MANUAL" }) {

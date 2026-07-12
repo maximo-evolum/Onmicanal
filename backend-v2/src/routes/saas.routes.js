@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
+import { resolveIndustryRole } from "../lib/industry-roles.js";
 import { requireRole } from "../middleware/tenant-access.js";
 import { runAutonomousSalesFollowUps } from "../services/autonomous-sales-followup.service.js";
 import {
@@ -81,7 +82,7 @@ saasRouter.get("/saas/team", requireRole("OWNER", "ADMIN"), async (req, res, nex
   try {
     const users = await prisma.workspaceUser.findMany({
       where: { tenantId: req.tenantId },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true, updatedAt: true },
+      select: { id: true, name: true, email: true, role: true, jobTitle: true, isActive: true, createdAt: true, updatedAt: true },
       orderBy: { createdAt: "desc" }
     });
     res.json({ users });
@@ -90,10 +91,17 @@ saasRouter.get("/saas/team", requireRole("OWNER", "ADMIN"), async (req, res, nex
 
 saasRouter.post("/saas/team", requireRole("OWNER", "ADMIN"), async (req, res, next) => {
   try {
-    const { name, email, role = "SELLER", password } = req.body || {};
+    const { name, email, role = "SELLER", password, operationalRole, jobTitle } = req.body || {};
     const userName = cleanText(name);
     const normalizedEmail = cleanEmail(email);
-    const normalizedRole = String(role || "SELLER").trim().toUpperCase();
+    const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId }, select: { industry: true } });
+    const resolvedRole = resolveIndustryRole({
+      industry: tenant?.industry,
+      operationalRole,
+      role,
+      jobTitle,
+    });
+    const normalizedRole = resolvedRole.workspaceRole;
 
     if (!userName || !normalizedEmail) return res.status(400).json({ error: "Nombre y email son requeridos" });
     if (!normalizedEmail.includes("@")) return res.status(400).json({ error: "El email del usuario no es válido" });
@@ -110,13 +118,14 @@ saasRouter.post("/saas/team", requireRole("OWNER", "ADMIN"), async (req, res, ne
         name: userName,
         email: normalizedEmail,
         role: normalizedRole,
+        jobTitle: resolvedRole.jobTitle,
         passwordHash: password ? await hashPassword(password) : null,
         isActive: true
       },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true, updatedAt: true }
+      select: { id: true, name: true, email: true, role: true, jobTitle: true, isActive: true, createdAt: true, updatedAt: true }
     });
 
-    await auditTenantAction({ tenantId: req.tenantId, actorUserId: req.user?.id, action: "TEAM_USER_CREATED", entity: "WorkspaceUser", entityId: user.id, metadata: { email: user.email, role: user.role } }).catch(() => null);
+    await auditTenantAction({ tenantId: req.tenantId, actorUserId: req.user?.id, action: "TEAM_USER_CREATED", entity: "WorkspaceUser", entityId: user.id, metadata: { email: user.email, role: user.role, jobTitle: user.jobTitle, operationalRole: resolvedRole.operationalRole } }).catch(() => null);
     res.status(201).json({ user });
   } catch (error) {
     return handleTeamError(res, error, "No se pudo crear el usuario");

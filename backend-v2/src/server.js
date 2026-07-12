@@ -164,7 +164,10 @@ app.use("/api", ...protectedApi, industryRecordsRouter);
 app.use("/api", ...protectedApi, adminRouter);
 app.use("/api", ...protectedApi, saasRouter);
 if (env.enableDevTools) {
-  app.use("/api", ...protectedApi, requireModule(MODULES.BOT_LAB), devRouter);
+  // El permiso de Bot Lab se aplica dentro de sus rutas. Colocarlo en este
+  // montaje global bloqueaba por accidente todos los endpoints posteriores
+  // (conexiones, campañas, agenda, etc.) para tenants sin bot_lab.
+  app.use("/api", ...protectedApi, devRouter);
 }
 app.use("/api", ...protectedApi, onboardingRouter);
 app.use("/api", ...protectedApi, conversationsRouter); // Inbox: auth + tenant, sin bloqueo por módulo para evitar 403 en tenants configurados

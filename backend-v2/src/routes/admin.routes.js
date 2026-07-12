@@ -25,6 +25,7 @@ import bcrypt from "bcryptjs";
 import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../lib/db.js";
+import { resolveIndustryRole } from "../lib/industry-roles.js";
 import { requireRole } from "../middleware/tenant-access.js";
 import { PLAN_DEFINITIONS, normalizePlanCode } from "../lib/modules.js";
 import { mergeMetadata, metadataOrNull, normalizeMetadata } from "../lib/metadata.js";
@@ -796,7 +797,7 @@ adminRouter.patch("/admin/tenants/:tenantId/modules", async (req, res) => {
 adminRouter.post("/admin/tenants/:tenantId/users", async (req, res) => {
   try {
     const { tenantId } = req.params;
-    const { name, email, role = "AGENT", password, isActive = true } = req.body || {};
+    const { name, email, role = "AGENT", operationalRole, jobTitle, password, isActive = true } = req.body || {};
     const userName = cleanText(name);
     const normalizedEmail = cleanEmail(email);
     const normalizedRole = String(role || "AGENT").trim().toUpperCase();
@@ -805,8 +806,16 @@ adminRouter.post("/admin/tenants/:tenantId/users", async (req, res) => {
     if (!normalizedEmail.includes("@")) return res.status(400).json({ error: "El email del usuario no es válido" });
     if (!VALID_ROLES.has(normalizedRole)) return res.status(400).json({ error: "Rol inválido para el usuario" });
 
-    const tenantExists = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+    const tenantExists = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, industry: true } });
     if (!tenantExists) return res.status(404).json({ error: "Cliente no encontrado" });
+
+    const industryRole = resolveIndustryRole({
+      industry: tenantExists.industry,
+      operationalRole,
+      role: normalizedRole,
+      jobTitle
+    });
+    if (!VALID_ROLES.has(industryRole.workspaceRole)) return res.status(400).json({ error: "Rol inválido para el usuario" });
 
     const existing = await prisma.workspaceUser.findUnique({ where: { email: normalizedEmail } });
     if (existing) return res.status(409).json({ error: "Ya existe un usuario con ese email" });
@@ -816,7 +825,8 @@ adminRouter.post("/admin/tenants/:tenantId/users", async (req, res) => {
         tenantId,
         name: userName,
         email: normalizedEmail,
-        role: normalizedRole,
+        role: industryRole.workspaceRole,
+        jobTitle: industryRole.jobTitle,
         isActive: Boolean(isActive),
         passwordHash: password ? await hashPassword(password) : null
       }
@@ -832,17 +842,29 @@ adminRouter.post("/admin/tenants/:tenantId/users", async (req, res) => {
 adminRouter.patch("/admin/users/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    const { name, role, isActive, password } = req.body;
+    const { name, role, operationalRole, jobTitle, isActive, password } = req.body;
     const data = {};
     if (name !== undefined) {
       const userName = cleanText(name);
       if (!userName) return res.status(400).json({ error: "El nombre del usuario no puede quedar vacío" });
       data.name = userName;
     }
-    if (role !== undefined) {
+    if (role !== undefined || operationalRole !== undefined || jobTitle !== undefined) {
+      const currentUser = await prisma.workspaceUser.findUnique({
+        where: { id: userId },
+        include: { tenant: { select: { industry: true } } }
+      });
+      if (!currentUser) return res.status(404).json({ error: "Usuario no encontrado" });
       const normalizedRole = String(role || "").trim().toUpperCase();
-      if (!VALID_ROLES.has(normalizedRole)) return res.status(400).json({ error: "Rol inválido para el usuario" });
-      data.role = normalizedRole;
+      const industryRole = resolveIndustryRole({
+        industry: currentUser.tenant?.industry,
+        operationalRole,
+        role: normalizedRole || currentUser.role,
+        jobTitle: jobTitle === undefined ? currentUser.jobTitle : jobTitle
+      });
+      if (!VALID_ROLES.has(industryRole.workspaceRole)) return res.status(400).json({ error: "Rol inválido para el usuario" });
+      data.role = industryRole.workspaceRole;
+      data.jobTitle = industryRole.jobTitle;
     }
     if (isActive !== undefined) data.isActive = Boolean(isActive);
     if (password) data.passwordHash = await hashPassword(password);
@@ -895,7 +917,7 @@ adminRouter.delete("/admin/users/:userId", async (req, res) => {
 
 adminRouter.post("/admin/team-users", async (req, res) => {
   try {
-    const { tenantId, name, email, password = "ChangeMe123*", role = "SELLER" } = req.body || {};
+    const { tenantId, name, email, password = "ChangeMe123*", role = "SELLER", operationalRole, jobTitle } = req.body || {};
     const userName = cleanText(name);
     const normalizedEmail = cleanEmail(email);
     const normalizedRole = String(role || "SELLER").trim().toUpperCase();
@@ -903,12 +925,18 @@ adminRouter.post("/admin/team-users", async (req, res) => {
     if (!tenantId || !userName || !normalizedEmail) return res.status(400).json({ error: "tenantId, nombre y email son requeridos" });
     if (!VALID_ROLES.has(normalizedRole)) return res.status(400).json({ error: "Rol inválido para el usuario" });
 
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { industry: true } });
+    if (!tenant) return res.status(404).json({ error: "Cliente no encontrado" });
+    const industryRole = resolveIndustryRole({ industry: tenant.industry, operationalRole, role: normalizedRole, jobTitle });
+    if (!VALID_ROLES.has(industryRole.workspaceRole)) return res.status(400).json({ error: "Rol inválido para el usuario" });
+
     const user = await prisma.workspaceUser.create({
       data: {
         tenantId,
         name: userName,
         email: normalizedEmail,
-        role: normalizedRole,
+        role: industryRole.workspaceRole,
+        jobTitle: industryRole.jobTitle,
         passwordHash: await hashPassword(password),
         isActive: true
       }

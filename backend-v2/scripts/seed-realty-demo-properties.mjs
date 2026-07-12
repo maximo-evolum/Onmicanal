@@ -1,25 +1,29 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
+import { MODULES } from "../src/lib/modules.js";
 
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = "Demo1234!";
 const REALTY_TENANT_EMAIL = "inmobiliaria@prueba.cl";
 
 const REALTY_MODULES = [
-  "inbox",
-  "agenda",
-  "pipeline",
-  "dashboard",
-  "ai_ops",
-  "realty_loads",
-  "properties",
-  "realty_activity",
-  "broker_portal",
-  "brokers",
-  "payments",
-  "campaigns",
-  "integrations",
+  MODULES.INBOX,
+  MODULES.BOOKINGS,
+  MODULES.SALES,
+  MODULES.ANALYTICS,
+  MODULES.AI_OPS,
+  MODULES.REALTY_LOADS,
+  MODULES.PROPERTIES,
+  MODULES.REALTY_ACTIVITY,
+  MODULES.BROKER_PORTAL,
+  MODULES.BROKERS,
+  MODULES.PROPERTY_ASSIGNMENTS,
+  MODULES.PAYMENTS,
+  MODULES.MARKETING,
+  MODULES.INTEGRATIONS,
+  MODULES.DOCUMENTS,
+  MODULES.WORKFLOWS,
 ];
 
 const BROKERS = [
@@ -398,7 +402,7 @@ async function ensureOwner(tenantId) {
     where: { email: REALTY_TENANT_EMAIL },
     update: {
       tenantId,
-      name: "Dueño inmobiliaria",
+      name: "Admin inmobiliaria",
       passwordHash,
       role: "ADMIN",
       jobTitle: "Administrador inmobiliario",
@@ -406,7 +410,7 @@ async function ensureOwner(tenantId) {
     },
     create: {
       tenantId,
-      name: "Dueño inmobiliaria",
+      name: "Admin inmobiliaria",
       email: REALTY_TENANT_EMAIL,
       passwordHash,
       role: "ADMIN",

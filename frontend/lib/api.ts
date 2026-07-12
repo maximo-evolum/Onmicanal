@@ -1101,8 +1101,8 @@ export async function updateOnboardingStatus(input: Record<string, boolean>): Pr
   });
 }
 
-export async function getTeamManagement(): Promise<{ users: Array<{ id: string; name: string; email: string; role: string; isActive: boolean; createdAt: string }> }> {
-  return request<{ users: Array<{ id: string; name: string; email: string; role: string; isActive: boolean; createdAt: string }> }>("/saas/team");
+export async function getTeamManagement(): Promise<{ users: Array<{ id: string; name: string; email: string; role: string; jobTitle?: string | null; isActive: boolean; createdAt: string }> }> {
+  return request<{ users: Array<{ id: string; name: string; email: string; role: string; jobTitle?: string | null; isActive: boolean; createdAt: string }> }>("/saas/team");
 }
 
 export async function getAuditLogs(): Promise<{ logs: Array<{ id: string; action: string; entity?: string | null; createdAt: string; metadata?: Record<string, unknown> | null }> }> {
@@ -1110,8 +1110,8 @@ export async function getAuditLogs(): Promise<{ logs: Array<{ id: string; action
 }
 
 
-export async function createTeamUser(input: { name: string; email: string; role?: string; password?: string }) {
-  return request<{ user: { id: string; name: string; email: string; role: string; isActive: boolean; createdAt: string } }>("/saas/team", {
+export async function createTeamUser(input: { name: string; email: string; role?: string; operationalRole?: string; jobTitle?: string; password?: string }) {
+  return request<{ user: { id: string; name: string; email: string; role: string; jobTitle?: string | null; isActive: boolean; createdAt: string } }>("/saas/team", {
     method: "POST",
     body: JSON.stringify(input)
   });

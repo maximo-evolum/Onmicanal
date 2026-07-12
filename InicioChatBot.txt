@@ -17,9 +17,6 @@ LIMPIAR DEPENDENCIAS SI HAY ERRORES
 Remove-Item -Recurse -Force node_modules
 Remove-Item package-lock.json
 
-Index Login
-http://localhost:3001/login
-
 
 git add .
 git commit -m "Mejoras"
@@ -27,8 +24,15 @@ git push -u origin main
 git remote add origin https://github.com/maximo-evolum/Onmicanal.git
 
 admin@platform.local / Admin123*
+Taller Mecánico/Dueño/tallermecanico@prueba.cl/tallermecanico1234
+Inmobiliaria/Dueño/Inmobiliaria@prueba.cl/Demo1234!
+Clinica dental/Dueña/clinicadental@prueba.cl/clinicadental1234
+Clinica veterinaria/Dueña/clinicaveterinaria@prueba.cl/clinicaveterinaria1234
 
-maximo.jara@evolum.cl / Bendo2026
+maria.ruiz@demo-evolum.cl/Demo1234!
+carlos.mendoza@demo-evolum.cl/Demo1234!
+laura.campos@demo-evolum.cl/Demo1234!
+diego.alvarez@demo-evolum.cl/Demo1234!
 
 cd E:\Onmicanal\backend-v2 recuprea weas depues de un cagazoooo
 npm run repair:admin

@@ -103,6 +103,14 @@ export function requireModule(module) {
         return next();
       }
 
+      // El Centro de Conexiones centraliza credenciales del negocio. Debe ser
+      // visible para administradores de cada tenant aunque el conector puntual
+      // aun no forme parte del plan; los proveedores individuales siguen
+      // mostrando su estado y requisitos antes de poder operar.
+      if (module === "integrations" && ["OWNER", "ADMIN"].includes(role)) {
+        return next();
+      }
+
       const tenantId = req.tenantId || req.user?.tenantId;
       if (!tenantId) return res.status(401).json({ error: "Tenant requerido" });
 

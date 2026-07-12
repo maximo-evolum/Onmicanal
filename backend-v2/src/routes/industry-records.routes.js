@@ -71,7 +71,7 @@ industryRecordsRouter.get("/industry-records/users", async (req, res) => {
         tenantId: req.user?.role === "SUPER_ADMIN" && req.query?.tenantId ? String(req.query.tenantId) : req.tenantId,
         isActive: true
       },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, jobTitle: true },
       orderBy: [{ role: "asc" }, { name: "asc" }]
     });
     res.json(users);
@@ -135,9 +135,10 @@ industryRecordsRouter.post("/industry-records/brokers", requireRole(ROLE_GROUPS.
           email,
           passwordHash: await hashPassword(password),
           role: "SELLER",
+          jobTitle: "Corredor inmobiliario",
           isActive: true
         },
-        select: { id: true, name: true, email: true, role: true }
+        select: { id: true, name: true, email: true, role: true, jobTitle: true }
       });
 
       const profile = await tx.industryRecord.create({
@@ -157,7 +158,7 @@ industryRecordsRouter.post("/industry-records/brokers", requireRole(ROLE_GROUPS.
             moduleScope: ["crm", "inbox", "agenda", "dashboard", "pipeline", "ai_ops", "properties", "broker_portal"]
           }
         },
-        include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
+        include: { assignedTo: { select: { id: true, name: true, email: true, role: true, jobTitle: true } } }
       });
 
       return { user, profile };

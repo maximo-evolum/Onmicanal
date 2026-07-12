@@ -91,8 +91,13 @@ function isDeveloperRole(role?: string | null) {
   return String(role || "").toUpperCase() === "SUPER_ADMIN";
 }
 
+function isTenantManager(role?: string | null) {
+  return ["OWNER", "ADMIN"].includes(String(role || "").toUpperCase());
+}
+
 export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null) {
   if (isDeveloperRole(role)) return true;
+  if (moduleKey === "integrations" && isTenantManager(role)) return true;
   if (alwaysAllowed.has(moduleKey)) return true;
   const roleAllowlist = roleModuleAllowlist[String(role || "").toUpperCase()];
   if (roleAllowlist && !roleAllowlist.has(moduleKey)) return false;
