@@ -1,0 +1,24 @@
+[AUTH_MODULE_FORBIDDEN] {
+  userId: 'cmr46lpoh003fk40pouqhhekw',
+  tenantId: 'cmr46lp75003dk40psibagons',
+  role: 'ADMIN',
+  module: 'bot_lab',
+  availableModules: [
+    'agenda',           'ai_ops',
+    'analytics',        'backup_provider',
+    'bookings',         'broker_portal',
+    'brokers',          'campaigns',
+    'dashboard',        'documents',
+    'email_imap',       'gmail',
+    'google_drive',     'inbox',
+    'integrations',     'marketing',
+    'offline_sync',     'onboarding',
+    'payments',         'pipeline',
+    'properties',       'property_assignments',
+    'realty_activity',  'realty_leads',
+    'realty_loads',     'revenue',
+    'saas',             'sales',
+    'security_replica', 'sharepoint',
+    'users',            'workflows'
+  ]
+}
