@@ -20,7 +20,7 @@ import {
   type TenantNotification
 } from "@/lib/api";
 import { AccountPill } from "@/components/account-pill";
-import { getStoredSession, LogoutButton } from "@/lib/auth";
+import { getStoredSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
 
@@ -733,7 +733,6 @@ export default function CrmPrincipalPage() {
             <AccountPill fallbackName={currentSession?.name || "Usuario"} />
             <span>{isDeveloper ? "Desarrollador" : currentSession?.role || "Cliente"}</span>
           </div>
-          <LogoutButton />
         </header>
 
         {state.error ? <div className="crm-main-notice">{state.error}</div> : null}

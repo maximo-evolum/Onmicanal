@@ -6,7 +6,7 @@ import { normalizeMetadata } from "../lib/metadata.js";
 import { MODULES } from "../lib/modules.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
-import { encryptSecret, hasSecret } from "../lib/credential-crypto.js";
+import { decryptSecret, encryptSecret, hasSecret } from "../lib/credential-crypto.js";
 
 export const connectionsPublicRouter = Router();
 export const connectionsRouter = Router();
@@ -213,7 +213,7 @@ function missingFields(provider, config) {
 
 function providerStatus(provider, config) {
   if (!config || !config.isActive) return "DISCONNECTED";
-  const envMissing = missingEnv(provider);
+  const envMissing = provider.oauthProvider ? missingOAuthEnv(provider) : missingEnv(provider);
   const fieldMissing = missingFields(provider, config);
   const lastTestStatus = String(configMetadata(config).lastTestStatus || "").toUpperCase();
   if (lastTestStatus === "ERROR") return "ERROR";
@@ -240,7 +240,7 @@ function publicConfig(config) {
 }
 
 function publicProvider(provider, config) {
-  const envMissing = missingEnv(provider);
+  const envMissing = provider.oauthProvider ? missingOAuthEnv(provider) : missingEnv(provider);
   const fieldMissing = missingFields(provider, config);
   return {
     key: provider.key,
@@ -449,6 +449,202 @@ async function exchangeOAuthCode(req, provider, code) {
   return data;
 }
 
+async function providerRequest(url, accessToken) {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error?.message || data?.message || data?.error_description || "El proveedor rechazo la conexion");
+  }
+  return data;
+}
+
+function compactDiscovery(value) {
+  return JSON.parse(JSON.stringify(value || {}));
+}
+
+async function discoverOAuthAccount(provider, accessToken) {
+  if (!accessToken) return {};
+
+  if (provider.oauthProvider === "google") {
+    if (provider.key === "gmail") {
+      const profile = await providerRequest("https://gmail.googleapis.com/gmail/v1/users/me/profile", accessToken);
+      const email = cleanText(profile.emailAddress);
+      return {
+        label: email || provider.label,
+        externalAccountId: email ? `google-gmail:${email}` : null,
+        discovery: { account: { email, messagesTotal: profile.messagesTotal || 0 } }
+      };
+    }
+
+    const about = await providerRequest("https://www.googleapis.com/drive/v3/about?fields=user,storageQuota", accessToken);
+    const user = about.user || {};
+    const identifier = cleanText(user.permissionId || user.emailAddress);
+    return {
+      label: cleanText(user.emailAddress || user.displayName, provider.label),
+      externalAccountId: identifier ? `google-drive:${identifier}` : null,
+      discovery: {
+        account: {
+          email: cleanText(user.emailAddress),
+          name: cleanText(user.displayName),
+          permissionId: cleanText(user.permissionId),
+          storageQuota: about.storageQuota || null
+        }
+      }
+    };
+  }
+
+  if (provider.oauthProvider === "microsoft") {
+    const [user, drive] = await Promise.all([
+      providerRequest("https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName", accessToken),
+      providerRequest("https://graph.microsoft.com/v1.0/me/drive?$select=id,name,webUrl", accessToken)
+    ]);
+    const identifier = cleanText(user.id || drive.id);
+    return {
+      label: cleanText(user.mail || user.userPrincipalName || user.displayName, provider.label),
+      externalAccountId: identifier ? `microsoft-sharepoint:${identifier}` : null,
+      discovery: {
+        account: {
+          id: cleanText(user.id),
+          name: cleanText(user.displayName),
+          email: cleanText(user.mail || user.userPrincipalName),
+          driveId: cleanText(drive.id),
+          driveName: cleanText(drive.name),
+          driveUrl: cleanText(drive.webUrl)
+        }
+      }
+    };
+  }
+
+  if (provider.oauthProvider === "mercadopago") {
+    const account = await providerRequest("https://api.mercadopago.com/users/me", accessToken);
+    const identifier = cleanText(account.id);
+    return {
+      label: cleanText(account.nickname || account.email || provider.label),
+      externalAccountId: identifier ? `mercadopago:${identifier}` : null,
+      discovery: {
+        account: {
+          id: identifier,
+          nickname: cleanText(account.nickname),
+          email: cleanText(account.email),
+          countryId: cleanText(account.country_id)
+        }
+      }
+    };
+  }
+
+  if (provider.oauthProvider === "meta") {
+    const pages = await providerRequest(
+      "https://graph.facebook.com/v23.0/me/accounts?fields=id,name,instagram_business_account{id,username},whatsapp_business_account{id,name,phone_numbers{id,display_phone_number,verified_name}}&limit=100",
+      accessToken
+    );
+    const accounts = Array.isArray(pages.data) ? pages.data : [];
+    const availableAccounts = accounts.map((page) => ({
+      pageId: cleanText(page.id),
+      pageName: cleanText(page.name),
+      instagram: page.instagram_business_account
+        ? { id: cleanText(page.instagram_business_account.id), username: cleanText(page.instagram_business_account.username) }
+        : null,
+      whatsapp: page.whatsapp_business_account
+        ? {
+            id: cleanText(page.whatsapp_business_account.id),
+            name: cleanText(page.whatsapp_business_account.name),
+            phoneNumbers: Array.isArray(page.whatsapp_business_account.phone_numbers)
+              ? page.whatsapp_business_account.phone_numbers.map((phone) => ({
+                  id: cleanText(phone.id),
+                  displayPhoneNumber: cleanText(phone.display_phone_number),
+                  verifiedName: cleanText(phone.verified_name)
+                }))
+              : []
+          }
+        : null
+    }));
+
+    if (provider.key === "meta_whatsapp") {
+      const selected = availableAccounts.find((item) => item.whatsapp?.phoneNumbers?.length) || availableAccounts.find((item) => item.whatsapp);
+      const phone = selected?.whatsapp?.phoneNumbers?.[0] || null;
+      return {
+        label: cleanText(phone?.verifiedName || selected?.whatsapp?.name || selected?.pageName, provider.label),
+        externalAccountId: phone?.id ? `meta-whatsapp:${phone.id}` : null,
+        businessAccountId: selected?.whatsapp?.id || null,
+        phoneNumberId: phone?.id || null,
+        discovery: { account: selected || null, availableAccounts }
+      };
+    }
+
+    const selected = availableAccounts.find((item) => item.instagram?.id) || availableAccounts[0] || null;
+    const instagramId = selected?.instagram?.id || null;
+    return {
+      label: cleanText(selected?.instagram?.username || selected?.pageName, provider.label),
+      externalAccountId: instagramId ? `meta-instagram:${instagramId}` : (selected?.pageId ? `meta-page:${selected.pageId}` : null),
+      businessAccountId: instagramId || selected?.pageId || null,
+      discovery: { account: selected, availableAccounts }
+    };
+  }
+
+  return {};
+}
+
+async function refreshOAuthAccessToken(provider, config) {
+  const metadata = configMetadata(config);
+  const expiresAt = Date.parse(String(metadata.oauthExpiresAt || ""));
+  const refreshToken = decryptSecret(config.verifyToken);
+  if (!refreshToken || !Number.isFinite(expiresAt) || expiresAt > Date.now() + 120000) return config;
+
+  const body = new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken });
+  let tokenUrl = "";
+  if (provider.oauthProvider === "google") {
+    tokenUrl = "https://oauth2.googleapis.com/token";
+    body.set("client_id", process.env.GOOGLE_CLIENT_ID || "");
+    body.set("client_secret", process.env.GOOGLE_CLIENT_SECRET || "");
+  } else if (provider.oauthProvider === "microsoft") {
+    tokenUrl = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+    body.set("client_id", process.env.MICROSOFT_CLIENT_ID || "");
+    body.set("client_secret", process.env.MICROSOFT_CLIENT_SECRET || "");
+    body.set("scope", (provider.scopes || []).join(" "));
+  } else if (provider.oauthProvider === "mercadopago") {
+    tokenUrl = "https://api.mercadopago.com/oauth/token";
+    body.set("client_id", process.env.MERCADOPAGO_CLIENT_ID || "");
+    body.set("client_secret", process.env.MERCADOPAGO_CLIENT_SECRET || "");
+  }
+  if (!tokenUrl) return config;
+
+  const response = await fetch(tokenUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  });
+  const token = await response.json().catch(() => ({}));
+  if (!response.ok || !token.access_token) {
+    throw new Error(token.error_description || token.error || "No se pudo renovar el token OAuth");
+  }
+
+  return prisma.tenantChannelConfig.update({
+    where: { id: config.id },
+    data: {
+      accessToken: encryptSecret(token.access_token),
+      verifyToken: encryptSecret(token.refresh_token) || config.verifyToken,
+      metadata: normalizeMetadata({
+        ...metadata,
+        oauthExpiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : metadata.oauthExpiresAt,
+        refreshedAt: new Date().toISOString(),
+        hasRefreshToken: Boolean(token.refresh_token || config.verifyToken)
+      }, {})
+    }
+  });
+}
+
+async function testOAuthConnection(provider, config) {
+  const refreshed = await refreshOAuthAccessToken(provider, config);
+  const accessToken = decryptSecret(refreshed.accessToken);
+  if (!accessToken) throw new Error("No hay access token OAuth para validar");
+  const discovery = await discoverOAuthAccount(provider, accessToken);
+  return { config: refreshed, discovery };
+}
+
 function oauthCallbackHandler(expectedProvider) {
   return async (req, res) => {
     try {
@@ -477,6 +673,14 @@ function oauthCallbackHandler(expectedProvider) {
       });
       const encryptedAccessToken = encryptSecret(token.access_token) || existing?.accessToken || null;
       const encryptedRefreshToken = encryptSecret(token.refresh_token) || existing?.verifyToken || null;
+      let discovery = {};
+      try {
+        discovery = await discoverOAuthAccount(provider, token.access_token);
+      } catch (discoveryError) {
+        discovery = {
+          discoveryError: discoveryError instanceof Error ? discoveryError.message : "No se pudo descubrir la cuenta autorizada"
+        };
+      }
       const metadata = normalizeMetadata({
         ...configMetadata(existing),
         providerType: provider.type,
@@ -487,9 +691,11 @@ function oauthCallbackHandler(expectedProvider) {
         expiresIn: token.expires_in || null,
         hasRefreshToken: Boolean(token.refresh_token || existing?.verifyToken || configMetadata(existing).hasRefreshToken),
         refreshToken: undefined,
+        oauthExpiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null,
         oauthConnectedAt: new Date().toISOString(),
-        lastTestStatus: "OK",
-        lastTestMessage: "OAuth conectado"
+        lastTestStatus: discovery.discoveryError ? "ERROR" : "OK",
+        lastTestMessage: discovery.discoveryError ? "OAuth conectado; falta revisar la cuenta autorizada" : "OAuth conectado y cuenta detectada",
+        oauthDiscovery: compactDiscovery(discovery.discovery || discovery)
       }, {});
 
       await prisma.tenantChannelConfig.upsert({
@@ -497,14 +703,20 @@ function oauthCallbackHandler(expectedProvider) {
         create: {
           tenantId: state.tenantId,
           channel: provider.key,
-          label: provider.label,
+          label: discovery.label || provider.label,
+          phoneNumberId: discovery.phoneNumberId || null,
+          businessAccountId: discovery.businessAccountId || null,
+          externalAccountId: discovery.externalAccountId || null,
           accessToken: encryptedAccessToken,
           verifyToken: encryptedRefreshToken,
           metadata,
           isActive: true
         },
         update: {
-          label: provider.label,
+          label: discovery.label || provider.label,
+          phoneNumberId: discovery.phoneNumberId || existing?.phoneNumberId || null,
+          businessAccountId: discovery.businessAccountId || existing?.businessAccountId || null,
+          externalAccountId: discovery.externalAccountId || existing?.externalAccountId || null,
           accessToken: encryptedAccessToken,
           verifyToken: encryptedRefreshToken,
           metadata,
@@ -631,18 +843,39 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
     });
     if (!config || !config.isActive) return res.status(400).json({ ok: false, error: "Conexion inactiva o no configurada" });
 
-    const missing = [...missingEnv(provider), ...missingFields(provider, config)];
-    const ok = missing.length === 0;
+    const missing = [...(provider.oauthProvider ? missingOAuthEnv(provider) : missingEnv(provider)), ...missingFields(provider, config)];
+    let testedConfig = config;
+    let testError = null;
+    let discovery = null;
+    if (!missing.length && provider.oauthProvider) {
+      try {
+        const result = await testOAuthConnection(provider, config);
+        testedConfig = result.config;
+        discovery = result.discovery;
+      } catch (error) {
+        testError = error instanceof Error ? error.message : "La prueba OAuth fallo";
+      }
+    }
+    const ok = missing.length === 0 && !testError;
     const metadata = normalizeMetadata({
-      ...configMetadata(config),
+      ...configMetadata(testedConfig),
       lastTestedAt: new Date().toISOString(),
       lastTestStatus: ok ? "OK" : "ERROR",
-      lastTestMessage: ok ? "Configuracion completa" : `Faltan campos: ${missing.join(", ")}`
+      lastTestMessage: ok
+        ? (provider.oauthProvider ? "Token y cuenta OAuth validados" : "Configuracion completa")
+        : (testError || `Faltan campos: ${missing.join(", ")}`),
+      oauthDiscovery: discovery?.discovery ? compactDiscovery(discovery.discovery) : configMetadata(testedConfig).oauthDiscovery
     }, {});
 
     const updated = await prisma.tenantChannelConfig.update({
-      where: { id: config.id },
-      data: { metadata }
+      where: { id: testedConfig.id },
+      data: {
+        label: discovery?.label || testedConfig.label,
+        phoneNumberId: discovery?.phoneNumberId || testedConfig.phoneNumberId,
+        businessAccountId: discovery?.businessAccountId || testedConfig.businessAccountId,
+        externalAccountId: discovery?.externalAccountId || testedConfig.externalAccountId,
+        metadata
+      }
     });
 
     await recordAuditLog(req, "CONNECTION_TESTED", "tenant_channel_config", config.id, {

@@ -7,3 +7,4 @@
 - Network:       http://0.0.0.0:3001
 ✓ Ready in 2.7s
 
+ GET /reports 200 in 3.6s (next.js: 3.2s, application-code: 378ms)

@@ -103,6 +103,25 @@ function providerCapabilities(provider: ConnectionProvider) {
   return ["Credenciales por tenant", "Prueba de conexion", "Auditoria operativa"];
 }
 
+function getOAuthDiscovery(provider: ConnectionProvider) {
+  const metadata = provider.config?.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+  const discovery = metadata.oauthDiscovery;
+  return discovery && typeof discovery === "object" ? discovery as Record<string, unknown> : null;
+}
+
+function discoverySummary(provider: ConnectionProvider) {
+  const discovery = getOAuthDiscovery(provider);
+  if (!discovery) return null;
+  const account = discovery.account;
+  if (!account || typeof account !== "object") return null;
+  const source = account as Record<string, unknown>;
+  const candidates = [source.email, source.name, source.username, source.verifiedName, source.displayPhoneNumber, source.nickname]
+    .map((value) => typeof value === "string" ? value.trim() : "")
+    .filter(Boolean);
+  return candidates[0] || null;
+}
+
 export default function ConnectionsPage() {
   const agent = getStoredSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -351,6 +370,14 @@ export default function ConnectionsPage() {
                         <span>{statusLabels[selected.status]}</span>
                         {selected.missing.length ? <small>Falta: {selected.missing.join(", ")}</small> : <small>Configuracion completa</small>}
                       </div>
+
+                      {discoverySummary(selected) ? (
+                        <div className="connection-oauth-discovery">
+                          <span>Cuenta detectada por OAuth</span>
+                          <strong>{discoverySummary(selected)}</strong>
+                          <small>Los identificadores necesarios se completaron automaticamente cuando el proveedor los expuso.</small>
+                        </div>
+                      ) : null}
 
                       {(() => {
                         const nextStep = providerNextStep(selected);
