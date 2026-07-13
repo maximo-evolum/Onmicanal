@@ -32,6 +32,7 @@ const baseItems: SidebarItem[] = [
   ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG", "onboarding"],
   ["Planes y modulos", "/saas", "Plan, modulos, usuarios y limites", "PM", "saas"],
   ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],
+  ["Reportes", "/reports", "Informes por rubro y operacion", "RE", "reports"],
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI", "ai_ops"],
   ["Cargas inmobiliarias", "/realty-loads", "Carga, importacion y comisiones", "CI", "realty_loads"],
   ["Propiedades", "/properties", "Portal de propiedades cargadas", "PR", "properties"],
@@ -48,12 +49,15 @@ const developerItems: SidebarItem[] = [
 ];
 
 export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
-  const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
+  const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [role, setRole] = useState<string | null>(null);
+  const [jobTitle, setJobTitle] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    setRole(getStoredSession()?.role || null);
+    const session = getStoredSession();
+    setRole(session?.role || null);
+    setJobTitle(session?.jobTitle || null);
     getMyModules()
       .then((data) => {
         if (mounted) setEnabledModules(data.modules || []);
@@ -69,11 +73,10 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
   const items = useMemo(() => {
     const allItems = isDeveloper ? [...baseItems, ...developerItems] : baseItems;
-    if (enabledModules === null) return allItems;
     return allItems.filter(([, , , , moduleKey]) =>
-      moduleAllowed(moduleKey, enabledModules, isDeveloper ? "SUPER_ADMIN" : role),
+      moduleAllowed(moduleKey, enabledModules, isDeveloper ? "SUPER_ADMIN" : role, jobTitle),
     );
-  }, [enabledModules, isDeveloper, role]);
+  }, [enabledModules, isDeveloper, jobTitle, role]);
 
   if (!isOpen) {
     return (

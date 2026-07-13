@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/db.js";
 import { MODULES } from "../lib/modules.js";
-import { requireModule } from "../middleware/tenant-access.js";
+import { requireModule, requireRole } from "../middleware/tenant-access.js";
 import { detectIntent } from "../services/intent.service.js";
 import { extractEntities } from "../services/entity-extractor.service.js";
 import { classifyPriority } from "../services/priority.service.js";
@@ -77,7 +77,7 @@ function buildReasonSummary({ intent, entities, priority, usedAI }) {
   return `Prioridad ${priority.label} (${priority.score}). ${reasons.join(", ")}.`;
 }
 
-devRouter.post("/dev/test-bot", requireModule(MODULES.BOT_LAB), async (req, res) => {
+devRouter.post("/dev/test-bot", requireRole("SUPER_ADMIN"), requireModule(MODULES.BOT_LAB), async (req, res) => {
   try {
     const { message, channel = "whatsapp" } = req.body;
     const cleanMessage = String(message || "").trim();
@@ -159,7 +159,7 @@ devRouter.post("/dev/test-bot", requireModule(MODULES.BOT_LAB), async (req, res)
   }
 });
 
-devRouter.post("/dev/simulate-inbound", requireModule(MODULES.BOT_LAB), async (req, res) => {
+devRouter.post("/dev/simulate-inbound", requireRole("SUPER_ADMIN"), requireModule(MODULES.BOT_LAB), async (req, res) => {
   try {
     const {
       channel = "whatsapp",

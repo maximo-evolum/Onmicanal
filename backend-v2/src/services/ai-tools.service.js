@@ -1,5 +1,6 @@
 import { prisma } from "../lib/db.js";
 import { createBooking, getAvailableSlots } from "./booking.service.js";
+import { createPaymentIntent, PAYMENT_STATUS } from "./payment.service.js";
 import { estimateServiceQuote, extractEventPreferences, getPrimaryService } from "./event-sales.service.js";
 import { searchProducts } from "./product.service.js";
 import { updateLead } from "./lead.service.js";
@@ -36,7 +37,7 @@ function safeDateFromText(value) {
 }
 
 export async function runAiTool({ name, args = {}, context }) {
-  const { tenant, conversation, contact, userMessage } = context;
+  const { tenant, conversation, contact, userMessage, memory } = context;
   const tenantId = tenant?.id;
 
   switch (name) {
@@ -115,9 +116,9 @@ export async function runAiTool({ name, args = {}, context }) {
     case AI_TOOLS.CREATE_BOOKING: {
       const prefs = extractEventPreferences(userMessage);
       const service = await getPrimaryService({ tenantId, query: userMessage });
-      const guests = Number(args.guests || prefs.guests || 0);
+      const guests = Number(args.guests || prefs.guests || (args.defaultGuests ? 1 : 0));
       const location = args.location || prefs.location || null;
-      const dateText = args.date || prefs.date;
+      const dateText = args.date || memory?.date || prefs.date;
       const parsedDate = safeDateFromText(dateText);
 
       if (!parsedDate || !guests) {
@@ -133,7 +134,7 @@ export async function runAiTool({ name, args = {}, context }) {
         };
       }
 
-      const quote = service ? estimateServiceQuote({ service, guests }) : null;
+      const quote = service && guests ? estimateServiceQuote({ service, guests }) : null;
       const booking = await createBooking({
         tenantId,
         conversationId: conversation.id,
@@ -169,7 +170,7 @@ export async function runAiTool({ name, args = {}, context }) {
         return { ok: false, tool: name, message: "No hay conversación para marcar cierre." };
       }
 
-      const existingLead = await prisma.lead.findUnique({ where: { conversationId: conversation.id } });
+      let existingLead = await prisma.lead.findUnique({ where: { conversationId: conversation.id } });
       const leadData = {
         status: "READY_TO_CLOSE",
         urgency: "HIGH",
@@ -192,7 +193,7 @@ export async function runAiTool({ name, args = {}, context }) {
           }
         });
       } else {
-        await prisma.lead.create({
+        existingLead = await prisma.lead.create({
           data: {
             tenantId,
             conversationId: conversation.id,
@@ -202,6 +203,31 @@ export async function runAiTool({ name, args = {}, context }) {
             ...leadData
           }
         });
+      }
+
+      let payment = await prisma.payment.findFirst({
+        where: {
+          tenantId,
+          conversationId: conversation.id,
+          status: { in: [PAYMENT_STATUS.PENDING, PAYMENT_STATUS.PARTIAL] }
+        },
+        orderBy: { createdAt: "desc" }
+      }).catch(() => null);
+
+      const amount = Number(args.amount || existingLead?.budget || 0);
+      if (!payment && amount > 0) {
+        // La IA puede crear una intencion pendiente, nunca ejecutar un cargo.
+        // El link interno queda listo para el flujo de cobro o un proveedor conectado.
+        payment = await createPaymentIntent({
+          tenantId,
+          conversationId: conversation.id,
+          leadId: existingLead?.id || null,
+          amount,
+          currency: args.currency || "CLP",
+          provider: "manual",
+          description: args.description || `Cobro generado por IA para ${contact?.name || "cliente"}`,
+          metadata: { generatedBy: "crm_agent", source: "inbox_ai" }
+        }).catch(() => null);
       }
 
       await prisma.conversation.update({
@@ -224,7 +250,11 @@ export async function runAiTool({ name, args = {}, context }) {
         ok: true,
         tool: name,
         notifySeller: true,
-        message: "Cliente marcado como listo para pago/reserva. Vendedor humano debe continuar el cierre."
+        paymentId: payment?.id || null,
+        paymentUrl: payment?.paymentUrl || null,
+        message: payment
+          ? "Cobro pendiente creado y asociado a la conversacion."
+          : "Cliente marcado como listo para pago/reserva. Falta un monto confirmado para generar el cobro."
       };
     }
 

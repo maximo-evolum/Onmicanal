@@ -48,6 +48,9 @@ function getActionPlan({ tenant, userMessage, memory, lead }) {
   const wantsQuote = includesAny(lower, [/cotizar/i, /cotizaci[oó]n/i, /precio/i, /valor/i, /cu[aá]nto/i, /presupuesto/i]);
   const wantsPayment = includesAny(lower, [/pagar/i, /pago/i, /link/i, /transfer/i, /abono/i]);
   const wantsProducts = includesAny(lower, [/stock/i, /disponible/i, /despacho/i, /producto/i, /modelo/i, /talla/i, /color/i, /comprar/i]);
+  const bookingDate = memory?.date || prefs.date || null;
+  const hasExactBookingDate = /^\d{4}-\d{2}-\d{2}/.test(String(bookingDate || ""));
+  const confirmsBooking = includesAny(lower, [/\bconfirm(?:o|amos)?\b/i, /\bagend(?:o|ar|emos)\b/i, /\breserv(?:o|ar|amos)\b/i, /\bquiero\s+(?:agendar|reservar)\b/i]);
 
   if (wantsHuman || (memory?.sentiment === "negative" && (lead?.closeProbability || 0) >= 45)) {
     actions.push({
@@ -87,10 +90,11 @@ function getActionPlan({ tenant, userMessage, memory, lead }) {
     if (wantsPayment || paymentReady.ready || conversationState === CONVERSATION_STATES.READY_TO_CLOSE) {
       actions.push({
         tool: AI_TOOLS.MARK_PAYMENT_READY,
-        args: {
-          reason: paymentReady.reason || "Cliente parece listo para coordinar pago/reserva",
-          interest: "Cierre asistido por vendedor humano"
-        }
+      args: {
+        reason: paymentReady.reason || "Cliente parece listo para coordinar pago/reserva",
+        interest: "Cierre asistido por vendedor humano",
+        amount: Number(lead?.budget || 0) || undefined
+      }
       });
       reasons.push("cliente listo para pago/reserva: avisar vendedor humano");
     }
@@ -120,6 +124,22 @@ function getActionPlan({ tenant, userMessage, memory, lead }) {
     }
   }
 
+  // Crear una cita pendiente solo cuando el cliente confirma y deja una fecha
+  // exacta. Asi el Inbox alimenta Agenda sin registrar reservas ambiguas.
+  if (industry !== "parrilladas" && wantsBooking && confirmsBooking && hasExactBookingDate) {
+    actions.push({
+      tool: AI_TOOLS.CREATE_BOOKING,
+      args: {
+        date: bookingDate,
+        guests: Number(prefs.guests || 0) || 1,
+        defaultGuests: true,
+        location: prefs.location || null,
+        notes: `Cita confirmada desde Inbox para rubro ${industry}.`
+      }
+    });
+    reasons.push("cita confirmada y enviada a Agenda");
+  }
+
   if (conversationState !== CONVERSATION_STATES.READY_TO_CLOSE && (sales.mode === "CLOSING" || sales.mode === "QUOTE" || sales.mode === "OBJECTION")) {
     actions.push({
       tool: AI_TOOLS.UPDATE_LEAD,
@@ -138,7 +158,8 @@ function getActionPlan({ tenant, userMessage, memory, lead }) {
       tool: AI_TOOLS.MARK_PAYMENT_READY,
       args: {
         reason: paymentReady.reason || "Cliente listo para cierre comercial",
-        interest: "Cliente listo para que vendedor coordine pago/cierre"
+        interest: "Cliente listo para que vendedor coordine pago/cierre",
+        amount: Number(lead?.budget || 0) || undefined
       }
     });
     reasons.push("cierre asistido por humano");

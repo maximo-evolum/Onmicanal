@@ -1086,6 +1086,28 @@ export async function getSaasAnalytics(): Promise<SaasAnalytics> {
   return request<SaasAnalytics>("/saas/analytics");
 }
 
+export type IndustryReportMetric = {
+  label: string;
+  value: number;
+  detail?: string;
+};
+
+export type IndustryReport = {
+  generatedAt: string;
+  tenant: { name: string; industry: string; industryLabel: string };
+  summary: IndustryReportMetric[];
+  sections: Array<{
+    id: string;
+    title: string;
+    description: string;
+    metrics: IndustryReportMetric[];
+  }>;
+};
+
+export async function getIndustryReports(): Promise<IndustryReport> {
+  return request<IndustryReport>("/reports/overview");
+}
+
 export async function getAIConfig(): Promise<{ settings: AISettings }> {
   return request<{ settings: AISettings }>("/saas/ai-config");
 }

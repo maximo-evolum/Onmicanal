@@ -428,6 +428,10 @@ export async function processIncomingText({
   }
 
   reply = normalizeText(reply);
+  const generatedPayment = actionPlan?.results?.find((result) => result?.ok && result.tool === "mark_payment_ready" && result.paymentUrl);
+  if (generatedPayment?.paymentUrl && !reply.includes(generatedPayment.paymentUrl)) {
+    reply = `${reply}\n\nLink de pago: ${generatedPayment.paymentUrl}`;
+  }
   await recordUsageEvent({ tenantId: tenant.id, type: "AI_REPLY", metadata: { channel, conversationId: conversation.id } });
 
   // ⚠️ importante para simulador

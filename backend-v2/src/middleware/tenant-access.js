@@ -1,5 +1,5 @@
 import { prisma } from "../lib/db.js";
-import { hasTenantModule, ensureTenantSubscriptionAndModules, getTenantModules } from "../services/tenant-modules.service.js";
+import { hasTenantModule, ensureTenantModuleEligibility, getTenantModules } from "../services/tenant-modules.service.js";
 
 export const ROLE_GROUPS = {
   STAFF: [
@@ -119,8 +119,7 @@ export function requireModule(module) {
       if (!ok) {
         const tenant = req.tenant || await prisma.tenant.findUnique({ where: { id: tenantId } });
         if (tenant) {
-          await ensureTenantSubscriptionAndModules({ tenantId, planCode: tenant.plan || "STARTER" });
-          ok = await hasTenantModule(tenantId, module);
+          ok = await ensureTenantModuleEligibility({ tenantId, module, tenant });
         }
       }
 

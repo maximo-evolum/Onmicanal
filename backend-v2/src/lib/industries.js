@@ -318,9 +318,18 @@ export function getIndustryModulesForPlan(industry, plan = "STARTER") {
 
 export function getTemplateModulesForPlan(template, plan = "STARTER") {
   const rank = PLAN_RANK[normalizePlanCode(plan)] || PLAN_RANK.STARTER;
-  return template.modules
+  const modules = template.modules
     .filter((item) => (PLAN_RANK[normalizePlanCode(item.minPlan)] || PLAN_RANK.STARTER) <= rank)
     .map((item) => item.key);
+
+  // Los reportes se generan desde datos transversales y registros propios de
+  // cada vertical. Quedan disponibles desde PRO sin obligar a duplicarlos en
+  // cada plantilla actual o futura.
+  if (rank >= PLAN_RANK.PRO && !modules.includes(MODULES.REPORTS)) {
+    modules.push(MODULES.REPORTS);
+  }
+
+  return modules;
 }
 
 export function buildBalancedAssignments(items = [], assignees = []) {

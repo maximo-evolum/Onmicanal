@@ -22,6 +22,7 @@ import { servicesRouter } from "./routes/services.routes.js";
 import { bookingsRouter } from "./routes/bookings.routes.js";
 import { paymentsRouter } from "./routes/payments.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
+import { reportsRouter } from "./routes/reports.routes.js";
 import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { modulesRouter } from "./routes/modules.routes.js";
 import { industriesRouter } from "./routes/industries.routes.js";
@@ -183,6 +184,7 @@ app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), servicesRouter
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), bookingsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.SALES), paymentsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), dashboardRouter);
+app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), reportsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });

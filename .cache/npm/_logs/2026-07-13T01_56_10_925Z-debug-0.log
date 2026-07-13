@@ -1,0 +1,24 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@10.8.2
+2 info using node@v20.19.2
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:E:\Onmicanal\frontend\.npmrc
+5 silly config load:file:C:\Users\maxim\.npmrc
+6 silly config load:file:C:\Users\maxim\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm run build
+8 verbose argv "run" "build"
+9 verbose logfile logs-max:10 dir:E:\Onmicanal\.cache\npm\_logs\2026-07-13T01_56_10_925Z-
+10 verbose logfile E:\Onmicanal\.cache\npm\_logs\2026-07-13T01_56_10_925Z-debug-0.log
+11 silly logfile done cleaning log files
+12 http fetch GET 200 https://registry.npmjs.org/npm 736ms
+13 verbose cwd E:\Onmicanal\frontend
+14 verbose os Windows_NT 10.0.26200
+15 verbose node v20.19.2
+16 verbose npm  v10.8.2
+17 notice
+17 notice New major version of npm available! 10.8.2 -> 12.0.1
+17 notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.1
+17 notice To update run: npm install -g npm@12.0.1
+17 notice  { force: true, [Symbol(proc-log.meta)]: true }
+18 verbose exit 0
+19 info ok

@@ -14,6 +14,7 @@ export type ModuleAccessKey =
   | "onboarding"
   | "saas"
   | "dashboard"
+  | "reports"
   | "ai_ops"
   | "admin"
   | "bot_lab"
@@ -50,6 +51,7 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   onboarding: ["onboarding", "knowledge", "configuracion_agente"],
   saas: ["saas", "plans", "planes", "users"],
   dashboard: ["dashboard", "analytics"],
+  reports: ["reports", "reportes", "informes", "analytics", "dashboard"],
   ai_ops: ["ai_ops", "ai-ops", "followups", "sales"],
   admin: ["admin", "developer", "desarrollador"],
   bot_lab: ["bot_lab", "bot-lab"],
@@ -79,9 +81,17 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
 
 const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas"]);
 
-const roleModuleAllowlist: Partial<Record<string, Set<ModuleAccessKey>>> = {
-  SELLER: new Set(["crm", "inbox", "agenda", "dashboard", "pipeline", "ai_ops", "properties", "broker_portal"]),
-};
+const brokerModuleAllowlist = new Set<ModuleAccessKey>([
+  "crm",
+  "inbox",
+  "agenda",
+  "dashboard",
+  "reports",
+  "pipeline",
+  "ai_ops",
+  "properties",
+  "broker_portal"
+]);
 
 function normalizeModule(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "_");
@@ -95,12 +105,12 @@ function isTenantManager(role?: string | null) {
   return ["OWNER", "ADMIN"].includes(String(role || "").toUpperCase());
 }
 
-export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null) {
+export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null, jobTitle?: string | null) {
   if (isDeveloperRole(role)) return true;
   if (moduleKey === "integrations" && isTenantManager(role)) return true;
   if (alwaysAllowed.has(moduleKey)) return true;
-  const roleAllowlist = roleModuleAllowlist[String(role || "").toUpperCase()];
-  if (roleAllowlist && !roleAllowlist.has(moduleKey)) return false;
+  const isBroker = String(role || "").toUpperCase() === "SELLER" && /corredor/i.test(String(jobTitle || ""));
+  if (isBroker && !brokerModuleAllowlist.has(moduleKey)) return false;
   const normalized = new Set(modules.map(normalizeModule));
   return moduleAliases[moduleKey].some((alias) => normalized.has(normalizeModule(alias)));
 }
@@ -139,8 +149,8 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const allowed = useMemo(() => {
     if (!moduleKey) return true;
     if (loading || modules === null) return true;
-    return moduleAllowed(moduleKey, modules, session?.role);
-  }, [loading, moduleKey, modules, session?.role]);
+    return moduleAllowed(moduleKey, modules, session?.role, session?.jobTitle);
+  }, [loading, moduleKey, modules, session?.role, session?.jobTitle]);
 
   return { allowed, loading, error, modules: modules || [], role: session?.role };
 }

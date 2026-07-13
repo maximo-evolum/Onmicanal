@@ -11,6 +11,7 @@ const MODULE_ALIASES = Object.freeze({
   [MODULES.BOOKINGS]: ["agenda", "reservas"],
   [MODULES.MARKETING]: ["campaigns", "campanas", "campañas"],
   [MODULES.ANALYTICS]: ["dashboard", "analytics"],
+  [MODULES.REPORTS]: ["reportes", "informes"],
   [MODULES.INTEGRATIONS]: ["integraciones", "conectores"],
   [MODULES.CUSTOMERS]: ["clientes", "pacientes"],
   [MODULES.REVENUE]: ["ganancias", "ingresos"],
@@ -154,6 +155,47 @@ export async function hasTenantModule(tenantId, module) {
     select: { id: true }
   });
   return Boolean(found);
+}
+
+// Recupera modulos propios del plan o de la vertical cuando una cuenta antigua
+// quedo con una configuracion parcial. Una desactivacion MANUAL explicita
+// siempre gana: no reactivamos servicios que un administrador eligio bloquear.
+export async function ensureTenantModuleEligibility({ tenantId, module, tenant: knownTenant = null } = {}) {
+  if (!tenantId || !module) return false;
+
+  const candidates = getModuleCandidates(module);
+  const configured = await prisma.tenantModule.findMany({
+    where: { tenantId, module: { in: candidates } },
+    select: { module: true, enabled: true, source: true }
+  });
+
+  if (configured.some((item) => item.enabled)) return true;
+  if (configured.some((item) => !item.enabled && item.source === "MANUAL")) return false;
+
+  const tenant = knownTenant || await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { plan: true, industry: true }
+  });
+  if (!tenant) return false;
+
+  const planCode = normalizePlanCode(tenant.plan || "STARTER");
+  const template = await getAnyIndustryTemplate(tenant.industry || "GENERAL");
+  const eligibleModules = [
+    ...new Set([
+      ...getModulesForPlan(planCode),
+      ...getTemplateModules(template, planCode)
+    ])
+  ];
+  const canonical = eligibleModules.find((item) => getModuleCandidates(item).some((candidate) => candidates.includes(candidate)));
+  if (!canonical) return false;
+
+  await prisma.tenantModule.upsert({
+    where: { tenantId_module: { tenantId, module: canonical } },
+    update: { enabled: true, source: "INDUSTRY" },
+    create: { tenantId, module: canonical, enabled: true, source: "INDUSTRY" }
+  });
+
+  return true;
 }
 
 export async function setTenantModules({ tenantId, modules = [], source = "MANUAL" }) {

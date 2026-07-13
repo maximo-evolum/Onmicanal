@@ -1,6 +1,5 @@
 ﻿"use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createTeamUser, getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";
 import { getStoredSession, mergeStoredSession } from "@/lib/auth";
@@ -154,6 +153,7 @@ export default function SaasPage() {
   const roleOptions = useMemo(() => getIndustryRoleOptions(data?.tenant?.industry), [data?.tenant?.industry]);
   const industryLabel = data?.tenant?.industry || "General";
   const normalizedAvatar = normalizeAvatarUrl(profileForm.avatarUrl);
+  const canManageUsers = ["ADMIN", "SUPER_ADMIN"].includes(String(agent?.role || "").toUpperCase());
 
   useEffect(() => {
     if (!roleOptions.some((option) => option.key === teamForm.operationalRole)) {
@@ -180,18 +180,6 @@ export default function SaasPage() {
             <AccountPill fallbackName={agent?.name || "Usuario"} />
           </div>
         </header>
-        <section className="phase5-hero">
-          <div>
-            <span className="eyebrow">SaaS Command Center</span>
-            <h1 className="chat-title">Centro comercial del workspace</h1>
-            <p className="meta-line">Planes, límites, onboarding, configuración IA y señales comerciales en un solo lugar.</p>
-          </div>
-          <div className="phase5-actions">
-            <Link className="primary-btn" href="/onboarding">Configurar agente</Link>
-            <Link className="ghost-btn" href="/dashboard">Ver analytics</Link>
-          </div>
-        </section>
-
         {error ? <div className="admin-notice error">{error}</div> : null}
         {!data ? <div className="empty-state">Cargando centro SaaS...</div> : (
           <>
@@ -277,7 +265,7 @@ export default function SaasPage() {
               </article>
             </section>
 
-            <section className="phase5-panel">
+            {canManageUsers ? <section className="phase5-panel">
               <div className="phase5-panel-head">
                 <div>
                   <h2>Usuarios y roles</h2>
@@ -319,23 +307,7 @@ export default function SaasPage() {
                 ))}
                 {!users.length ? <div className="empty-state">Sin usuarios cargados para este workspace.</div> : null}
               </div>
-            </section>
-
-            <section className="phase5-grid three">
-              <Card title="Conversaciones" value={data.analytics?.conversations || 0} detail="últimas operativas" />
-              <Card title="Listos para cierre" value={data.analytics?.ready || 0} detail="requieren vendedor" />
-              <Card title="Handoff IA" value={data.analytics?.handoff || 0} detail="intervención sugerida" />
-            </section>
-
-            <section className="phase5-panel">
-              <div className="phase5-panel-head"><div><h2>Accesos rápidos</h2><p>Herramientas de operación comercial SaaS.</p></div></div>
-              <div className="phase5-quick-grid">
-                <Link href="/onboarding">Personalidad y reglas IA</Link>
-                <Link href="/saas">Usuarios y roles</Link>
-                <Link href="/onboarding">Onboarding guiado</Link>
-                <Link href="/dashboard">Dashboard</Link>
-              </div>
-            </section>
+            </section> : null}
           </>
         )}
       </main>

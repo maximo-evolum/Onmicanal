@@ -669,7 +669,6 @@ export default function CrmPrincipalPage() {
           <div>
             <span className="crm-main-kicker">{isDeveloper ? "Desarrollador / EVOLUM OS" : "CRM principal / EVOLUM OS"}</span>
             <h1>Hola, {currentSession?.name || "Usuario"}</h1>
-            <p>{isDeveloper ? "Administra el catalogo global de agentes, sus rubros compatibles y el nivel de cuenta en que aparecen para cada cliente." : "Gestiona conversaciones, clientes, agentes habilitados por tu plan y oportunidades desde una vista central."}</p>
           </div>
           <form className="crm-main-search" onSubmit={submitSearch}>
             <input
