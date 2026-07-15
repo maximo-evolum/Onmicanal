@@ -8,3 +8,5 @@
 ✓ Ready in 2.7s
 
  GET /reports 200 in 3.6s (next.js: 3.2s, application-code: 378ms)
+ GET /connections 200 in 811ms (next.js: 700ms, application-code: 111ms)
+ GET /connections 200 in 103ms (next.js: 9ms, application-code: 94ms)
