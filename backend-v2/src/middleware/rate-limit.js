@@ -1,4 +1,6 @@
 
+import { getRedisClient } from "../lib/redis.js";
+
 const buckets = new Map();
 const MAX_BUCKETS = 20_000;
 
@@ -16,18 +18,30 @@ function keyFor(req) {
 }
 
 export function basicRateLimit({ windowMs = 60_000, max = 240 } = {}) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     // No limitar preflight ni health.
     if (req.method === "OPTIONS" || req.path === "/health" || req.path === "/api/health") return next();
 
     const now = Date.now();
+    const key = keyFor(req);
+    const redis = await getRedisClient();
+    if (redis) {
+      const redisKey = `rate-limit:${key}:${Math.floor(now / windowMs)}`;
+      const current = await redis.incr(redisKey);
+      if (current === 1) await redis.pExpire(redisKey, windowMs);
+      const ttl = Math.max(0, await redis.pTTL(redisKey));
+      res.setHeader("X-RateLimit-Limit", String(max));
+      res.setHeader("X-RateLimit-Remaining", String(Math.max(0, max - current)));
+      res.setHeader("X-RateLimit-Reset", String(Math.ceil((now + ttl) / 1000)));
+      if (current > max) return res.status(429).json({ error: "Demasiadas solicitudes. Intenta nuevamente en unos segundos.", retryAfterSeconds: Math.ceil(ttl / 1000) });
+      return next();
+    }
     if (buckets.size >= MAX_BUCKETS) {
       for (const [bucketKey, bucket] of buckets) {
         if (bucket.resetAt <= now) buckets.delete(bucketKey);
       }
       if (buckets.size >= MAX_BUCKETS) buckets.delete(buckets.keys().next().value);
     }
-    const key = keyFor(req);
     const current = buckets.get(key) || { count: 0, resetAt: now + windowMs };
 
     if (now > current.resetAt) {

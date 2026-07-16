@@ -2,8 +2,19 @@ import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { getPublishedMetadataSchema } from "../services/metadata-schemas.service.js";
+import { redactMetadataForRole } from "../lib/metadata-access.js";
 
 export const backupsRouter = Router();
+
+async function redactIndustryRecordsForExport(req, records) {
+  const schemas = new Map(await Promise.all([...new Set(records.map((record) => record.recordType))].map(async (recordType) => [recordType, await getPublishedMetadataSchema(req.tenantId, recordType)])));
+  return records.map((record) => {
+    const schema = schemas.get(record.recordType);
+    if (!schema || req.user?.role === "SUPER_ADMIN") return record;
+    return { ...record, data: redactMetadataForRole(record.data, schema, req.user?.role).data };
+  });
+}
 
 const EXPORT_LIMITS = {
   contacts: 5000,
@@ -159,7 +170,7 @@ backupsRouter.get("/backups/export", requireRole(ROLE_GROUPS.MANAGERS), async (r
         bookings,
         payments,
         campaigns,
-        industryRecords,
+        industryRecords: await redactIndustryRecordsForExport(req, industryRecords),
         auditLogs
       }
     };

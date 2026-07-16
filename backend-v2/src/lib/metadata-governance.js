@@ -12,6 +12,7 @@ export function validateMetadataSchemaDefinition(fields) {
     const config = typeof rawConfig === "string" ? { type: rawConfig } : rawConfig || {};
     const type = String(config.type || "string").toLowerCase();
     if (!FIELD_TYPES.has(type)) errors.push({ field: name, code: "INVALID_TYPE", message: "Tipo de campo no permitido" });
+    if (type === "relation" && !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(String(config.relationRecordType || ""))) errors.push({ field: name, code: "RELATION_TARGET_REQUIRED", message: "Una relación debe declarar relationRecordType" });
     if (config.options !== undefined && !Array.isArray(config.options)) errors.push({ field: name, code: "INVALID_OPTIONS", message: "options debe ser un arreglo" });
     if (config.sensitivity !== undefined && !SENSITIVITIES.has(String(config.sensitivity).toUpperCase())) errors.push({ field: name, code: "INVALID_SENSITIVITY", message: "Clasificacion de sensibilidad no permitida" });
     if (["PERSONAL", "SENSITIVE"].includes(String(config.sensitivity || "").toUpperCase()) && !String(config.purpose || "").trim()) errors.push({ field: name, code: "PURPOSE_REQUIRED", message: "Los datos personales o sensibles requieren finalidad" });

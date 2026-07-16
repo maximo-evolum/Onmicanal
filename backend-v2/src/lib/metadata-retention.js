@@ -6,3 +6,11 @@ export function retentionDueFields(record, schema, now = new Date()) {
     .filter(([name, config]) => Object.prototype.hasOwnProperty.call(record.data || {}, name) && Number.isInteger(config?.retentionDays) && ageDays >= config.retentionDays)
     .map(([name, config]) => ({ field: name, retentionDays: config.retentionDays, ageDays }));
 }
+
+export function anonymizeExpiredSensitiveFields(record, schema, now = new Date()) {
+  const due = retentionDueFields(record, schema, now).filter(({ field }) => ["PERSONAL", "SENSITIVE"].includes(String(schema?.fields?.[field]?.sensitivity || "").toUpperCase()));
+  if (!due.length) return { data: record.data || {}, due };
+  const data = { ...(record.data || {}) };
+  for (const { field } of due) delete data[field];
+  return { data, due };
+}
