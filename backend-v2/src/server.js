@@ -44,6 +44,8 @@ import { MODULES } from "./lib/modules.js";
 import { basicRateLimit } from "./middleware/rate-limit.js";
 import { apiErrorHandler, requestContext } from "./middleware/request-context.js";
 import { runAutonomousSalesFollowUps } from "./services/autonomous-sales-followup.service.js";
+import { observeRequest } from "./lib/runtime-metrics.js";
+import { operationsRouter } from "./routes/operations.routes.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -60,6 +62,7 @@ app.use(express.json({
   }
 }));
 app.use(requestContext);
+app.use(observeRequest);
 app.use(basicRateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 300) }));
 
 app.use((req, res, next) => {
@@ -169,6 +172,7 @@ app.use("/api", ...protectedApi, searchRouter);
 app.use("/api", ...protectedApi, notificationsRouter);
 app.use("/api", ...protectedApi, backupsRouter);
 app.use("/api", ...protectedApi, architectureRouter);
+app.use("/api", ...protectedApi, operationsRouter);
 app.use("/api", ...protectedApi, industriesRouter);
 app.use("/api", ...protectedApi, industryRecordsRouter);
 app.use("/api", ...protectedApi, adminRouter);
