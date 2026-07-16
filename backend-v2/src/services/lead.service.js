@@ -2,6 +2,7 @@ import { prisma } from "../lib/db.js";
 import { predictCloseProbability } from "./close-prediction.service.js";
 import { calculateDynamicLeadScore } from "./dynamic-scoring.service.js";
 import { calculateCloseScore } from "./predictive-scoring.service.js";
+import { resolveCoreMetadata } from "./core-metadata.service.js";
 
 export async function getLeadByConversationId(conversationId) {
   return prisma.lead.findUnique({ where: { conversationId } });
@@ -11,6 +12,7 @@ export async function getOrCreateLead({ tenantId, conversationId, contact }) {
   const existing = await prisma.lead.findUnique({ where: { conversationId } });
   if (existing) return existing;
 
+  const resolvedMetadata = await resolveCoreMetadata({ tenantId, recordType: "lead", metadata: {} });
   return prisma.lead.create({
     data: {
       tenantId,
@@ -18,7 +20,8 @@ export async function getOrCreateLead({ tenantId, conversationId, contact }) {
       name: contact?.name || null,
       phone: contact?.externalId || null,
       status: "NEW",
-      customFields: {},
+      customFields: resolvedMetadata.metadata,
+      schemaVersion: resolvedMetadata.schemaVersion,
       nextFollowUpAt: new Date(Date.now() + 2 * 60 * 60 * 1000)
     }
   });
@@ -66,6 +69,11 @@ export async function updateLead({ conversationId, data }) {
   }
 
   const previous = await prisma.lead.findUnique({ where: { conversationId } });
+  if (clean.customFields !== undefined && previous) {
+    const resolvedMetadata = await resolveCoreMetadata({ tenantId: previous.tenantId, recordType: "lead", metadata: clean.customFields });
+    clean.customFields = resolvedMetadata.metadata;
+    clean.schemaVersion = resolvedMetadata.schemaVersion;
+  }
   const updated = await prisma.lead.update({ where: { conversationId }, data: clean });
   const refreshed = await refreshLeadPrediction({ conversationId });
 

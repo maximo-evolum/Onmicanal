@@ -402,7 +402,8 @@ model Lead {
   commune          String?
   budget           Int?
   urgency          String?
-  customFields     Json?
+    customFields     Json?
+    schemaVersion    Int?
 
   status           String   @default("NEW")
   notes            String?
@@ -492,7 +493,9 @@ model Booking {
   location       String?
   total          Float         @default(0)
   status         String        @default("PENDING")
-  notes          String?
+    notes          String?
+    metadata       Json?
+    schemaVersion  Int?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -600,7 +603,8 @@ model Payment {
   externalId     String?
   expiresAt      DateTime?
   paidAt         DateTime?
-  metadata       Json?
+    metadata       Json?
+    schemaVersion  Int?
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

@@ -26,7 +26,7 @@ bookingsRouter.get("/bookings/slots", async (req, res) => {
 
 bookingsRouter.post("/bookings", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
-    const { conversationId, name, phone, email, date, guests, location, total, notes } = req.body;
+    const { conversationId, name, phone, email, date, guests, location, total, notes, metadata } = req.body;
     if (!date || !guests) return res.status(400).json({ error: "date y guests son requeridos" });
 
     const booking = await createBooking({
@@ -39,7 +39,8 @@ bookingsRouter.post("/bookings", requireRole(ROLE_GROUPS.STAFF), async (req, res
       guests,
       location,
       total,
-      notes
+      notes,
+      metadata
     });
 
     res.json(booking);
@@ -54,11 +55,17 @@ bookingsRouter.patch("/bookings/:id", requireRole(ROLE_GROUPS.STAFF), async (req
     const existing = await prisma.booking.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
     if (!existing) return res.status(404).json({ error: "Reserva no encontrada" });
 
-    const allowed = ["status", "name", "phone", "email", "date", "guests", "location", "total", "notes"];
+    const allowed = ["status", "name", "phone", "email", "date", "guests", "location", "total", "notes", "metadata"];
     const data = Object.fromEntries(Object.entries(req.body || {}).filter(([key]) => allowed.includes(key)));
     if (data.date) data.date = new Date(data.date);
     if (data.guests !== undefined) data.guests = Number(data.guests);
     if (data.total !== undefined) data.total = Number(data.total);
+    if (data.metadata !== undefined) {
+      const { resolveCoreMetadata } = await import("../services/core-metadata.service.js");
+      const resolved = await resolveCoreMetadata({ tenantId: req.tenantId, recordType: "booking", metadata: data.metadata });
+      data.metadata = resolved.metadata;
+      data.schemaVersion = resolved.schemaVersion;
+    }
 
     const updated = await prisma.booking.update({ where: { id: req.params.id }, data });
     res.json(updated);

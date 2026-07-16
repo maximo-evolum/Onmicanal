@@ -1,5 +1,6 @@
 
 import { prisma } from "../lib/db.js";
+import { resolveCoreMetadata } from "./core-metadata.service.js";
 import { env } from "../lib/env.js";
 
 export const PAYMENT_STATUS = Object.freeze({
@@ -131,6 +132,7 @@ export async function createPaymentIntent({
     input: { bookingId, amount: numericAmount }
   }).catch(() => null);
 
+  const resolvedMetadata = await resolveCoreMetadata({ tenantId, recordType: "payment", metadata });
   const payment = await prisma.payment.create({
     data: {
       tenantId,
@@ -143,7 +145,8 @@ export async function createPaymentIntent({
       status: PAYMENT_STATUS.PENDING,
       description: cleanText(description) || "Pago pendiente",
       expiresAt: expiresAt ? new Date(expiresAt) : null,
-      metadata: { ...(metadata || {}), providerMode: normalizedProvider === "manual" ? "manual" : "external" }
+      metadata: { ...resolvedMetadata.metadata, providerMode: normalizedProvider === "manual" ? "manual" : "external" },
+      schemaVersion: resolvedMetadata.schemaVersion
     },
     include: { tenant: true, conversation: { include: { contact: true } }, lead: true, booking: true }
   });
