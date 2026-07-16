@@ -22,11 +22,18 @@ function isAllowedBrowserOrigin(origin) {
   return Boolean(origin) && (env.corsOrigins || []).includes(origin);
 }
 
+function browserSameSite() {
+  // El frontend y el API se publican en hosts Railway distintos. En producción
+  // el navegador no adjunta una cookie Lax a fetch cross-site, causando 401
+  // aunque la cuenta y sus módulos estén correctamente configurados.
+  return env.nodeEnv === "production" ? "none" : env.sessionCookieSameSite;
+}
+
 export function setBrowserSession(res, token) {
   res.cookie(env.sessionCookieName, token, {
     httpOnly: true,
     secure: env.nodeEnv === "production",
-    sameSite: env.sessionCookieSameSite,
+    sameSite: browserSameSite(),
     domain: env.sessionCookieDomain || undefined,
     path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000
@@ -37,7 +44,7 @@ export function clearBrowserSession(res) {
   res.clearCookie(env.sessionCookieName, {
     httpOnly: true,
     secure: env.nodeEnv === "production",
-    sameSite: env.sessionCookieSameSite,
+    sameSite: browserSameSite(),
     domain: env.sessionCookieDomain || undefined,
     path: "/"
   });
