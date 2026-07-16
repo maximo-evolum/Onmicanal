@@ -815,25 +815,6 @@ export default function CrmPrincipalPage() {
             </div>
           </section>
 
-          <section className="crm-main-panel crm-main-modules">
-            <div className="crm-main-panel-head">
-              <div>
-                <span>Accesos de esta cuenta</span>
-                <h2>Módulos habilitados</h2>
-              </div>
-              <strong className="crm-main-module-count">{state.modulesLoaded ? visibleNav.length : "..."}</strong>
-            </div>
-            <div className="crm-main-module-grid">
-              {(state.modulesLoaded ? visibleNav : navItems).map((item) => (
-                <Link className="crm-main-module" href={item.href} key={item.label}>
-                  <strong>{item.label}</strong>
-                  <p>{item.description}</p>
-                </Link>
-              ))}
-            </div>
-            {!state.modulesLoaded ? <p className="crm-main-module-hint">No fue posible sincronizar el catálogo ahora. El acceso se validará al abrir cada módulo.</p> : null}
-          </section>
-
           <section className="crm-main-panel crm-main-agents" id="agents">
             <div className="crm-main-panel-head">
               <div>

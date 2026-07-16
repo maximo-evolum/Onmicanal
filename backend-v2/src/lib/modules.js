@@ -26,6 +26,7 @@ export const MODULES = Object.freeze({
   BROKER_PORTAL: "broker_portal",
   BROKERS: "brokers",
   CUSTOMERS: "customers",
+  EXAMS: "exams",
   REVENUE: "revenue",
   VEHICLES: "vehicles",
   PARTS_INVENTORY: "parts_inventory",
