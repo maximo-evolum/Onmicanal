@@ -42,6 +42,7 @@ const baseItems: SidebarItem[] = [
   ["Portal corredor", "/broker-portal", "Propiedades asignadas y seguimiento", "PC", "broker_portal"],
   ["Corredores", "/brokers", "Perfiles y reparto comercial", "CO", "brokers"],
   ["Clientes / Pacientes", "/customers", "Fichas, historial y seguimiento", "CP", "customers"],
+  ["Exámenes y presupuestos", "/exams", "Órdenes, resultados y cotizaciones clínicas", "EP", "exams"],
   ["Taller", "/workshop", "Vehiculos, repuestos y mecanicos", "TA", "vehicles"],
 ];
 

@@ -111,16 +111,34 @@ function industrySections(industry, recordCounts, bookings, payments) {
     ];
   }
 
-  if (["HEALTH", "DENTAL"].includes(industry)) {
+  if (industry === "HEALTH") {
     return [
       {
         id: "atencion",
-        title: "Informe clínico",
-        description: "Pacientes, agenda, documentos y continuidad de atención.",
+        title: "Informe de salud clínica",
+        description: "Pacientes, agenda, exámenes, presupuestos y continuidad de atención humana.",
         metrics: [
           metric("Pacientes", recordCount(recordCounts, "customer"), "Fichas activas"),
           metric("Citas", bookings.length, "Agenda por confirmar o atendida"),
-          metric("Exámenes y documentos", recordCount(recordCounts, "document"), "Archivos clínicos disponibles")
+          metric("Exámenes y presupuestos", recordCount(recordCounts, "exam"), "Órdenes, resultados y cotizaciones"),
+          metric("Documentos", recordCount(recordCounts, "document"), "Archivos clínicos disponibles")
+        ]
+      },
+      ...shared
+    ];
+  }
+
+  if (industry === "DENTAL") {
+    return [
+      {
+        id: "atencion_dental",
+        title: "Informe de clínica dental",
+        description: "Pacientes, agenda, exámenes, presupuestos y planes de tratamiento dental.",
+        metrics: [
+          metric("Pacientes", recordCount(recordCounts, "customer"), "Fichas odontológicas activas"),
+          metric("Citas", bookings.length, "Agenda por confirmar o atendida"),
+          metric("Exámenes y presupuestos", recordCount(recordCounts, "exam"), "Órdenes, resultados y cotizaciones"),
+          metric("Documentos", recordCount(recordCounts, "document"), "Archivos de tratamiento disponibles")
         ]
       },
       ...shared
@@ -132,11 +150,10 @@ function industrySections(industry, recordCounts, bookings, payments) {
       {
         id: "gastronomia",
         title: "Informe gastronómico",
-        description: "Reservas, clientes e ingresos operativos.",
+        description: "Reservas, clientes y operación gastronómica sobre el Core CRM.",
         metrics: [
           metric("Reservas", bookings.length, "Eventos, mesas y servicios"),
-          metric("Clientes", recordCount(recordCounts, "customer"), "Preferencias e historial"),
-          metric("Ingresos", recordCount(recordCounts, "revenue"), "Registros de ganancias")
+          metric("Clientes", recordCount(recordCounts, "customer"), "Preferencias e historial")
         ]
       },
       ...shared
@@ -175,6 +192,7 @@ export async function getIndustryReports({ tenantId }) {
   const paidPayments = payments.filter((payment) => payment.status === "PAID");
   const canceledPayments = payments.filter((payment) => payment.status === "CANCELED");
   const hotLeads = leads.filter((lead) => number(lead.closeProbability) >= 75 || ["READY_TO_CLOSE", "NEGOTIATION", "PAYMENT_PENDING"].includes(lead.status));
+  const forecast = sum(leads, "budget");
   const industry = String(tenant?.industry || "GENERAL").toUpperCase();
 
   return {
@@ -186,6 +204,15 @@ export async function getIndustryReports({ tenantId }) {
       metric("Cobrado", sum(paidPayments, "amount"), `${paidPayments.length} pagos confirmados`),
       metric("Pendiente", sum(pendingPayments, "amount"), `${pendingPayments.length} cobros por gestionar`)
     ],
+    economicChart: {
+      title: "Resumen económico (CLP)",
+      series: [
+        { label: "Cobrado", value: sum(paidPayments, "amount") },
+        { label: "Pendiente", value: sum(pendingPayments, "amount") },
+        { label: "Cancelado", value: sum(canceledPayments, "amount") },
+        { label: "Forecast", value: forecast }
+      ]
+    },
     sections: [
       {
         id: "comercial",
@@ -194,7 +221,7 @@ export async function getIndustryReports({ tenantId }) {
         metrics: [
           metric("Leads", leads.length, "Oportunidades registradas"),
           metric("Listos para cierre", hotLeads.length, "Alta intención o pago pendiente"),
-          metric("Forecast", sum(leads, "budget"), "Valor estimado del pipeline"),
+          metric("Forecast", forecast, "Valor estimado del pipeline"),
           metric("Score promedio", leads.length ? Math.round(sum(leads, "closeProbability") / leads.length) : 0, "Probabilidad comercial")
         ]
       },

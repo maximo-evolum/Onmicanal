@@ -103,24 +103,9 @@ export function requireModule(module) {
         return next();
       }
 
-      // OWNER y ADMIN administran la operación completa de su tenant. La
-      // selección de módulos limita las cuentas operativas, no a quienes
-      // deben configurar y supervisar todas las verticales.
-      if (["OWNER", "ADMIN"].includes(role)) {
-        return next();
-      }
-
       // Reportes ejecutivos es parte del Core EVOLUM y no depende de que una
       // cuenta antigua tenga sincronizada la fila tenant_module correspondiente.
       if (module === "reports") {
-        return next();
-      }
-
-      // El Centro de Conexiones centraliza credenciales del negocio. Debe ser
-      // visible para administradores de cada tenant aunque el conector puntual
-      // aun no forme parte del plan; los proveedores individuales siguen
-      // mostrando su estado y requisitos antes de poder operar.
-      if (module === "integrations" && ["OWNER", "ADMIN"].includes(role)) {
         return next();
       }
 

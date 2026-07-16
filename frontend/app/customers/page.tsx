@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 
-type CustomerMode = "GASTRONOMY" | "DENTAL" | "VETERINARY" | "GENERAL";
+type CustomerMode = "GASTRONOMY" | "HEALTH" | "DENTAL" | "VETERINARY" | "GENERAL";
 type CustomerDocument = {
   name: string;
   type: string;
@@ -59,6 +59,15 @@ const modeConfig: Record<CustomerMode, {
     segmentLabel: "Profesional / box",
     placeholder: "Ej: Pedro Ramirez"
   },
+  HEALTH: {
+    eyebrow: "Salud clinica",
+    title: "Pacientes y atencion clinica",
+    subtitle: "Gestiona pacientes, antecedentes, especialidad, seguimiento y estado de atencion.",
+    entityLabel: "Paciente",
+    preferenceLabel: "Prestacion / motivo",
+    segmentLabel: "Especialidad / profesional",
+    placeholder: "Ej: Ana Perez"
+  },
   VETERINARY: {
     eyebrow: "Clinica veterinaria",
     title: "Tutores, mascotas y controles",
@@ -83,6 +92,7 @@ function detectMode(industry?: string | null): CustomerMode {
   const value = String(industry || "").toUpperCase();
   if (value.includes("GASTRO") || value.includes("RESTAUR")) return "GASTRONOMY";
   if (value.includes("DENT")) return "DENTAL";
+  if (value.includes("HEALTH") || value.includes("SALUD") || value.includes("CLINIC")) return "HEALTH";
   if (value.includes("VETER")) return "VETERINARY";
   return "GENERAL";
 }

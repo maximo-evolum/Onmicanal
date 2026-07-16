@@ -61,6 +61,11 @@ function providerActionLabel(provider: ConnectionProvider) {
   return "Validar conexion";
 }
 
+function missingOAuthEnvironment(provider: ConnectionProvider) {
+  const required = provider.oauthRequiredEnv?.length ? provider.oauthRequiredEnv : provider.requiredEnv || [];
+  return provider.missing.filter((item) => required.includes(item));
+}
+
 function providerNextStep(provider: ConnectionProvider) {
   if (provider.status === "CONNECTED") {
     return {
@@ -232,6 +237,14 @@ export default function ConnectionsPage() {
   }
 
   async function openOAuth(provider: ConnectionProvider) {
+    const missingEnvironment = missingOAuthEnvironment(provider);
+    if (missingEnvironment.length) {
+      setNotice({
+        type: "error",
+        text: `OAuth todavía no está configurado para ${provider.label}. Faltan en Railway: ${missingEnvironment.join(", ")}.`,
+      });
+      return;
+    }
     try {
       setNotice(null);
       const response = await getConnectionOAuthUrl(provider.key);
@@ -421,8 +434,10 @@ export default function ConnectionsPage() {
                         <>
                           <div className="connection-oauth-action">
                             <strong>{selected.status === "CONNECTED" ? "¿Necesitas cambiar la cuenta externa?" : "Vincula la cuenta que el cliente quiere usar"}</strong>
-                            <p>Se abrirá la pantalla oficial de {selected.label}. El cliente puede iniciar sesión con una cuenta diferente a su usuario EVOLUM.</p>
-                            <button className="primary" type="button" onClick={() => openOAuth(selected)}>
+                            <p>{missingOAuthEnvironment(selected).length
+                              ? `La aplicación OAuth aún requiere configuración de plataforma: ${missingOAuthEnvironment(selected).join(", ")}.`
+                              : `Se abrirá la pantalla oficial de ${selected.label}. El cliente puede iniciar sesión con una cuenta diferente a su usuario EVOLUM.`}</p>
+                            <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={Boolean(missingOAuthEnvironment(selected).length)}>
                               {selected.status === "CONNECTED" ? `Cambiar cuenta de ${selected.label}` : `Vincular con ${selected.label}`}
                             </button>
                           </div>

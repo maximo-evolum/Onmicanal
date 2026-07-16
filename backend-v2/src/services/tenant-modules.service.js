@@ -14,6 +14,7 @@ const MODULE_ALIASES = Object.freeze({
   [MODULES.REPORTS]: ["reportes", "informes"],
   [MODULES.INTEGRATIONS]: ["integraciones", "conectores"],
   [MODULES.CUSTOMERS]: ["clientes", "pacientes"],
+  [MODULES.EXAMS]: ["examenes", "presupuestos", "examenes_y_presupuestos"],
   [MODULES.REVENUE]: ["ganancias", "ingresos"],
   [MODULES.PROPERTIES]: ["propiedades"],
   [MODULES.REALTY_LOADS]: ["cargas_inmobiliarias", "cargas"],

@@ -194,11 +194,10 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
   GASTRONOMY: {
     code: "GASTRONOMY",
     name: "Gastronomia",
-    summary: "Capacidades propias de gastronomia que se suman al Core EVOLUM, sin duplicar agenda, ventas, marketing, pagos ni dashboard.",
-    modules: [
-      moduleItem(MODULES.CUSTOMERS, "Clientes", "Historial de clientes, preferencias y recurrencia.", "PRO"),
-      moduleItem(MODULES.REVENUE, "Ganancias", "Ingresos confirmados, pendientes y forecast.", "PRO")
-    ],
+    summary: "Flujos y datos propios de gastronomia sobre el Core CRM, sin duplicar agenda, ventas, marketing, pagos, ganancias ni dashboard.",
+    // Pagos y ganancias pertenecen al CRM transversal; no son exclusivos de
+    // gastronomia. La vertical aporta sus entidades y flujos operativos.
+    modules: [],
     entities: [
       { key: "booking", label: "Reserva/evento", fields: ["cliente", "personas", "fecha", "hora", "lugar", "monto", "notas"] },
       { key: "customer", label: "Cliente", fields: ["nombre", "telefono", "preferencias", "historial"] },
@@ -234,13 +233,15 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     modules: [
       moduleItem(MODULES.INBOX, "Inbox pacientes", "Consultas, confirmaciones y recordatorios."),
       moduleItem(MODULES.BOOKINGS, "Agenda clinica", "Citas por profesional, box y tratamiento."),
-      moduleItem(MODULES.CUSTOMERS, "Pacientes", "Ficha, historial y preferencias.", "PRO"),
+      moduleItem(MODULES.CUSTOMERS, "Pacientes", "Ficha, historial y continuidad de atencion dental."),
+      moduleItem(MODULES.EXAMS, "Examenes y presupuestos", "Ordenes, resultados, planes de tratamiento y cotizaciones."),
       moduleItem(MODULES.PAYMENTS, "Pagos", "Abonos y saldos de tratamiento.", "BUSINESS"),
       moduleItem(MODULES.ANALYTICS, "Dashboard", "Citas, asistencia y conversion.", "PRO")
     ],
     entities: [
       { key: "patient", label: "Paciente", fields: ["nombre", "telefono", "tratamiento", "historial", "observaciones"] },
-      { key: "appointment", label: "Cita", fields: ["paciente", "profesional", "fecha", "hora", "box"] }
+      { key: "appointment", label: "Cita", fields: ["paciente", "profesional", "fecha", "hora", "box"] },
+      { key: "exam", label: "Examen o presupuesto", fields: ["paciente", "tipo", "monto", "resultado", "notas"] }
     ],
     workflows: ["consulta", "agendar cita", "recordar", "atender", "cobrar", "seguimiento"]
   },
@@ -251,13 +252,15 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     modules: [
       moduleItem(MODULES.INBOX, "Inbox clinico", "Consultas, confirmaciones y recordatorios de pacientes."),
       moduleItem(MODULES.BOOKINGS, "Agenda clinica", "Citas por profesional, box y especialidad.", "PRO"),
-      moduleItem(MODULES.CUSTOMERS, "Pacientes", "Ficha de paciente, antecedentes y continuidad de atencion.", "PRO"),
+      moduleItem(MODULES.CUSTOMERS, "Pacientes", "Ficha de paciente, antecedentes y continuidad de atencion."),
+      moduleItem(MODULES.EXAMS, "Examenes y presupuestos", "Ordenes, resultados, prestaciones y presupuestos clinicos."),
       moduleItem(MODULES.PAYMENTS, "Pagos", "Abonos y saldos de prestaciones.", "BUSINESS"),
       moduleItem(MODULES.ANALYTICS, "Dashboard clinico", "Citas, asistencia y capacidad operativa.", "PRO")
     ],
     entities: [
       { key: "patient", label: "Paciente", fields: ["nombre", "telefono", "antecedentes", "tratamiento", "observaciones"] },
-      { key: "appointment", label: "Cita clinica", fields: ["paciente", "profesional", "especialidad", "fecha", "hora"] }
+      { key: "appointment", label: "Cita clinica", fields: ["paciente", "profesional", "especialidad", "fecha", "hora"] },
+      { key: "exam", label: "Examen o presupuesto", fields: ["paciente", "tipo", "monto", "resultado", "notas"] }
     ],
     workflows: ["consulta", "agendar cita", "recordar", "atender", "cobrar", "seguimiento"]
   },

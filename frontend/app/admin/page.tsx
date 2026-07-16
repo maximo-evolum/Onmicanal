@@ -70,7 +70,6 @@ const MODULE_LABELS: Record<string, string> = {
   properties: "Propiedades",
   property_assignments: "Asignación de ventas",
   customers: "Clientes / pacientes",
-  patients: "Pacientes",
   exams: "Exámenes y presupuestos",
   veterinary: "Veterinaria",
   vehicles: "Vehículos",
@@ -126,7 +125,6 @@ const PROJECT_MODULE_CATALOG = [
   "properties",
   "property_assignments",
   "customers",
-  "patients",
   "exams",
   "veterinary",
   "vehicles",
@@ -145,7 +143,7 @@ const MODULE_GROUPS = [
   {
     title: "Operación CRM",
     description: "Capacidades comerciales comunes, independientes de cada vertical.",
-    modules: ["agenda", "pipeline", "campaigns", "payments", "dashboard", "customers", "saas", "users"],
+    modules: ["agenda", "pipeline", "campaigns", "payments", "revenue", "dashboard", "customers", "saas", "users"],
   },
   {
     title: "Integraciones y continuidad",
@@ -158,9 +156,9 @@ const MODULE_GROUPS = [
     modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "realty_leads", "property_assignments"],
   },
   {
-    title: "Salud clínica",
-    description: "Atención humana: pacientes, exámenes y documentos clínicos.",
-    modules: ["patients", "exams"],
+    title: "Salud clínica y dental",
+    description: "Son rubros distintos, pero ambos comparten Pacientes y Exámenes y presupuestos.",
+    modules: ["customers", "exams"],
   },
   {
     title: "Veterinaria",
@@ -171,11 +169,6 @@ const MODULE_GROUPS = [
     title: "Automotriz y taller",
     description: "Vehículos, repuestos, mecánicos, stock y avisos de retiro.",
     modules: ["vehicles", "workshop", "parts_inventory", "mechanic_assignments", "ready_notifications"],
-  },
-  {
-    title: "Gastronomía",
-    description: "Datos propios de clientes, preferencias, ingresos y recurrencia; el Core no se duplica.",
-    modules: ["revenue"],
   },
 ];
 
@@ -343,7 +336,8 @@ const INDUSTRY_ALIASES: Record<string, string[]> = {
   REALTY: ["realty", "inmobiliaria", "inmobiliario", "propiedades", "corretaje", "bienes raices"],
   GASTRONOMY: ["gastronomia", "gastronomico", "restaurante", "restaurant", "eventos", "catering"],
   AUTOMOTIVE: ["automotriz", "automotive", "taller", "mecanica", "mecanico", "vehículos"],
-  HEALTH: ["salud", "health", "clinica", "medica", "medico", "dental", "dentales"],
+  HEALTH: ["salud", "health", "clinica", "medica", "medico"],
+  DENTAL: ["dental", "dentales", "odontologia", "odontologico"],
   VETERINARY: ["veterinaria", "veterinario", "veterinary", "mascotas", "animales"],
   GENERAL: ["general", "saas"]
 };

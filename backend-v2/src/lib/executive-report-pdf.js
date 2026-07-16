@@ -22,6 +22,54 @@ function formatValue(metric) {
   return new Intl.NumberFormat("es-CL", { maximumFractionDigits: 0 }).format(value);
 }
 
+function chartSeries(report) {
+  const source = Array.isArray(report?.economicChart?.series) ? report.economicChart.series : [];
+  return source
+    .map((item) => ({ label: String(item?.label || "Dato"), value: Math.max(0, Number(item?.value || 0)) }))
+    .slice(0, 4);
+}
+
+function drawEconomicChart(line) {
+  const series = line.series || [];
+  if (!series.length) return "";
+
+  const x = LEFT;
+  const width = 524;
+  const top = Number(line.y || 0);
+  const bottom = top - 138;
+  const plotBottom = bottom + 34;
+  const plotHeight = 62;
+  const max = Math.max(...series.map((item) => item.value), 1);
+  const colors = ["0.18 0.55 1", "0.54 0.18 1", "0.94 0.56 0.18", "0.38 0.86 0.72"];
+  const commands = [
+    "q",
+    "0.055 0.07 0.13 rg",
+    `${x} ${bottom} ${width} 138 re f`,
+    "0.36 0.18 0.74 RG",
+    "0.8 w",
+    `${x} ${bottom} ${width} 138 re S`,
+    "Q",
+    `BT /F1 12 Tf 0.22 0.55 1 rg ${x + 16} ${top - 22} Td (RESUMEN ECONOMICO) Tj ET`,
+    `BT /F1 8 Tf 0.62 0.66 0.77 rg ${x + 16} ${top - 37} Td (Cobranza, pipeline y proyeccion en CLP) Tj ET`,
+    "0.20 0.23 0.34 RG",
+    "0.5 w",
+    `${x + 44} ${plotBottom} m ${x + width - 20} ${plotBottom} l S`,
+    `BT /F1 7 Tf 0.55 0.58 0.70 rg ${x + width - 86} ${plotBottom + plotHeight + 6} Td (MAX $ ${pdfText(new Intl.NumberFormat("es-CL", { maximumFractionDigits: 0 }).format(max))}) Tj ET`
+  ];
+
+  const slot = (width - 94) / series.length;
+  series.forEach((item, index) => {
+    const barWidth = Math.min(58, slot - 18);
+    const barX = x + 58 + index * slot + (slot - barWidth) / 2;
+    const height = Math.max(item.value > 0 ? 3 : 0, (item.value / max) * plotHeight);
+    commands.push(`${colors[index % colors.length]} rg`);
+    commands.push(`${barX.toFixed(1)} ${plotBottom} ${barWidth.toFixed(1)} ${height.toFixed(1)} re f`);
+    commands.push(`BT /F1 8 Tf 0.93 0.94 0.99 rg ${barX.toFixed(1)} ${(plotBottom + height + 7).toFixed(1)} Td ($ ${pdfText(new Intl.NumberFormat("es-CL", { maximumFractionDigits: 0 }).format(item.value))}) Tj ET`);
+    commands.push(`BT /F1 8 Tf 0.70 0.72 0.82 rg ${barX.toFixed(1)} ${bottom + 14} Td (${pdfText(item.label)}) Tj ET`);
+  });
+  return commands.join("\n");
+}
+
 function buildPage(lines, pageNumber) {
   const commands = [
     "q",
@@ -33,6 +81,10 @@ function buildPage(lines, pageNumber) {
   ];
 
   for (const line of lines) {
+    if (line.type === "economic-chart") {
+      commands.push(drawEconomicChart(line));
+      continue;
+    }
     const color = line.color || "0.90 0.91 0.97";
     commands.push(`BT /F1 ${line.size || 10} Tf ${color} rg ${line.x || LEFT} ${line.y} Td (${pdfText(line.text)}) Tj ET`);
   }
@@ -70,6 +122,11 @@ export function buildExecutiveReportPdf(report) {
   add("RESUMEN EJECUTIVO", { size: 12, color: "0.54 0.18 1", height: 23 });
   for (const item of report?.summary || []) {
     add(`${item.label}: ${formatValue(item)}  |  ${item.detail || ""}`, { size: 10, color: "0.91 0.92 0.98" });
+  }
+
+  const economicSeries = chartSeries(report);
+  if (economicSeries.length) {
+    add("", { type: "economic-chart", series: economicSeries, height: 166 });
   }
 
   for (const section of report?.sections || []) {

@@ -25,6 +25,7 @@ export type ModuleAccessKey =
   | "broker_portal"
   | "brokers"
   | "customers"
+  | "exams"
   | "revenue"
   | "vehicles"
   | "parts_inventory"
@@ -62,6 +63,7 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   broker_portal: ["broker_portal", "portal_corredor"],
   brokers: ["brokers", "corredores"],
   customers: ["customers", "clientes", "pacientes"],
+  exams: ["exams", "examenes", "presupuestos", "examenes_y_presupuestos"],
   revenue: ["revenue", "ganancias", "ingresos"],
   vehicles: ["vehicles", "vehiculos"],
   parts_inventory: ["parts_inventory", "repuestos", "inventario_repuestos"],
@@ -102,14 +104,8 @@ function isDeveloperRole(role?: string | null) {
   return String(role || "").toUpperCase() === "SUPER_ADMIN";
 }
 
-function isTenantManager(role?: string | null) {
-  return ["OWNER", "ADMIN"].includes(String(role || "").toUpperCase());
-}
-
 export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null, jobTitle?: string | null) {
   if (isDeveloperRole(role)) return true;
-  if (isTenantManager(role)) return true;
-  if (moduleKey === "integrations" && isTenantManager(role)) return true;
   if (alwaysAllowed.has(moduleKey)) return true;
   const isBroker = String(role || "").toUpperCase() === "SELLER" && /corredor/i.test(String(jobTitle || ""));
   if (isBroker && !brokerModuleAllowlist.has(moduleKey)) return false;
