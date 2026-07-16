@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getMyModules } from "./api";
+import { getMe, getMyModules } from "./api";
 import { getStoredSession } from "./auth";
 
 export type ModuleAccessKey =
@@ -122,6 +122,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const [modules, setModules] = useState<string[] | null>(null);
   const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(session?.role || null);
   const [loading, setLoading] = useState(Boolean(moduleKey));
+  const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -129,11 +130,20 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
     if (!moduleKey) return;
 
     setLoading(true);
+    setIdentityLoading(true);
+    getMe()
+      .then((data) => {
+        if (active) setAuthoritativeRole(data.user.role || null);
+      })
+      .finally(() => { if (active) setIdentityLoading(false); });
+
     getMyModules()
       .then((data) => {
         if (!active) return;
         setModules(data.modules || []);
-        setAuthoritativeRole(data.role || session?.role || null);
+        // Si /auth/me ya resolvió el rol actual, no volver a pisarlo con
+        // información local antigua. El rol del catálogo solo es respaldo.
+        if (data.role) setAuthoritativeRole(data.role);
         setError(null);
       })
       .catch((err) => {
@@ -154,9 +164,9 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
 
   const allowed = useMemo(() => {
     if (!moduleKey) return true;
-    if (loading || modules === null) return true;
+    if (loading || identityLoading || modules === null) return true;
     return moduleAllowed(moduleKey, modules, authoritativeRole, session?.jobTitle);
-  }, [authoritativeRole, loading, moduleKey, modules, session?.jobTitle]);
+  }, [authoritativeRole, identityLoading, loading, moduleKey, modules, session?.jobTitle]);
 
   return { allowed, loading, error, modules: modules || [], role: authoritativeRole };
 }

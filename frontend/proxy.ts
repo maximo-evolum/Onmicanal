@@ -22,13 +22,8 @@ export function proxy(request: NextRequest) {
 
   if (!session) return NextResponse.redirect(new URL("/login", request.url));
 
-  if (pathname.startsWith("/admin") && session?.role !== "SUPER_ADMIN") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
-
-  if (pathname.startsWith("/dev") && session?.role !== "SUPER_ADMIN") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
-  }
+  // Los privilegios se validan en el backend con el usuario actual de la base
+  // de datos. Este JSON del navegador puede quedar antiguo tras cambiar roles.
 
   return NextResponse.next();
 }
