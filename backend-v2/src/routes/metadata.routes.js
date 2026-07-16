@@ -6,6 +6,7 @@ import { getTenantModules } from "../services/tenant-modules.service.js";
 import { createMetadataSchemaDraft, getPublishedMetadataSchema, listMetadataSchemas, publishMetadataSchema } from "../services/metadata-schemas.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { recordAuditLog } from "../lib/audit.js";
+import { METADATA_GOVERNANCE_CATALOG } from "../lib/metadata-governance.js";
 
 export const metadataRouter = Router();
 
@@ -71,6 +72,10 @@ metadataRouter.get("/metadata/schemas", requireRole(ROLE_GROUPS.MANAGERS), async
   res.json({ schemas: await listMetadataSchemas(req.tenantId, recordType) });
 });
 
+metadataRouter.get("/metadata/governance-catalog", requireRole(ROLE_GROUPS.MANAGERS), (_req, res) => {
+  res.json(METADATA_GOVERNANCE_CATALOG);
+});
+
 metadataRouter.post("/metadata/schemas", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
   try {
     const recordType = cleanRecordType(req.body?.recordType);
@@ -81,7 +86,7 @@ metadataRouter.post("/metadata/schemas", requireRole(ROLE_GROUPS.MANAGERS), asyn
     return res.status(201).json({ schema });
   } catch (error) {
     console.error("Create metadata schema error:", error);
-    return res.status(500).json({ error: "No se pudo crear el borrador de metadata" });
+    return res.status(error.statusCode || 500).json({ error: error.message || "No se pudo crear el borrador de metadata", details: error.details });
   }
 });
 

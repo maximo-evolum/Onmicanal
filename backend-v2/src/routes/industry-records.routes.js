@@ -9,6 +9,7 @@ import { mergeMetadata, normalizeMetadata } from "../lib/metadata.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { getPublishedMetadataSchema } from "../services/metadata-schemas.service.js";
 import { evaluateMetadataSchema } from "../lib/metadata-enforcement.js";
+import { redactMetadataForRole } from "../lib/metadata-access.js";
 
 export const industryRecordsRouter = Router();
 
@@ -71,6 +72,13 @@ function metadataValidationResponse(evaluation) {
   };
 }
 
+async function redactRecordForViewer(req, record) {
+  const schema = await getPublishedMetadataSchema(req.tenantId, record.recordType);
+  if (!schema || req.user?.role === "SUPER_ADMIN") return record;
+  const redacted = redactMetadataForRole(record.data, schema, req.user?.role);
+  return { ...record, data: redacted.data, metadataAccess: redacted.hiddenFields.length ? { hiddenFields: redacted.hiddenFields } : undefined };
+}
+
 function tenantRecordWhere(req, extra = {}) {
   if (req.user?.role === "SUPER_ADMIN" && req.query?.tenantId) {
     return { tenantId: String(req.query.tenantId), ...extra };
@@ -115,7 +123,7 @@ industryRecordsRouter.get("/industry-records", async (req, res) => {
       orderBy: [{ updatedAt: "desc" }],
       take: Math.min(Number(req.query.limit || 200), 500)
     });
-    res.json(records);
+    res.json(await Promise.all(records.map((record) => redactRecordForViewer(req, record))));
   } catch (error) {
     console.error("List industry records error:", error);
     res.status(500).json({ error: "No se pudieron obtener registros del rubro" });
@@ -288,7 +296,7 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_CREATED", recordType, record.id, { recordType, status: record.status });
-    res.status(201).json({ ...record, metadataValidation: metadataValidationResponse(evaluation) });
+    res.status(201).json({ ...(await redactRecordForViewer(req, record)), metadataValidation: metadataValidationResponse(evaluation) });
   } catch (error) {
     console.error("Create industry record error:", error);
     res.status(500).json({ error: "No se pudo crear el registro del rubro" });
@@ -329,7 +337,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_UPDATED", existing.recordType, record.id, { recordType: existing.recordType, status: record.status });
-    res.json({ ...record, metadataValidation: metadataValidationResponse(evaluation) });
+    res.json({ ...(await redactRecordForViewer(req, record)), metadataValidation: metadataValidationResponse(evaluation) });
   } catch (error) {
     console.error("Update industry record error:", error);
     res.status(500).json({ error: "No se pudo actualizar el registro" });
@@ -358,7 +366,7 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_METADATA_UPDATED", existing.recordType, record.id, { recordType: existing.recordType });
-    res.json({ ...record, metadataValidation: metadataValidationResponse(evaluation) });
+    res.json({ ...(await redactRecordForViewer(req, record)), metadataValidation: metadataValidationResponse(evaluation) });
   } catch (error) {
     console.error("Update industry metadata error:", error);
     res.status(500).json({ error: "No se pudieron actualizar los metadatos" });

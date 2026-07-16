@@ -1,5 +1,6 @@
 import { prisma } from "../lib/db.js";
 import { normalizeMetadata } from "../lib/metadata.js";
+import { validateMetadataSchemaDefinition } from "../lib/metadata-governance.js";
 
 export async function listMetadataSchemas(tenantId, recordType = "") {
   return prisma.metadataSchema.findMany({
@@ -16,6 +17,14 @@ export async function getPublishedMetadataSchema(tenantId, recordType) {
 }
 
 export async function createMetadataSchemaDraft({ tenantId, recordType, label, fields, policies }) {
+  const normalizedFields = normalizeMetadata(fields, {});
+  const definitionErrors = validateMetadataSchemaDefinition(normalizedFields);
+  if (definitionErrors.length) {
+    const error = new Error("La definicion de campos no es valida");
+    error.statusCode = 400;
+    error.details = definitionErrors;
+    throw error;
+  }
   const latest = await prisma.metadataSchema.findFirst({
     where: { tenantId, recordType },
     orderBy: { version: "desc" }
@@ -26,7 +35,7 @@ export async function createMetadataSchemaDraft({ tenantId, recordType, label, f
       recordType,
       version: (latest?.version || 0) + 1,
       label,
-      fields: normalizeMetadata(fields, {}),
+      fields: normalizedFields,
       policies: normalizeMetadata(policies, {})
     }
   });
