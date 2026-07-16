@@ -30,6 +30,7 @@ const baseItems: SidebarItem[] = [
   ["Pagos", "/payments", "Cobros, estados y links", "PA", "payments"],
   ["Centro de Conexiones", "/connections", "Correo, archivos, pagos y respaldo", "CX", "integrations"],
   ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG", "onboarding"],
+  ["Esquemas de datos", "/settings/metadata", "Campos y reglas de cada entidad", "MD", "crm"],
   ["Planes y modulos", "/saas", "Plan, modulos, usuarios y limites", "PM", "saas"],
   ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],
   ["Reportes", "/reports", "Informes por rubro y operacion", "RE", "reports"],

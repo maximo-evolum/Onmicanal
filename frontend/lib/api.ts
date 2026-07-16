@@ -1616,3 +1616,37 @@ export async function exportTenantBackup(): Promise<Blob> {
 
   return response.blob();
 }
+
+export type MetadataSchema = {
+  id: string;
+  recordType: string;
+  version: number;
+  status: "DRAFT" | "PUBLISHED" | "ARCHIVED" | string;
+  label: string;
+  fields: Record<string, { type?: string; required?: boolean; options?: unknown[]; sensitivity?: string; purpose?: string; retentionDays?: number; accessRoles?: string[] }>;
+  policies?: { enforcement?: "COMPATIBLE" | "STRICT"; allowUnknown?: boolean; [key: string]: unknown } | null;
+  publishedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function getMetadataSchemas(recordType?: string): Promise<{ schemas: MetadataSchema[] }> {
+  const suffix = recordType ? `?recordType=${encodeURIComponent(recordType)}` : "";
+  return request<{ schemas: MetadataSchema[] }>(`/metadata/schemas${suffix}`);
+}
+
+export async function createMetadataSchema(input: {
+  recordType: string;
+  label: string;
+  fields: MetadataSchema["fields"];
+  policies?: MetadataSchema["policies"];
+}): Promise<{ schema: MetadataSchema }> {
+  return request<{ schema: MetadataSchema }>("/metadata/schemas", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function publishMetadataSchema(id: string): Promise<{ schema: MetadataSchema }> {
+  return request<{ schema: MetadataSchema }>(`/metadata/schemas/${encodeURIComponent(id)}/publish`, { method: "POST" });
+}
