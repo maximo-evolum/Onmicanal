@@ -9,6 +9,7 @@ import {
   listPayments,
   PAYMENT_STATUS
 } from "../services/payment.service.js";
+import { redactCoreMetadataForViewer } from "../services/core-metadata-access.service.js";
 
 export const paymentsRouter = Router();
 
@@ -23,7 +24,7 @@ paymentsRouter.get("/payments", async (req, res, next) => {
     const tenantId = tenantWhere(req);
     const status = req.query?.status ? String(req.query.status) : null;
     const payments = await listPayments({ tenantId, status });
-    res.json(payments);
+    res.json(await Promise.all(payments.map((payment) => redactCoreMetadataForViewer({ tenantId, role: req.user?.role, recordType: "payment", record: payment, key: "metadata" }))));
   } catch (error) { next(error); }
 });
 
@@ -49,7 +50,7 @@ paymentsRouter.post("/payments", requireRole(ROLE_GROUPS.MANAGERS), async (req, 
       metadata: req.body?.metadata || null,
       expiresAt: req.body?.expiresAt || null
     });
-    res.status(201).json(payment);
+    res.status(201).json(await redactCoreMetadataForViewer({ tenantId, role: req.user?.role, recordType: "payment", record: payment, key: "metadata" }));
   } catch (error) { next(error); }
 });
 
@@ -61,7 +62,7 @@ paymentsRouter.get("/payments/:paymentId", async (req, res, next) => {
       include: { conversation: { include: { contact: true } }, lead: true, booking: true }
     });
     if (!payment) return res.status(404).json({ error: "Pago no encontrado" });
-    res.json(payment);
+    res.json(await redactCoreMetadataForViewer({ tenantId, role: req.user?.role, recordType: "payment", record: payment, key: "metadata" }));
   } catch (error) { next(error); }
 });
 

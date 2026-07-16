@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { updateLead } from "../services/lead.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { redactCoreMetadataForViewer } from "../services/core-metadata-access.service.js";
 
 export const leadsRouter = Router();
 
@@ -77,7 +78,7 @@ leadsRouter.get("/leads", async (req, res) => {
       },
       orderBy: [{ closeProbability: "desc" }, { updatedAt: "desc" }]
     });
-    res.json(leads);
+    res.json(await Promise.all(leads.map((lead) => redactCoreMetadataForViewer({ tenantId: req.tenantId, role: req.user?.role, recordType: "lead", record: lead, key: "customFields" }))));
   } catch (error) {
     console.error("List leads error:", error);
     res.status(500).json({ error: "No se pudieron obtener leads" });
@@ -89,7 +90,7 @@ leadsRouter.get("/leads/:conversationId", async (req, res) => {
     const conversation = await findAccessibleConversation(req, req.params.conversationId);
 
     if (!conversation?.lead) return res.status(404).json({ error: "Lead no encontrado" });
-    res.json(conversation.lead);
+    res.json(await redactCoreMetadataForViewer({ tenantId: req.tenantId, role: req.user?.role, recordType: "lead", record: conversation.lead, key: "customFields" }));
   } catch (error) {
     console.error("Get lead error:", error);
     res.status(500).json({ error: "No se pudo obtener el lead" });
@@ -102,7 +103,7 @@ leadsRouter.patch("/leads/:conversationId", requireRole(ROLE_GROUPS.STAFF), asyn
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
     const updated = await updateLead({ conversationId: req.params.conversationId, data: req.body });
-    res.json(updated);
+    res.json(await redactCoreMetadataForViewer({ tenantId: req.tenantId, role: req.user?.role, recordType: "lead", record: updated, key: "customFields" }));
   } catch (error) {
     console.error("Update lead error:", error);
     res.status(500).json({ error: "No se pudo actualizar el lead" });

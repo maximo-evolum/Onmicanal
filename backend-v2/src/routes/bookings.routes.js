@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { createBooking, getAvailableSlots } from "../services/booking.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { redactCoreMetadataForViewer } from "../services/core-metadata-access.service.js";
 
 export const bookingsRouter = Router();
 
@@ -12,7 +13,7 @@ bookingsRouter.get("/bookings", async (req, res) => {
       orderBy: { date: "asc" },
       take: 100
     });
-    res.json(bookings);
+    res.json(await Promise.all(bookings.map((booking) => redactCoreMetadataForViewer({ tenantId: req.tenantId, role: req.user?.role, recordType: "booking", record: booking, key: "metadata" }))));
   } catch (error) {
     console.error("List bookings error:", error);
     res.status(500).json({ error: "No se pudieron obtener reservas" });
@@ -43,7 +44,7 @@ bookingsRouter.post("/bookings", requireRole(ROLE_GROUPS.STAFF), async (req, res
       metadata
     });
 
-    res.json(booking);
+    res.json(await redactCoreMetadataForViewer({ tenantId: req.tenantId, role: req.user?.role, recordType: "booking", record: booking, key: "metadata" }));
   } catch (error) {
     console.error("Create booking error:", error);
     res.status(500).json({ error: "No se pudo crear la reserva" });
@@ -68,7 +69,7 @@ bookingsRouter.patch("/bookings/:id", requireRole(ROLE_GROUPS.STAFF), async (req
     }
 
     const updated = await prisma.booking.update({ where: { id: req.params.id }, data });
-    res.json(updated);
+    res.json(await redactCoreMetadataForViewer({ tenantId: req.tenantId, role: req.user?.role, recordType: "booking", record: updated, key: "metadata" }));
   } catch (error) {
     console.error("Update booking error:", error);
     res.status(500).json({ error: "No se pudo actualizar la reserva" });
