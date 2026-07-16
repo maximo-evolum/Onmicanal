@@ -78,6 +78,7 @@ export const env = {
   sessionCookieName: firstEnv("SESSION_COOKIE_NAME", "sessionCookieName") || "evolum_session",
   sessionCookieSameSite: firstEnv("SESSION_COOKIE_SAME_SITE", "sessionCookieSameSite") || "lax",
   sessionCookieDomain: firstEnv("SESSION_COOKIE_DOMAIN", "sessionCookieDomain"),
+  metadataRetentionEnabled: firstEnv("METADATA_RETENTION_ENABLED", "metadataRetentionEnabled") === "true",
 
   frontendOrigin,
   corsOrigins: [...new Set(corsOrigins)],

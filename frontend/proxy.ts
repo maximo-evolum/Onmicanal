@@ -11,7 +11,7 @@ function readSession(request: NextRequest): { role?: string } | null {
   }
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const session = readSession(request);
   const { pathname } = request.nextUrl;
 

@@ -7,6 +7,8 @@ import { createMetadataSchemaDraft, getPublishedMetadataSchema, listMetadataSche
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { METADATA_GOVERNANCE_CATALOG } from "../lib/metadata-governance.js";
+import { retentionDueFields } from "../lib/metadata-retention.js";
+import { prisma } from "../lib/db.js";
 
 export const metadataRouter = Router();
 
@@ -74,6 +76,14 @@ metadataRouter.get("/metadata/schemas", requireRole(ROLE_GROUPS.MANAGERS), async
 
 metadataRouter.get("/metadata/governance-catalog", requireRole(ROLE_GROUPS.MANAGERS), (_req, res) => {
   res.json(METADATA_GOVERNANCE_CATALOG);
+});
+
+metadataRouter.get("/metadata/retention/report", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  const schemas = (await listMetadataSchemas(req.tenantId)).filter((item) => item.status === "PUBLISHED");
+  const records = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: { in: schemas.map((item) => item.recordType) } }, take: 1000 });
+  const schemaByType = new Map(schemas.map((item) => [item.recordType, item]));
+  const due = records.flatMap((record) => retentionDueFields(record, schemaByType.get(record.recordType)).map((field) => ({ recordId: record.id, recordType: record.recordType, ...field })));
+  res.json({ generatedAt: new Date().toISOString(), automaticDeletionEnabled: false, reviewedRecords: records.length, due });
 });
 
 metadataRouter.post("/metadata/schemas", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {

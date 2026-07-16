@@ -1606,7 +1606,8 @@ export async function getBackupSummary(): Promise<BackupSummary> {
 export async function exportTenantBackup(): Promise<Blob> {
   const response = await fetch(`${API_BASE_URL}/backups/export`, {
     headers: buildHeaders(),
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 
   if (!response.ok) {
