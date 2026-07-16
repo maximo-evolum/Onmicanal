@@ -1,10 +1,21 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
-import { authMiddleware } from "../lib/auth.js";
+import { authMiddleware, clearBrowserSession, setBrowserSession } from "../lib/auth.js";
 import { loginUser, registerTenantOwner } from "../services/auth.service.js";
 import { ensureTenantSubscriptionAndModules, getTenantModules } from "../services/tenant-modules.service.js";
 
 export const authRouter = Router();
+
+function isMobileClient(req) {
+  return String(req.get("x-auth-client") || "").toLowerCase() === "mobile";
+}
+
+function sendAuthenticatedSession(req, res, result) {
+  if (isMobileClient(req)) return res.json(result);
+  setBrowserSession(res, result.token);
+  const { token: _token, ...session } = result;
+  return res.json(session);
+}
 
 function cleanText(value, fallback = "") {
   if (typeof value !== "string") return fallback;
@@ -23,7 +34,7 @@ authRouter.post("/auth/register", async (req, res) => {
       return res.status(400).json({ error: "name, email y password son requeridos" });
     }
     const result = await registerTenantOwner({ companyName, name, email, password, type, industry });
-    res.json(result);
+    return sendAuthenticatedSession(req, res, result);
   } catch (error) {
     res.status(400).json({ error: error.message || "No se pudo registrar" });
   }
@@ -32,12 +43,19 @@ authRouter.post("/auth/register", async (req, res) => {
 authRouter.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email) return res.status(400).json({ error: "email es requerido" });
+    if (!email || typeof password !== "string" || !password) {
+      return res.status(400).json({ error: "email y password son requeridos" });
+    }
     const result = await loginUser({ email, password });
-    res.json(result);
+    return sendAuthenticatedSession(req, res, result);
   } catch {
     res.status(401).json({ error: "Credenciales inválidas" });
   }
+});
+
+authRouter.post("/auth/logout", (_req, res) => {
+  clearBrowserSession(res);
+  return res.status(204).end();
 });
 
 authRouter.get("/auth/me", authMiddleware, async (req, res) => {

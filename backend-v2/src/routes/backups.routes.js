@@ -5,6 +5,18 @@ import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 
 export const backupsRouter = Router();
 
+const EXPORT_LIMITS = {
+  contacts: 5000,
+  conversations: 5000,
+  messages: 10000,
+  leads: 5000,
+  bookings: 5000,
+  payments: 5000,
+  campaigns: 1000,
+  industryRecords: 5000,
+  auditLogs: 1000
+};
+
 async function tenantCounts(tenantId) {
   const [
     users,
@@ -60,6 +72,22 @@ backupsRouter.get("/backups/summary", requireRole(ROLE_GROUPS.MANAGERS), async (
 backupsRouter.get("/backups/export", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
   try {
     const tenantId = req.tenantId;
+    const counts = await tenantCounts(tenantId);
+    const exceeded = Object.entries(EXPORT_LIMITS)
+      .filter(([key, limit]) => Number(counts[key] || 0) > limit)
+      .map(([key, limit]) => ({ entity: key, count: counts[key], limit }));
+
+    if (exceeded.length) {
+      return res.status(409).json({
+        error: "La exportacion completa supera los limites seguros de descarga.",
+        code: "BACKUP_EXPORT_LIMIT_EXCEEDED",
+        counts,
+        limits: EXPORT_LIMITS,
+        exceeded,
+        nextStep: "Solicita una exportacion asincrona o utiliza el respaldo administrado de la base de datos."
+      });
+    }
+
     const [
       tenant,
       users,
@@ -117,7 +145,11 @@ backupsRouter.get("/backups/export", requireRole(ROLE_GROUPS.MANAGERS), async (r
       version: "tenant-export-v1",
       generatedAt: new Date().toISOString(),
       tenant,
-      counts: await tenantCounts(tenantId),
+      counts,
+      export: {
+        complete: true,
+        limits: EXPORT_LIMITS
+      },
       data: {
         users,
         contacts,

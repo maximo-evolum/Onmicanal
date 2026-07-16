@@ -75,6 +75,10 @@ export const env = {
 
   jwtSecret: firstEnv("JWT_SECRET", "jwtSecret"),
 
+  sessionCookieName: firstEnv("SESSION_COOKIE_NAME", "sessionCookieName") || "evolum_session",
+  sessionCookieSameSite: firstEnv("SESSION_COOKIE_SAME_SITE", "sessionCookieSameSite") || "lax",
+  sessionCookieDomain: firstEnv("SESSION_COOKIE_DOMAIN", "sessionCookieDomain"),
+
   frontendOrigin,
   corsOrigins: [...new Set(corsOrigins)],
 

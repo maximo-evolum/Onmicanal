@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
+import { verifyMetaWebhookSignature } from "../lib/meta-webhook-signature.js";
 import { normalizeMetaWebhook } from "../adapters/channel.adapter.js";
 import { parseWhatsAppStatuses } from "../adapters/whatsapp.adapter.js";
 import { getOrCreateContact, getOrCreateOpenConversation, updateContactProfile } from "../services/conversation.service.js";
@@ -10,6 +11,14 @@ import { isKnownVerifyToken } from "../services/tenant-channel-config.service.js
 import { createTrace, summarizeMetaPayload, traceError, traceStep } from "../lib/trace.js";
 
 export const metaRouter = Router();
+
+function hasValidMetaSignature(req) {
+  return verifyMetaWebhookSignature({
+    rawBody: req.rawBody,
+    signature: req.get("x-hub-signature-256"),
+    appSecret: env.metaAppSecret
+  });
+}
 
 function mapWhatsAppDeliveryStatus(status) {
   const normalized = String(status || "").toLowerCase();
@@ -73,6 +82,10 @@ metaRouter.get("/webhook", async (req, res) => {
 });
 
 metaRouter.post("/webhook", async (req, res) => {
+  if (!hasValidMetaSignature(req)) {
+    return res.status(401).json({ error: "Invalid webhook signature" });
+  }
+
   // Meta requiere respuesta rápida. Respondemos 200 y procesamos en segundo plano.
   res.sendStatus(200);
 
@@ -80,7 +93,6 @@ metaRouter.post("/webhook", async (req, res) => {
 
   try {
     traceStep(trace, "1_WEBHOOK_RECEIVED", summarizeMetaPayload(req.body));
-    traceStep(trace, "1B_META_RAW_PAYLOAD", req.body);
 
     const whatsappStatuses = parseWhatsAppStatuses(req.body);
     if (whatsappStatuses.length) {

@@ -13,7 +13,7 @@ import {
 import { getStoredSession } from "@/lib/auth";
 import { getCommercialState } from "@/lib/commercial-state";
 import { roleLabel } from "@/lib/role-labels";
-import { getSocketToken, socket } from "@/lib/socket";
+import { socket } from "@/lib/socket";
 import { Conversation, Message } from "@/lib/types";
 import { ChatPanel } from "./chat-panel";
 import { EvolumSidebar } from "./evolum-sidebar";
@@ -149,7 +149,6 @@ export function InboxShell() {
   }, [selectedId]);
 
   useEffect(() => {
-    socket.auth = { token: getSocketToken() };
     socket.connect();
     if (agent?.tenantId) {
       socket.emit("join:tenant", agent.tenantId);

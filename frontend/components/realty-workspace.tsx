@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import * as XLSX from "xlsx";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
@@ -81,6 +80,43 @@ const emptyProperty = {
   assignedBrokerId: "",
   stage: "LEAD"
 };
+
+function parseCsvRows(source: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  const text = source.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const firstLine = text.split("\n", 1)[0] || "";
+  const delimiter = (firstLine.match(/;/g)?.length || 0) > (firstLine.match(/,/g)?.length || 0) ? ";" : ",";
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"') {
+      if (quoted && text[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (!quoted && char === delimiter) {
+      row.push(cell.trim());
+      cell = "";
+    } else if (!quoted && char === "\n") {
+      row.push(cell.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  row.push(cell.trim());
+  if (row.some(Boolean)) rows.push(row);
+
+  const [headers = [], ...values] = rows;
+  return values.map((valuesRow) => Object.fromEntries(headers.map((header, index) => [header, valuesRow[index] || ""])));
+}
 
 const emptyBroker = {
   name: "",
@@ -613,13 +649,10 @@ export function RealtyLoadsPageContent() {
     });
   }
 
-  async function onExcelFile(event: ChangeEvent<HTMLInputElement>) {
+  async function onCsvFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
-    const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const rows = parseCsvRows(await file.text());
     setImportRows(rows);
     setMessage(`${rows.length} filas listas para importar`);
   }
@@ -631,7 +664,7 @@ export function RealtyLoadsPageContent() {
         recordType: "property_import",
         title: `Importacion ${title}`,
         status: "READY",
-        data: { source: "excel", row }
+        data: { source: "csv", row }
       });
       await createIndustryRecord({
         recordType: "property",
@@ -738,10 +771,10 @@ export function RealtyLoadsPageContent() {
 
       <section className="vertical-card">
         <div className="vertical-card-head">
-          <div><span>Importacion masiva</span><h2>Excel para IA predictiva</h2></div>
-          <label className="secondary-btn">Seleccionar Excel<input type="file" accept=".xlsx,.xls,.csv" hidden onChange={onExcelFile} /></label>
+          <div><span>Importacion masiva</span><h2>CSV para IA predictiva</h2></div>
+          <label className="secondary-btn">Seleccionar CSV<input type="file" accept=".csv,text/csv" hidden onChange={onCsvFile} /></label>
         </div>
-        <p>Sube una base de propiedades para acelerar aprendizaje, forecast y carga operativa.</p>
+        <p>Sube una base CSV de propiedades para acelerar aprendizaje, forecast y carga operativa.</p>
         <div className="realty-mini-row">
           <strong>{importRows.length} filas detectadas</strong>
           <button className="primary-btn" disabled={!importRows.length} onClick={importProperties}>Importar propiedades</button>

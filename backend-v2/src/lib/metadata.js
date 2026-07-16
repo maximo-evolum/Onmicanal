@@ -73,3 +73,67 @@ export function pickMetadataValue(metadata, key, fallback = null) {
   const source = normalizeMetadata(metadata, {});
   return Object.prototype.hasOwnProperty.call(source, key) ? source[key] : fallback;
 }
+
+function isEmpty(value) {
+  return value === undefined || value === null || value === "";
+}
+
+function configForField(config) {
+  return typeof config === "string" ? { type: config } : (config || { type: "string" });
+}
+
+function valueMatchesType(value, type) {
+  if (isEmpty(value)) return true;
+  switch (String(type || "string").toLowerCase()) {
+    case "string": return typeof value === "string";
+    case "number": return typeof value === "number" && Number.isFinite(value);
+    case "boolean": return typeof value === "boolean";
+    case "array": return Array.isArray(value);
+    case "object":
+    case "json": return isPlainObject(value);
+    case "date": return typeof value === "string" && !Number.isNaN(Date.parse(value));
+    case "relation": return typeof value === "string" && value.length > 0;
+    default: return true;
+  }
+}
+
+export function metadataFields(entity) {
+  if (Array.isArray(entity?.fields)) {
+    return Object.fromEntries(entity.fields.map((field) => [field, { type: "string" }]));
+  }
+  return isPlainObject(entity?.fields) ? entity.fields : {};
+}
+
+export function validateMetadata(data, entity, { allowUnknown = true } = {}) {
+  const metadata = normalizeMetadata(data, {});
+  const fields = metadataFields(entity);
+  const errors = [];
+  const unknownFields = [];
+
+  for (const [name, rawConfig] of Object.entries(fields)) {
+    const config = configForField(rawConfig);
+    const value = metadata[name];
+    if (config.required && isEmpty(value)) {
+      errors.push({ field: name, code: "REQUIRED", message: "El campo es requerido" });
+      continue;
+    }
+    if (!isEmpty(value) && !valueMatchesType(value, config.type)) {
+      errors.push({ field: name, code: "INVALID_TYPE", expected: config.type || "string", message: "El tipo de dato no es valido" });
+      continue;
+    }
+    if (!isEmpty(value) && Array.isArray(config.options) && !config.options.includes(value)) {
+      errors.push({ field: name, code: "INVALID_OPTION", options: config.options, message: "El valor no pertenece a las opciones permitidas" });
+    }
+  }
+
+  for (const name of Object.keys(metadata)) {
+    if (!Object.prototype.hasOwnProperty.call(fields, name)) unknownFields.push(name);
+  }
+  if (!allowUnknown) {
+    for (const field of unknownFields) {
+      errors.push({ field, code: "UNKNOWN_FIELD", message: "El campo no existe en el esquema publicado" });
+    }
+  }
+
+  return { ok: errors.length === 0, data: metadata, errors, unknownFields, fields };
+}

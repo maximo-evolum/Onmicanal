@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { loginWithEmail } from "./api";
 import { AgentSession } from "./types";
-import { SESSION_COOKIE, TOKEN_COOKIE, SESSION_STORAGE_KEY, TOKEN_STORAGE_KEY } from "./constants";
+import { API_BASE_URL, SESSION_COOKIE, SESSION_STORAGE_KEY } from "./constants";
 
 function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=604800; samesite=lax`;
@@ -27,20 +27,11 @@ function cookieSafeSession(session: AgentSession) {
   });
 }
 
-function setStoredAuth(session: AgentSession, token: string) {
+function setStoredAuth(session: AgentSession) {
   const serializedSession = JSON.stringify(session);
   setCookie(SESSION_COOKIE, cookieSafeSession(session));
-  setCookie(TOKEN_COOKIE, token);
-
   if (typeof window !== "undefined") {
     window.localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-
-    // Compatibilidad con versiones anteriores del frontend que buscaban otras claves.
-    window.localStorage.setItem("token", token);
-    window.localStorage.setItem("auth_token", token);
-    window.localStorage.setItem("jwt", token);
   }
 }
 
@@ -61,12 +52,11 @@ export function mergeStoredSession(patch: Partial<AgentSession>) {
 
 function clearStoredAuth() {
   clearCookie(SESSION_COOKIE);
-  clearCookie(TOKEN_COOKIE);
 
   if (typeof window !== "undefined") {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
-    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-    window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem("inbox_token");
+    window.sessionStorage.removeItem("inbox_token");
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("auth_token");
     window.localStorage.removeItem("jwt");
@@ -109,7 +99,7 @@ export function LoginPage() {
       setSubmitting(true);
       setError(null);
       const data = await loginWithEmail(email, password || undefined);
-      setStoredAuth(data.user, data.token);
+      setStoredAuth(data.user);
       router.push("/crm-principal");
       router.refresh();
     } catch (err) {
@@ -153,6 +143,7 @@ export function LoginPage() {
 export function LogoutButton() {
   const router = useRouter();
   function handleLogout() {
+    void fetch(`${API_BASE_URL}/auth/logout`, { method: "POST", credentials: "include" });
     clearStoredAuth();
     router.push("/login");
     router.refresh();

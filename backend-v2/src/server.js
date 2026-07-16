@@ -50,7 +50,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
 const tenantDocumentsDir = path.resolve(__dirname, "../public/tenant-documents");
 
-app.use(express.json({ limit: "5mb" }));
+app.use(express.json({
+  limit: "5mb",
+  verify: (req, _res, buffer) => {
+    // Meta signs the original request bytes, not the parsed JSON object.
+    if (req.originalUrl?.split("?")[0] === "/meta/webhook") {
+      req.rawBody = Buffer.from(buffer);
+    }
+  }
+}));
 app.use(requestContext);
 app.use(basicRateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 300) }));
 
@@ -77,7 +85,8 @@ function resolveCorsOrigin(origin) {
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", resolveCorsOrigin(req.headers.origin));
   res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Auth-Client");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
   if (!req.path.startsWith("/campaign-assets/") && !req.path.startsWith("/tenant-documents/")) {
@@ -201,7 +210,8 @@ const io = new Server(server, {
       if (!origin || allowed.includes("*") || allowed.includes(origin)) return callback(null, true);
       return callback(null, false);
     },
-    methods: ["GET", "POST"]
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -212,7 +222,7 @@ function getSocketToken(socket) {
   if (authToken) return authToken;
 
   const cookieHeader = socket.handshake.headers?.cookie || "";
-  const match = String(cookieHeader).match(/(?:^|;\s*)inbox_token=([^;]+)/);
+  const match = String(cookieHeader).match(new RegExp(`(?:^|;\\s*)${env.sessionCookieName}=([^;]+)`));
   return match ? decodeURIComponent(match[1]) : null;
 }
 

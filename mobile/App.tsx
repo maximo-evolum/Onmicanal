@@ -2,7 +2,6 @@ import { StatusBar } from "expo-status-bar";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
-import * as XLSX from "xlsx";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -374,6 +373,43 @@ function parsePropertyImportRow(row: Record<string, unknown>, index: number): Pr
     recognizedFields,
     errors
   };
+}
+
+function parseCsvRows(source: string): Record<string, string>[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  const text = source.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const firstLine = text.split("\n", 1)[0] || "";
+  const delimiter = (firstLine.match(/;/g)?.length || 0) > (firstLine.match(/,/g)?.length || 0) ? ";" : ",";
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '"') {
+      if (quoted && text[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (!quoted && char === delimiter) {
+      row.push(cell.trim());
+      cell = "";
+    } else if (!quoted && char === "\n") {
+      row.push(cell.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  row.push(cell.trim());
+  if (row.some(Boolean)) rows.push(row);
+
+  const [headers = [], ...values] = rows;
+  return values.map((valuesRow) => Object.fromEntries(headers.map((header, index) => [header, valuesRow[index] || ""])));
 }
 
 export default function App() {
@@ -1290,14 +1326,9 @@ function RealtyLoadsScreen({
     setPhotoFileName(asset.fileName || "foto-propiedad.jpg");
   }
 
-  async function pickPropertyExcel() {
+  async function pickPropertyCsv() {
     const result = await DocumentPicker.getDocumentAsync({
-      type: [
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.ms-excel",
-        "text/csv",
-        "text/comma-separated-values"
-      ],
+      type: ["text/csv", "text/comma-separated-values"],
       copyToCacheDirectory: true,
       multiple: false
     });
@@ -1305,35 +1336,31 @@ function RealtyLoadsScreen({
 
     const asset = result.assets[0];
     if (asset.size && asset.size > 6 * 1024 * 1024) {
-      Alert.alert("Archivo muy grande", "Sube un Excel de hasta 6 MB para mantener la app rapida.");
+      Alert.alert("Archivo muy grande", "Sube un CSV de hasta 6 MB para mantener la app rapida.");
       return;
     }
 
     try {
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: "base64" as any });
-      const workbook = XLSX.read(base64, { type: "base64", cellDates: true });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      if (!sheet) {
-        Alert.alert("Excel sin datos", "No se encontro una hoja valida.");
+      const csv = await FileSystem.readAsStringAsync(asset.uri, { encoding: "utf8" as any });
+      const rows = parseCsvRows(csv);
+      if (!rows.length) {
+        Alert.alert("CSV sin datos", "No se encontraron filas validas.");
         return;
       }
-
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "", raw: false });
       const preview = rows.slice(0, 250).map((row, index) => parsePropertyImportRow(row, index));
-      setImportFileName(asset.name || "propiedades.xlsx");
+      setImportFileName(asset.name || "propiedades.csv");
       setImportPreview(preview);
       setImportSummary(`${preview.filter((row) => !row.errors.length).length} listas / ${preview.length} filas leidas`);
     } catch (error) {
       setImportPreview([]);
       setImportSummary("");
-      Alert.alert("No se pudo leer el Excel", error instanceof Error ? error.message : "Revisa el formato del archivo.");
+      Alert.alert("No se pudo leer el CSV", error instanceof Error ? error.message : "Revisa el formato del archivo.");
     }
   }
 
-  async function importPropertiesFromExcel() {
+  async function importPropertiesFromCsv() {
     if (!validImportRows.length) {
-      Alert.alert("Sin filas validas", "Primero selecciona un Excel con propiedades completas.");
+      Alert.alert("Sin filas validas", "Primero selecciona un CSV con propiedades completas.");
       return;
     }
 
@@ -1355,7 +1382,7 @@ function RealtyLoadsScreen({
               phone: row.ownerPhone,
               email: row.ownerEmail,
               origin: row.captureOrigin,
-              source: "mobile_excel_import",
+              source: "mobile_csv_import",
               importBatchId,
               importFileName,
               importRowNumber: row.rowNumber
@@ -1389,7 +1416,7 @@ function RealtyLoadsScreen({
             captureDate: row.captureDate,
             assignedToName: row.assignedToName,
             stage: row.stage,
-            source: "mobile_excel_import",
+            source: "mobile_csv_import",
             importBatchId,
             importFileName,
             importRowNumber: row.rowNumber,
@@ -1409,7 +1436,7 @@ function RealtyLoadsScreen({
         title: `Aprendizaje inmobiliario movil ${new Date().toLocaleDateString("es-CL")}`,
         status: "processed",
         data: {
-          agentType: "realty_mobile_excel_learning",
+          agentType: "realty_mobile_csv_learning",
           context: "Importacion masiva de propiedades desde app movil para acelerar aprendizaje predictivo.",
           result: `${importedIds.length} propiedades importadas`,
           requiresSupervision: false,
@@ -1420,7 +1447,7 @@ function RealtyLoadsScreen({
         }
       });
 
-      Alert.alert("Excel importado", `${importedIds.length} propiedades quedaron cargadas para la IA predictiva.`);
+      Alert.alert("CSV importado", `${importedIds.length} propiedades quedaron cargadas para la IA predictiva.`);
       setImportPreview([]);
       setImportFileName("");
       setImportSummary("");
@@ -1718,13 +1745,13 @@ function RealtyLoadsScreen({
         <Kpi label="Visitas" value={visits.length} detail={`${leads.length} leads`} />
         <Kpi label="Score IA" value={`${predictiveScore}%`} detail={`${forecasts.length} forecasts`} />
       </View>
-      <Panel title="Importar Excel para IA">
-        <Text style={styles.muted}>Sube una planilla con propiedades, propietarios, atributos y vendedor sugerido. EVOLUM creara fichas y dejara metadata para el aprendizaje predictivo.</Text>
+      <Panel title="Importar CSV para IA">
+        <Text style={styles.muted}>Sube un CSV con propiedades, propietarios, atributos y vendedor sugerido. EVOLUM creara fichas y dejara metadata para el aprendizaje predictivo.</Text>
         <View style={styles.importActionRow}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={pickPropertyExcel} disabled={importing}>
-            <Text style={styles.secondaryButtonText}>{importFileName || "Seleccionar Excel"}</Text>
+          <TouchableOpacity style={styles.secondaryButton} onPress={pickPropertyCsv} disabled={importing}>
+            <Text style={styles.secondaryButtonText}>{importFileName || "Seleccionar CSV"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.primaryButton} onPress={importPropertiesFromExcel} disabled={importing || !validImportRows.length}>
+          <TouchableOpacity style={styles.primaryButton} onPress={importPropertiesFromCsv} disabled={importing || !validImportRows.length}>
             <Text style={styles.primaryButtonText}>{importing ? "Importando..." : "Importar"}</Text>
           </TouchableOpacity>
         </View>

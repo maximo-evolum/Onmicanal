@@ -1,10 +1,17 @@
 
 const buckets = new Map();
+const MAX_BUCKETS = 20_000;
+
+function clientIp(req) {
+  return String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "ip")
+    .split(",")[0]
+    .trim();
+}
 
 function keyFor(req) {
   const user = req.user?.id || req.user?.email || "anon";
   const tenant = req.tenantId || req.user?.tenantId || "public";
-  const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "ip";
+  const ip = clientIp(req);
   return `${tenant}:${user}:${ip}`;
 }
 
@@ -14,6 +21,12 @@ export function basicRateLimit({ windowMs = 60_000, max = 240 } = {}) {
     if (req.method === "OPTIONS" || req.path === "/health" || req.path === "/api/health") return next();
 
     const now = Date.now();
+    if (buckets.size >= MAX_BUCKETS) {
+      for (const [bucketKey, bucket] of buckets) {
+        if (bucket.resetAt <= now) buckets.delete(bucketKey);
+      }
+      if (buckets.size >= MAX_BUCKETS) buckets.delete(buckets.keys().next().value);
+    }
     const key = keyFor(req);
     const current = buckets.get(key) || { count: 0, resetAt: now + windowMs };
 

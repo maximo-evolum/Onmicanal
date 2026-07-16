@@ -4,12 +4,14 @@ import { env } from "./env.js";
 const PREFIX = "enc:v1:";
 
 function secretMaterial() {
-  return (
-    process.env.CONNECTIONS_ENCRYPTION_KEY ||
-    env.jwtSecret ||
-    process.env.DATABASE_URL ||
-    "evolum-local-development-key"
-  );
+  const dedicatedKey = process.env.CONNECTIONS_ENCRYPTION_KEY;
+  if (dedicatedKey) return dedicatedKey;
+
+  if (env.nodeEnv === "production") {
+    throw new Error("CONNECTIONS_ENCRYPTION_KEY es obligatoria en produccion para cifrar credenciales de integraciones.");
+  }
+
+  return env.jwtSecret || "evolum-local-development-key";
 }
 
 function encryptionKey() {

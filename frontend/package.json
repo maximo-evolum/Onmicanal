@@ -11,8 +11,7 @@
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "socket.io-client": "^4.8.3",
-    "xlsx": "^0.18.5"
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@types/node": "latest",

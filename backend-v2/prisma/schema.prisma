@@ -83,7 +83,8 @@ model Tenant {
   campaigns           Campaign[]
   products            Product[]
   tenantModules       TenantModule[]
-  subscriptions       Subscription[]
+    subscriptions       Subscription[]
+    metadataSchemas     MetadataSchema[]
   services            Service[]
   bookings            Booking[]
   payments            Payment[]
@@ -95,6 +96,25 @@ model Tenant {
   channelConfigs      TenantChannelConfig[]
   onboardingImports      TenantOnboardingImport[]
   industryRecords        IndustryRecord[]
+}
+
+model MetadataSchema {
+  id          String   @id @default(cuid())
+  tenantId    String
+  recordType  String
+  version     Int
+  status      String   @default("DRAFT") // DRAFT | PUBLISHED | ARCHIVED
+  label       String
+  fields      Json
+  policies    Json?
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, recordType, version])
+  @@index([tenantId, recordType, status])
 }
 
 

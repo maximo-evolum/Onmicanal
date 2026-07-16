@@ -76,6 +76,10 @@ export async function registerTenantOwner({ companyName, name, email, password, 
 
 export async function loginUser({ email, password }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
+  // A passwordless user must never receive an authenticated session.
+  if (typeof password !== "string" || password.length === 0) {
+    throw new Error("Invalid credentials");
+  }
   const user = await prisma.workspaceUser.findUnique({
     where: { email: normalizedEmail },
     include: { tenant: true }

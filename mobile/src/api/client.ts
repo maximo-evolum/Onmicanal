@@ -12,7 +12,7 @@ import {
   TenantModulesResponse
 } from "../types";
 
-export const API_BASE_URL = "https://onmicanal-backend-v2.up.railway.app/api";
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:3000/api";
 const TOKEN_KEY = "evolum_mobile_token";
 const SESSION_KEY = "evolum_mobile_session";
 
@@ -81,6 +81,7 @@ export async function checkApiHealth() {
 export async function loginWithEmail(email: string, password?: string) {
   const data = await request<any>("/auth/login", {
     method: "POST",
+    headers: { "X-Auth-Client": "mobile" },
     body: JSON.stringify({ email, password })
   });
   await saveMobileSession(data, data.token);

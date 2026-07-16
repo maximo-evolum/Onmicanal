@@ -1,10 +1,17 @@
 import { Router } from "express";
 import { MODULES, PLAN_DEFINITIONS } from "../lib/modules.js";
-import { normalizeMetadata } from "../lib/metadata.js";
+import { metadataFields, normalizeMetadata, validateMetadata } from "../lib/metadata.js";
 import { getAnyIndustryTemplate, listAllIndustryTemplates } from "../services/industry-templates.service.js";
 import { getTenantModules } from "../services/tenant-modules.service.js";
+import { createMetadataSchemaDraft, getPublishedMetadataSchema, listMetadataSchemas, publishMetadataSchema } from "../services/metadata-schemas.service.js";
+import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { recordAuditLog } from "../lib/audit.js";
 
 export const metadataRouter = Router();
+
+function cleanRecordType(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
+}
 
 function inferFieldType(value) {
   if (Array.isArray(value)) return "array";
@@ -16,9 +23,7 @@ function inferFieldType(value) {
 }
 
 function entityToSchema(entity = {}) {
-  const fields = Array.isArray(entity.fields)
-    ? Object.fromEntries(entity.fields.map((field) => [field, { type: "string" }]))
-    : entity.fields && typeof entity.fields === "object" ? entity.fields : {};
+  const fields = metadataFields(entity);
   return {
     recordType: entity.type || entity.code || entity.name,
     label: entity.label || entity.name || entity.type,
@@ -36,9 +41,15 @@ metadataRouter.get("/metadata/catalog", async (req, res) => {
     const tenantIndustry = req.tenant?.industry || "GENERAL";
     const template = await getAnyIndustryTemplate(req.query.industry || tenantIndustry);
     const modules = await getTenantModules(req.tenantId);
-    const entities = Array.isArray(template?.entities)
+    const templateEntities = Array.isArray(template?.entities)
       ? template.entities.map(entityToSchema)
       : Object.entries(template?.entities || {}).map(([type, config]) => entityToSchema({ type, ...(config || {}) }));
+    const publishedSchemas = await listMetadataSchemas(req.tenantId);
+    const overrides = publishedSchemas.filter((item) => item.status === "PUBLISHED");
+    const entities = [
+      ...templateEntities.filter((entity) => !overrides.some((schema) => schema.recordType === entity.recordType)),
+      ...overrides.map((schema) => ({ recordType: schema.recordType, label: schema.label, fields: Object.entries(schema.fields || {}).map(([name, config]) => ({ name, type: config?.type || "string", required: Boolean(config?.required), options: config?.options })) }))
+    ];
 
     res.json({
       tenantId: req.tenantId,
@@ -52,6 +63,37 @@ metadataRouter.get("/metadata/catalog", async (req, res) => {
   } catch (error) {
     console.error("Metadata catalog error:", error);
     res.status(500).json({ error: "No se pudo cargar catalogo de metadata" });
+  }
+});
+
+metadataRouter.get("/metadata/schemas", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  const recordType = cleanRecordType(req.query.recordType);
+  res.json({ schemas: await listMetadataSchemas(req.tenantId, recordType) });
+});
+
+metadataRouter.post("/metadata/schemas", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    const recordType = cleanRecordType(req.body?.recordType);
+    const label = String(req.body?.label || "").trim();
+    if (!recordType || !label) return res.status(400).json({ error: "recordType y label son requeridos" });
+    const schema = await createMetadataSchemaDraft({ tenantId: req.tenantId, recordType, label, fields: req.body?.fields, policies: req.body?.policies });
+    await recordAuditLog(req, "METADATA_SCHEMA_DRAFT_CREATED", "metadata_schema", schema.id, { recordType, version: schema.version });
+    return res.status(201).json({ schema });
+  } catch (error) {
+    console.error("Create metadata schema error:", error);
+    return res.status(500).json({ error: "No se pudo crear el borrador de metadata" });
+  }
+});
+
+metadataRouter.post("/metadata/schemas/:id/publish", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    const schema = await publishMetadataSchema({ tenantId: req.tenantId, id: req.params.id });
+    if (!schema) return res.status(404).json({ error: "Borrador no encontrado" });
+    await recordAuditLog(req, "METADATA_SCHEMA_PUBLISHED", "metadata_schema", schema.id, { recordType: schema.recordType, version: schema.version });
+    return res.json({ schema });
+  } catch (error) {
+    console.error("Publish metadata schema error:", error);
+    return res.status(500).json({ error: "No se pudo publicar el esquema de metadata" });
   }
 });
 
@@ -70,20 +112,18 @@ metadataRouter.post("/metadata/validate", async (req, res) => {
     const rawEntities = Array.isArray(template?.entities)
       ? template.entities
       : Object.entries(template?.entities || {}).map(([type, config]) => ({ type, ...(config || {}) }));
-    const schema = rawEntities.find((entity) => [entity.type, entity.code, entity.name].includes(recordType));
-    const fields = Array.isArray(schema?.fields)
-      ? Object.fromEntries(schema.fields.map((field) => [field, { type: "string" }]))
-      : schema?.fields && typeof schema.fields === "object" ? schema.fields : {};
-    const missing = Object.entries(fields)
-      .filter(([, config]) => Boolean(config?.required))
-      .map(([key]) => key)
-      .filter((key) => data[key] === undefined || data[key] === null || data[key] === "");
+    const templateSchema = rawEntities.find((entity) => [entity.type, entity.code, entity.name].includes(recordType));
+    const publishedSchema = await getPublishedMetadataSchema(req.tenantId, recordType);
+    const schema = publishedSchema ? { fields: publishedSchema.fields } : templateSchema;
+    const result = validateMetadata(data, schema, {
+      allowUnknown: req.body?.allowUnknown !== false
+    });
 
     res.json({
-      ok: missing.length === 0,
+      ...result,
       recordType,
-      missing,
-      data
+      schemaVersion: publishedSchema?.version || 1,
+      source: publishedSchema ? "tenant_published" : "industry_template"
     });
   } catch (error) {
     console.error("Metadata validate error:", error);

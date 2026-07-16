@@ -1,24 +1,5 @@
 import { AgentSession, Booking, BookingSlot, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
-import { API_BASE_URL, TOKEN_COOKIE, TOKEN_STORAGE_KEY, SESSION_STORAGE_KEY } from "./constants";
-
-function getCookie(name: string) {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-export function getAuthToken() {
-  if (typeof window === "undefined") return getCookie(TOKEN_COOKIE);
-
-  return (
-    getCookie(TOKEN_COOKIE) ||
-    window.localStorage.getItem(TOKEN_STORAGE_KEY) ||
-    window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ||
-    window.localStorage.getItem("token") ||
-    window.localStorage.getItem("auth_token") ||
-    window.localStorage.getItem("jwt")
-  );
-}
+import { API_BASE_URL, SESSION_STORAGE_KEY } from "./constants";
 
 export function getStoredApiSession() {
   if (typeof window === "undefined") return null;
@@ -32,10 +13,8 @@ export function getStoredApiSession() {
 }
 
 function buildHeaders(init?: RequestInit) {
-  const token = getAuthToken();
   return {
     "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(init?.headers || {})
   };
 }
@@ -44,7 +23,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: buildHeaders(init),
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 
   if (!response.ok) {
@@ -64,13 +44,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
 
     if (response.status === 403) {
-      const token = getAuthToken();
       const session = getStoredApiSession();
       message = message || "No tienes acceso o tu sesión no está enviando autorización.";
       console.warn("[API_403]", {
         path,
-        hasToken: Boolean(token),
-        tokenPreview: token ? `${token.slice(0, 12)}...` : null,
         sessionRole: session?.role,
         tenantId: session?.tenantId
       });
@@ -86,8 +63,8 @@ export async function getWorkspaceUsers(): Promise<AgentSession[]> {
   return request<AgentSession[]>("/workspace-users");
 }
 
-export async function loginWithEmail(email: string, password?: string): Promise<{ token: string; user: AgentSession; tenant?: TenantSession }> {
-  return request<{ token: string; user: AgentSession; tenant?: TenantSession }>("/auth/login", {
+export async function loginWithEmail(email: string, password?: string): Promise<{ user: AgentSession; tenant?: TenantSession }> {
+  return request<{ user: AgentSession; tenant?: TenantSession }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password })
   });
@@ -100,8 +77,8 @@ export async function registerAccount(input: {
   email: string;
   password: string;
   industry?: string;
-}): Promise<{ token: string; user: AgentSession; tenant: TenantSession }> {
-  return request<{ token: string; user: AgentSession; tenant: TenantSession }>("/auth/register", {
+}): Promise<{ user: AgentSession; tenant: TenantSession }> {
+  return request<{ user: AgentSession; tenant: TenantSession }>("/auth/register", {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -1196,7 +1173,6 @@ export async function saveOnboardingProfile(input: Record<string, string>): Prom
 }
 
 export async function uploadOnboardingFiles(input: { files: File[]; businessName?: string; industry?: string; description?: string; tone?: string; objective?: string; restrictions?: string }): Promise<{ importId: string; extraction: OnboardingExtraction }> {
-  const token = getAuthToken();
   const form = new FormData();
   for (const file of input.files) form.append("files", file);
   for (const [key, value] of Object.entries(input)) {
@@ -1205,9 +1181,9 @@ export async function uploadOnboardingFiles(input: { files: File[]; businessName
 
   const response = await fetch(`${API_BASE_URL}/onboarding/extract`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 
   if (!response.ok) {
@@ -1235,7 +1211,6 @@ export async function uploadAdminTenantOnboardingFiles(input: {
   objective?: string;
   restrictions?: string;
 }): Promise<{ importId: string; extraction: OnboardingExtraction }> {
-  const token = getAuthToken();
   const form = new FormData();
   for (const file of input.files) form.append("files", file);
   for (const [key, value] of Object.entries(input)) {
@@ -1244,9 +1219,9 @@ export async function uploadAdminTenantOnboardingFiles(input: {
 
   const response = await fetch(`${API_BASE_URL}/admin/tenants/${input.tenantId}/onboarding/extract`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 
   if (!response.ok) {
@@ -1399,7 +1374,6 @@ export async function uploadTenantDocuments(input: {
   category?: string;
   description?: string;
 }): Promise<{ documents: TenantDocument[] }> {
-  const token = getAuthToken();
   const form = new FormData();
   for (const file of input.files) form.append("files", file);
   if (input.title) form.append("title", input.title);
@@ -1408,9 +1382,9 @@ export async function uploadTenantDocuments(input: {
 
   const response = await fetch(`${API_BASE_URL}/documents`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
-    cache: "no-store"
+    cache: "no-store",
+    credentials: "include"
   });
 
   if (!response.ok) {
