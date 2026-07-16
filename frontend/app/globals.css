@@ -427,6 +427,32 @@ a {
   padding: 26px;
 }
 
+/* El CRM usa el mismo menú EV que el resto de los módulos. */
+.crm-main.nav-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.crm-main.nav-collapsed .crm-main-workspace {
+  grid-column: 1;
+}
+
+.crm-main-module-count {
+  min-width: 38px;
+  min-height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 44%, transparent);
+  border-radius: 999px;
+  color: var(--theme-primary-2);
+  background: color-mix(in srgb, var(--theme-primary) 12%, transparent);
+}
+
+.crm-main-module-hint {
+  margin: 14px 0 0;
+  color: var(--crm-main-muted);
+  font-size: 12px;
+}
+
 .crm-main-header {
   min-height: 92px;
   display: grid;

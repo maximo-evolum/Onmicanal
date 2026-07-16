@@ -35,7 +35,7 @@ import {
   getTemplateModules,
   listAllIndustryTemplates
 } from "../services/industry-templates.service.js";
-import { ensureTenantSubscriptionAndModules, enableTenantModules, getTenantModules, setTenantModules } from "../services/tenant-modules.service.js";
+import { ensureTenantSubscriptionAndModules, enableTenantModules, syncTenantIndustryModules, getTenantModules, setTenantModules } from "../services/tenant-modules.service.js";
 import { extractOnboardingKnowledge } from "../services/onboarding-intelligence.service.js";
 
 export const adminRouter = Router();
@@ -675,7 +675,7 @@ adminRouter.patch("/admin/tenants/:tenantId/plan", async (req, res) => {
     const tenantForIndustry = await prisma.tenant.findUnique({ where: { id: tenantId } });
     const templateForIndustry = await getAnyIndustryTemplate(tenantForIndustry?.industry || "GENERAL");
     const industryModules = getTemplateModules(templateForIndustry, planCode);
-    if (industryModules.length) await enableTenantModules({ tenantId, modules: industryModules, source: "INDUSTRY" });
+    await syncTenantIndustryModules({ tenantId, modules: industryModules, planCode });
     const modules = await getTenantModules(tenantId);
     const tenant = await getFullTenant(tenantId);
     res.json({ tenant, modules });
@@ -704,7 +704,7 @@ adminRouter.patch("/admin/tenants/:tenantId/industry-template", async (req, res)
     });
 
     await ensureTenantSubscriptionAndModules({ tenantId, planCode });
-    await enableTenantModules({ tenantId, modules, source: "INDUSTRY" });
+    await syncTenantIndustryModules({ tenantId, modules, planCode });
 
     const tenant = await getFullTenant(tenantId);
     res.json({

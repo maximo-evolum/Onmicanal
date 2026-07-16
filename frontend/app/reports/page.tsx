@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
-import { getIndustryReports, type IndustryReport, type IndustryReportMetric } from "@/lib/api";
+import { downloadExecutiveReport, getIndustryReports, type IndustryReport, type IndustryReportMetric } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 
 function formatMetric(metric: IndustryReportMetric) {
@@ -25,6 +25,7 @@ export default function ReportsPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [report, setReport] = useState<IndustryReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -47,6 +48,26 @@ export default function ReportsPage() {
     };
   }, []);
 
+  async function downloadPdf() {
+    try {
+      setDownloading(true);
+      setError(null);
+      const blob = await downloadExecutiveReport();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `evolum-reporte-ejecutivo-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo descargar el PDF");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <ModuleGate moduleKey="reports">
       <div className={`module-with-menu-shell reports-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
@@ -64,7 +85,12 @@ export default function ReportsPage() {
               <h1>Informes operativos</h1>
               <p>{report ? `${report.tenant.industryLabel} · actualización automática` : "Cargando indicadores del negocio"}</p>
             </div>
-            <AccountPill fallbackName={agent?.name || "Usuario"} />
+            <div className="module-app-actions">
+              <button className="primary-btn" type="button" onClick={downloadPdf} disabled={!report || downloading}>
+                {downloading ? "Generando PDF..." : "Descargar reporte ejecutivo PDF"}
+              </button>
+              <AccountPill fallbackName={agent?.name || "Usuario"} />
+            </div>
           </header>
 
           {error ? <div className="sales-queue-error">{error}</div> : null}

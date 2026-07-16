@@ -235,7 +235,14 @@ export default function ConnectionsPage() {
     try {
       setNotice(null);
       const response = await getConnectionOAuthUrl(provider.key);
-      window.open(response.url, "_blank", "noopener,noreferrer,width=720,height=780");
+      // Mantener una ventana con nombre permite que el callback notifique al
+      // Centro de Conexiones y refresque el estado inmediatamente.
+      const popup = window.open(response.url, "evolum-oauth", "popup=yes,width=720,height=780");
+      if (!popup) {
+        window.location.assign(response.url);
+      } else {
+        popup.focus();
+      }
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudo iniciar OAuth" });
     }

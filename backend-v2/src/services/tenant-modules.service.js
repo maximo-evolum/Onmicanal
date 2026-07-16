@@ -222,3 +222,27 @@ export async function enableTenantModules({ tenantId, modules = [], source = "IN
   }
   return getTenantModules(tenantId);
 }
+
+// Reemplaza solo capacidades propias de una vertical. Conserva módulos del
+// plan y no toca configuraciones MANUAL, evitando duplicados históricos al
+// actualizar una plantilla de rubro.
+export async function syncTenantIndustryModules({ tenantId, modules = [], planCode = "STARTER" }) {
+  const desired = new Set(modules.map((module) => String(module).trim()).filter(Boolean));
+  const planModules = new Set(getModulesForPlan(normalizePlanCode(planCode)));
+  const currentIndustryModules = await prisma.tenantModule.findMany({
+    where: { tenantId, source: "INDUSTRY" },
+    select: { id: true, module: true }
+  });
+
+  const obsolete = currentIndustryModules
+    .filter((item) => !desired.has(item.module) && !planModules.has(item.module))
+    .map((item) => item.id);
+  if (obsolete.length) {
+    await prisma.tenantModule.updateMany({
+      where: { id: { in: obsolete } },
+      data: { enabled: false }
+    });
+  }
+
+  return enableTenantModules({ tenantId, modules: [...desired], source: "INDUSTRY" });
+}

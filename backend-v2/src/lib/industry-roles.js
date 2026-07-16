@@ -28,6 +28,12 @@ export const INDUSTRY_ROLE_OPTIONS = Object.freeze({
     { key: "DENTAL_NURSE", label: "Enfermero/a", workspaceRole: "AGENT" },
     { key: "DENTAL_RECEPTION", label: "Recepcionista", workspaceRole: "AGENT" },
   ],
+  HEALTH: [
+    { key: "HEALTH_ADMIN", label: "Administrador de clinica", workspaceRole: "ADMIN" },
+    { key: "HEALTH_PROFESSIONAL", label: "Profesional de salud", workspaceRole: "AGENT" },
+    { key: "HEALTH_ASSISTANT", label: "Asistente clinico", workspaceRole: "AGENT" },
+    { key: "HEALTH_RECEPTION", label: "Recepcionista", workspaceRole: "AGENT" },
+  ],
   VETERINARY: [
     { key: "VETERINARY_ADMIN", label: "Administrador veterinario", workspaceRole: "ADMIN" },
     { key: "VETERINARY_VET", label: "Veterinario/a", workspaceRole: "AGENT" },

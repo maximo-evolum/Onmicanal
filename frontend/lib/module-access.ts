@@ -79,7 +79,8 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   security_replica: ["security_replica", "replica", "replica_seguridad", "drp"],
 };
 
-const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas"]);
+// CRM, administración de cuenta y Reportes son parte del Core EVOLUM.
+const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas", "reports"]);
 
 const brokerModuleAllowlist = new Set<ModuleAccessKey>([
   "crm",
@@ -134,7 +135,9 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
       })
       .catch((err) => {
         if (!active) return;
-        setModules([]);
+        // El backend mantiene la autorizacion real. No bloquear la interfaz
+        // por una falla transitoria al consultar los modulos del tenant.
+        setModules(null);
         setError(err instanceof Error ? err.message : "No se pudieron cargar los módulos");
       })
       .finally(() => {

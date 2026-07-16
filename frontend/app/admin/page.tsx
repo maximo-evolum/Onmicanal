@@ -45,6 +45,7 @@ const MODULE_LABELS: Record<string, string> = {
   pipeline: "Pipeline",
   campaigns: "Campañas",
   dashboard: "Dashboard",
+  reports: "Reportes ejecutivos",
   ai_ops: "AI Ops / Cierres IA",
   onboarding: "Configuración de Agente",
   saas: "Planes y módulos",
@@ -79,6 +80,21 @@ const MODULE_LABELS: Record<string, string> = {
   ready_notifications: "Aviso de retiro",
 };
 
+// Claves que existieron como servicios internos del backend. En la consola se
+// administran con sus nombres de experiencia EVOLUM para no duplicar módulos
+// ni presentar conceptos técnicos a los clientes.
+const LEGACY_MODULE_TO_EXPERIENCE: Record<string, string> = {
+  sales: "pipeline",
+  marketing: "campaigns",
+  bookings: "agenda",
+  followups: "ai_ops",
+  analytics: "dashboard",
+};
+
+function modulePickerKey(module: string) {
+  return LEGACY_MODULE_TO_EXPERIENCE[module] || module;
+}
+
 const PROJECT_MODULE_CATALOG = [
   "inbox",
   "agenda",
@@ -89,6 +105,7 @@ const PROJECT_MODULE_CATALOG = [
   "saas",
   "users",
   "dashboard",
+  "reports",
   "ai_ops",
   "integrations",
   "gmail",
@@ -117,19 +134,18 @@ const PROJECT_MODULE_CATALOG = [
   "parts_inventory",
   "mechanic_assignments",
   "ready_notifications",
-  "sales",
-  "marketing",
-  "bookings",
-  "followups",
-  "analytics",
-  "bot_lab",
 ];
 
 const MODULE_GROUPS = [
   {
     title: "Core EVOLUM",
-    description: "Módulos transversales que cualquier cliente puede usar.",
-    modules: ["inbox", "agenda", "pipeline", "campaigns", "payments", "onboarding", "saas", "users", "dashboard", "ai_ops", "documents", "workflows", "revenue", "bot_lab"],
+    description: "Capacidades base de EVOLUM presentes en toda operación.",
+    modules: ["inbox", "reports", "ai_ops", "onboarding", "documents", "workflows"],
+  },
+  {
+    title: "Operación CRM",
+    description: "Capacidades comerciales comunes, independientes de cada vertical.",
+    modules: ["agenda", "pipeline", "campaigns", "payments", "dashboard", "customers", "saas", "users"],
   },
   {
     title: "Integraciones y continuidad",
@@ -142,9 +158,14 @@ const MODULE_GROUPS = [
     modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "realty_leads", "property_assignments"],
   },
   {
-    title: "Salud y veterinaria",
-    description: "Fichas clínicas, pacientes, examenes, presupuestos y seguimiento.",
-    modules: ["customers", "patients", "exams", "veterinary", "bookings", "followups"],
+    title: "Salud clínica",
+    description: "Atención humana: pacientes, exámenes y documentos clínicos.",
+    modules: ["patients", "exams"],
+  },
+  {
+    title: "Veterinaria",
+    description: "Operación separada para tutores, mascotas, controles y documentos veterinarios.",
+    modules: ["veterinary"],
   },
   {
     title: "Automotriz y taller",
@@ -152,9 +173,9 @@ const MODULE_GROUPS = [
     modules: ["vehicles", "workshop", "parts_inventory", "mechanic_assignments", "ready_notifications"],
   },
   {
-    title: "Gastronomía y servicios",
-    description: "Reservas, ventas, marketing, pagos y agenda operativa.",
-    modules: ["sales", "marketing", "bookings", "followups", "analytics"],
+    title: "Gastronomía",
+    description: "Datos propios de clientes, preferencias, ingresos y recurrencia; el Core no se duplica.",
+    modules: ["revenue"],
   },
 ];
 
@@ -285,7 +306,9 @@ function asArrayRules(value: unknown) {
 }
 
 function enabledModulesOf(tenant: AdminTenant) {
-  return (tenant.tenantModules || []).filter((item) => item.enabled).map((item) => item.module);
+  return [...new Set((tenant.tenantModules || [])
+    .filter((item) => item.enabled)
+    .map((item) => modulePickerKey(item.module)))];
 }
 
 function activeSubscriptionOf(tenant: AdminTenant | null) {
@@ -336,13 +359,16 @@ function templateMatchesTenantIndustry(template: IndustryTemplate, industryValue
 }
 
 function templateModulesForPlan(template: IndustryTemplate | null, plan: string) {
-  return (template?.modules || []).filter((module) => planAllows(module.minPlan, plan));
+  return (template?.modules || [])
+    .filter((module) => planAllows(module.minPlan, plan))
+    .map((module) => ({ ...module, key: modulePickerKey(module.key) }));
 }
 
 function moduleToTemplateItem(module: string) {
+  const key = modulePickerKey(module);
   return {
-    key: module,
-    label: MODULE_LABELS[module] || module,
+    key,
+    label: MODULE_LABELS[key] || key,
     description: "",
     minPlan: "STARTER"
   };
@@ -522,8 +548,11 @@ export default function AdminPage() {
   }, [selectedTenant, pendingModules]);
 
   const availableModules = useMemo(() => {
-    const industryModules = industryTemplates.flatMap((template) => template.modules.map((module) => module.key));
-    const merged = new Set([...PROJECT_MODULE_CATALOG, ...moduleCatalog, ...industryModules]);
+    const industryModules = industryTemplates.flatMap((template) => template.modules.map((module) => modulePickerKey(module.key)));
+    const backendModules = moduleCatalog
+      .map(modulePickerKey)
+      .filter((module) => !["bot_lab"].includes(module));
+    const merged = new Set([...PROJECT_MODULE_CATALOG, ...backendModules, ...industryModules]);
     return Array.from(merged);
   }, [industryTemplates, moduleCatalog]);
 

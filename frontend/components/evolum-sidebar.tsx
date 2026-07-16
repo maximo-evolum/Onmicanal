@@ -50,7 +50,7 @@ const developerItems: SidebarItem[] = [
 ];
 
 export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
-  const [enabledModules, setEnabledModules] = useState<string[]>([]);
+  const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
 
@@ -64,7 +64,9 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
         if (mounted) setEnabledModules(data.modules || []);
       })
       .catch(() => {
-        if (mounted) setEnabledModules([]);
+        // No ocultar modulos por una falla momentanea de red; cada ruta sigue
+        // validada por el backend antes de entregar datos.
+        if (mounted) setEnabledModules(null);
       });
 
     return () => {
@@ -74,6 +76,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
   const items = useMemo(() => {
     const allItems = isDeveloper ? [...baseItems, ...developerItems] : baseItems;
+    if (enabledModules === null) return allItems;
     return allItems.filter(([, , , , moduleKey]) =>
       moduleAllowed(moduleKey, enabledModules, isDeveloper ? "SUPER_ADMIN" : role, jobTitle),
     );

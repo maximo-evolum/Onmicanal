@@ -20,6 +20,7 @@ import {
   type TenantNotification
 } from "@/lib/api";
 import { AccountPill } from "@/components/account-pill";
+import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { getStoredSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
@@ -78,6 +79,7 @@ const navItems: NavItem[] = [
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA", moduleKey: "onboarding" },
   { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites", moduleKey: "saas" },
   { label: "Dashboard", href: "/dashboard", description: "Metricas operativas", moduleKey: "dashboard" },
+  { label: "Reportes", href: "/reports", description: "Reporte ejecutivo general y por rubro", moduleKey: "reports" },
   { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA", moduleKey: "ai_ops" },
   { label: "Propiedades", href: "/properties", description: "Ficha inmobiliaria, vendedores y pipeline por propiedad", moduleKey: "properties" },
   { label: "Clientes / Pacientes", href: "/customers", description: "Fichas por rubro, historial y proxima accion", moduleKey: "customers" },
@@ -350,6 +352,7 @@ export default function CrmPrincipalPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [backupStatus, setBackupStatus] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const isDeveloper = state.session?.role === "SUPER_ADMIN";
   const visibleNav = (isDeveloper ? [...navItems, ...developerOnlyItems] : navItems).filter((item) => {
@@ -379,7 +382,9 @@ export default function CrmPrincipalPage() {
       crm: crm.status === "fulfilled" ? crm.value : null,
       campaigns: campaigns.status === "fulfilled" ? campaigns.value : [],
       modules: modules.status === "fulfilled" ? modules.value.modules || [] : [],
-      modulesLoaded: true,
+      // Si esta consulta falla, conservamos una interfaz compatible en vez de
+      // esconder modulos que el backend si puede autorizar.
+      modulesLoaded: modules.status === "fulfilled",
       onboarding: onboarding.status === "fulfilled" ? onboarding.value : null,
       plan: modules.status === "fulfilled" ? accountLevelFromPlan(modules.value.plan) : accountLevelFromPlan(me.status === "fulfilled" ? me.value.tenant?.plan : null),
       tenant: me.status === "fulfilled" ? me.value.tenant : null,
@@ -629,40 +634,13 @@ export default function CrmPrincipalPage() {
   }
 
   return (
-    <main className="crm-main">
-      <aside className="crm-main-sidebar">
-        <div className="crm-main-brand">
-          <div className="crm-main-mark">EV</div>
-          <div>
-            <strong>EVOLUM OS</strong>
-            <span>{isDeveloper ? "Catalogo global" : "CRM operativo"}</span>
-          </div>
-        </div>
-
-        <nav className="crm-main-nav">
-          {visibleNav.map((item, index) => (
-            item.href.startsWith("#")
-              ? <a className={index === 0 ? "active" : ""} href={item.href} key={item.label}><span>{item.label}</span><small>{item.description}</small></a>
-              : <Link className={index === 0 ? "active" : ""} href={item.href} key={item.label}><span>{item.label}</span><small>{item.description}</small></Link>
-          ))}
-        </nav>
-
-        <section className="crm-main-side-summary">
-          <span>{isDeveloper ? "Control de plataforma" : "Resumen del dia"}</span>
-          <div>
-            <small>Nivel de cuenta</small>
-            <strong>{planLabel(state.plan)}</strong>
-          </div>
-          <div>
-            <small>Rubro</small>
-            <strong>{state.tenant?.industry || "General"}</strong>
-          </div>
-          <div>
-            <small>Modulos activos</small>
-            <strong>{state.modules.length || 0}</strong>
-          </div>
-        </section>
-      </aside>
+    <main className={`crm-main ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <EvolumSidebar
+        active="Inicio"
+        isDeveloper={isDeveloper}
+        isOpen={sidebarOpen}
+        onToggle={() => setSidebarOpen((value) => !value)}
+      />
 
       <section className="crm-main-workspace">
         <header className="crm-main-header">
@@ -833,6 +811,25 @@ export default function CrmPrincipalPage() {
                 </Link>
               ))}
             </div>
+          </section>
+
+          <section className="crm-main-panel crm-main-modules">
+            <div className="crm-main-panel-head">
+              <div>
+                <span>Accesos de esta cuenta</span>
+                <h2>Módulos habilitados</h2>
+              </div>
+              <strong className="crm-main-module-count">{state.modulesLoaded ? visibleNav.length : "..."}</strong>
+            </div>
+            <div className="crm-main-module-grid">
+              {(state.modulesLoaded ? visibleNav : navItems).map((item) => (
+                <Link className="crm-main-module" href={item.href} key={item.label}>
+                  <strong>{item.label}</strong>
+                  <p>{item.description}</p>
+                </Link>
+              ))}
+            </div>
+            {!state.modulesLoaded ? <p className="crm-main-module-hint">No fue posible sincronizar el catálogo ahora. El acceso se validará al abrir cada módulo.</p> : null}
           </section>
 
           <section className="crm-main-panel crm-main-agents" id="agents">

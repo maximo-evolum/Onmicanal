@@ -103,6 +103,12 @@ export function requireModule(module) {
         return next();
       }
 
+      // Reportes ejecutivos es parte del Core EVOLUM y no depende de que una
+      // cuenta antigua tenga sincronizada la fila tenant_module correspondiente.
+      if (module === "reports") {
+        return next();
+      }
+
       // El Centro de Conexiones centraliza credenciales del negocio. Debe ser
       // visible para administradores de cada tenant aunque el conector puntual
       // aun no forme parte del plan; los proveedores individuales siguen

@@ -194,15 +194,10 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
   GASTRONOMY: {
     code: "GASTRONOMY",
     name: "Gastronomia",
-    summary: "Reservas, eventos, ganancias, inbox y campanas para negocios gastronomicos.",
+    summary: "Capacidades propias de gastronomia que se suman al Core EVOLUM, sin duplicar agenda, ventas, marketing, pagos ni dashboard.",
     modules: [
-      moduleItem(MODULES.INBOX, "Inbox gastronomico", "Consultas, cotizaciones y confirmaciones."),
-      moduleItem(MODULES.BOOKINGS, "Agenda de reservas", "Reservas por fecha, hora, personas, sucursal o domicilio."),
       moduleItem(MODULES.CUSTOMERS, "Clientes", "Historial de clientes, preferencias y recurrencia.", "PRO"),
-      moduleItem(MODULES.REVENUE, "Ganancias", "Ingresos confirmados, pendientes y forecast.", "PRO"),
-      moduleItem(MODULES.MARKETING, "Campanas", "Promociones, historias, reels y mensajes.", "BUSINESS"),
-      moduleItem(MODULES.PAYMENTS, "Pagos", "Abonos, links y confirmaciones.", "BUSINESS"),
-      moduleItem(MODULES.ANALYTICS, "Dashboard", "Reservas, ingresos, conversion y actividad.", "PRO")
+      moduleItem(MODULES.REVENUE, "Ganancias", "Ingresos confirmados, pendientes y forecast.", "PRO")
     ],
     entities: [
       { key: "booking", label: "Reserva/evento", fields: ["cliente", "personas", "fecha", "hora", "lugar", "monto", "notas"] },
@@ -249,6 +244,23 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     ],
     workflows: ["consulta", "agendar cita", "recordar", "atender", "cobrar", "seguimiento"]
   },
+  HEALTH: {
+    code: "HEALTH",
+    name: "Clinica de salud",
+    summary: "Atencion clinica humana con fichas de pacientes, citas, tratamientos y documentos propios de salud.",
+    modules: [
+      moduleItem(MODULES.INBOX, "Inbox clinico", "Consultas, confirmaciones y recordatorios de pacientes."),
+      moduleItem(MODULES.BOOKINGS, "Agenda clinica", "Citas por profesional, box y especialidad.", "PRO"),
+      moduleItem(MODULES.CUSTOMERS, "Pacientes", "Ficha de paciente, antecedentes y continuidad de atencion.", "PRO"),
+      moduleItem(MODULES.PAYMENTS, "Pagos", "Abonos y saldos de prestaciones.", "BUSINESS"),
+      moduleItem(MODULES.ANALYTICS, "Dashboard clinico", "Citas, asistencia y capacidad operativa.", "PRO")
+    ],
+    entities: [
+      { key: "patient", label: "Paciente", fields: ["nombre", "telefono", "antecedentes", "tratamiento", "observaciones"] },
+      { key: "appointment", label: "Cita clinica", fields: ["paciente", "profesional", "especialidad", "fecha", "hora"] }
+    ],
+    workflows: ["consulta", "agendar cita", "recordar", "atender", "cobrar", "seguimiento"]
+  },
   VETERINARY: {
     code: "VETERINARY",
     name: "Clinica veterinaria",
@@ -284,6 +296,9 @@ const INDUSTRY_ALIASES = Object.freeze({
   TALLER: "AUTOMOTIVE",
   DENTAL: "DENTAL",
   ODONTOLOGIA: "DENTAL",
+  SALUD: "HEALTH",
+  CLINICA: "HEALTH",
+  HEALTH: "HEALTH",
   VETERINARIA: "VETERINARY",
   VETERINARY: "VETERINARY"
 });

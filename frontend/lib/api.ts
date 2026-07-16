@@ -1085,6 +1085,22 @@ export async function getIndustryReports(): Promise<IndustryReport> {
   return request<IndustryReport>("/reports/overview");
 }
 
+export async function downloadExecutiveReport(): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/reports/executive.pdf`, {
+    cache: "no-store",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    let message = "No se pudo generar el reporte ejecutivo";
+    try {
+      const data = await response.json();
+      message = data?.error || message;
+    } catch {}
+    throw new Error(message);
+  }
+  return response.blob();
+}
+
 export async function getAIConfig(): Promise<{ settings: AISettings }> {
   return request<{ settings: AISettings }>("/saas/ai-config");
 }

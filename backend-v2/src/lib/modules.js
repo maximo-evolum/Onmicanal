@@ -40,7 +40,9 @@ export const PLAN_DEFINITIONS = Object.freeze({
     description: "Bot de atención e inbox para responder mensajes.",
     priceMonthly: 0,
     currency: "CLP",
-    modules: [MODULES.INBOX, MODULES.DOCUMENTS],
+    // Reportes es una capacidad core: cada cuenta puede descargar su resumen
+    // ejecutivo aun con el plan de entrada.
+    modules: [MODULES.INBOX, MODULES.DOCUMENTS, MODULES.REPORTS],
     limits: { messagesMonthly: 500, users: 2 }
   },
   PRO: {

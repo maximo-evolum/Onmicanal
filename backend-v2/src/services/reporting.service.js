@@ -95,11 +95,27 @@ function industrySections(industry, recordCounts, bookings, payments) {
     ];
   }
 
-  if (["HEALTH", "DENTAL", "VETERINARY"].includes(industry)) {
+  if (industry === "VETERINARY") {
+    return [
+      {
+        id: "veterinaria",
+        title: "Informe veterinario",
+        description: "Mascotas, tutores, controles, documentos y continuidad de atencion veterinaria.",
+        metrics: [
+          metric("Tutores y mascotas", recordCount(recordCounts, "customer"), "Fichas veterinarias activas"),
+          metric("Controles", bookings.length, "Agenda veterinaria por confirmar o atendida"),
+          metric("Documentos veterinarios", recordCount(recordCounts, "document"), "Archivos clinicos de mascotas disponibles")
+        ]
+      },
+      ...shared
+    ];
+  }
+
+  if (["HEALTH", "DENTAL"].includes(industry)) {
     return [
       {
         id: "atencion",
-        title: industry === "VETERINARY" ? "Informe veterinario" : "Informe clínico",
+        title: "Informe clínico",
         description: "Pacientes, agenda, documentos y continuidad de atención.",
         metrics: [
           metric("Pacientes", recordCount(recordCounts, "customer"), "Fichas activas"),
