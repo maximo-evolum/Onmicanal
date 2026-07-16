@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
-import { createMetadataSchema, getMetadataSchemas, publishMetadataSchema, type MetadataSchema } from "@/lib/api";
+import { createMetadataSchema, getMetadataSchemas, migrateMetadataSchema, publishMetadataSchema, type MetadataSchema } from "@/lib/api";
 
 const exampleFields = JSON.stringify({
   address: { type: "string", required: true, sensitivity: "INTERNAL", purpose: "Operacion comercial", retentionDays: 1825 },
@@ -52,6 +52,20 @@ export default function MetadataSettingsPage() {
     } finally { setSaving(false); }
   }
 
+  async function migrate(schema: MetadataSchema) {
+    try {
+      setSaving(true); setStatus(null);
+      const core = ["lead", "booking", "payment"].includes(schema.recordType);
+      const preview = await migrateMetadataSchema(schema.id, { core });
+      const count = preview.records?.length || 0;
+      if (!count) { setStatus("No hay registros pendientes de migrar."); return; }
+      if (!window.confirm(`Se migrarán ${count} registros a v${preview.targetVersion}. ¿Continuar?`)) { setStatus("Migración cancelada después de la vista previa."); return; }
+      const applied = await migrateMetadataSchema(schema.id, { core, apply: true });
+      setStatus(`Migración aplicada: ${applied.migrated || 0} registros.`);
+    } catch (error) { setStatus(error instanceof Error ? error.message : "No se pudo migrar."); }
+    finally { setSaving(false); }
+  }
+
   return <div className="inbox-page-shell">
     <EvolumSidebar active="Esquemas de datos" isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
     <main className="inbox-main">
@@ -66,7 +80,7 @@ export default function MetadataSettingsPage() {
         </form>
       </section>
       <section className="vertical-card"><div className="vertical-card-head"><div><span>VERSIONES</span><h2>Esquemas del tenant</h2></div></div>
-        <div className="vertical-list">{schemas.length ? schemas.map((schema) => <article key={schema.id}><div><strong>{schema.label} · {schema.recordType}</strong><p>v{schema.version} · {schema.status} · {Object.keys(schema.fields || {}).length} campos</p><small>{String(schema.policies?.enforcement || "COMPATIBLE")} · desconocidos: {schema.policies?.allowUnknown === false ? "bloqueados" : "permitidos"}</small></div>{schema.status === "DRAFT" && <button className="primary-btn" disabled={saving} onClick={() => void publish(schema.id)}>Publicar</button>}</article>) : <p className="muted-copy">Aún no existen esquemas propios. Las entidades usan la plantilla de su rubro.</p>}</div>
+        <div className="vertical-list">{schemas.length ? schemas.map((schema) => <article key={schema.id}><div><strong>{schema.label} · {schema.recordType}</strong><p>v{schema.version} · {schema.status} · {Object.keys(schema.fields || {}).length} campos</p><small>{String(schema.policies?.enforcement || "COMPATIBLE")} · desconocidos: {schema.policies?.allowUnknown === false ? "bloqueados" : "permitidos"}</small></div>{schema.status === "DRAFT" ? <button className="primary-btn" disabled={saving} onClick={() => void publish(schema.id)}>Publicar</button> : schema.status === "PUBLISHED" ? <button className="secondary-btn" disabled={saving} onClick={() => void migrate(schema)}>Migrar datos</button> : null}</article>) : <p className="muted-copy">Aún no existen esquemas propios. Las entidades usan la plantilla de su rubro.</p>}</div>
       </section>
     </main>
   </div>;

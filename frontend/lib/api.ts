@@ -1651,3 +1651,10 @@ export async function createMetadataSchema(input: {
 export async function publishMetadataSchema(id: string): Promise<{ schema: MetadataSchema }> {
   return request<{ schema: MetadataSchema }>(`/metadata/schemas/${encodeURIComponent(id)}/publish`, { method: "POST" });
 }
+
+export async function migrateMetadataSchema(id: string, input: { core?: boolean; apply?: boolean } = {}) {
+  return request<{ dryRun: boolean; recordType: string; targetVersion: number; records?: Array<{ id: string; before: Record<string, unknown>; after: Record<string, unknown> }>; migrated?: number }>(`/metadata/schemas/${encodeURIComponent(id)}/${input.core ? "migrate-core" : "migrate"}`, {
+    method: "POST",
+    body: JSON.stringify({ apply: input.apply === true })
+  });
+}

@@ -142,6 +142,24 @@ metadataRouter.post("/metadata/schemas/:id/migrate", requireRole(ROLE_GROUPS.MAN
   return res.json({ dryRun: false, migrated: preview.length, targetVersion: target.version });
 });
 
+metadataRouter.post("/metadata/schemas/:id/migrate-core", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  const target = await prisma.metadataSchema.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, status: "PUBLISHED" } });
+  const definitions = {
+    lead: { model: prisma.lead, key: "customFields" },
+    booking: { model: prisma.booking, key: "metadata" },
+    payment: { model: prisma.payment, key: "metadata" }
+  };
+  const definition = definitions[target?.recordType];
+  if (!target || !definition) return res.status(400).json({ error: "Este esquema no corresponde a un modelo core migrable" });
+  const records = await definition.model.findMany({ where: { tenantId: req.tenantId, OR: [{ schemaVersion: null }, { schemaVersion: { lt: target.version } }] }, take: 1000 });
+  const migration = target.policies?.migration || {};
+  const preview = records.map((record) => ({ id: record.id, before: record[definition.key] || {}, after: migrateMetadataValue(record[definition.key], migration) }));
+  if (req.body?.apply !== true) return res.json({ dryRun: true, recordType: target.recordType, targetVersion: target.version, records: preview });
+  for (const item of preview) await definition.model.update({ where: { id: item.id }, data: { [definition.key]: item.after, schemaVersion: target.version } });
+  await recordAuditLog(req, "METADATA_CORE_SCHEMA_MIGRATED", "metadata_schema", target.id, { recordType: target.recordType, migrated: preview.length, targetVersion: target.version });
+  return res.json({ dryRun: false, recordType: target.recordType, migrated: preview.length, targetVersion: target.version });
+});
+
 metadataRouter.post("/metadata/normalize", (req, res) => {
   res.json({
     metadata: normalizeMetadata(req.body?.metadata ?? req.body ?? {}, {}),
