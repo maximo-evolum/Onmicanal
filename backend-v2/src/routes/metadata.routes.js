@@ -10,6 +10,7 @@ import { METADATA_GOVERNANCE_CATALOG } from "../lib/metadata-governance.js";
 import { anonymizeExpiredSensitiveFields, retentionDueFields } from "../lib/metadata-retention.js";
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/db.js";
+import { migrateMetadataValue } from "../lib/metadata-migration.js";
 
 export const metadataRouter = Router();
 
@@ -127,6 +128,18 @@ metadataRouter.post("/metadata/schemas/:id/publish", requireRole(ROLE_GROUPS.MAN
     console.error("Publish metadata schema error:", error);
     return res.status(500).json({ error: "No se pudo publicar el esquema de metadata" });
   }
+});
+
+metadataRouter.post("/metadata/schemas/:id/migrate", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  const target = await prisma.metadataSchema.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, status: "PUBLISHED" } });
+  if (!target) return res.status(404).json({ error: "Esquema publicado no encontrado" });
+  const migration = target.policies?.migration || {};
+  const records = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: target.recordType, OR: [{ schemaVersion: null }, { schemaVersion: { lt: target.version } }] }, take: 1000 });
+  const preview = records.map((record) => ({ id: record.id, before: record.data, after: migrateMetadataValue(record.data, migration) }));
+  if (req.body?.apply !== true) return res.json({ dryRun: true, targetVersion: target.version, records: preview });
+  for (const item of preview) await prisma.industryRecord.update({ where: { id: item.id }, data: { data: item.after, schemaVersion: target.version } });
+  await recordAuditLog(req, "METADATA_SCHEMA_MIGRATED", "metadata_schema", target.id, { migrated: preview.length, targetVersion: target.version });
+  return res.json({ dryRun: false, migrated: preview.length, targetVersion: target.version });
 });
 
 metadataRouter.post("/metadata/normalize", (req, res) => {

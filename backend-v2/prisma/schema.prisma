@@ -270,8 +270,9 @@ model IndustryRecord {
   recordType    String
   title         String
   status        String   @default("ACTIVE")
-  assignedToId  String?
-  data          Json?
+    assignedToId  String?
+    data          Json?
+    schemaVersion Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -305,7 +305,8 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
         title,
         status: cleanText(req.body?.status, "ACTIVE").toUpperCase(),
         assignedToId,
-        data: normalizedData
+        data: normalizedData,
+        schemaVersion: evaluation.schemaVersion
       },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
@@ -344,6 +345,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });
     }
     if (req.body?.data !== undefined) data.data = nextMetadata;
+    if (evaluation.schemaVersion) data.schemaVersion = evaluation.schemaVersion;
 
     const record = await prisma.industryRecord.update({
       where: { id: existing.id },
@@ -376,7 +378,7 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
     }
     const record = await prisma.industryRecord.update({
       where: { id: existing.id },
-      data: { data: nextMetadata },
+      data: { data: nextMetadata, ...(evaluation.schemaVersion ? { schemaVersion: evaluation.schemaVersion } : {}) },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_METADATA_UPDATED", existing.recordType, record.id, { recordType: existing.recordType });
