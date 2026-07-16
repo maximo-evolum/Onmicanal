@@ -434,6 +434,23 @@ a {
 
 .crm-main.nav-collapsed .crm-main-workspace {
   grid-column: 1;
+  /* Reserva una franja para el botón EV sin superponerlo al encabezado. */
+  padding-left: calc(var(--ev-rail-width) + 18px);
+}
+
+.metadata-settings-main {
+  min-width: 0;
+  min-height: 100vh;
+  padding: 22px;
+}
+
+@media (max-width: 700px) {
+  .crm-main.nav-collapsed .crm-main-workspace {
+    padding-left: calc(var(--ev-rail-width) + 8px);
+    padding-right: 14px;
+  }
+
+  .metadata-settings-main { padding: 14px; }
 }
 
 .crm-main-module-count {

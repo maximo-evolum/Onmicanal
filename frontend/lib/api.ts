@@ -679,6 +679,7 @@ export async function previewAutonomousFollowUps(): Promise<{ count: number; act
 
 export type TenantModulesResponse = {
   tenantId: string;
+  role?: string | null;
   plan: string;
   modules: string[];
   subscription?: unknown;

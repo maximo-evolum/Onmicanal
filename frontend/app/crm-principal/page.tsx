@@ -21,7 +21,7 @@ import {
 } from "@/lib/api";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, mergeStoredSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
 
@@ -374,9 +374,11 @@ export default function CrmPrincipalPage() {
     ]);
 
     const notifications = await getNotifications({ limit: 6 }).catch(() => ({ notifications: [] }));
+    const resolvedSession = me.status === "fulfilled" ? me.value.user : session;
+    if (me.status === "fulfilled") mergeStoredSession(me.value.user);
 
     setState({
-      session,
+      session: resolvedSession,
       conversations: conversations.status === "fulfilled" ? conversations.value : [],
       leadMetrics: leadMetrics.status === "fulfilled" ? leadMetrics.value : null,
       crm: crm.status === "fulfilled" ? crm.value : null,

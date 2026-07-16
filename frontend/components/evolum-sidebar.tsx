@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { getMyModules } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
@@ -53,6 +54,8 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     let mounted = true;
@@ -61,7 +64,10 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     setJobTitle(session?.jobTitle || null);
     getMyModules()
       .then((data) => {
-        if (mounted) setEnabledModules(data.modules || []);
+        if (mounted) {
+          setEnabledModules(data.modules || []);
+          setRole(data.role || session?.role || null);
+        }
       })
       .catch(() => {
         // No ocultar modulos por una falla momentanea de red; cada ruta sigue
@@ -75,12 +81,30 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   }, []);
 
   const items = useMemo(() => {
-    const allItems = isDeveloper ? [...baseItems, ...developerItems] : baseItems;
+    const showDeveloperItems = isDeveloper || String(role || "").toUpperCase() === "SUPER_ADMIN";
+    const allItems = showDeveloperItems ? [...baseItems, ...developerItems] : baseItems;
     if (enabledModules === null) return allItems;
     return allItems.filter(([, , , , moduleKey]) =>
-      moduleAllowed(moduleKey, enabledModules, isDeveloper ? "SUPER_ADMIN" : role, jobTitle),
+      moduleAllowed(moduleKey, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle),
     );
   }, [enabledModules, isDeveloper, jobTitle, role]);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || typeof window === "undefined") return;
+    const saved = Number(window.sessionStorage.getItem("evolum-sidebar-scroll") || "0");
+    if (Number.isFinite(saved) && saved > 0) nav.scrollTop = saved;
+    const frame = window.requestAnimationFrame(() => {
+      nav.querySelector<HTMLElement>("[data-evolum-active='true']")?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pathname, items]);
+
+  function saveMenuPosition() {
+    if (typeof window !== "undefined" && navRef.current) {
+      window.sessionStorage.setItem("evolum-sidebar-scroll", String(navRef.current.scrollTop));
+    }
+  }
 
   if (!isOpen) {
     return (
@@ -102,16 +126,19 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
         </button>
       </div>
 
-      <nav className="inbox-unified-nav-list">
-        {items.map(([label, href, description, icon]) => (
-          <Link className={label === active ? "active" : ""} href={href} key={label} title={label}>
+      <nav className="inbox-unified-nav-list" ref={navRef} onScroll={saveMenuPosition}>
+        {items.map(([label, href, description, icon]) => {
+          const selected = pathname === href || pathname.startsWith(`${href}/`) || label === active;
+          return (
+          <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
             <span>{icon}</span>
             <div>
               <strong>{label}</strong>
               <small>{description}</small>
             </div>
           </Link>
-        ))}
+          );
+        })}
       </nav>
 
       <div className="inbox-nav-footer">

@@ -103,6 +103,13 @@ export function requireModule(module) {
         return next();
       }
 
+      // OWNER y ADMIN administran la operación completa de su tenant. La
+      // selección de módulos limita las cuentas operativas, no a quienes
+      // deben configurar y supervisar todas las verticales.
+      if (["OWNER", "ADMIN"].includes(role)) {
+        return next();
+      }
+
       // Reportes ejecutivos es parte del Core EVOLUM y no depende de que una
       // cuenta antigua tenga sincronizada la fila tenant_module correspondiente.
       if (module === "reports") {

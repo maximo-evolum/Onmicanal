@@ -108,6 +108,7 @@ function isTenantManager(role?: string | null) {
 
 export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null, jobTitle?: string | null) {
   if (isDeveloperRole(role)) return true;
+  if (isTenantManager(role)) return true;
   if (moduleKey === "integrations" && isTenantManager(role)) return true;
   if (alwaysAllowed.has(moduleKey)) return true;
   const isBroker = String(role || "").toUpperCase() === "SELLER" && /corredor/i.test(String(jobTitle || ""));
@@ -119,6 +120,7 @@ export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], rol
 export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const session = getStoredSession();
   const [modules, setModules] = useState<string[] | null>(null);
+  const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(session?.role || null);
   const [loading, setLoading] = useState(Boolean(moduleKey));
   const [error, setError] = useState<string | null>(null);
 
@@ -131,6 +133,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
       .then((data) => {
         if (!active) return;
         setModules(data.modules || []);
+        setAuthoritativeRole(data.role || session?.role || null);
         setError(null);
       })
       .catch((err) => {
@@ -152,8 +155,8 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const allowed = useMemo(() => {
     if (!moduleKey) return true;
     if (loading || modules === null) return true;
-    return moduleAllowed(moduleKey, modules, session?.role, session?.jobTitle);
-  }, [loading, moduleKey, modules, session?.role, session?.jobTitle]);
+    return moduleAllowed(moduleKey, modules, authoritativeRole, session?.jobTitle);
+  }, [authoritativeRole, loading, moduleKey, modules, session?.jobTitle]);
 
-  return { allowed, loading, error, modules: modules || [], role: session?.role };
+  return { allowed, loading, error, modules: modules || [], role: authoritativeRole };
 }

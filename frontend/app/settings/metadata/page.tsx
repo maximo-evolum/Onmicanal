@@ -66,9 +66,9 @@ export default function MetadataSettingsPage() {
     finally { setSaving(false); }
   }
 
-  return <div className="inbox-page-shell">
+  return <div className={`module-with-menu-shell metadata-settings-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
     <EvolumSidebar active="Esquemas de datos" isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
-    <main className="inbox-main">
+    <main className="main dashboard-page metadata-settings-main">
       <header className="inbox-topbar"><div><span className="eyebrow">METADATOS V1</span><h1>Esquemas de datos</h1><p>Publica reglas por entidad sin interrumpir la operación actual.</p></div><AccountPill /></header>
       {status && <p className="module-note">{status}</p>}
       <section className="vertical-card">
