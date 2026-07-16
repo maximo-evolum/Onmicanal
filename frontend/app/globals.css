@@ -11981,6 +11981,86 @@ textarea:focus {
 .connection-oauth-discovery strong { color: var(--text-strong); }
 .connection-oauth-discovery small { color: var(--text-muted); line-height: 1.4; }
 
+.connection-account-context {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.connection-account-context article {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--theme-border) 78%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-surface) 84%, transparent);
+}
+
+.connection-account-context article.connected {
+  border-color: color-mix(in srgb, var(--theme-primary-2) 44%, transparent);
+  background: color-mix(in srgb, var(--theme-primary) 10%, var(--theme-surface));
+}
+
+.connection-account-context article span,
+.connection-oauth-action strong {
+  color: var(--theme-primary-2);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.connection-account-context article strong { overflow-wrap: anywhere; }
+.connection-account-context article small { color: var(--text-muted); line-height: 1.35; }
+
+.connection-account-context > b {
+  align-self: center;
+  color: var(--theme-primary-2);
+  font-size: 19px;
+  text-align: center;
+}
+
+.connection-oauth-action {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 44%, transparent);
+  border-radius: 18px;
+  background: radial-gradient(circle at 0 0, color-mix(in srgb, var(--theme-primary) 20%, transparent), transparent 52%), color-mix(in srgb, var(--theme-surface) 92%, transparent);
+}
+
+.connection-oauth-action p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.connection-oauth-action button {
+  justify-self: start;
+  min-height: 42px;
+  padding: 10px 16px;
+}
+
+.connection-advanced-fields {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px dashed color-mix(in srgb, var(--theme-border) 78%, transparent);
+  border-radius: 14px;
+}
+
+.connection-advanced-fields summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.connection-advanced-fields .connection-form-grid { margin-top: 14px; }
+.connection-advanced-fields > button { margin-top: 12px; }
+
 .connection-next-step {
   display: grid;
   gap: 6px;
@@ -12404,6 +12484,14 @@ textarea:focus {
     display: grid;
     gap: 8px;
   }
+}
+
+@media (max-width: 560px) {
+  .connection-account-context {
+    grid-template-columns: 1fr;
+  }
+  .connection-account-context > b { transform: rotate(90deg); }
+  .connection-oauth-action button { width: 100%; }
 }
 
 @media (max-width: 640px) {

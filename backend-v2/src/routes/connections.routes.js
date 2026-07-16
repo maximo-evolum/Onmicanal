@@ -305,6 +305,9 @@ function buildOAuthUrl(req, provider) {
   const state = encodeOAuthState({
     tenantId: req.tenantId,
     key: provider.key,
+    // Identifica a quien inició la gestión dentro de EVOLUM, sin vincular la
+    // integración a su cuenta personal del proveedor externo.
+    initiatedByUserId: req.user?.id || null,
     ts: Date.now()
   });
 
@@ -367,10 +370,11 @@ function decodeOAuthState(value) {
     const parsed = JSON.parse(decoded);
     const tenantId = cleanText(parsed.tenantId);
     const key = cleanText(parsed.key).toLowerCase();
+    const initiatedByUserId = cleanText(parsed.initiatedByUserId, null);
     const ts = Number(parsed.ts || 0);
     if (!tenantId || !key || !ts) return null;
     if (Date.now() - ts > 15 * 60 * 1000) return null;
-    return { tenantId, key, ts };
+    return { tenantId, key, initiatedByUserId, ts };
   } catch {
     return null;
   }
@@ -693,6 +697,7 @@ function oauthCallbackHandler(expectedProvider) {
         refreshToken: undefined,
         oauthExpiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null,
         oauthConnectedAt: new Date().toISOString(),
+        oauthInitiatedByUserId: state.initiatedByUserId || null,
         lastTestStatus: discovery.discoveryError ? "ERROR" : "OK",
         lastTestMessage: discovery.discoveryError ? "OAuth conectado; falta revisar la cuenta autorizada" : "OAuth conectado y cuenta detectada",
         oauthDiscovery: compactDiscovery(discovery.discovery || discovery)

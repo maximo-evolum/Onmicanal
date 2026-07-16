@@ -55,8 +55,8 @@ function providerProgress(provider: ConnectionProvider) {
 }
 
 function providerActionLabel(provider: ConnectionProvider) {
-  if (provider.status === "CONNECTED") return "Operativo";
-  if (provider.oauthProvider) return "Conectar OAuth";
+  if (provider.status === "CONNECTED") return provider.oauthProvider ? "Cuenta vinculada" : "Operativo";
+  if (provider.oauthProvider) return "Vincular cuenta";
   if (provider.missing.length) return "Completar datos";
   return "Validar conexion";
 }
@@ -70,8 +70,8 @@ function providerNextStep(provider: ConnectionProvider) {
   }
   if (provider.oauthProvider) {
     return {
-      title: "Autorizar cuenta",
-      description: "Abre OAuth y confirma permisos para correo, archivos, calendario o pagos.",
+      title: "Vincula una cuenta externa",
+      description: "La cuenta de este proveedor puede ser distinta a la usada para entrar a EVOLUM. No se guardan contraseñas.",
     };
   }
   if (provider.missing.length) {
@@ -281,8 +281,8 @@ export default function ConnectionsPage() {
                 </article>
                 <article>
                   <b>2</b>
-                  <strong>Autoriza o configura</strong>
-                  <span>OAuth cuando exista, credenciales por tenant cuando aplique.</span>
+                  <strong>Vincula una cuenta externa</strong>
+                  <span>La cuenta de Gmail, Meta, Microsoft o pagos puede ser distinta a tu acceso EVOLUM.</span>
                 </article>
                 <article>
                   <b>3</b>
@@ -378,11 +378,27 @@ export default function ConnectionsPage() {
                         {selected.missing.length ? <small>Falta: {selected.missing.join(", ")}</small> : <small>Configuracion completa</small>}
                       </div>
 
-                      {discoverySummary(selected) ? (
+                      {selected.oauthProvider ? (
+                        <section className="connection-account-context" aria-label="Cuentas involucradas en la vinculación">
+                          <article>
+                            <span>Cuenta que administra EVOLUM</span>
+                            <strong>{agent?.email || agent?.name || "Sesión EVOLUM"}</strong>
+                            <small>Solo gestiona esta conexión dentro del CRM.</small>
+                          </article>
+                          <b aria-hidden="true">→</b>
+                          <article className={discoverySummary(selected) ? "connected" : ""}>
+                            <span>Cuenta externa vinculada</span>
+                            <strong>{discoverySummary(selected) || `Pendiente: ${selected.label}`}</strong>
+                            <small>{discoverySummary(selected) ? "Autorizada por el cliente para esta empresa." : "El cliente la seleccionará en la pantalla oficial del proveedor."}</small>
+                          </article>
+                        </section>
+                      ) : null}
+
+                      {selected.oauthProvider && discoverySummary(selected) ? (
                         <div className="connection-oauth-discovery">
                           <span>Cuenta detectada por OAuth</span>
                           <strong>{discoverySummary(selected)}</strong>
-                          <small>Los identificadores necesarios se completaron automaticamente cuando el proveedor los expuso.</small>
+                          <small>Los identificadores disponibles fueron completados automáticamente por el proveedor.</small>
                         </div>
                       ) : null}
 
@@ -401,61 +417,95 @@ export default function ConnectionsPage() {
                         {providerCapabilities(selected).map((item) => <span key={item}>{item}</span>)}
                       </div>
 
-                      <div className="connection-form-grid">
-                        <label>
-                          Nombre visible
-                          <input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
-                        </label>
-                        <label>
-                          ID externo / cuenta
-                          <input value={form.externalAccountId} onChange={(event) => setForm((current) => ({ ...current, externalAccountId: event.target.value }))} />
-                        </label>
-                        <label>
-                          Business account ID
-                          <input value={form.businessAccountId} onChange={(event) => setForm((current) => ({ ...current, businessAccountId: event.target.value }))} />
-                        </label>
-                        <label>
-                          Phone number ID
-                          <input value={form.phoneNumberId} onChange={(event) => setForm((current) => ({ ...current, phoneNumberId: event.target.value }))} />
-                        </label>
-                        <label>
-                          Access token / API key
-                          <input
-                            type="password"
-                            value={form.accessToken}
-                            placeholder={selected.config?.hasAccessToken ? "Token guardado. Escribe uno nuevo para reemplazar." : ""}
-                            onChange={(event) => setForm((current) => ({ ...current, accessToken: event.target.value }))}
-                          />
-                        </label>
-                        <label>
-                          Verify token / secreto
-                          <input
-                            type="password"
-                            value={form.verifyToken}
-                            placeholder={selected.config?.hasVerifyToken ? "Secreto guardado. Escribe uno nuevo para reemplazar." : ""}
-                            onChange={(event) => setForm((current) => ({ ...current, verifyToken: event.target.value }))}
-                          />
-                        </label>
-                      </div>
+                      {selected.oauthProvider ? (
+                        <>
+                          <div className="connection-oauth-action">
+                            <strong>{selected.status === "CONNECTED" ? "¿Necesitas cambiar la cuenta externa?" : "Vincula la cuenta que el cliente quiere usar"}</strong>
+                            <p>Se abrirá la pantalla oficial de {selected.label}. El cliente puede iniciar sesión con una cuenta diferente a su usuario EVOLUM.</p>
+                            <button className="primary" type="button" onClick={() => openOAuth(selected)}>
+                              {selected.status === "CONNECTED" ? `Cambiar cuenta de ${selected.label}` : `Vincular con ${selected.label}`}
+                            </button>
+                          </div>
 
-                      <label className="connection-metadata-field">
-                        Metadatos JSON
-                        <textarea value={form.metadata} onChange={(event) => setForm((current) => ({ ...current, metadata: event.target.value }))} />
-                      </label>
+                          <details className="connection-advanced-fields">
+                            <summary>Datos complementarios (solo si el proveedor no los detectó)</summary>
+                            <div className="connection-form-grid">
+                              <label>
+                                Nombre visible
+                                <input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
+                              </label>
+                              <label>
+                                ID externo / cuenta
+                                <input value={form.externalAccountId} onChange={(event) => setForm((current) => ({ ...current, externalAccountId: event.target.value }))} />
+                              </label>
+                              <label>
+                                Business account ID
+                                <input value={form.businessAccountId} onChange={(event) => setForm((current) => ({ ...current, businessAccountId: event.target.value }))} />
+                              </label>
+                              <label>
+                                Phone number ID
+                                <input value={form.phoneNumberId} onChange={(event) => setForm((current) => ({ ...current, phoneNumberId: event.target.value }))} />
+                              </label>
+                            </div>
+                            <button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar datos complementarios"}</button>
+                          </details>
 
-                      <div className="connection-callbacks">
-                        <span>Callbacks</span>
-                        {Object.entries(data?.callbacks || {}).map(([key, value]) => (
-                          value ? <code key={key}>{key}: {value}</code> : null
-                        ))}
-                      </div>
+                          <div className="connection-actions">
+                            <button type="button" onClick={() => runTest(selected)}>Probar conexión</button>
+                            {selected.status === "CONNECTED" ? <button className="danger" type="button" onClick={() => disconnect(selected)}>Desvincular cuenta</button> : null}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="connection-form-grid">
+                            <label>
+                              Nombre visible
+                              <input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
+                            </label>
+                            <label>
+                              ID externo / cuenta
+                              <input value={form.externalAccountId} onChange={(event) => setForm((current) => ({ ...current, externalAccountId: event.target.value }))} />
+                            </label>
+                            <label>
+                              Business account ID
+                              <input value={form.businessAccountId} onChange={(event) => setForm((current) => ({ ...current, businessAccountId: event.target.value }))} />
+                            </label>
+                            <label>
+                              Phone number ID
+                              <input value={form.phoneNumberId} onChange={(event) => setForm((current) => ({ ...current, phoneNumberId: event.target.value }))} />
+                            </label>
+                            <label>
+                              Access token / API key
+                              <input type="password" value={form.accessToken} placeholder={selected.config?.hasAccessToken ? "Token guardado. Escribe uno nuevo para reemplazar." : ""} onChange={(event) => setForm((current) => ({ ...current, accessToken: event.target.value }))} />
+                            </label>
+                            <label>
+                              Verify token / secreto
+                              <input type="password" value={form.verifyToken} placeholder={selected.config?.hasVerifyToken ? "Secreto guardado. Escribe uno nuevo para reemplazar." : ""} onChange={(event) => setForm((current) => ({ ...current, verifyToken: event.target.value }))} />
+                            </label>
+                          </div>
 
-                      <div className="connection-actions">
-                        <button className="primary" type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar conexion"}</button>
-                        {selected.oauthProvider && <button type="button" onClick={() => openOAuth(selected)}>Conectar OAuth</button>}
-                        <button type="button" onClick={() => runTest(selected)}>Probar</button>
-                        <button className="danger" type="button" onClick={() => disconnect(selected)}>Desconectar</button>
-                      </div>
+                          <label className="connection-metadata-field">
+                            Metadatos JSON
+                            <textarea value={form.metadata} onChange={(event) => setForm((current) => ({ ...current, metadata: event.target.value }))} />
+                          </label>
+
+                          <div className="connection-actions">
+                            <button className="primary" type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar conexión"}</button>
+                            <button type="button" onClick={() => runTest(selected)}>Probar</button>
+                            <button className="danger" type="button" onClick={() => disconnect(selected)}>Desconectar</button>
+                          </div>
+                        </>
+                      )}
+
+                      <details className="connection-advanced-fields">
+                        <summary>Información técnica para integradores</summary>
+                        <div className="connection-callbacks">
+                          <span>Callbacks OAuth y webhook</span>
+                          {Object.entries(data?.callbacks || {}).map(([key, value]) => (
+                            value ? <code key={key}>{key}: {value}</code> : null
+                          ))}
+                        </div>
+                      </details>
                     </form>
                   ) : (
                     <p>Selecciona una conexion.</p>
