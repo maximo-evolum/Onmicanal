@@ -7,6 +7,8 @@ import { ensureTenantModuleEligibility } from "../services/tenant-modules.servic
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { mergeMetadata, normalizeMetadata } from "../lib/metadata.js";
 import { recordAuditLog } from "../lib/audit.js";
+import { getPublishedMetadataSchema } from "../services/metadata-schemas.service.js";
+import { evaluateMetadataSchema } from "../lib/metadata-enforcement.js";
 
 export const industryRecordsRouter = Router();
 
@@ -51,6 +53,22 @@ async function assertRecordModule(req, recordType) {
   const module = RECORD_MODULES[recordType];
   if (!module) return true;
   return ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant });
+}
+
+async function evaluateRecordMetadata(tenantId, recordType, data) {
+  const schema = await getPublishedMetadataSchema(tenantId, recordType);
+  return evaluateMetadataSchema({ data, schema });
+}
+
+function metadataValidationResponse(evaluation) {
+  if (!evaluation.result) return null;
+  return {
+    schemaVersion: evaluation.schemaVersion,
+    mode: evaluation.mode,
+    ok: evaluation.result.ok,
+    errors: evaluation.result.errors,
+    unknownFields: evaluation.result.unknownFields
+  };
 }
 
 function tenantRecordWhere(req, extra = {}) {
@@ -252,6 +270,12 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
       if (!user) return res.status(400).json({ error: "Usuario asignado no pertenece a este cliente" });
     }
 
+    const normalizedData = normalizeMetadata(req.body?.data, {});
+    const evaluation = await evaluateRecordMetadata(req.tenantId, recordType, normalizedData);
+    if (evaluation.blocking) {
+      return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });
+    }
+
     const record = await prisma.industryRecord.create({
       data: {
         tenantId: req.tenantId,
@@ -259,12 +283,12 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
         title,
         status: cleanText(req.body?.status, "ACTIVE").toUpperCase(),
         assignedToId,
-        data: normalizeMetadata(req.body?.data, {})
+        data: normalizedData
       },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_CREATED", recordType, record.id, { recordType, status: record.status });
-    res.status(201).json(record);
+    res.status(201).json({ ...record, metadataValidation: metadataValidationResponse(evaluation) });
   } catch (error) {
     console.error("Create industry record error:", error);
     res.status(500).json({ error: "No se pudo crear el registro del rubro" });
@@ -292,7 +316,12 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       }
       data.assignedToId = assignedToId;
     }
-    if (req.body?.data !== undefined) data.data = normalizeMetadata(req.body.data, {});
+    const nextMetadata = req.body?.data !== undefined ? normalizeMetadata(req.body.data, {}) : existing.data;
+    const evaluation = await evaluateRecordMetadata(req.tenantId, existing.recordType, nextMetadata);
+    if (evaluation.blocking) {
+      return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });
+    }
+    if (req.body?.data !== undefined) data.data = nextMetadata;
 
     const record = await prisma.industryRecord.update({
       where: { id: existing.id },
@@ -300,7 +329,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_UPDATED", existing.recordType, record.id, { recordType: existing.recordType, status: record.status });
-    res.json(record);
+    res.json({ ...record, metadataValidation: metadataValidationResponse(evaluation) });
   } catch (error) {
     console.error("Update industry record error:", error);
     res.status(500).json({ error: "No se pudo actualizar el registro" });
@@ -318,13 +347,18 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
     }
 
     const patch = normalizeMetadata(req.body?.metadata ?? req.body?.data, {});
+    const nextMetadata = mergeMetadata(existing.data, patch);
+    const evaluation = await evaluateRecordMetadata(req.tenantId, existing.recordType, nextMetadata);
+    if (evaluation.blocking) {
+      return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });
+    }
     const record = await prisma.industryRecord.update({
       where: { id: existing.id },
-      data: { data: mergeMetadata(existing.data, patch) },
+      data: { data: nextMetadata },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_METADATA_UPDATED", existing.recordType, record.id, { recordType: existing.recordType });
-    res.json(record);
+    res.json({ ...record, metadataValidation: metadataValidationResponse(evaluation) });
   } catch (error) {
     console.error("Update industry metadata error:", error);
     res.status(500).json({ error: "No se pudieron actualizar los metadatos" });
