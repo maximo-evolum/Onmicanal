@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleGate } from "@/components/module-gate";
 import { createMetadataSchema, getMetadataSchemas, migrateMetadataSchema, publishMetadataSchema, type MetadataSchema } from "@/lib/api";
 
 type FieldType = "string" | "number" | "date" | "boolean" | "array" | "relation";
@@ -223,6 +224,7 @@ export default function MetadataSettingsPage() {
   }
 
   return (
+    <ModuleGate moduleKey="metadata">
     <div className={`module-with-menu-shell metadata-settings-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar active="Esquemas de datos" isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
       <main className="main dashboard-page metadata-settings-main">
@@ -290,7 +292,7 @@ export default function MetadataSettingsPage() {
           <div className="vertical-list metadata-schema-list">
             {schemas.length ? schemas.map((schema) => (
               <article key={schema.id}>
-                <div><strong>{schema.label}</strong><p>{Object.keys(schema.fields || {}).length} datos · versión {schema.version}</p><small>{schema.status === "PUBLISHED" ? "Activa" : schema.status === "DRAFT" ? "Borrador: aún no afecta al equipo" : "Versión anterior"} · {schema.policies?.enforcement === "STRICT" ? "campos nuevos bloqueados" : "modo flexible"}</small></div>
+                <div><strong>{schema.label}</strong><p>{Object.keys(schema.fields || {}).length} datos · versión {schema.version}</p><small>{schema.status === "PUBLISHED" ? "Activa" : schema.status === "DRAFT" ? "Borrador: aún no afecta al equipo" : "Versión anterior"} · {schema.policies?.generatedBy === "industry_template" ? "creada automáticamente desde tu rubro" : schema.policies?.enforcement === "STRICT" ? "campos nuevos bloqueados" : "modo flexible"}</small></div>
                 <div className="metadata-schema-actions">{schema.status === "DRAFT" ? <button className="primary-btn" disabled={saving} onClick={() => void publish(schema.id)}>Activar ficha</button> : schema.status === "PUBLISHED" ? <button className="secondary-btn" disabled={saving} onClick={() => void migrate(schema)}>Actualizar registros antiguos</button> : null}</div>
               </article>
             )) : <p className="muted-copy">Todavía no hay fichas personalizadas. Puedes comenzar con una plantilla arriba.</p>}
@@ -298,5 +300,6 @@ export default function MetadataSettingsPage() {
         </section>
       </main>
     </div>
+    </ModuleGate>
   );
 }

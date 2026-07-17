@@ -79,7 +79,6 @@ const navItems: NavItem[] = [
   { label: "Configuracion de Agente", href: "/onboarding", description: "Perfil, documentos, FAQs y reglas IA", moduleKey: "onboarding" },
   { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites", moduleKey: "saas" },
   { label: "Dashboard", href: "/dashboard", description: "Metricas operativas", moduleKey: "dashboard" },
-  { label: "Reportes", href: "/reports", description: "Reporte ejecutivo general y por rubro", moduleKey: "reports" },
   { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA", moduleKey: "ai_ops" },
   { label: "Propiedades", href: "/properties", description: "Ficha inmobiliaria, vendedores y pipeline por propiedad", moduleKey: "properties" },
   { label: "Clientes / Pacientes", href: "/customers", description: "Fichas por rubro, historial y proxima accion", moduleKey: "customers" },

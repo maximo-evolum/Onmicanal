@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
-import { getCrmOperationalDashboard, getLeadMetrics, type CrmOperationalDashboard } from "@/lib/api";
+import { downloadExecutiveReport, getCrmOperationalDashboard, getLeadMetrics, type CrmOperationalDashboard } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import type { LeadMetrics } from "@/lib/types";
 
@@ -39,6 +39,7 @@ export default function DashboardPage() {
   const [crm, setCrm] = useState<CrmOperationalDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   async function load() {
     try {
@@ -59,6 +60,26 @@ export default function DashboardPage() {
     const interval = window.setInterval(load, 15000);
     return () => window.clearInterval(interval);
   }, []);
+
+  async function downloadPdf() {
+    try {
+      setDownloading(true);
+      setError(null);
+      const blob = await downloadExecutiveReport();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `evolum-reporte-ejecutivo-${new Date().toISOString().slice(0, 10)}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo generar el reporte ejecutivo");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const dashboardStats = [
     { label: "Leads captados", value: crm?.kpis.leads || metrics?.total || 0, delta: `${crm?.kpis.hotLeads || 0} calientes`, tone: "purple", icon: "LC" },
@@ -98,6 +119,9 @@ export default function DashboardPage() {
             <p>Bienvenido, {agent?.name || "Usuario"}. Resumen operativo en tiempo real.</p>
           </div>
           <div className="executive-top-actions">
+            <button className="primary-btn" type="button" onClick={downloadPdf} disabled={!crm || downloading}>
+              {downloading ? "Generando PDF..." : "Descargar reporte ejecutivo PDF"}
+            </button>
             <AccountPill fallbackName={agent?.name || "Usuario"} />
           </div>
         </header>

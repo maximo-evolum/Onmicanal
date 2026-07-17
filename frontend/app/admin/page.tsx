@@ -45,7 +45,6 @@ const MODULE_LABELS: Record<string, string> = {
   pipeline: "Pipeline",
   campaigns: "Campañas",
   dashboard: "Dashboard",
-  reports: "Reportes ejecutivos",
   ai_ops: "AI Ops / Cierres IA",
   onboarding: "Configuración de Agente",
   saas: "Planes y módulos",
@@ -104,7 +103,6 @@ const PROJECT_MODULE_CATALOG = [
   "saas",
   "users",
   "dashboard",
-  "reports",
   "ai_ops",
   "integrations",
   "gmail",
@@ -138,7 +136,7 @@ const MODULE_GROUPS = [
   {
     title: "Core EVOLUM",
     description: "Capacidades base de EVOLUM presentes en toda operación.",
-    modules: ["inbox", "reports", "ai_ops", "onboarding", "documents", "workflows"],
+    modules: ["inbox", "ai_ops", "onboarding", "documents", "workflows"],
   },
   {
     title: "Operación CRM",

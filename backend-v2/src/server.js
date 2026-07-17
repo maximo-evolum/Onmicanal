@@ -197,8 +197,9 @@ app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), servicesRouter
 app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), bookingsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.SALES), paymentsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), dashboardRouter);
-// Reportes es independiente de Dashboard/Analytics.
-app.use("/api", ...protectedApi, requireModule(MODULES.REPORTS), reportsRouter);
+// El PDF ejecutivo forma parte del Dashboard: usa la misma autorización y no
+// existe como módulo independiente.
+app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), reportsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });

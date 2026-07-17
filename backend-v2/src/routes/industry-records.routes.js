@@ -7,7 +7,7 @@ import { ensureTenantModuleEligibility } from "../services/tenant-modules.servic
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { mergeMetadata, normalizeMetadata } from "../lib/metadata.js";
 import { recordAuditLog } from "../lib/audit.js";
-import { getPublishedMetadataSchema } from "../services/metadata-schemas.service.js";
+import { ensureAutomatedMetadataDraft, getPublishedMetadataSchema } from "../services/metadata-schemas.service.js";
 import { evaluateMetadataSchema } from "../lib/metadata-enforcement.js";
 import { redactMetadataForRole } from "../lib/metadata-access.js";
 
@@ -29,6 +29,7 @@ const RECORD_MODULES = Object.freeze({
   forecast: MODULES.AI_OPS,
   ai_interaction: MODULES.AI_OPS,
   customer: MODULES.CUSTOMERS,
+  exam: MODULES.EXAMS,
   revenue: MODULES.REVENUE,
   vehicle: MODULES.VEHICLES,
   part: MODULES.PARTS_INVENTORY,
@@ -293,6 +294,18 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
     }
 
     const normalizedData = normalizeMetadata(req.body?.data, {});
+    const automatedSchema = await ensureAutomatedMetadataDraft({
+      tenantId: req.tenantId,
+      industry: req.tenant?.industry,
+      recordType
+    });
+    if (automatedSchema) {
+      await recordAuditLog(req, "METADATA_SCHEMA_AUTO_DRAFT_CREATED", "metadata_schema", automatedSchema.id, {
+        recordType,
+        version: automatedSchema.version,
+        industry: req.tenant?.industry || "GENERAL"
+      });
+    }
     const evaluation = await evaluateRecordMetadata(req.tenantId, recordType, normalizedData);
     if (evaluation.blocking) {
       return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });
@@ -311,7 +324,11 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_CREATED", recordType, record.id, { recordType, status: record.status });
-    res.status(201).json({ ...(await redactRecordForViewer(req, record)), metadataValidation: metadataValidationResponse(evaluation) });
+    res.status(201).json({
+      ...(await redactRecordForViewer(req, record)),
+      metadataValidation: metadataValidationResponse(evaluation),
+      automatedSchema: automatedSchema ? { id: automatedSchema.id, label: automatedSchema.label, version: automatedSchema.version } : null
+    });
   } catch (error) {
     console.error("Create industry record error:", error);
     res.status(500).json({ error: "No se pudo crear el registro del rubro" });

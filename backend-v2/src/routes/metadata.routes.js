@@ -14,6 +14,10 @@ import { migrateMetadataValue } from "../lib/metadata-migration.js";
 
 export const metadataRouter = Router();
 
+// Metadatos define estructuras, retencion y reglas de validacion para toda
+// la cuenta. Solo perfiles administrativos pueden consultarlo o modificarlo.
+metadataRouter.use(requireRole(ROLE_GROUPS.MANAGERS));
+
 function cleanRecordType(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
 }

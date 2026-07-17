@@ -14,7 +14,6 @@ export type ModuleAccessKey =
   | "onboarding"
   | "saas"
   | "dashboard"
-  | "reports"
   | "ai_ops"
   | "admin"
   | "bot_lab"
@@ -26,6 +25,7 @@ export type ModuleAccessKey =
   | "brokers"
   | "customers"
   | "exams"
+  | "metadata"
   | "revenue"
   | "vehicles"
   | "parts_inventory"
@@ -52,7 +52,6 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   onboarding: ["onboarding", "knowledge", "configuracion_agente"],
   saas: ["saas", "plans", "planes", "users"],
   dashboard: ["dashboard", "analytics"],
-  reports: ["reports", "reportes", "informes", "analytics", "dashboard"],
   ai_ops: ["ai_ops", "ai-ops", "followups", "sales"],
   admin: ["admin", "developer", "desarrollador"],
   bot_lab: ["bot_lab", "bot-lab"],
@@ -64,6 +63,7 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   brokers: ["brokers", "corredores"],
   customers: ["customers", "clientes", "pacientes"],
   exams: ["exams", "examenes", "presupuestos", "examenes_y_presupuestos"],
+  metadata: ["metadata", "esquemas_de_datos"],
   revenue: ["revenue", "ganancias", "ingresos"],
   vehicles: ["vehicles", "vehiculos"],
   parts_inventory: ["parts_inventory", "repuestos", "inventario_repuestos"],
@@ -81,15 +81,14 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   security_replica: ["security_replica", "replica", "replica_seguridad", "drp"],
 };
 
-// CRM, administración de cuenta y Reportes son parte del Core EVOLUM.
-const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas", "reports"]);
+// CRM y administración de cuenta son parte del Core EVOLUM.
+const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas"]);
 
 const brokerModuleAllowlist = new Set<ModuleAccessKey>([
   "crm",
   "inbox",
   "agenda",
   "dashboard",
-  "reports",
   "pipeline",
   "ai_ops",
   "properties",
@@ -106,6 +105,7 @@ function isDeveloperRole(role?: string | null) {
 
 export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null, jobTitle?: string | null) {
   if (isDeveloperRole(role)) return true;
+  if (moduleKey === "metadata") return ["OWNER", "ADMIN"].includes(String(role || "").toUpperCase());
   if (alwaysAllowed.has(moduleKey)) return true;
   const isBroker = String(role || "").toUpperCase() === "SELLER" && /corredor/i.test(String(jobTitle || ""));
   if (isBroker && !brokerModuleAllowlist.has(moduleKey)) return false;

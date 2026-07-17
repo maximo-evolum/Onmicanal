@@ -41,9 +41,7 @@ export const PLAN_DEFINITIONS = Object.freeze({
     description: "Bot de atención e inbox para responder mensajes.",
     priceMonthly: 0,
     currency: "CLP",
-    // Reportes es una capacidad core: cada cuenta puede descargar su resumen
-    // ejecutivo aun con el plan de entrada.
-    modules: [MODULES.INBOX, MODULES.DOCUMENTS, MODULES.REPORTS],
+    modules: [MODULES.INBOX, MODULES.DOCUMENTS],
     limits: { messagesMonthly: 500, users: 2 }
   },
   PRO: {
@@ -52,7 +50,7 @@ export const PLAN_DEFINITIONS = Object.freeze({
     description: "Ventas, pipeline, scoring, follow-up y reservas.",
     priceMonthly: 49000,
     currency: "CLP",
-    modules: [MODULES.INBOX, MODULES.SALES, MODULES.BOOKINGS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.REPORTS, MODULES.AI_OPS, MODULES.DOCUMENTS, MODULES.WORKFLOWS],
+    modules: [MODULES.INBOX, MODULES.SALES, MODULES.BOOKINGS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.AI_OPS, MODULES.DOCUMENTS, MODULES.WORKFLOWS],
     limits: { messagesMonthly: 3000, users: 5 }
   },
   BUSINESS: {
@@ -61,7 +59,7 @@ export const PLAN_DEFINITIONS = Object.freeze({
     description: "Automatización completa con marketing, pagos y analítica.",
     priceMonthly: 99000,
     currency: "CLP",
-    modules: [MODULES.INBOX, MODULES.SALES, MODULES.MARKETING, MODULES.BOOKINGS, MODULES.PAYMENTS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.REPORTS, MODULES.AI_OPS, MODULES.DOCUMENTS, MODULES.WORKFLOWS, MODULES.INTEGRATIONS, MODULES.GMAIL, MODULES.EMAIL_IMAP, MODULES.GOOGLE_DRIVE],
+    modules: [MODULES.INBOX, MODULES.SALES, MODULES.MARKETING, MODULES.BOOKINGS, MODULES.PAYMENTS, MODULES.FOLLOWUPS, MODULES.ANALYTICS, MODULES.AI_OPS, MODULES.DOCUMENTS, MODULES.WORKFLOWS, MODULES.INTEGRATIONS, MODULES.GMAIL, MODULES.EMAIL_IMAP, MODULES.GOOGLE_DRIVE],
     limits: { messagesMonthly: 10000, users: 15 }
   },
   ENTERPRISE: {
@@ -70,9 +68,9 @@ export const PLAN_DEFINITIONS = Object.freeze({
     description: "Todo activado, límites personalizados y soporte avanzado.",
     priceMonthly: 0,
     currency: "CLP",
-    // Bot Lab es una herramienta interna de desarrollo, no una capacidad de
-    // clientes incluso en Enterprise. SUPER_ADMIN conserva acceso por rol.
-    modules: Object.values(MODULES).filter((module) => module !== MODULES.BOT_LAB),
+    // Bot Lab y Reportes no son módulos de cliente: Reportes se integró al
+    // Dashboard. SUPER_ADMIN conserva sus herramientas por rol.
+    modules: Object.values(MODULES).filter((module) => ![MODULES.BOT_LAB, MODULES.REPORTS].includes(module)),
     limits: { messagesMonthly: null, users: null }
   }
 });
