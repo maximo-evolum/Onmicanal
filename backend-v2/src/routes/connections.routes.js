@@ -55,6 +55,38 @@ const PROVIDERS = [
     scopes: ["business_management", "pages_show_list", "pages_read_engagement", "pages_manage_posts", "instagram_basic", "instagram_content_publish"]
   },
   {
+    key: "meta_business",
+    label: "Meta Business Suite",
+    group: "Canales Meta",
+    groupKey: "meta_channels",
+    icon: "MB",
+    type: "oauth",
+    oauthProvider: "meta",
+    module: MODULES.MARKETING,
+    description: "Administrador central de activos Meta: negocio, páginas, Instagram Business y permisos de equipos.",
+    oauthRequiredEnv: ["META_APP_ID", "META_APP_SECRET", "PUBLIC_BASE_URL"],
+    requiredFields: ["accessToken"],
+    scopes: ["business_management", "pages_show_list", "pages_read_engagement"]
+  },
+  {
+    key: "facebook_business",
+    // El canal histórico facebook sigue siendo el que consumen los flujos
+    // existentes; la nueva tarjeta lo expone como Facebook Business.
+    storageChannel: "facebook",
+    legacyChannels: ["facebook"],
+    label: "Facebook Business",
+    group: "Canales Meta",
+    groupKey: "meta_channels",
+    icon: "FB",
+    type: "oauth",
+    oauthProvider: "meta",
+    module: MODULES.MARKETING,
+    description: "Páginas de Facebook, publicaciones, interacción y administración comercial de la marca.",
+    oauthRequiredEnv: ["META_APP_ID", "META_APP_SECRET", "PUBLIC_BASE_URL"],
+    requiredFields: ["accessToken", "externalAccountId"],
+    scopes: ["pages_show_list", "pages_read_engagement", "pages_manage_posts"]
+  },
+  {
     key: "gmail",
     label: "Gmail / Google Workspace",
     group: "Correos y archivos",
@@ -235,6 +267,7 @@ function hasField(config, field) {
   if (field === "accessToken") return hasSecret(config?.accessToken);
   if (field === "verifyToken") return hasSecret(config?.verifyToken);
   if (field === "externalAccountId") return Boolean(config?.externalAccountId);
+  if (field === "phoneNumberId") return Boolean(config?.phoneNumberId);
   if (field === "businessAccountId") return Boolean(config?.businessAccountId);
   return Boolean(metadata[field]);
 }
@@ -248,7 +281,10 @@ function providerStatus(provider, config) {
   if (!config || !config.isActive) return "DISCONNECTED";
   const fieldMissing = missingFields(provider, config);
   const lastTestStatus = String(configMetadata(config).lastTestStatus || "").toUpperCase();
-  if (lastTestStatus === "ERROR") return "ERROR";
+  const lastTestMessage = String(configMetadata(config).lastTestMessage || "");
+  // Errores de validación previos no deben dejar bloqueada una conexión que
+  // ahora ya contiene todos sus identificadores operativos.
+  if (lastTestStatus === "ERROR" && !/^Faltan campos:/i.test(lastTestMessage)) return "ERROR";
   // Las variables OAuth se requieren para crear o renovar una autorización,
   // no para reconocer una conexión ya configurada con token válido.
   if (fieldMissing.length) return "PENDING";
@@ -616,6 +652,26 @@ async function discoverOAuthAccount(provider, accessToken) {
       };
     }
 
+    if (provider.key === "facebook_business") {
+      const selected = availableAccounts.find((item) => item.pageId) || null;
+      return {
+        label: cleanText(selected?.pageName, provider.label),
+        externalAccountId: selected?.pageId ? `meta-page:${selected.pageId}` : null,
+        discovery: { account: selected, availableAccounts }
+      };
+    }
+
+    if (provider.key === "meta_business") {
+      const selected = availableAccounts.find((item) => item.whatsapp?.id || item.instagram?.id) || availableAccounts[0] || null;
+      const businessId = selected?.whatsapp?.id || selected?.instagram?.id || selected?.pageId || null;
+      return {
+        label: cleanText(selected?.pageName || selected?.whatsapp?.name || selected?.instagram?.username, provider.label),
+        externalAccountId: businessId ? `meta-business:${businessId}` : null,
+        businessAccountId: businessId,
+        discovery: { account: selected, availableAccounts }
+      };
+    }
+
     const selected = availableAccounts.find((item) => item.instagram?.id) || availableAccounts[0] || null;
     const instagramId = selected?.instagram?.id || null;
     return {
@@ -682,6 +738,35 @@ async function testOAuthConnection(provider, config) {
   const refreshed = await refreshOAuthAccessToken(provider, config);
   const accessToken = decryptSecret(refreshed.accessToken);
   if (!accessToken) throw new Error("No hay access token OAuth para validar");
+
+  // El token de WhatsApp Business se valida contra el número registrado. No
+  // depende de una cuenta personal de Facebook ni de un ID externo ingresado
+  // manualmente en el Centro de Conexiones.
+  if (provider.key === "meta_whatsapp") {
+    const phoneNumberId = cleanText(refreshed.phoneNumberId);
+    if (!phoneNumberId) throw new Error("Falta phoneNumberId para validar WhatsApp Business");
+    const account = await providerRequest(
+      `https://graph.facebook.com/v23.0/${encodeURIComponent(phoneNumberId)}?fields=id,display_phone_number,verified_name`,
+      accessToken
+    );
+    return {
+      config: refreshed,
+      discovery: {
+        label: cleanText(account.verified_name || account.display_phone_number, provider.label),
+        externalAccountId: refreshed.externalAccountId || `meta-whatsapp:${phoneNumberId}`,
+        phoneNumberId,
+        businessAccountId: refreshed.businessAccountId || null,
+        discovery: {
+          account: {
+            id: cleanText(account.id || phoneNumberId),
+            displayPhoneNumber: cleanText(account.display_phone_number),
+            verifiedName: cleanText(account.verified_name)
+          }
+        }
+      }
+    };
+  }
+
   const discovery = await discoverOAuthAccount(provider, accessToken);
   return { config: refreshed, discovery };
 }
