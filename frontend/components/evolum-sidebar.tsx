@@ -24,7 +24,7 @@ type SidebarItem = readonly [
 
 const baseItems: SidebarItem[] = [
   ["Inicio", "/crm-principal", "Centro principal de EVOLUM", "IN", "crm"],
-  ["Inbox Omnicanal", "/inbox", "Conversaciones y atencion IA", "IO", "inbox"],
+  ["Chat's", "/inbox", "Conversaciones y atencion IA", "CH", "inbox"],
   ["Agenda", "/agenda", "Reservas, citas y disponibilidad", "AG", "agenda"],
   ["Pipeline", "/pipeline", "Leads, clientes y oportunidades", "PI", "pipeline"],
   ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA", "campaigns"],
@@ -83,10 +83,19 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   const items = useMemo(() => {
     const showDeveloperItems = isDeveloper || String(role || "").toUpperCase() === "SUPER_ADMIN";
     const allItems = showDeveloperItems ? [...baseItems, ...developerItems] : baseItems;
-    if (enabledModules === null) return allItems;
-    return allItems.filter(([, , , , moduleKey]) =>
+    const availableItems = enabledModules === null
+      ? allItems
+      : allItems.filter(([, , , , moduleKey]) =>
       moduleAllowed(moduleKey, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle),
     );
+
+    // Inicio siempre encabeza la navegacion; los modulos restantes se ordenan
+    // alfabeticamente para que el menu sea predecible con cualquier vertical.
+    return [...availableItems].sort(([leftLabel], [rightLabel]) => {
+      if (leftLabel === "Inicio") return -1;
+      if (rightLabel === "Inicio") return 1;
+      return leftLabel.localeCompare(rightLabel, "es");
+    });
   }, [enabledModules, isDeveloper, jobTitle, role]);
 
   useEffect(() => {
