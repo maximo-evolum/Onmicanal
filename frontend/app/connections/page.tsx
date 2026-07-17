@@ -62,8 +62,7 @@ function providerActionLabel(provider: ConnectionProvider) {
 }
 
 function missingOAuthEnvironment(provider: ConnectionProvider) {
-  const required = provider.oauthRequiredEnv?.length ? provider.oauthRequiredEnv : provider.requiredEnv || [];
-  return provider.missing.filter((item) => required.includes(item));
+  return provider.missingOAuthEnvironment || [];
 }
 
 function providerNextStep(provider: ConnectionProvider) {

@@ -1493,6 +1493,7 @@ export type ConnectionProvider = {
   requiredFields: string[];
   scopes: string[];
   missing: string[];
+  missingOAuthEnvironment?: string[];
   status: ConnectionStatus;
   config: ConnectionPublicConfig | null;
 };

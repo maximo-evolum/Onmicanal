@@ -18,6 +18,11 @@ connectionsRouter.use(requireRole(ROLE_GROUPS.MANAGERS));
 const PROVIDERS = [
   {
     key: "meta_whatsapp",
+    // El inbox y los webhooks existentes usan `whatsapp`. El Centro de
+    // Conexiones conserva su clave visual `meta_whatsapp`, pero persiste y
+    // reconoce ambas variantes para no perder conexiones ya operativas.
+    storageChannel: "whatsapp",
+    legacyChannels: ["whatsapp"],
     label: "WhatsApp Business",
     group: "Canales Meta",
     groupKey: "meta_channels",
@@ -32,7 +37,12 @@ const PROVIDERS = [
   },
   {
     key: "meta_instagram",
-    label: "Instagram / Facebook",
+    // Instagram y Facebook se configuraban antes como canales separados.
+    // La tarjeta unificada de Meta debe poder leerlos sin obligar al cliente
+    // a volver a autorizar una cuenta que ya está en operación.
+    storageChannel: "instagram",
+    legacyChannels: ["instagram", "facebook"],
+    label: "Instagram Business / Meta",
     group: "Canales Meta",
     groupKey: "meta_channels",
     icon: "IG",
@@ -167,6 +177,29 @@ const PROVIDERS = [
 
 const PROVIDER_BY_KEY = new Map(PROVIDERS.map((provider) => [provider.key, provider]));
 
+function providerConfigChannels(provider) {
+  return [...new Set([provider.key, provider.storageChannel, ...(provider.legacyChannels || [])].filter(Boolean))];
+}
+
+function providerStorageChannel(provider) {
+  return provider.storageChannel || provider.key;
+}
+
+function resolveProviderConfig(provider, configs) {
+  const byChannel = new Map((configs || []).map((config) => [config.channel, config]));
+  const candidates = providerConfigChannels(provider).map((channel) => byChannel.get(channel)).filter(Boolean);
+  // Una conexión activa tiene prioridad sobre una configuración antigua que
+  // pudo quedar deshabilitada durante una migración o una reconexión.
+  return candidates.find((config) => config.isActive) || candidates[0] || null;
+}
+
+async function findTenantProviderConfig(tenantId, provider) {
+  const configs = await prisma.tenantChannelConfig.findMany({
+    where: { tenantId, channel: { in: providerConfigChannels(provider) } }
+  });
+  return resolveProviderConfig(provider, configs);
+}
+
 function cleanText(value, fallback = "") {
   const text = String(value ?? "").trim();
   return text || fallback;
@@ -213,11 +246,12 @@ function missingFields(provider, config) {
 
 function providerStatus(provider, config) {
   if (!config || !config.isActive) return "DISCONNECTED";
-  const envMissing = provider.oauthProvider ? missingOAuthEnv(provider) : missingEnv(provider);
   const fieldMissing = missingFields(provider, config);
   const lastTestStatus = String(configMetadata(config).lastTestStatus || "").toUpperCase();
   if (lastTestStatus === "ERROR") return "ERROR";
-  if (envMissing.length || fieldMissing.length) return "PENDING";
+  // Las variables OAuth se requieren para crear o renovar una autorización,
+  // no para reconocer una conexión ya configurada con token válido.
+  if (fieldMissing.length) return "PENDING";
   return "CONNECTED";
 }
 
@@ -256,7 +290,10 @@ function publicProvider(provider, config) {
     oauthRequiredEnv: provider.oauthRequiredEnv || [],
     requiredFields: provider.requiredFields || [],
     scopes: provider.scopes || [],
-    missing: [...envMissing, ...fieldMissing],
+    // `missing` describe la conexión del tenant; la plataforma OAuth se
+    // comunica aparte para no degradar una cuenta existente.
+    missing: fieldMissing,
+    missingOAuthEnvironment: envMissing,
     status: providerStatus(provider, config),
     config: publicConfig(config)
   };
@@ -672,9 +709,7 @@ function oauthCallbackHandler(expectedProvider) {
       }
 
       const token = await exchangeOAuthCode(req, provider, code);
-      const existing = await prisma.tenantChannelConfig.findUnique({
-        where: { tenantId_channel: { tenantId: state.tenantId, channel: provider.key } }
-      });
+      const existing = await findTenantProviderConfig(state.tenantId, provider);
       const encryptedAccessToken = encryptSecret(token.access_token) || existing?.accessToken || null;
       const encryptedRefreshToken = encryptSecret(token.refresh_token) || existing?.verifyToken || null;
       let discovery = {};
@@ -703,31 +738,23 @@ function oauthCallbackHandler(expectedProvider) {
         oauthDiscovery: compactDiscovery(discovery.discovery || discovery)
       }, {});
 
-      await prisma.tenantChannelConfig.upsert({
-        where: { tenantId_channel: { tenantId: state.tenantId, channel: provider.key } },
-        create: {
-          tenantId: state.tenantId,
-          channel: provider.key,
-          label: discovery.label || provider.label,
-          phoneNumberId: discovery.phoneNumberId || null,
-          businessAccountId: discovery.businessAccountId || null,
-          externalAccountId: discovery.externalAccountId || null,
-          accessToken: encryptedAccessToken,
-          verifyToken: encryptedRefreshToken,
-          metadata,
-          isActive: true
-        },
-        update: {
-          label: discovery.label || provider.label,
-          phoneNumberId: discovery.phoneNumberId || existing?.phoneNumberId || null,
-          businessAccountId: discovery.businessAccountId || existing?.businessAccountId || null,
-          externalAccountId: discovery.externalAccountId || existing?.externalAccountId || null,
-          accessToken: encryptedAccessToken,
-          verifyToken: encryptedRefreshToken,
-          metadata,
-          isActive: true
-        }
-      });
+      const connectionData = {
+        label: discovery.label || provider.label,
+        phoneNumberId: discovery.phoneNumberId || existing?.phoneNumberId || null,
+        businessAccountId: discovery.businessAccountId || existing?.businessAccountId || null,
+        externalAccountId: discovery.externalAccountId || existing?.externalAccountId || null,
+        accessToken: encryptedAccessToken,
+        verifyToken: encryptedRefreshToken,
+        metadata,
+        isActive: true
+      };
+      if (existing) {
+        await prisma.tenantChannelConfig.update({ where: { id: existing.id }, data: connectionData });
+      } else {
+        await prisma.tenantChannelConfig.create({
+          data: { tenantId: state.tenantId, channel: providerStorageChannel(provider), ...connectionData }
+        });
+      }
 
       return res.send(oauthHtml({
         ok: true,
@@ -754,11 +781,10 @@ connectionsRouter.get("/connections", async (req, res, next) => {
     const configs = await prisma.tenantChannelConfig.findMany({
       where: {
         tenantId: req.tenantId,
-        channel: { in: PROVIDERS.map((provider) => provider.key) }
+        channel: { in: PROVIDERS.flatMap((provider) => providerConfigChannels(provider)) }
       }
     });
-    const byChannel = new Map(configs.map((config) => [config.channel, config]));
-    const providers = PROVIDERS.map((provider) => publicProvider(provider, byChannel.get(provider.key)));
+    const providers = PROVIDERS.map((provider) => publicProvider(provider, resolveProviderConfig(provider, configs)));
     const connected = providers.filter((provider) => provider.status === "CONNECTED").length;
     const pending = providers.filter((provider) => provider.status === "PENDING").length;
     const errors = providers.filter((provider) => provider.status === "ERROR").length;
@@ -793,9 +819,7 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
     const provider = PROVIDER_BY_KEY.get(key);
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });
 
-    const existing = await prisma.tenantChannelConfig.findUnique({
-      where: { tenantId_channel: { tenantId: req.tenantId, channel: key } }
-    });
+    const existing = await findTenantProviderConfig(req.tenantId, provider);
     const incomingMetadata = normalizeMetadata(req.body?.metadata, {});
     const metadata = normalizeMetadata({
       ...configMetadata(existing),
@@ -816,15 +840,11 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
       isActive: req.body?.isActive === undefined ? true : Boolean(req.body.isActive)
     };
 
-    const config = await prisma.tenantChannelConfig.upsert({
-      where: { tenantId_channel: { tenantId: req.tenantId, channel: key } },
-      create: {
-        tenantId: req.tenantId,
-        channel: key,
-        ...data
-      },
-      update: data
-    });
+    const config = existing
+      ? await prisma.tenantChannelConfig.update({ where: { id: existing.id }, data })
+      : await prisma.tenantChannelConfig.create({
+          data: { tenantId: req.tenantId, channel: providerStorageChannel(provider), ...data }
+        });
 
     await recordAuditLog(req, "CONNECTION_CONFIGURED", "tenant_channel_config", config.id, {
       provider: key,
@@ -843,12 +863,12 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
     const provider = PROVIDER_BY_KEY.get(key);
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });
 
-    const config = await prisma.tenantChannelConfig.findUnique({
-      where: { tenantId_channel: { tenantId: req.tenantId, channel: key } }
-    });
+    const config = await findTenantProviderConfig(req.tenantId, provider);
     if (!config || !config.isActive) return res.status(400).json({ ok: false, error: "Conexion inactiva o no configurada" });
 
-    const missing = [...(provider.oauthProvider ? missingOAuthEnv(provider) : missingEnv(provider)), ...missingFields(provider, config)];
+    // Una prueba de una conexión ya enlazada no depende de las credenciales
+    // de alta OAuth; valida los campos y el token que pertenecen al tenant.
+    const missing = missingFields(provider, config);
     let testedConfig = config;
     let testError = null;
     let discovery = null;
@@ -905,9 +925,7 @@ connectionsRouter.post("/connections/:key/disconnect", requireRole(ROLE_GROUPS.M
     const provider = PROVIDER_BY_KEY.get(key);
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });
 
-    const config = await prisma.tenantChannelConfig.findUnique({
-      where: { tenantId_channel: { tenantId: req.tenantId, channel: key } }
-    });
+    const config = await findTenantProviderConfig(req.tenantId, provider);
     if (!config) return res.json({ ok: true, provider: publicProvider(provider, null) });
 
     const updated = await prisma.tenantChannelConfig.update({
