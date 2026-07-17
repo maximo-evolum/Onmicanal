@@ -235,6 +235,19 @@ export default function ConnectionsPage() {
     }
   }
 
+  async function reactivate(provider: ConnectionProvider) {
+    try {
+      setNotice(null);
+      // Conserva token, IDs y metadatos ya registrados; solo vuelve a dejar
+      // disponible la integración que el cliente había configurado antes.
+      await saveConnectionProvider(provider.key, { isActive: true });
+      setNotice({ type: "success", text: "Conexion existente reactivada" });
+      await load(true);
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudo reactivar la conexion" });
+    }
+  }
+
   async function openOAuth(provider: ConnectionProvider) {
     const missingEnvironment = missingOAuthEnvironment(provider);
     if (missingEnvironment.length) {
@@ -432,13 +445,23 @@ export default function ConnectionsPage() {
                       {selected.oauthProvider ? (
                         <>
                           <div className="connection-oauth-action">
-                            <strong>{selected.status === "CONNECTED" ? "¿Necesitas cambiar la cuenta externa?" : "Vincula la cuenta que el cliente quiere usar"}</strong>
-                            <p>{missingOAuthEnvironment(selected).length
-                              ? `La aplicación OAuth aún requiere configuración de plataforma: ${missingOAuthEnvironment(selected).join(", ")}.`
-                              : `Se abrirá la pantalla oficial de ${selected.label}. El cliente puede iniciar sesión con una cuenta diferente a su usuario EVOLUM.`}</p>
-                            <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={Boolean(missingOAuthEnvironment(selected).length)}>
-                              {selected.status === "CONNECTED" ? `Cambiar cuenta de ${selected.label}` : `Vincular con ${selected.label}`}
-                            </button>
+                            {selected.config && !selected.config.isActive ? (
+                              <>
+                                <strong>Ya existe una cuenta registrada</strong>
+                                <p>Sus credenciales e identificadores se conservaron. Reactívala para volver a usarla sin repetir la vinculación.</p>
+                                <button className="primary" type="button" onClick={() => reactivate(selected)}>Reactivar conexión registrada</button>
+                              </>
+                            ) : (
+                              <>
+                                <strong>{selected.status === "CONNECTED" ? "¿Necesitas cambiar la cuenta externa?" : "Vincula la cuenta que el cliente quiere usar"}</strong>
+                                <p>{missingOAuthEnvironment(selected).length
+                                  ? `La aplicación OAuth aún requiere configuración de plataforma: ${missingOAuthEnvironment(selected).join(", ")}.`
+                                  : `Se abrirá la pantalla oficial de ${selected.label}. El cliente puede iniciar sesión con una cuenta diferente a su usuario EVOLUM.`}</p>
+                                <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={Boolean(missingOAuthEnvironment(selected).length)}>
+                                  {selected.status === "CONNECTED" ? `Cambiar cuenta de ${selected.label}` : `Vincular con ${selected.label}`}
+                                </button>
+                              </>
+                            )}
                           </div>
 
                           <details className="connection-advanced-fields">

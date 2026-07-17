@@ -56,6 +56,10 @@ const PROVIDERS = [
   },
   {
     key: "meta_business",
+    // Meta Business Suite es una vista de los activos Meta ya enlazados. Si
+    // no cuenta aún con una autorización propia, puede reconocer de forma
+    // segura una cuenta activa de WhatsApp, Instagram o Facebook del tenant.
+    sharedSourceChannels: ["whatsapp", "instagram", "facebook", "meta_whatsapp", "meta_instagram", "facebook_business"],
     label: "Meta Business Suite",
     group: "Canales Meta",
     groupKey: "meta_channels",
@@ -213,13 +217,17 @@ function providerConfigChannels(provider) {
   return [...new Set([provider.key, provider.storageChannel, ...(provider.legacyChannels || [])].filter(Boolean))];
 }
 
+function providerDisplayChannels(provider) {
+  return [...new Set([...providerConfigChannels(provider), ...(provider.sharedSourceChannels || [])])];
+}
+
 function providerStorageChannel(provider) {
   return provider.storageChannel || provider.key;
 }
 
 function resolveProviderConfig(provider, configs) {
   const byChannel = new Map((configs || []).map((config) => [config.channel, config]));
-  const candidates = providerConfigChannels(provider).map((channel) => byChannel.get(channel)).filter(Boolean);
+  const candidates = providerDisplayChannels(provider).map((channel) => byChannel.get(channel)).filter(Boolean);
   // Una conexión activa tiene prioridad sobre una configuración antigua que
   // pudo quedar deshabilitada durante una migración o una reconexión.
   return candidates.find((config) => config.isActive) || candidates[0] || null;
@@ -866,7 +874,7 @@ connectionsRouter.get("/connections", async (req, res, next) => {
     const configs = await prisma.tenantChannelConfig.findMany({
       where: {
         tenantId: req.tenantId,
-        channel: { in: PROVIDERS.flatMap((provider) => providerConfigChannels(provider)) }
+        channel: { in: PROVIDERS.flatMap((provider) => providerDisplayChannels(provider)) }
       }
     });
     const providers = PROVIDERS.map((provider) => publicProvider(provider, resolveProviderConfig(provider, configs)));
