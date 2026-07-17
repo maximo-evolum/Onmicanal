@@ -1307,6 +1307,28 @@ export type WorkflowDefinition = {
   updatedAt: string;
 };
 
+export type WorkflowRun = {
+  id: string;
+  tenantId: string;
+  recordType: "workflow_run";
+  title: string;
+  status: string;
+  data?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkflowDeadLetter = {
+  id: string;
+  tenantId: string;
+  recordType: "workflow_dead_letter";
+  title: string;
+  status: "OPEN" | "RESOLVED" | string;
+  data?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type IntegrationStatus = {
   id: string;
   channel: string;
@@ -1441,9 +1463,27 @@ export async function updateWorkflow(id: string, input: Partial<WorkflowDefiniti
 }
 
 export async function runWorkflow(id: string, input: { input?: Record<string, unknown>; target?: Record<string, unknown> }) {
-  return request<{ run: { id: string; status: string; data?: Record<string, unknown> | null } }>(`/workflows/${id}/run`, {
+  return request<{ run: WorkflowRun; conditions?: unknown; applied?: unknown[] }>(`/workflows/${id}/run`, {
     method: "POST",
     body: JSON.stringify(input)
+  });
+}
+
+export async function getWorkflowVersions(id: string): Promise<{ versions: WorkflowDefinition[] }> {
+  return request<{ versions: WorkflowDefinition[] }>(`/workflows/${id}/versions`);
+}
+
+export async function getWorkflowRuns(id: string): Promise<{ runs: WorkflowRun[] }> {
+  return request<{ runs: WorkflowRun[] }>(`/workflows/${id}/runs`);
+}
+
+export async function getWorkflowDeadLetters(status = "OPEN"): Promise<{ deadLetters: WorkflowDeadLetter[] }> {
+  return request<{ deadLetters: WorkflowDeadLetter[] }>(`/workflow-dead-letters?status=${encodeURIComponent(status)}`);
+}
+
+export async function retryWorkflowDeadLetter(id: string) {
+  return request<{ run: WorkflowRun; conditions?: unknown; applied?: unknown[] }>(`/workflow-dead-letters/${id}/retry`, {
+    method: "POST"
   });
 }
 

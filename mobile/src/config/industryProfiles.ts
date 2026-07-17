@@ -33,6 +33,28 @@ export const INDUSTRY_PROFILES: Record<string, IndustryProfile> = {
     accent: "#ff8a1f",
     modules: ["dashboard", "inbox", "agenda", "pipeline", "payments", "campaigns"]
   },
+  gastronomy: {
+    code: "gastronomy",
+    label: "Gastronomía",
+    dashboardTitle: "Operación gastronómica",
+    primaryEntity: "Reserva",
+    pipelineStages: ["Consulta", "Reserva", "Confirmación", "Servicio", "Fidelización"],
+    bookingLabel: "Reserva",
+    serviceLabel: "Servicio o evento",
+    accent: "#f97316",
+    modules: ["dashboard", "inbox", "agenda", "pipeline", "campaigns"]
+  },
+  health: {
+    code: "health",
+    label: "Salud clínica",
+    dashboardTitle: "Operación clínica",
+    primaryEntity: "Paciente",
+    pipelineStages: ["Consulta", "Agenda", "Atención", "Exámenes", "Seguimiento"],
+    bookingLabel: "Cita",
+    serviceLabel: "Atención clínica",
+    accent: "#38bdf8",
+    modules: ["dashboard", "inbox", "agenda", "pipeline", "payments"]
+  },
   dental: {
     code: "dental",
     label: "Clinica dental",
@@ -72,6 +94,8 @@ export function normalizeIndustry(industry?: string | null) {
   const value = String(industry || "").trim().toLowerCase();
   if (["realty", "inmobiliaria", "inmobiliario", "real_estate", "real estate"].includes(value)) return "real_estate";
   if (["automotriz", "automotive", "autos", "vehiculos"].includes(value)) return "automotive";
+  if (["gastronomia", "gastronomía", "restaurant", "restaurante", "eventos", "food"].includes(value)) return "gastronomy";
+  if (["salud", "health", "clinica", "clínica", "medica", "médica", "medicina"].includes(value)) return "health";
   if (["dental", "dentista", "clinica dental", "odontologia"].includes(value)) return "dental";
   if (["veterinaria", "veterinary", "animales", "clinica animal"].includes(value)) return "veterinary";
   return "default";
