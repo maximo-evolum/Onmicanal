@@ -45,6 +45,46 @@ function recordCount(recordCounts, type) {
   return recordCounts[type] || 0;
 }
 
+const REPORT_PERIOD_DAYS = 30;
+
+function daysAgo(days, now = new Date()) {
+  const value = new Date(now);
+  value.setDate(value.getDate() - days);
+  return value;
+}
+
+function inRange(value, start, end) {
+  const date = value ? new Date(value) : null;
+  return Boolean(date && !Number.isNaN(date.getTime()) && date >= start && date < end);
+}
+
+function inCurrentPeriod(items, dateOf, period) {
+  return items.filter((item) => inRange(dateOf(item), period.start, period.end));
+}
+
+function inPreviousPeriod(items, dateOf, period) {
+  return items.filter((item) => inRange(dateOf(item), period.previousStart, period.start));
+}
+
+function changeDetail(current, previous, unit = "registros") {
+  const delta = number(current) - number(previous);
+  if (!previous && !current) return `Sin ${unit} en los últimos dos periodos`;
+  if (!previous) return `${current} ${unit}; sin base anterior para comparar`;
+  const percent = Math.round((delta / previous) * 100);
+  if (!delta) return `Sin variación vs. periodo anterior (${previous})`;
+  return `${delta > 0 ? "+" : ""}${delta} ${unit} (${percent > 0 ? "+" : ""}${percent}%) vs. periodo anterior`;
+}
+
+function moneyFromRecord(record) {
+  const data = record?.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data : {};
+  return number(data.amount ?? data.monto ?? data.cost ?? data.costo ?? data.value ?? data.valor ?? 0);
+}
+
+function rate(numerator, denominator) {
+  if (!denominator) return 0;
+  return Math.round((number(numerator) / number(denominator)) * 100);
+}
+
 function industrySections(industry, recordCounts, bookings, payments) {
   const shared = [
     {
@@ -177,14 +217,23 @@ function industrySections(industry, recordCounts, bookings, payments) {
 }
 
 export async function getIndustryReports({ tenantId }) {
-  const [tenant, conversations, leads, contacts, bookings, payments, recordGroups] = await Promise.all([
+  const now = new Date();
+  const period = {
+    days: REPORT_PERIOD_DAYS,
+    end: now,
+    start: daysAgo(REPORT_PERIOD_DAYS, now),
+    previousStart: daysAgo(REPORT_PERIOD_DAYS * 2, now)
+  };
+  const [tenant, conversations, leads, contacts, bookings, payments, recordGroups, expenses, outcomes] = await Promise.all([
     prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true, industry: true } }),
-    prisma.conversation.findMany({ where: { tenantId }, select: { status: true, aiHandoffRequired: true, aiCloseScore: true } }),
-    prisma.lead.findMany({ where: { tenantId }, select: { status: true, budget: true, closeProbability: true } }),
-    prisma.contact.count({ where: { tenantId } }),
-    prisma.booking.findMany({ where: { tenantId }, select: { status: true, total: true, date: true } }),
-    prisma.payment.findMany({ where: { tenantId }, select: { status: true, amount: true, currency: true } }),
-    prisma.industryRecord.groupBy({ where: { tenantId }, by: ["recordType"], _count: { _all: true } })
+    prisma.conversation.findMany({ where: { tenantId }, select: { status: true, aiHandoffRequired: true, aiCloseScore: true, createdAt: true } }),
+    prisma.lead.findMany({ where: { tenantId }, select: { status: true, budget: true, closeProbability: true, createdAt: true } }),
+    prisma.contact.findMany({ where: { tenantId }, select: { createdAt: true } }),
+    prisma.booking.findMany({ where: { tenantId }, select: { status: true, total: true, date: true, createdAt: true } }),
+    prisma.payment.findMany({ where: { tenantId }, select: { status: true, amount: true, currency: true, paidAt: true, createdAt: true } }),
+    prisma.industryRecord.groupBy({ where: { tenantId }, by: ["recordType"], _count: { _all: true } }),
+    prisma.industryRecord.findMany({ where: { tenantId, recordType: "expense" }, select: { data: true, createdAt: true } }),
+    prisma.salesOutcome.findMany({ where: { tenantId }, select: { outcome: true, createdAt: true } })
   ]);
 
   const recordCounts = Object.fromEntries(recordGroups.map((group) => [group.recordType, group._count._all]));
@@ -194,24 +243,93 @@ export async function getIndustryReports({ tenantId }) {
   const hotLeads = leads.filter((lead) => number(lead.closeProbability) >= 75 || ["READY_TO_CLOSE", "NEGOTIATION", "PAYMENT_PENDING"].includes(lead.status));
   const forecast = sum(leads, "budget");
   const industry = String(tenant?.industry || "GENERAL").toUpperCase();
+  const paymentDate = (payment) => payment.paidAt || payment.createdAt;
+  const currentPaid = inCurrentPeriod(paidPayments, paymentDate, period);
+  const previousPaid = inPreviousPeriod(paidPayments, paymentDate, period);
+  const currentCanceled = inCurrentPeriod(payments.filter((payment) => ["CANCELED", "REFUNDED", "FAILED"].includes(payment.status)), (payment) => payment.createdAt, period);
+  const previousCanceled = inPreviousPeriod(payments.filter((payment) => ["CANCELED", "REFUNDED", "FAILED"].includes(payment.status)), (payment) => payment.createdAt, period);
+  const currentRefunded = inCurrentPeriod(payments.filter((payment) => payment.status === "REFUNDED"), (payment) => payment.createdAt, period);
+  const previousRefunded = inPreviousPeriod(payments.filter((payment) => payment.status === "REFUNDED"), (payment) => payment.createdAt, period);
+  const currentExpenses = inCurrentPeriod(expenses, (item) => item.createdAt, period);
+  const previousExpenses = inPreviousPeriod(expenses, (item) => item.createdAt, period);
+  const currentContacts = inCurrentPeriod(contacts, (item) => item.createdAt, period);
+  const previousContacts = inPreviousPeriod(contacts, (item) => item.createdAt, period);
+  const currentLeads = inCurrentPeriod(leads, (item) => item.createdAt, period);
+  const previousLeads = inPreviousPeriod(leads, (item) => item.createdAt, period);
+  const currentBookings = inCurrentPeriod(bookings, (item) => item.createdAt, period);
+  const previousBookings = inPreviousPeriod(bookings, (item) => item.createdAt, period);
+  const currentOutcomes = inCurrentPeriod(outcomes, (item) => item.createdAt, period);
+  const previousOutcomes = inPreviousPeriod(outcomes, (item) => item.createdAt, period);
+  const currentIncome = sum(currentPaid, "amount");
+  const previousIncome = sum(previousPaid, "amount");
+  const currentExpenseAmount = currentExpenses.reduce((total, item) => total + moneyFromRecord(item), 0);
+  const previousExpenseAmount = previousExpenses.reduce((total, item) => total + moneyFromRecord(item), 0);
+  const currentRefundedAmount = sum(currentRefunded, "amount");
+  const previousRefundedAmount = sum(previousRefunded, "amount");
+  const currentNet = currentIncome - currentExpenseAmount - currentRefundedAmount;
+  const previousNet = previousIncome - previousExpenseAmount - previousRefundedAmount;
+  const currentWon = currentOutcomes.filter((item) => ["WON", "PAID"].includes(item.outcome)).length;
+  const currentLost = currentOutcomes.filter((item) => ["LOST", "NO_RESPONSE"].includes(item.outcome)).length;
+  const previousWon = previousOutcomes.filter((item) => ["WON", "PAID"].includes(item.outcome)).length;
+  const previousLost = previousOutcomes.filter((item) => ["LOST", "NO_RESPONSE"].includes(item.outcome)).length;
 
   return {
     generatedAt: new Date().toISOString(),
     tenant: { name: tenant?.name || "Cuenta", industry, industryLabel: INDUSTRY_LABELS[industry] || industry },
+    period: {
+      days: period.days,
+      start: period.start.toISOString(),
+      end: period.end.toISOString(),
+      previousStart: period.previousStart.toISOString()
+    },
     summary: [
-      metric("Leads", leads.length, `${hotLeads.length} con prioridad comercial`),
-      metric("Conversaciones", conversations.length, `${conversations.filter((item) => item.aiHandoffRequired).length} requieren seguimiento`),
-      metric("Cobrado", sum(paidPayments, "amount"), `${paidPayments.length} pagos confirmados`),
-      metric("Pendiente", sum(pendingPayments, "amount"), `${pendingPayments.length} cobros por gestionar`)
+      metric("Resultado neto", currentNet, changeDetail(currentNet, previousNet, "CLP")),
+      metric("Ingresos cobrados", currentIncome, changeDetail(currentIncome, previousIncome, "CLP")),
+      metric("Costos registrados", currentExpenseAmount, changeDetail(currentExpenseAmount, previousExpenseAmount, "CLP")),
+      metric("Clientes nuevos", currentContacts.length, changeDetail(currentContacts.length, previousContacts.length, "clientes")),
+      metric("Leads nuevos", currentLeads.length, changeDetail(currentLeads.length, previousLeads.length, "leads")),
+      metric("Cobros caídos", sum(currentCanceled, "amount"), changeDetail(sum(currentCanceled, "amount"), sum(previousCanceled, "amount"), "CLP"))
     ],
     economicChart: {
-      title: "Resumen económico (CLP)",
+      title: "Estado económico del período (CLP)",
       series: [
-        { label: "Cobrado", value: sum(paidPayments, "amount") },
-        { label: "Pendiente", value: sum(pendingPayments, "amount") },
-        { label: "Cancelado", value: sum(canceledPayments, "amount") },
-        { label: "Forecast", value: forecast }
+        { label: "Ingresos", value: currentIncome },
+        { label: "Costos", value: currentExpenseAmount },
+        { label: "Devuelto", value: currentRefundedAmount },
+        { label: "Neto", value: Math.max(0, currentNet) }
       ]
+    },
+    comparisons: {
+      economics: [
+        { label: "Ingresos", current: currentIncome, previous: previousIncome, format: "currency" },
+        { label: "Costos", current: currentExpenseAmount, previous: previousExpenseAmount, format: "currency" },
+        { label: "Neto", current: currentNet, previous: previousNet, format: "currency" },
+        { label: "Cobros caídos", current: sum(currentCanceled, "amount"), previous: sum(previousCanceled, "amount"), format: "currency" }
+      ],
+      operation: [
+        { label: "Clientes nuevos", current: currentContacts.length, previous: previousContacts.length },
+        { label: "Leads", current: currentLeads.length, previous: previousLeads.length },
+        { label: "Reservas", current: currentBookings.length, previous: previousBookings.length },
+        { label: "Cierres", current: currentWon, previous: previousWon }
+      ]
+    },
+    executiveStatus: {
+      totalCustomers: contacts.length,
+      currentCustomers: currentContacts.length,
+      previousCustomers: previousContacts.length,
+      customerVariation: currentContacts.length - previousContacts.length,
+      currentIncome,
+      previousIncome,
+      currentExpenses: currentExpenseAmount,
+      previousExpenses: previousExpenseAmount,
+      currentRefunded: currentRefundedAmount,
+      currentNet,
+      previousNet,
+      currentLost,
+      previousLost,
+      conversionRate: rate(currentWon, currentLeads.length),
+      pendingCollection: sum(pendingPayments, "amount"),
+      handoffs: conversations.filter((item) => item.aiHandoffRequired).length
     },
     sections: [
       {
@@ -230,10 +348,11 @@ export async function getIndustryReports({ tenantId }) {
         title: "Contabilidad y cobranza",
         description: "Estado de pagos, ingresos y anulaciones.",
         metrics: [
-          metric("Pagados", sum(paidPayments, "amount"), `${paidPayments.length} pagos confirmados`),
+          metric("Ingresos cobrados", currentIncome, `${currentPaid.length} pagos confirmados en el período`),
           metric("Pendientes", sum(pendingPayments, "amount"), `${pendingPayments.length} pagos por cobrar`),
-          metric("Cancelados", sum(canceledPayments, "amount"), `${canceledPayments.length} pagos cancelados`),
-          metric("Ingresos registrados", recordCount(recordCounts, "revenue"), "Registros de ganancias")
+          metric("Costos registrados", currentExpenseAmount, `${currentExpenses.length} gastos registrados en el período`),
+          metric("Cobros caídos", sum(currentCanceled, "amount"), `${currentCanceled.length} pagos cancelados, fallidos o devueltos`),
+          metric("Resultado neto", currentNet, "Ingresos menos costos y devoluciones")
         ]
       },
       ...industrySections(industry, recordCounts, bookings, payments),
@@ -242,7 +361,7 @@ export async function getIndustryReports({ tenantId }) {
         title: "Base operativa",
         description: "Datos disponibles para reportes automáticos y futuras verticales.",
         metrics: [
-          metric("Contactos", contacts, "Base omnicanal"),
+          metric("Contactos", contacts.length, "Base omnicanal"),
           metric("Reservas", bookings.length, `${bookings.filter((item) => item.status === "CONFIRMED").length} confirmadas`),
           metric("Registros de rubro", Object.values(recordCounts).reduce((total, count) => total + number(count), 0), "Metadatos y fichas operativas"),
           metric("Tipos de registro", Object.keys(recordCounts).length, "Modelo adaptable por vertical")
