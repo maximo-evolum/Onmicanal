@@ -41,7 +41,7 @@ const PROVIDERS = [
     // La tarjeta unificada de Meta debe poder leerlos sin obligar al cliente
     // a volver a autorizar una cuenta que ya está en operación.
     storageChannel: "instagram",
-    legacyChannels: ["instagram", "facebook"],
+    legacyChannels: ["instagram"],
     label: "Instagram Business / Meta",
     group: "Canales Meta",
     groupKey: "meta_channels",
@@ -366,6 +366,45 @@ function groupProviders(providers) {
     group.providers.push(provider);
   }
   return groups;
+}
+
+function reconciliationProviderForChannel(channel) {
+  return PROVIDERS.find((provider) => providerConfigChannels(provider).includes(channel)) || null;
+}
+
+function reconcileConnectionConfigs(configs) {
+  const items = (configs || []).map((config) => {
+    const provider = reconciliationProviderForChannel(config.channel);
+    if (!provider) {
+      return {
+        channel: config.channel,
+        label: config.label || config.channel,
+        status: "UNRECOGNIZED",
+        reason: "No existe un proveedor asociado a esta configuración histórica.",
+        updatedAt: config.updatedAt
+      };
+    }
+
+    const missing = missingFields(provider, config);
+    const status = !config.isActive ? "INACTIVE" : missing.length ? "INCOMPLETE" : "ACTIVE";
+    return {
+      channel: config.channel,
+      provider: provider.key,
+      label: config.label || provider.label,
+      status,
+      missing,
+      updatedAt: config.updatedAt
+    };
+  });
+
+  return {
+    scanned: items.length,
+    active: items.filter((item) => item.status === "ACTIVE").length,
+    inactive: items.filter((item) => item.status === "INACTIVE").length,
+    incomplete: items.filter((item) => item.status === "INCOMPLETE").length,
+    unrecognized: items.filter((item) => item.status === "UNRECOGNIZED").length,
+    items
+  };
 }
 
 function oauthStateSecret() {
@@ -872,10 +911,7 @@ connectionsPublicRouter.get("/connections/oauth/mercadopago/callback", oauthCall
 connectionsRouter.get("/connections", async (req, res, next) => {
   try {
     const configs = await prisma.tenantChannelConfig.findMany({
-      where: {
-        tenantId: req.tenantId,
-        channel: { in: PROVIDERS.flatMap((provider) => providerDisplayChannels(provider)) }
-      }
+      where: { tenantId: req.tenantId }
     });
     const providers = PROVIDERS.map((provider) => publicProvider(provider, resolveProviderConfig(provider, configs)));
     const connected = providers.filter((provider) => provider.status === "CONNECTED").length;
@@ -892,6 +928,7 @@ connectionsRouter.get("/connections", async (req, res, next) => {
         errors,
         disconnected: providers.length - connected - pending - errors
       },
+      reconciliation: reconcileConnectionConfigs(configs),
       callbacks: {
         oauthGoogle: `${publicBaseUrl(req)}/api/connections/oauth/google/callback`,
         oauthMicrosoft: `${publicBaseUrl(req)}/api/connections/oauth/microsoft/callback`,

@@ -1515,6 +1515,22 @@ export type ConnectionCenterResponse = {
     errors: number;
     disconnected: number;
   };
+  reconciliation?: {
+    scanned: number;
+    active: number;
+    inactive: number;
+    incomplete: number;
+    unrecognized: number;
+    items: Array<{
+      channel: string;
+      provider?: string;
+      label: string;
+      status: "ACTIVE" | "INACTIVE" | "INCOMPLETE" | "UNRECOGNIZED";
+      missing?: string[];
+      reason?: string;
+      updatedAt?: string;
+    }>;
+  };
   callbacks: {
     oauthGoogle: string;
     oauthMicrosoft: string;

@@ -348,6 +348,41 @@ export default function ConnectionsPage() {
                 </article>
               </section>
 
+              {data?.reconciliation ? (
+                <>
+                  <section className="connection-command-strip" aria-label="Diagnóstico de conexiones existentes">
+                    <article>
+                      <b>DX</b>
+                      <strong>Diagnóstico de conexiones</strong>
+                      <span>Revisión automática y de solo lectura de los registros ya existentes.</span>
+                    </article>
+                    <article>
+                      <b>OK</b>
+                      <strong>{data.reconciliation.active} operativas</strong>
+                      <span>{data.reconciliation.scanned} configuraciones revisadas en esta cuenta.</span>
+                    </article>
+                    <article>
+                      <b>IN</b>
+                      <strong>{data.reconciliation.inactive} inactivas</strong>
+                      <span>Conservan sus datos y pueden reactivarse desde su proveedor.</span>
+                    </article>
+                    <article>
+                      <b>RV</b>
+                      <strong>{data.reconciliation.incomplete + data.reconciliation.unrecognized} por revisar</strong>
+                      <span>{data.reconciliation.incomplete} incompletas · {data.reconciliation.unrecognized} sin proveedor reconocido.</span>
+                    </article>
+                  </section>
+                  {data.reconciliation.unrecognized ? (
+                    <div className="connection-notice error">
+                      Configuraciones históricas sin proveedor asignado: {data.reconciliation.items
+                        .filter((item) => item.status === "UNRECOGNIZED")
+                        .map((item) => item.label)
+                        .join(", ")}.
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
               {notice && <div className={`connection-notice ${notice.type}`}>{notice.text}</div>}
 
               <section className="connections-layout">
