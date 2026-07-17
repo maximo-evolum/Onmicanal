@@ -7,6 +7,7 @@ import { runAiTool, AI_TOOLS } from "./ai-tools.service.js";
 import { detectConversationState, detectPaymentReadySignal, buildSalesWorkflowContext, CONVERSATION_STATES, nextActionForState } from "./sales-workflow.service.js";
 import { buildReasoningSnapshot, buildReasoningPromptContext } from "./ai-reasoning.service.js";
 import { buildAutonomousWorkflow, buildWorkflowPromptContext } from "./autonomous-workflow.service.js";
+import { createAiActionApproval, getAiGovernance, needsHumanApproval } from "./ai-governance.service.js";
 
 function includesAny(text, patterns) {
   return patterns.some((pattern) => pattern.test(text));
@@ -217,9 +218,27 @@ export async function runActionOrchestrator({ tenant, conversation, contact, use
 
   const plan = getActionPlan({ tenant, userMessage, memory, lead });
   const results = [];
+  const governance = await getAiGovernance(tenant?.id);
 
-  for (const action of plan.actions) {
+  for (const action of plan.actions.slice(0, governance.maxAutonomousActions)) {
     try {
+      if (needsHumanApproval(governance, action.tool)) {
+        const approval = await createAiActionApproval({
+          tenantId: tenant.id,
+          conversationId: conversation?.id || null,
+          tool: action.tool,
+          args: action.args,
+          reason: "La política del tenant exige aprobación humana para esta acción."
+        });
+        results.push({
+          ok: false,
+          blocked: true,
+          approvalId: approval.id,
+          tool: action.tool,
+          message: "Acción pendiente de aprobación humana según la política IA."
+        });
+        continue;
+      }
       const result = await runAiTool({
         name: action.tool,
         args: action.args,

@@ -36,6 +36,7 @@ const baseItems: SidebarItem[] = [
   ["Planes y modulos", "/saas", "Plan, modulos, usuarios y limites", "PM", "saas"],
   ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI", "ai_ops"],
+  ["Gobierno IA", "/settings/ai", "Políticas, aprobaciones y evaluaciones", "GI", "ai_ops"],
   ["Cargas inmobiliarias", "/realty-loads", "Carga, importacion y comisiones", "CI", "realty_loads"],
   ["Propiedades", "/properties", "Portal de propiedades cargadas", "PR", "properties"],
   ["Actividad inmobiliaria", "/realty-activity", "Visitas, propietarios y alertas", "AC", "realty_activity"],

@@ -80,6 +80,7 @@ onboardingRouter.get("/onboarding/knowledge", requireRole(ROLE_GROUPS.MANAGERS),
 onboardingRouter.post("/onboarding/profile", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
   try {
     const manual = cleanManual(req.body || {});
+    const currentTenant = await prisma.tenant.findUnique({ where: { id: req.tenantId }, select: { aiSettings: true } });
     const tenant = await prisma.tenant.update({
       where: { id: req.tenantId },
       data: {
@@ -87,6 +88,7 @@ onboardingRouter.post("/onboarding/profile", requireRole(ROLE_GROUPS.MANAGERS), 
         industry: manual.industry || undefined,
         businessPrompt: manual.description || undefined,
         aiSettings: {
+          ...(currentTenant?.aiSettings || {}),
           tone: manual.tone,
           objective: manual.objective,
           restrictions: manual.restrictions
@@ -163,6 +165,7 @@ onboardingRouter.post("/onboarding/apply", requireRole(ROLE_GROUPS.MANAGERS), as
       const policies = Array.isArray(data.policies) ? data.policies.filter(Boolean) : [];
       const faqs = Array.isArray(data.faqs) ? data.faqs.filter((x) => x?.question) : [];
       const products = Array.isArray(data.products) ? data.products.filter((x) => x?.name) : [];
+      const currentTenant = await tx.tenant.findUnique({ where: { id: req.tenantId }, select: { aiSettings: true } });
 
       const tenant = await tx.tenant.update({
         where: { id: req.tenantId },
@@ -173,6 +176,7 @@ onboardingRouter.post("/onboarding/apply", requireRole(ROLE_GROUPS.MANAGERS), as
           onboardingCompleted: true,
           onboardingState: data,
           aiSettings: {
+            ...(currentTenant?.aiSettings || {}),
             tone: data.suggestedTone || business.tone || null,
             objective: business.objective || null,
             policies

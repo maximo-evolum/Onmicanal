@@ -1,4 +1,5 @@
 import { prisma } from "../lib/db.js";
+import { DEFAULT_AI_GOVERNANCE, normalizeAiGovernance } from "./ai-governance.service.js";
 import { PLAN_DEFINITIONS, normalizePlanCode, getModulesForPlan } from "../lib/modules.js";
 
 export const DEFAULT_AI_SETTINGS = Object.freeze({
@@ -7,7 +8,8 @@ export const DEFAULT_AI_SETTINGS = Object.freeze({
   objective: "convertir conversaciones en oportunidades y avisar al humano cuando el cliente esté listo para cerrar",
   responseStyle: "breve, claro, natural, con una pregunta útil al final",
   forbidden: "no inventar precios, stock, disponibilidad ni enlaces de pago",
-  businessRules: []
+  businessRules: [],
+  governance: DEFAULT_AI_GOVERNANCE
 });
 
 export function planLimits(planCode = "STARTER", subscription = null) {
@@ -94,11 +96,19 @@ export async function checkPlanLimit({ tenantId, metric = "messagesMonthly", inc
 
 export async function getAISettings(tenantId) {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-  return { ...DEFAULT_AI_SETTINGS, ...(tenant?.aiSettings || {}) };
+  const current = tenant?.aiSettings || {};
+  return { ...DEFAULT_AI_SETTINGS, ...current, governance: normalizeAiGovernance(current.governance) };
 }
 
 export async function updateAISettings({ tenantId, settings, actorUserId = null }) {
-  const next = { ...DEFAULT_AI_SETTINGS, ...(settings || {}) };
+  const currentTenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { aiSettings: true } });
+  const current = currentTenant?.aiSettings || {};
+  const next = {
+    ...DEFAULT_AI_SETTINGS,
+    ...current,
+    ...(settings || {}),
+    governance: normalizeAiGovernance({ ...(current.governance || {}), ...((settings || {}).governance || {}) })
+  };
   const tenant = await prisma.tenant.update({ where: { id: tenantId }, data: { aiSettings: next } });
   await auditTenantAction({ tenantId, actorUserId, action: "AI_SETTINGS_UPDATED", entity: "Tenant", entityId: tenantId, metadata: next });
   return tenant.aiSettings;

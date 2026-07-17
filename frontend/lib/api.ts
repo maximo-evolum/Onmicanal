@@ -1046,6 +1046,21 @@ export type AISettings = {
   responseStyle: string;
   forbidden: string;
   businessRules: string[];
+  governance?: {
+    requireApprovalFor: string[];
+    maxAutonomousActions: number;
+    blockedTerms: string[];
+    recordEvaluations: boolean;
+  };
+};
+
+export type AiGovernanceRecord = {
+  id: string;
+  title: string;
+  status: string;
+  data?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type SaasAnalytics = {
@@ -1111,6 +1126,24 @@ export async function updateAIConfig(input: Partial<AISettings>): Promise<{ sett
     method: "PATCH",
     body: JSON.stringify(input)
   });
+}
+
+export async function getAiGovernance(): Promise<{ governance: NonNullable<AISettings["governance"]>; approvals: AiGovernanceRecord[]; evaluations: AiGovernanceRecord[] }> {
+  return request("/saas/ai-governance");
+}
+
+export async function createAiEvaluation(input: { scenario: string; output: string; expected?: string }) {
+  return request<{ record: AiGovernanceRecord; result: { passed: boolean; matches: string[]; score: number } }>("/saas/ai-evaluations", {
+    method: "POST", body: JSON.stringify(input)
+  });
+}
+
+export async function approveAiAction(id: string) {
+  return request<{ approval: AiGovernanceRecord; result: { ok: boolean; message?: string } }>(`/saas/ai-approvals/${id}/approve`, { method: "POST" });
+}
+
+export async function rejectAiAction(id: string, reason?: string) {
+  return request<{ approval: AiGovernanceRecord }>(`/saas/ai-approvals/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
 export async function getOnboardingStatus(): Promise<{ completed: number; total: number; completedPercent: number; steps: Record<string, boolean> }> {
