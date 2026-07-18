@@ -27,11 +27,12 @@ function cookieSafeSession(session: AgentSession) {
   });
 }
 
-function setStoredAuth(session: AgentSession) {
+function setStoredAuth(session: AgentSession, accessToken?: string) {
   const serializedSession = JSON.stringify(session);
   setCookie(SESSION_COOKIE, cookieSafeSession(session));
   if (typeof window !== "undefined") {
     window.localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
+    if (accessToken) window.sessionStorage.setItem("evolum_access_token", accessToken);
   }
 }
 
@@ -60,6 +61,7 @@ function clearStoredAuth() {
     window.localStorage.removeItem("token");
     window.localStorage.removeItem("auth_token");
     window.localStorage.removeItem("jwt");
+    window.sessionStorage.removeItem("evolum_access_token");
   }
 }
 
@@ -99,7 +101,7 @@ export function LoginPage() {
       setSubmitting(true);
       setError(null);
       const data = await loginWithEmail(email, password || undefined);
-      setStoredAuth(data.user);
+      setStoredAuth(data.user, data.accessToken);
       router.push("/crm-principal");
       router.refresh();
     } catch (err) {

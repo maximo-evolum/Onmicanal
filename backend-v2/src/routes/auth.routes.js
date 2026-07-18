@@ -15,8 +15,10 @@ function isMobileClient(req) {
 function sendAuthenticatedSession(req, res, result) {
   if (isMobileClient(req)) return res.json(result);
   setBrowserSession(res, result.token);
-  const { token: _token, ...session } = result;
-  return res.json(session);
+  const { token, ...session } = result;
+  // Cookie HTTP-only + token de sesión: el segundo evita que una cookie
+  // antigua firmada antes de un deploy bloquee módulos en dominios separados.
+  return res.json({ ...session, accessToken: token });
 }
 
 function cleanText(value, fallback = "") {

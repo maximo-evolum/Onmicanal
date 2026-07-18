@@ -1,6 +1,13 @@
 import { AgentSession, Booking, BookingSlot, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
 import { API_BASE_URL, SESSION_STORAGE_KEY } from "./constants";
 
+const BROWSER_ACCESS_TOKEN_KEY = "evolum_access_token";
+
+function getBrowserAccessToken() {
+  if (typeof window === "undefined") return null;
+  return window.sessionStorage.getItem(BROWSER_ACCESS_TOKEN_KEY);
+}
+
 export function getStoredApiSession() {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
@@ -13,8 +20,10 @@ export function getStoredApiSession() {
 }
 
 function buildHeaders(init?: RequestInit) {
+  const accessToken = getBrowserAccessToken();
   return {
     "Content-Type": "application/json",
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...(init?.headers || {})
   };
 }
@@ -43,6 +52,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       message = message || "Tu sesión expiró. Cierra sesión e inicia nuevamente.";
     }
 
+    if (response.status === 401) {
+      // Evita que la UI quede atrapada mostrando "Token invalido" despues de
+      // una rotacion de JWT o un deploy. La proxima pantalla exige sesion sana.
+      if (typeof window !== "undefined" && !path.startsWith("/auth/")) {
+        window.sessionStorage.removeItem(BROWSER_ACCESS_TOKEN_KEY);
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+        window.location.assign("/login?session=expired");
+      }
+      message = "Tu sesion expiro. Inicia sesion nuevamente.";
+    }
+
     if (response.status === 403) {
       const session = getStoredApiSession();
       message = message || "No tienes acceso o tu sesión no está enviando autorización.";
@@ -63,8 +83,8 @@ export async function getWorkspaceUsers(): Promise<AgentSession[]> {
   return request<AgentSession[]>("/workspace-users");
 }
 
-export async function loginWithEmail(email: string, password?: string): Promise<{ user: AgentSession; tenant?: TenantSession }> {
-  return request<{ user: AgentSession; tenant?: TenantSession }>("/auth/login", {
+export async function loginWithEmail(email: string, password?: string): Promise<{ user: AgentSession; tenant?: TenantSession; accessToken?: string }> {
+  return request<{ user: AgentSession; tenant?: TenantSession; accessToken?: string }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password })
   });

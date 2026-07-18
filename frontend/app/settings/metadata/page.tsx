@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
-import { createMetadataSchema, getMetadataSchemas, migrateMetadataSchema, publishMetadataSchema, type MetadataSchema } from "@/lib/api";
+import { createMetadataSchema, getMetadataCatalog, getMetadataSchemas, migrateMetadataSchema, publishMetadataSchema, type MetadataCatalog, type MetadataSchema } from "@/lib/api";
 
 type FieldType = "string" | "number" | "date" | "boolean" | "array" | "relation";
 type DataCare = "INTERNAL" | "PERSONAL" | "SENSITIVE" | "CONFIDENTIAL";
@@ -102,8 +102,36 @@ function cloneFields(fields: FieldDraft[]) {
   return fields.map((item) => ({ ...item, id: `${item.id}-${Math.random().toString(36).slice(2, 6)}` }));
 }
 
+function catalogFieldType(value: string): FieldType {
+  const normalized = String(value || "string").toLowerCase();
+  if (["number", "date", "boolean", "array", "relation"].includes(normalized)) return normalized as FieldType;
+  return "string";
+}
+
+function catalogFieldCare(name: string): DataCare {
+  const value = String(name || "").toLowerCase();
+  if (/(antecedente|diagnostic|historial|resultado|tratamiento|mascota)/.test(value)) return "SENSITIVE";
+  if (/(nombre|telefono|correo|email|direccion|tutor|cliente|propietario)/.test(value)) return "PERSONAL";
+  if (/(precio|monto|valor|comision|costo|presupuesto)/.test(value)) return "CONFIDENTIAL";
+  return "INTERNAL";
+}
+
+function catalogPreset(entity: MetadataCatalog["entities"][number]): Preset | null {
+  const recordType = String(entity.recordType || "").trim();
+  if (!recordType) return null;
+  return {
+    id: `catalog-${recordType}`,
+    name: String(entity.label || recordType),
+    description: "Ficha propia de este rubro. Puedes ajustarla antes de guardarla.",
+    recordType,
+    label: String(entity.label || recordType),
+    fields: (entity.fields || []).map((item) => field(item.name, catalogFieldType(item.type), item.required, catalogFieldCare(item.name))),
+  };
+}
+
 export default function MetadataSettingsPage() {
   const [schemas, setSchemas] = useState<MetadataSchema[]>([]);
+  const [catalog, setCatalog] = useState<MetadataCatalog | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [selectedPreset, setSelectedPreset] = useState("property");
   const [recordType, setRecordType] = useState("property");
@@ -114,8 +142,9 @@ export default function MetadataSettingsPage() {
   const [saving, setSaving] = useState(false);
 
   async function reload() {
-    const response = await getMetadataSchemas();
+    const [response, currentCatalog] = await Promise.all([getMetadataSchemas(), getMetadataCatalog()]);
     setSchemas(response.schemas || []);
+    setCatalog(currentCatalog);
   }
 
   useEffect(() => {
@@ -124,6 +153,21 @@ export default function MetadataSettingsPage() {
 
   const generatedType = useMemo(() => toKey(recordType || label), [label, recordType]);
   const fieldCount = fieldRows.filter((item) => item.label.trim()).length;
+  const visiblePresets = useMemo(() => {
+    const fromIndustry = (catalog?.entities || []).map(catalogPreset).filter((item): item is Preset => Boolean(item));
+    return [...fromIndustry, presets.find((item) => item.id === "blank")!];
+  }, [catalog]);
+  const allowedRecordTypes = useMemo(() => new Set(visiblePresets.map((preset) => preset.recordType)), [visiblePresets]);
+  const visibleSchemas = useMemo(() => schemas.filter((schema) => {
+    if (!catalog) return true;
+    const schemaIndustry = String(schema.policies?.industry || "").toUpperCase();
+    return allowedRecordTypes.has(schema.recordType) || schemaIndustry === String(catalog.industry || "").toUpperCase();
+  }), [allowedRecordTypes, catalog, schemas]);
+
+  useEffect(() => {
+    if (!catalog || !visiblePresets.length) return;
+    if (!visiblePresets.some((preset) => preset.recordType === recordType)) applyPreset(visiblePresets[0]);
+  }, [catalog, recordType, visiblePresets]);
 
   function applyPreset(preset: Preset) {
     setSelectedPreset(preset.id);
@@ -180,7 +224,7 @@ export default function MetadataSettingsPage() {
         recordType: generatedType,
         label: label.trim(),
         fields: buildFields(),
-        policies: { enforcement: strict ? "STRICT" : "COMPATIBLE", allowUnknown: !strict },
+        policies: { enforcement: strict ? "STRICT" : "COMPATIBLE", allowUnknown: !strict, industry: catalog?.industry || "GENERAL", createdFrom: "metadata_builder" },
       });
       setStatus(`Borrador v${response.schema.version} creado. Revísalo y publícalo cuando estés conforme.`);
       await reload();
@@ -249,7 +293,7 @@ export default function MetadataSettingsPage() {
           <section className="vertical-card metadata-step-card">
             <div className="vertical-card-head"><div><span>PASO 1</span><h2>¿Qué ficha quieres organizar?</h2><p>Selecciona la más parecida a tu operación. Después podrás cambiarla.</p></div></div>
             <div className="metadata-preset-grid">
-              {presets.map((preset) => (
+              {visiblePresets.map((preset) => (
                 <button className={`metadata-preset ${selectedPreset === preset.id ? "selected" : ""}`} type="button" key={preset.id} onClick={() => applyPreset(preset)}>
                   <strong>{preset.name}</strong><span>{preset.description}</span>
                 </button>
@@ -280,6 +324,18 @@ export default function MetadataSettingsPage() {
             </div>
           </section>
 
+          <section className="vertical-card metadata-step-card metadata-live-preview">
+            <div className="vertical-card-head"><div><span>VISTA PREVIA</span><h2>Asi vera esta ficha tu equipo</h2><p>Los cambios aun no afectan la operacion. Podras guardarlos como borrador y activarlos despues.</p></div></div>
+            <article className="metadata-preview-form">
+              <strong>{label || "Nueva ficha"}</strong>
+              <div className="metadata-preview-fields">
+                {fieldRows.filter((item) => item.label.trim()).map((item) => (
+                  <label key={`preview-${item.id}`}><span>{item.label}{item.required ? " *" : ""}</span><div>{item.type === "boolean" ? "Si / No" : item.type === "date" ? "dd-mm-aaaa" : item.type === "number" ? "Ingresa un numero" : item.type === "array" ? "Agrega elementos" : item.type === "relation" ? "Selecciona una ficha" : "Escribe aqui"}</div></label>
+                ))}
+              </div>
+            </article>
+          </section>
+
           <section className="vertical-card metadata-step-card metadata-publish-card">
             <div><span>PASO 3</span><h2>Guarda con tranquilidad</h2><p>Primero crearemos un borrador. Nada cambia para tu equipo hasta que presiones “Activar” en la lista inferior.</p></div>
             <label className="metadata-safety-toggle"><input type="checkbox" checked={strict} onChange={(event) => setStrict(event.target.checked)} /><span><strong>Solo permitir los datos de este formulario</strong><small>Déjalo desactivado mientras pruebas. Actívalo cuando estés seguro de que no falta ningún dato.</small></span></label>
@@ -290,7 +346,7 @@ export default function MetadataSettingsPage() {
         <section className="vertical-card metadata-existing">
           <div className="vertical-card-head"><div><span>FICHAS GUARDADAS</span><h2>Versiones y activación</h2><p>Una sola versión puede estar activa por tipo de ficha.</p></div></div>
           <div className="vertical-list metadata-schema-list">
-            {schemas.length ? schemas.map((schema) => (
+            {visibleSchemas.length ? visibleSchemas.map((schema) => (
               <article key={schema.id}>
                 <div><strong>{schema.label}</strong><p>{Object.keys(schema.fields || {}).length} datos · versión {schema.version}</p><small>{schema.status === "PUBLISHED" ? "Activa" : schema.status === "DRAFT" ? "Borrador: aún no afecta al equipo" : "Versión anterior"} · {schema.policies?.generatedBy === "industry_template" ? "creada automáticamente desde tu rubro" : schema.policies?.enforcement === "STRICT" ? "campos nuevos bloqueados" : "modo flexible"}</small></div>
                 <div className="metadata-schema-actions">{schema.status === "DRAFT" ? <button className="primary-btn" disabled={saving} onClick={() => void publish(schema.id)}>Activar ficha</button> : schema.status === "PUBLISHED" ? <button className="secondary-btn" disabled={saving} onClick={() => void migrate(schema)}>Actualizar registros antiguos</button> : null}</div>
