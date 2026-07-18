@@ -788,15 +788,33 @@ export default function AdminPage() {
     }
   }
 
-  function handleModuleToggle(module: string) {
-    setPendingModules((current) => {
-      const next = new Set(current);
-      if (next.has(module)) next.delete(module);
-      else next.add(module);
-      return Array.from(next);
-    });
-    setSuccess(null);
-    setError(null);
+  async function handleModuleToggle(module: string) {
+    if (!selectedTenant || savingId === `modules-${selectedTenant.id}`) return;
+    const next = new Set(pendingModules);
+    if (next.has(module)) next.delete(module);
+    else next.add(module);
+    const nextModules = Array.from(next);
+
+    // Cada click persiste de inmediato. Así no existe el riesgo de perder una
+    // habilitación al recargar por olvidar un segundo botón de guardado.
+    setPendingModules(nextModules);
+    try {
+      setSavingId(`modules-${selectedTenant.id}`);
+      setError(null);
+      setSuccess(null);
+      const result = await updateAdminTenantModules(selectedTenant.id, nextModules);
+      if (result.tenant) {
+        updateTenantLocal(result.tenant);
+        setPendingModules(enabledModulesOf(result.tenant as AdminTenant));
+      }
+      setSuccess(`${MODULE_LABELS[module] || module} ${next.has(module) ? "habilitado" : "bloqueado"} y guardado.`);
+    } catch (err) {
+      // Volvemos al estado confirmado si la red o el backend rechazó el cambio.
+      setPendingModules(enabledModulesOf(selectedTenant));
+      setError(err instanceof Error ? err.message : "No se pudo guardar el módulo");
+    } finally {
+      setSavingId(null);
+    }
   }
 
   function addModulesToPending(modules: string[]) {
@@ -1528,11 +1546,11 @@ export default function AdminPage() {
                     <div>
                       <strong>Servicios / módulos habilitados</strong>
                       <div className="meta-line">
-                        Activa solo lo que este cliente paga o necesita. Los cambios quedan pendientes hasta presionar "Guardar módulos".
+                        Activa solo lo que este cliente paga o necesita. Cada cambio se guarda de inmediato en la cuenta.
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                      {moduleDirty ? <span className="meta-line">Cambios sin guardar</span> : <span className="meta-line">Módulos sincronizados</span>}
+                      {savingId === `modules-${selectedTenant.id}` ? <span className="meta-line">Guardando cambio...</span> : moduleDirty ? <span className="meta-line">Cambios pendientes</span> : <span className="meta-line">Módulos sincronizados</span>}
                       <button
                         className="primary-btn"
                         type="button"
@@ -1559,7 +1577,7 @@ export default function AdminPage() {
                             const active = pendingModules.includes(module);
                             const saved = enabledModulesOf(selectedTenant).includes(module);
                             return (
-                              <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => handleModuleToggle(module)}>
+                              <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>
                                 <span>{MODULE_LABELS[module] || module}</span>
                                 {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
                                 <small>{active ? "Activo" : "Bloqueado"}{active !== saved ? " - pendiente" : ""}</small>
