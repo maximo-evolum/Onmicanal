@@ -716,6 +716,29 @@ export type IndustryRecord = {
   assignedTo?: IndustryUser | null;
 };
 
+export type RealtyIntelligence = {
+  generatedAt: string;
+  inventory: {
+    total: number;
+    portfolioValue: number;
+    averagePrice: number;
+    averageCompleteness: number;
+    assigned: number;
+    unassigned: number;
+    missingMedia: number;
+    stale: number;
+    byOperation: Array<{ label: string; count: number }>;
+    byStage: Array<{ label: string; count: number }>;
+    topCommunes: Array<{ label: string; count: number }>;
+  };
+  visits: { total: number; pending: number };
+  owners: number;
+  brokers: Array<{ brokerId: string; name: string; role: string; properties: number; portfolioValue: number; activeVisits: number }>;
+  marketing: { campaigns: number; published: number; audiences: Array<{ key: string; label: string; count: number; recommendedChannel: string }> };
+  priorities: Array<{ priority: string; code: string; message: string }>;
+  actionQueue: Array<{ type: string; recordId: string; title: string; message: string }>;
+};
+
 export async function getMyModules(): Promise<TenantModulesResponse> {
   return request<TenantModulesResponse>("/modules/me");
 }
@@ -749,6 +772,21 @@ export async function getIndustryUsers(): Promise<IndustryUser[]> {
 export async function getIndustryRecords(type?: string): Promise<IndustryRecord[]> {
   const query = type ? `?type=${encodeURIComponent(type)}` : "";
   return request<IndustryRecord[]>(`/industry-records${query}`);
+}
+
+export async function getRealtyIntelligence(): Promise<RealtyIntelligence> {
+  return request<RealtyIntelligence>("/realty/intelligence");
+}
+
+export async function getRealtyLeadMatches(leadId: string): Promise<{ lead: { id: string; name?: string | null; status: string; budget?: number | null; closeProbability?: number | null }; matches: Array<{ score: number; reasons: string[]; property: { id: string; title: string; status: string; price: number; commune: string; operation: string; assignedToId?: string | null } }> }> {
+  return request(`/realty/leads/${encodeURIComponent(leadId)}/matches`);
+}
+
+export async function createRealtyPropertyCampaignDraft(propertyId: string, input: { platforms?: CampaignPlatform[]; variantCount?: number; tone?: string } = {}): Promise<CampaignProResult> {
+  return request<CampaignProResult>(`/campaigns/realty/property/${encodeURIComponent(propertyId)}/draft`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 
 export async function createIndustryRecord(input: {

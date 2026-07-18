@@ -9,6 +9,7 @@ import {
   IndustryUser,
   Message,
   PaymentMetrics,
+  RealtyIntelligence,
   TenantModulesResponse
 } from "../types";
 
@@ -100,6 +101,10 @@ export async function getMyModules(): Promise<TenantModulesResponse> {
 
 export async function getCrmOperationalDashboard(): Promise<CrmOperationalDashboard> {
   return request<CrmOperationalDashboard>("/crm/operational");
+}
+
+export async function getRealtyIntelligence(): Promise<RealtyIntelligence> {
+  return request<RealtyIntelligence>("/realty/intelligence");
 }
 
 export async function getConversations(): Promise<Conversation[]> {

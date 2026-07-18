@@ -38,6 +38,7 @@ import {
   getCampaigns,
   getConversations,
   getCrmOperationalDashboard,
+  getRealtyIntelligence,
   getIndustryRecords,
   getIndustryUsers,
   getMe,
@@ -56,7 +57,7 @@ import {
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
-import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, IndustryRecord, IndustryUser, Message, TenantSession } from "./src/types";
+import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, IndustryRecord, IndustryUser, Message, RealtyIntelligence, TenantSession } from "./src/types";
 
 type ScreenKey =
   | "dashboard"
@@ -419,6 +420,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dashboard, setDashboard] = useState<CrmOperationalDashboard | null>(null);
+  const [realtyIntelligence, setRealtyIntelligence] = useState<RealtyIntelligence | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -499,7 +501,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.allSettled([loadModules(), loadDashboard(false), loadConversations(false), loadBookings(false), loadCampaigns(false), loadProperties(false), loadCustomers(false)]);
+    await Promise.allSettled([loadModules(), loadDashboard(false), loadRealtyIntelligence(), loadConversations(false), loadBookings(false), loadCampaigns(false), loadProperties(false), loadCustomers(false)]);
   }
 
   async function loadModules() {
@@ -512,6 +514,11 @@ export default function App() {
     const data = await getCrmOperationalDashboard().catch(() => null);
     if (data) setDashboard(data);
     if (showLoading) setRefreshing(false);
+  }
+
+  async function loadRealtyIntelligence() {
+    const data = await getRealtyIntelligence().catch(() => null);
+    setRealtyIntelligence(data);
   }
 
   async function loadConversations(showLoading = true) {
@@ -590,6 +597,7 @@ export default function App() {
     await clearMobileSession();
     setSession(null);
     setDashboard(null);
+    setRealtyIntelligence(null);
     setConversations([]);
     setMessages([]);
     setBookings([]);
@@ -599,7 +607,10 @@ export default function App() {
   }
 
   async function refreshCurrent() {
-    if (screen === "dashboard") return loadDashboard();
+    if (screen === "dashboard") {
+      await Promise.all([loadDashboard(), loadRealtyIntelligence()]);
+      return;
+    }
     if (screen === "inbox") {
       await loadConversations();
       if (selectedConversation?.id) await loadMessages(selectedConversation.id);
@@ -756,7 +767,7 @@ export default function App() {
       )}
       <View style={styles.contentShell}>
         {screen === "dashboard" && (
-          <DashboardScreen dashboard={dashboard} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />
+          <DashboardScreen dashboard={dashboard} realtyIntelligence={realtyIntelligence} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />
         )}
         {screen === "inbox" && (
           <InboxScreen
@@ -859,7 +870,7 @@ function SideNav({
   );
 }
 
-function DashboardScreen({ dashboard, profile, refreshing, onRefresh }: { dashboard: CrmOperationalDashboard | null; profile: IndustryProfile; refreshing: boolean; onRefresh: () => void }) {
+function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, onRefresh }: { dashboard: CrmOperationalDashboard | null; realtyIntelligence: RealtyIntelligence | null; profile: IndustryProfile; refreshing: boolean; onRefresh: () => void }) {
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>Dashboard</Text>
@@ -877,6 +888,13 @@ function DashboardScreen({ dashboard, profile, refreshing, onRefresh }: { dashbo
           <Kpi label="Conversion" value={`${dashboard?.kpis.conversionRate ?? 0}%`} detail={money(dashboard?.revenue.estimated)} />
         </View>
       </Panel>
+      {realtyIntelligence ? <Panel title="Inteligencia inmobiliaria">
+        <View style={styles.compactMetrics}>
+          <Kpi label="Ficha completa" value={`${realtyIntelligence.inventory.averageCompleteness}%`} detail={`${realtyIntelligence.inventory.total} propiedades`} />
+          <Kpi label="Visitas" value={realtyIntelligence.visits.pending} detail="seguimientos activos" />
+        </View>
+        {(realtyIntelligence.priorities || []).slice(0, 3).map((item) => <ListRow key={item.code} left="IA" title={item.message} subtitle={item.priority === "high" ? "Prioridad alta" : "Recomendación operacional"} />)}
+      </Panel> : null}
       <Panel title="Actividad reciente">
         {(dashboard?.activity || []).slice(0, 5).map((item) => (
           <ListRow key={item.id} left={initials(item.type)} title={item.title} subtitle={item.description} right={dateLabel(item.createdAt)} />

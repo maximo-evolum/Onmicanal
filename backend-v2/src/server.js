@@ -47,6 +47,7 @@ import { runAutonomousSalesFollowUps } from "./services/autonomous-sales-followu
 import { observeRequest, runtimeMetrics } from "./lib/runtime-metrics.js";
 import { operationsRouter } from "./routes/operations.routes.js";
 import { getRedisClient } from "./lib/redis.js";
+import { realtyIntelligenceRouter } from "./routes/realty-intelligence.routes.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -212,6 +213,7 @@ app.use("/api", ...protectedApi, onboardingRouter);
 app.use("/api", ...protectedApi, conversationsRouter); // Inbox: auth + tenant, sin bloqueo por módulo para evitar 403 en tenants configurados
 app.use("/api", ...protectedApi, messagesRouter); // Mensajes manuales del inbox: auth + tenant
 app.use("/api", ...protectedApi, leadsRouter); // Lead panel universal usado desde Inbox
+app.use("/api", ...protectedApi, requireModule(MODULES.PROPERTIES), realtyIntelligenceRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.SALES), productRoutes);
 app.use("/api", ...protectedApi, requireModule(MODULES.DOCUMENTS), documentsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.WORKFLOWS), workflowsRouter);

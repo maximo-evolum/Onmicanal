@@ -7,13 +7,16 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import {
   createIndustryBrokerUser,
+  createRealtyPropertyCampaignDraft,
   createIndustryRecord,
   deleteIndustryBrokerUser,
+  getRealtyIntelligence,
   getIndustryRecords,
   getIndustryUsers,
   updateIndustryRecord,
   type IndustryRecord,
-  type IndustryUser
+  type IndustryUser,
+  type RealtyIntelligence
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
@@ -307,6 +310,32 @@ function RealtyPredictivePanel({ data }: { data: RealtyData }) {
   );
 }
 
+function RealtyIntelligencePanel() {
+  const [intelligence, setIntelligence] = useState<RealtyIntelligence | null>(null);
+
+  useEffect(() => {
+    getRealtyIntelligence().then(setIntelligence).catch(() => setIntelligence(null));
+  }, []);
+
+  if (!intelligence) return null;
+  const { inventory, marketing } = intelligence;
+  return (
+    <section className="vertical-card realty-predictive-panel">
+      <div className="vertical-card-head"><div><span>Inteligencia operacional</span><h2>Cartera, demanda y marketing</h2></div><strong>{inventory.averageCompleteness}% completa</strong></div>
+      <div className="realty-predictive-grid">
+        <article><small>Sin corredor</small><strong>{inventory.unassigned}</strong><span>requieren asignación</span></article>
+        <article><small>Sin material</small><strong>{inventory.missingMedia}</strong><span>sin foto o galería</span></article>
+        <article><small>Sin actualizar</small><strong>{inventory.stale}</strong><span>más de 14 días</span></article>
+        <article><small>Visitas activas</small><strong>{intelligence.visits.pending}</strong><span>agenda comercial</span></article>
+      </div>
+      <div className="realty-insight-list">
+        <div><strong>Audiencias recomendadas</strong>{marketing.audiences.map((audience) => <p key={audience.key}>{audience.count} · {audience.label} <small>({audience.recommendedChannel})</small></p>)}</div>
+        <div><strong>Prioridades</strong>{intelligence.priorities.map((item) => <p key={item.code}>{item.message}</p>)}</div>
+      </div>
+    </section>
+  );
+}
+
 export function useRealtyWorkspace() {
   const [data, setData] = useState<RealtyData>(emptyData);
   const [loading, setLoading] = useState(true);
@@ -507,11 +536,13 @@ export function PropertyPortalCards({
 export function PropertyDetailModal({
   property,
   brokers,
-  onClose
+  onClose,
+  onCreateCampaign
 }: {
   property: IndustryRecord;
   brokers: Broker[];
   onClose: () => void;
+  onCreateCampaign?: (property: IndustryRecord) => Promise<void> | void;
 }) {
   const data = asData(property);
   const photos = propertyPhotos(data);
@@ -578,6 +609,7 @@ export function PropertyDetailModal({
               {data.ownerPhone ? <small>{text(data.ownerPhone)}</small> : null}
               {data.ownerEmail ? <small>{text(data.ownerEmail)}</small> : null}
             </div>
+            {onCreateCampaign ? <button type="button" className="secondary-btn" onClick={() => onCreateCampaign(property)}>Crear borrador de campaña</button> : null}
           </aside>
         </div>
 
@@ -794,6 +826,7 @@ export function RealtyLoadsPageContent() {
 export function RealtyPropertiesPageContent() {
   const { data, error, reload } = useRealtyWorkspace();
   const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
+  const [message, setMessage] = useState("");
 
   async function updateStage(property: IndustryRecord, stage: string) {
     await updateIndustryRecord(property.id, { data: { ...asData(property), stage } });
@@ -814,6 +847,15 @@ export function RealtyPropertiesPageContent() {
     await reload();
   }
 
+  async function createPropertyCampaign(property: IndustryRecord) {
+    try {
+      await createRealtyPropertyCampaignDraft(property.id, { platforms: ["instagram", "facebook"] });
+      setMessage(`Borrador de campaña creado para ${property.title}. Revísalo en Campañas antes de publicar.`);
+    } catch (campaignError) {
+      setMessage(campaignError instanceof Error ? campaignError.message : "No se pudo crear el borrador de campaña.");
+    }
+  }
+
   return (
     <>
       <RealtyHeader
@@ -823,12 +865,14 @@ export function RealtyPropertiesPageContent() {
       />
       <RealtyKpis data={data} />
       {error ? <div className="sales-queue-error">{error}</div> : null}
+      {message ? <div className="module-toast">{message}</div> : null}
       <RealtyPredictivePanel data={data} />
+      <RealtyIntelligencePanel />
       <section className="vertical-card">
         <div className="vertical-card-head"><div><span>Inventario</span><h2>Portal de propiedades</h2></div></div>
         <PropertyPortalCards properties={data.properties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
       </section>
-      {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} /> : null}
+      {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} onCreateCampaign={createPropertyCampaign} /> : null}
     </>
   );
 }
@@ -845,6 +889,7 @@ export function RealtyActivityPageContent() {
         description="Visitas, propietarios, portal corredor, alertas y propiedades activas en una vista ejecutiva."
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
+      <RealtyIntelligencePanel />
       <section className="vertical-four">
         <article className="vertical-card"><span>Visitas</span><h2>{data.visits.length}</h2><p>Agenda comercial y resultados.</p></article>
         <article className="vertical-card"><span>Propietarios</span><h2>{data.owners.length}</h2><p>Base de captacion y seguimiento.</p></article>

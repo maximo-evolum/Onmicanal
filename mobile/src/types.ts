@@ -153,6 +153,13 @@ export type CrmOperationalDashboard = {
   upcomingBookings: Booking[];
 };
 
+export type RealtyIntelligence = {
+  inventory: { total: number; portfolioValue: number; averageCompleteness: number; unassigned: number; missingMedia: number; stale: number };
+  visits: { total: number; pending: number };
+  marketing: { campaigns: number; published: number; audiences: Array<{ key: string; label: string; count: number; recommendedChannel: string }> };
+  priorities: Array<{ priority: string; code: string; message: string }>;
+};
+
 export type TenantModulesResponse = {
   tenantId: string;
   plan: string;

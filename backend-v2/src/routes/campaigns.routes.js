@@ -170,6 +170,26 @@ function serializeCampaign(campaign) {
   };
 }
 
+function propertyCampaignContext(property) {
+  const data = property?.data && typeof property.data === "object" ? property.data : {};
+  const price = Number(data.price || data.value || data.askingPrice || 0);
+  const operation = String(data.operation || "venta").toLowerCase();
+  const address = String(data.address || data.comuna || data.commune || "ubicación por confirmar").trim();
+  const propertyType = String(data.propertyType || data.type || "propiedad").trim();
+  const specs = [data.bedrooms ? `${data.bedrooms} dormitorios` : null, data.bathrooms ? `${data.bathrooms} baños` : null, data.meters ? `${data.meters} m²` : null].filter(Boolean).join(", ");
+  const value = price ? `$${Math.round(price).toLocaleString("es-CL")}` : "precio a consultar";
+  return {
+    product: `${propertyType} en ${address}`,
+    visualTitle: property.title,
+    idea: `${operation === "arriendo" ? "Arriendo" : "Venta"} de ${propertyType} en ${address}. ${specs || "Ficha disponible"}. ${value}.`,
+    caption: `${property.title}\n${address}${specs ? ` · ${specs}` : ""}${price ? ` · ${value}` : ""}\n\nEscríbenos para coordinar una visita y recibir la ficha completa.`,
+    cta: "Agenda una visita",
+    target: operation === "arriendo" ? "personas buscando arriendo en la zona" : "personas interesadas en comprar propiedad en la zona",
+    category: "inmobiliaria",
+    propertyId: property.id
+  };
+}
+
 campaignsRouter.get("/campaigns", async (req, res) => {
   try {
     const campaigns = await prisma.campaign.findMany({
@@ -180,6 +200,72 @@ campaignsRouter.get("/campaigns", async (req, res) => {
   } catch (error) {
     console.error("List campaigns error:", error);
     return res.status(500).json({ error: "No se pudieron obtener campañas" });
+  }
+});
+
+// Resumen de rendimiento operativo. Las redes no entregan métricas de pauta
+// sin sus APIs publicitarias; por eso este reporte distingue publicaciones de
+// conversiones, evitando inventar resultados comerciales.
+campaignsRouter.get("/campaigns/analytics", async (req, res) => {
+  try {
+    const campaigns = await prisma.campaign.findMany({ where: { tenantId: req.tenantId }, orderBy: { updatedAt: "desc" }, take: 500 });
+    const byStatus = campaigns.reduce((acc, campaign) => {
+      const status = String(campaign.status || "DRAFT").toUpperCase();
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {});
+    const byPlatform = {};
+    let successfulPublications = 0;
+    let partialPublications = 0;
+    for (const campaign of campaigns) {
+      const template = safeJsonParse(campaign.template, {});
+      const platforms = Array.isArray(template?.platforms) ? template.platforms : [];
+      for (const platform of platforms) {
+        const key = String(platform || "").toLowerCase();
+        if (key) byPlatform[key] = (byPlatform[key] || 0) + 1;
+      }
+      if (String(campaign.status).toUpperCase() === "PUBLISHED") successfulPublications += 1;
+      if (String(campaign.status).toUpperCase() === "PARTIAL") partialPublications += 1;
+    }
+    res.json({
+      generatedAt: new Date().toISOString(),
+      total: campaigns.length,
+      byStatus,
+      byPlatform: Object.entries(byPlatform).map(([platform, count]) => ({ platform, count })).sort((a, b) => b.count - a.count),
+      successfulPublications,
+      partialPublications,
+      conversionTracking: "pending_provider_events",
+      recommendations: [
+        successfulPublications ? "Relaciona cada campaña publicada con su fuente de lead para medir atribución comercial." : "Publica una campaña de prueba antes de medir atribución.",
+        partialPublications ? "Hay publicaciones parciales: revisa credenciales y permisos del canal." : "No hay publicaciones parciales pendientes de revisión."
+      ]
+    });
+  } catch (error) {
+    console.error("Campaign analytics error:", error);
+    res.status(500).json({ error: "No se pudo obtener la analítica de campañas" });
+  }
+});
+
+campaignsRouter.post("/campaigns/realty/property/:propertyId/draft", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const property = await prisma.industryRecord.findFirst({ where: { id: req.params.propertyId, tenantId: req.tenantId, recordType: "property", status: { not: "ARCHIVED" } } });
+    if (!property) return res.status(404).json({ error: "Propiedad no encontrada" });
+    const context = propertyCampaignContext(property);
+    const platforms = Array.isArray(req.body?.platforms) && req.body.platforms.length ? req.body.platforms : ["instagram", "facebook"];
+    const generated = await generateCampaignCopy({ ...context, platforms, variantCount: req.body?.variantCount || 2, tone: req.body?.tone || "profesional, cercano y confiable" });
+    const campaign = await prisma.campaign.create({
+      data: {
+        tenantId: req.tenantId,
+        name: `Propiedad · ${property.title}`,
+        segment: "realty_property",
+        template: JSON.stringify({ ...context, platforms, variants: generated.variants, source: "property_campaign_draft" }),
+        status: "DRAFT"
+      }
+    });
+    return res.status(201).json({ campaign: serializeCampaign(campaign), context, variants: generated.variants });
+  } catch (error) {
+    console.error("Property campaign draft error:", error);
+    return res.status(500).json({ error: "No se pudo generar el borrador de campaña inmobiliaria" });
   }
 });
 
