@@ -45,6 +45,7 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
       moduleItem(MODULES.REALTY_ACTIVITY, "Actividad inmobiliaria", "Visitas, propietarios, portal corredor, alertas y propiedades activas.", "PRO"),
       moduleItem(MODULES.BOOKINGS, "Agenda de visitas", "Visitas por propiedad, sucursal o direccion.", "PRO"),
       moduleItem(MODULES.SALES, "Pipeline inmobiliario", "Estados comerciales por propiedad y comprador.", "PRO"),
+      moduleItem(MODULES.CUSTOMERS, "Clientes", "Fichas de compradores, presupuesto, preferencias y propiedades compatibles.", "PRO"),
       moduleItem(MODULES.MARKETING, "Campanas inmobiliarias", "Publicaciones y mensajes por propiedad.", "BUSINESS"),
       moduleItem(MODULES.PAYMENTS, "Pagos y reservas", "Reservas, abonos y compromisos de compra.", "BUSINESS"),
       moduleItem(MODULES.ANALYTICS, "Dashboard", "Ventas, visitas, conversion y rendimiento de vendedores.", "PRO")
@@ -211,7 +212,7 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     summary: "Vehiculos, repuestos, mecanicos, agenda de taller y aviso de retiro.",
     modules: [
       moduleItem(MODULES.INBOX, "Inbox taller", "Mensajes por cliente, vehiculo y estado de servicio."),
-      moduleItem(MODULES.VEHICLES, "Vehiculos", "Ficha de vehiculo, cliente, patente, kilometraje y diagnostico.", "PRO"),
+      moduleItem(MODULES.VEHICLES, "Dueños y vehículos", "Ficha de dueño, vehículo, historial técnico, repuestos y presupuestos.", "PRO"),
       moduleItem(MODULES.PARTS_INVENTORY, "Repuestos", "Fotos, stock, ubicacion, costo y compatibilidad.", "BUSINESS"),
       moduleItem(MODULES.MECHANIC_ASSIGNMENTS, "Asignacion de mecanicos", "Distribucion de trabajos segun carga y especialidad.", "PRO"),
       moduleItem(MODULES.READY_NOTIFICATIONS, "Aviso de retiro", "Mensaje automatico al cliente cuando el vehiculo esta listo.", "PRO"),
@@ -220,9 +221,9 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
       moduleItem(MODULES.ANALYTICS, "Dashboard", "Ordenes, tiempos, repuestos y rendimiento.", "PRO")
     ],
     entities: [
-      { key: "vehicle", label: "Vehiculo", fields: ["cliente", "patente", "marca", "modelo", "ano", "kilometraje", "diagnostico"] },
+      { key: "vehicle", label: "Dueño y vehículo", fields: ["dueno", "telefono", "correo", "patente", "marca", "modelo", "ano", "kilometraje", "diagnostico"] },
       { key: "part", label: "Repuesto", fields: ["foto", "sku", "stock", "ubicacion", "costo", "compatibilidad"] },
-      { key: "work_order", label: "Orden de trabajo", fields: ["vehiculo", "mecanico", "estado", "fecha_entrega", "notas"] }
+      { key: "work_order", label: "Orden de trabajo", fields: ["vehiculo", "mecanico", "estado", "fecha_entrega", "repuestos", "presupuesto", "notas"] }
     ],
     workflows: ["recibir vehiculo", "asignar mecanico", "validar repuestos", "reparar", "avisar retiro", "cobrar"]
   },

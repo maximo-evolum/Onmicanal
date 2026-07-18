@@ -6,9 +6,9 @@ import { ModuleGate } from "@/components/module-gate";
 import { createIndustryRecord, getIndustryRecords, getIndustryUsers, updateIndustryRecord, type IndustryRecord, type IndustryUser } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 
-const emptyVehicle = { title: "", plate: "", client: "", mileage: "", diagnosis: "", assignedToId: "" };
+const emptyVehicle = { title: "", plate: "", client: "", ownerPhone: "", ownerEmail: "", mileage: "", diagnosis: "", assignedToId: "" };
 const emptyPart = { title: "", sku: "", stock: "", location: "", cost: "", photoUrl: "", photoFileName: "", compatibility: "" };
-const emptyWorkOrder = { title: "", vehicleId: "", dueDate: "", notes: "", assignedToId: "", status: "RECEIVED" };
+const emptyWorkOrder = { title: "", vehicleId: "", dueDate: "", notes: "", partsUsed: "", quoteAmount: "", assignedToId: "", status: "RECEIVED" };
 
 const WORKSHOP_STAGES = [
   { key: "RECEIVED", label: "Recibido" },
@@ -42,6 +42,7 @@ export default function WorkshopPage() {
   const [vehicleForm, setVehicleForm] = useState(emptyVehicle);
   const [partForm, setPartForm] = useState(emptyPart);
   const [workOrderForm, setWorkOrderForm] = useState(emptyWorkOrder);
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -73,6 +74,10 @@ export default function WorkshopPage() {
   const mechanics = useMemo(() => users.filter((user) => ["AGENT", "SELLER", "OWNER", "ADMIN"].includes(user.role)), [users]);
   const readyVehicles = useMemo(() => workOrders.filter((order) => order.status === "READY").length, [workOrders]);
   const lowStock = useMemo(() => parts.filter((part) => Number(valueOf(part, "stock") || 0) <= 2).length, [parts]);
+  const selectedVehicle = useMemo(() => vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || null, [vehicles, selectedVehicleId]);
+  const selectedVehicleHistory = useMemo(() => selectedVehicle
+    ? workOrders.filter((order) => String(valueOf(order, "vehicleId")) === selectedVehicle.id)
+    : [], [selectedVehicle, workOrders]);
 
   async function createVehicle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -86,6 +91,8 @@ export default function WorkshopPage() {
         data: {
           plate: vehicleForm.plate,
           client: vehicleForm.client,
+          ownerPhone: vehicleForm.ownerPhone,
+          ownerEmail: vehicleForm.ownerEmail,
           mileage: Number(vehicleForm.mileage || 0),
           diagnosis: vehicleForm.diagnosis
         }
@@ -165,7 +172,10 @@ export default function WorkshopPage() {
           client: vehicle ? valueOf(vehicle, "client") : "",
           plate: vehicle ? valueOf(vehicle, "plate") : "",
           dueDate: workOrderForm.dueDate,
-          notes: workOrderForm.notes
+          notes: workOrderForm.notes,
+          partsUsed: workOrderForm.partsUsed,
+          quoteAmount: Number(workOrderForm.quoteAmount || 0),
+          createdFrom: "workshop"
         }
       });
       setWorkOrderForm(emptyWorkOrder);
@@ -210,16 +220,16 @@ export default function WorkshopPage() {
   return (
     <ModuleGate moduleKey="vehicles">
       <div className={`executive-shell vertical-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
-        <EvolumSidebar active="Taller" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
+        <EvolumSidebar active="Dueños y vehículos" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
         <main className="vertical-page">
           <header className="vertical-hero automotive">
             <div>
               <span>Rubro automotriz</span>
-              <h1>Taller, vehiculos y repuestos</h1>
-              <p>Gestiona ingresos al taller, asigna mecanicos y controla stock con ubicacion.</p>
+              <h1>Dueños, vehículos y taller</h1>
+              <p>Cada vehículo conserva su dueño, historial de reparaciones, repuestos usados y presupuestos entregados.</p>
             </div>
             <div className="vertical-hero-stats">
-              <article><strong>{vehicles.length}</strong><span>Vehiculos</span></article>
+              <article><strong>{vehicles.length}</strong><span>Fichas de vehículo</span></article>
               <article><strong>{parts.length}</strong><span>Repuestos</span></article>
               <article><strong>{workOrders.length}</strong><span>Ordenes</span></article>
               <article><strong>{readyVehicles}</strong><span>Listos</span></article>
@@ -232,19 +242,23 @@ export default function WorkshopPage() {
 
           <section className="vertical-grid">
             <form className="vertical-card vertical-form" onSubmit={createVehicle}>
-              <div><span>Orden de taller</span><h2>Ingresar vehiculo</h2></div>
+              <div><span>Ficha de dueño y vehículo</span><h2>Ingresar vehículo</h2></div>
               <input value={vehicleForm.title} onChange={(e) => setVehicleForm({ ...vehicleForm, title: e.target.value })} placeholder="Vehiculo: Toyota RAV4 2021" required />
               <div className="vertical-two">
                 <input value={vehicleForm.plate} onChange={(e) => setVehicleForm({ ...vehicleForm, plate: e.target.value })} placeholder="Patente" />
                 <input value={vehicleForm.mileage} onChange={(e) => setVehicleForm({ ...vehicleForm, mileage: e.target.value })} placeholder="Kilometraje" inputMode="numeric" />
               </div>
-              <input value={vehicleForm.client} onChange={(e) => setVehicleForm({ ...vehicleForm, client: e.target.value })} placeholder="Cliente" />
+              <input value={vehicleForm.client} onChange={(e) => setVehicleForm({ ...vehicleForm, client: e.target.value })} placeholder="Nombre del dueño" />
+              <div className="vertical-two">
+                <input value={vehicleForm.ownerPhone} onChange={(e) => setVehicleForm({ ...vehicleForm, ownerPhone: e.target.value })} placeholder="Teléfono del dueño" />
+                <input type="email" value={vehicleForm.ownerEmail} onChange={(e) => setVehicleForm({ ...vehicleForm, ownerEmail: e.target.value })} placeholder="Correo del dueño" />
+              </div>
               <textarea value={vehicleForm.diagnosis} onChange={(e) => setVehicleForm({ ...vehicleForm, diagnosis: e.target.value })} placeholder="Diagnostico / trabajo solicitado" rows={4} />
               <select value={vehicleForm.assignedToId} onChange={(e) => setVehicleForm({ ...vehicleForm, assignedToId: e.target.value })}>
                 <option value="">Sin mecanico asignado</option>
                 {mechanics.map((mechanic) => <option key={mechanic.id} value={mechanic.id}>{mechanic.name} / {mechanic.role}</option>)}
               </select>
-              <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar vehiculo"}</button>
+              <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar ficha"}</button>
             </form>
 
             <form className="vertical-card vertical-form" onSubmit={createPart}>
@@ -295,8 +309,39 @@ export default function WorkshopPage() {
                 <input value={workOrderForm.dueDate} onChange={(e) => setWorkOrderForm({ ...workOrderForm, dueDate: e.target.value })} type="date" />
               </div>
               <textarea value={workOrderForm.notes} onChange={(e) => setWorkOrderForm({ ...workOrderForm, notes: e.target.value })} placeholder="Notas de reparacion, repuestos requeridos o entrega estimada" rows={3} />
+              <div className="vertical-two">
+                <input value={workOrderForm.partsUsed} onChange={(e) => setWorkOrderForm({ ...workOrderForm, partsUsed: e.target.value })} placeholder="Repuestos usados o requeridos" />
+                <input value={workOrderForm.quoteAmount} onChange={(e) => setWorkOrderForm({ ...workOrderForm, quoteAmount: e.target.value })} placeholder="Presupuesto entregado" inputMode="numeric" />
+              </div>
               <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Crear orden"}</button>
             </form>
+          </section>
+
+          <section className="vertical-card workshop-vehicle-history">
+            <div className="vertical-card-head"><div><span>Historial técnico</span><h2>Dueño y vehículo</h2></div></div>
+            <p className="meta-line">Selecciona un vehículo para revisar en un solo lugar sus trabajos, repuestos y presupuestos anteriores.</p>
+            <select value={selectedVehicleId} onChange={(event) => setSelectedVehicleId(event.target.value)}>
+              <option value="">Seleccionar vehículo</option>
+              {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.title} · {String(valueOf(vehicle, "plate") || "Sin patente")}</option>)}
+            </select>
+            {selectedVehicle ? (
+              <div className="workshop-history-detail">
+                <div className="workshop-history-owner">
+                  <strong>{selectedVehicle.title}</strong>
+                  <span>Dueño: {valueOf(selectedVehicle, "client") || "No informado"} · {valueOf(selectedVehicle, "plate") || "Sin patente"}</span>
+                  <small>{valueOf(selectedVehicle, "ownerPhone") || "Sin teléfono"}{valueOf(selectedVehicle, "ownerEmail") ? ` · ${valueOf(selectedVehicle, "ownerEmail")}` : ""} · {valueOf(selectedVehicle, "mileage") || 0} km</small>
+                </div>
+                <div className="workshop-history-list">
+                  {selectedVehicleHistory.length ? selectedVehicleHistory.map((order) => (
+                    <article key={order.id}>
+                      <div><strong>{order.title}</strong><span>{String(valueOf(order, "dueDate") || "Fecha por definir")} · {order.status}</span></div>
+                      <div><small>{valueOf(order, "partsUsed") || "Sin repuestos registrados"}</small><b>{money(valueOf(order, "quoteAmount"))}</b></div>
+                      {valueOf(order, "notes") ? <p>{valueOf(order, "notes")}</p> : null}
+                    </article>
+                  )) : <p className="meta-line">Este vehículo aún no tiene órdenes de trabajo registradas.</p>}
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <section className="vertical-list workshop-list">

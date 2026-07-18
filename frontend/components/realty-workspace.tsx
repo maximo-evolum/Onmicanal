@@ -8,6 +8,7 @@ import { ModuleGate } from "@/components/module-gate";
 import {
   createIndustryBrokerUser,
   createRealtyPropertyCampaignDraft,
+  getRealtyPropertyMatches,
   createIndustryRecord,
   deleteIndustryBrokerUser,
   getRealtyIntelligence,
@@ -533,6 +534,32 @@ export function PropertyPortalCards({
   );
 }
 
+function PropertyBuyerMatches({ propertyId }: { propertyId: string }) {
+  const [matches, setMatches] = useState<Array<{ score: number; reasons: string[]; buyer: { id: string; name: string; commune?: string | null; propertyType?: string | null; conversationId: string } }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getRealtyPropertyMatches(propertyId)
+      .then((result) => { if (active) setMatches(result.matches || []); })
+      .catch(() => { if (active) setMatches([]); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [propertyId]);
+
+  return <section className="property-buyer-matches">
+    <div><span>Compradores recomendados</span><h3>Personas que podrían calzar con esta propiedad</h3></div>
+    {loading ? <p>Buscando compradores compatibles...</p> : null}
+    {!loading && !matches.length ? <p>Aún no hay compradores compatibles. Cuando un cliente indique presupuesto, comuna o tipo de propiedad en Chat&apos;s, aparecerá aquí.</p> : null}
+    <div className="property-buyer-match-list">{matches.map((match) => <article key={match.buyer.id}>
+      <strong>{match.buyer.name}</strong><b>{match.score}% compatible</b>
+      <span>{match.buyer.commune || "Comuna por confirmar"} · {match.buyer.propertyType || "Tipo por confirmar"}</span>
+      <small>{match.reasons.slice(0, 3).join(" · ") || "Compatibilidad general"}</small>
+      <Link href={`/inbox?conversation=${encodeURIComponent(match.buyer.conversationId)}`}>Ver conversación</Link>
+    </article>)}</div>
+  </section>;
+}
+
 export function PropertyDetailModal({
   property,
   brokers,
@@ -616,6 +643,8 @@ export function PropertyDetailModal({
         <section className="property-detail-specs">
           {details.map(([label, value]) => <article key={label}><span>{label}</span><strong>{value}</strong></article>)}
         </section>
+
+        <PropertyBuyerMatches propertyId={property.id} />
 
         <section className="property-detail-description">
           <div>

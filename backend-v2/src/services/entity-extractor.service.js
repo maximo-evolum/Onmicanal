@@ -4,6 +4,11 @@ function extractBudget(text) {
     .replace(/\./g, "")
     .replace(/,/g, ".");
 
+  const matchMillions = normalized.match(/(\d{1,4}(?:\.\d+)?)\s*(mill[oó]n(?:es)?|palos)\b/i);
+  if (matchMillions) {
+    return Math.round(Number(matchMillions[1]) * 1_000_000);
+  }
+
   const matchMiles = normalized.match(/(\d{2,4})\s*(mil|k)/i);
   if (matchMiles) {
     return Number(matchMiles[1]) * 1000;

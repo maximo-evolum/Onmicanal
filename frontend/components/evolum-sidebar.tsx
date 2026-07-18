@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { getMyModules } from "@/lib/api";
+import { getMe, getMyModules } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 
@@ -52,10 +52,40 @@ const developerItems: SidebarItem[] = [
   ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL", "bot_lab"],
 ];
 
+function isRealtyIndustry(industry?: string | null) {
+  const value = String(industry || "").toUpperCase();
+  return value.includes("REAL_ESTATE") || value.includes("INMOBIL") || value.includes("CORRETAJE");
+}
+
+function isCareIndustry(industry?: string | null) {
+  const value = String(industry || "").toUpperCase();
+  return value.includes("HEALTH") || value.includes("SALUD") || value.includes("CLINIC") || value.includes("DENT") || value.includes("VETER");
+}
+
+function isAutomotiveIndustry(industry?: string | null) {
+  const value = String(industry || "").toUpperCase();
+  return value.includes("AUTO") || value.includes("TALLER") || value.includes("MECAN");
+}
+
+function contextualizeItem(item: SidebarItem, industry?: string | null): SidebarItem {
+  const [, href, , icon, moduleKey] = item;
+  if (moduleKey === "customers" && isRealtyIndustry(industry)) {
+    return ["Clientes", href, "Compradores, preferencias e historial comercial", icon, moduleKey];
+  }
+  if (moduleKey === "customers" && isCareIndustry(industry)) {
+    return ["Pacientes", href, "Fichas de atención, historial y seguimiento", icon, moduleKey];
+  }
+  if (moduleKey === "vehicles" && isAutomotiveIndustry(industry)) {
+    return ["Dueños y vehículos", href, "Fichas, historial técnico, repuestos y presupuestos", icon, moduleKey];
+  }
+  return item;
+}
+
 export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
   const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
+  const [industry, setIndustry] = useState<string | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const pathname = usePathname();
 
@@ -64,6 +94,9 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     const session = getStoredSession();
     setRole(session?.role || null);
     setJobTitle(session?.jobTitle || null);
+    getMe()
+      .then((data) => { if (mounted) setIndustry(data.tenant?.industry || null); })
+      .catch(() => { if (mounted) setIndustry(null); });
     getMyModules()
       .then((data) => {
         if (mounted) {
@@ -84,7 +117,8 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
   const items = useMemo(() => {
     const showDeveloperItems = isDeveloper || String(role || "").toUpperCase() === "SUPER_ADMIN";
-    const allItems = showDeveloperItems ? [...baseItems, ...developerItems] : baseItems;
+    const allItems = (showDeveloperItems ? [...baseItems, ...developerItems] : baseItems)
+      .map((item) => contextualizeItem(item, industry));
     const availableItems = enabledModules === null
       ? allItems
       : allItems.filter(([, , , , moduleKey]) =>
@@ -98,7 +132,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
       if (rightLabel === "Inicio") return 1;
       return leftLabel.localeCompare(rightLabel, "es");
     });
-  }, [enabledModules, isDeveloper, jobTitle, role]);
+  }, [enabledModules, industry, isDeveloper, jobTitle, role]);
 
   useEffect(() => {
     const nav = navRef.current;

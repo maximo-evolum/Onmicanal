@@ -68,10 +68,10 @@ const MODULE_LABELS: Record<string, string> = {
   realty_leads: "Leads inmobiliarios",
   properties: "Propiedades",
   property_assignments: "Asignación de ventas",
-  customers: "Clientes / pacientes",
+  customers: "Clientes o pacientes según rubro",
   exams: "Exámenes y presupuestos",
   veterinary: "Veterinaria",
-  vehicles: "Vehículos",
+  vehicles: "Dueños y vehículos",
   workshop: "Taller",
   parts_inventory: "Repuestos",
   mechanic_assignments: "Asignación de mecánicos",
@@ -141,7 +141,7 @@ const MODULE_GROUPS = [
   {
     title: "Operación CRM",
     description: "Capacidades comerciales comunes, independientes de cada vertical.",
-    modules: ["agenda", "pipeline", "campaigns", "payments", "revenue", "dashboard", "customers", "saas", "users"],
+    modules: ["agenda", "pipeline", "campaigns", "payments", "revenue", "dashboard", "saas", "users"],
   },
   {
     title: "Integraciones y continuidad",
@@ -150,8 +150,8 @@ const MODULE_GROUPS = [
   },
   {
     title: "Inmobiliaria",
-    description: "Carga, portal, corredores, actividad y asignacion de propiedades.",
-    modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "realty_leads", "property_assignments"],
+    description: "Carga, portal, corredores, clientes compradores, actividad y asignacion de propiedades.",
+    modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "realty_leads", "property_assignments", "customers"],
   },
   {
     title: "Salud clínica y dental",
@@ -165,7 +165,7 @@ const MODULE_GROUPS = [
   },
   {
     title: "Automotriz y taller",
-    description: "Vehículos, repuestos, mecánicos, stock y avisos de retiro.",
+    description: "Dueños, vehículos, historial técnico, repuestos, presupuestos y avisos de retiro.",
     modules: ["vehicles", "workshop", "parts_inventory", "mechanic_assignments", "ready_notifications"],
   },
 ];

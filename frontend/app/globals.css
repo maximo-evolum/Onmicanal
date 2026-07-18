@@ -12901,6 +12901,12 @@ textarea:focus {
 .context-help-card li::before { display: inline-grid; place-items: center; flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; background: rgba(138, 46, 255, .25); color: #d8b4fe; font-size: 10px; font-weight: 800; counter-increment: contextual-help; content: counter(contextual-help); }
 .context-help-icon { position: fixed; right: 22px; bottom: 22px; z-index: 80; border: 0; cursor: pointer; }
 .context-help-icon:hover, .context-help-icon:focus-visible { transform: translateY(-1px); box-shadow: 0 0 25px rgba(46, 139, 255, .52); }
+.property-buyer-matches { display: grid; gap: 12px; margin-top: 18px; padding: 18px; border: 1px solid rgba(138, 46, 255, .38); border-radius: 16px; background: linear-gradient(135deg, rgba(138, 46, 255, .1), rgba(46, 139, 255, .06)); }
+.property-buyer-matches > div:first-child span { color: #c084fc; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.property-buyer-matches h3 { margin: 4px 0 0; font-size: 17px; }.property-buyer-matches > p { margin: 0; color: var(--text-muted); font-size: 13px; }
+.property-buyer-match-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; }
+.property-buyer-match-list article { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: rgba(5, 7, 13, .46); }
+.property-buyer-match-list strong { color: #fff; }.property-buyer-match-list b { color: #a78bfa; font-size: 12px; }.property-buyer-match-list span, .property-buyer-match-list small { color: var(--text-muted); font-size: 12px; line-height: 1.35; }.property-buyer-match-list a { margin-top: 3px; color: #93c5fd; font-size: 12px; font-weight: 700; }
 .workflow-notice { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--theme-surface); }
 .workflow-notice.error { border-color: rgba(239, 68, 68, .55); color: #fecaca; }
 .workflow-notice.success { border-color: rgba(34, 197, 94, .45); color: #bbf7d0; }
@@ -12975,3 +12981,23 @@ textarea:focus {
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
+
+/* Compradores inmobiliarios: información simple, sin depender de lenguaje técnico. */
+.realty-buyer-workspace { display: grid; grid-template-columns: minmax(290px, .9fr) minmax(0, 1.6fr); gap: 18px; align-items: start; }
+.realty-buyer-form > div > p { margin: 6px 0 0; color: var(--text-muted); font-size: .88rem; line-height: 1.5; }
+.realty-buyer-results { min-width: 0; }.realty-buyer-layout { display: grid; grid-template-columns: minmax(190px, .7fr) minmax(0, 1.3fr); gap: 14px; margin-top: 16px; }
+.realty-buyer-list, .realty-property-match-list { display: grid; gap: 9px; }
+.realty-buyer-item { appearance: none; width: 100%; padding: 13px; border: 1px solid rgba(140, 87, 255, .2); border-radius: 13px; background: rgba(9, 13, 31, .82); color: var(--text); cursor: pointer; text-align: left; transition: border-color .18s ease, transform .18s ease, background .18s ease; }
+.realty-buyer-item:hover, .realty-buyer-item.is-selected { border-color: rgba(144, 73, 255, .8); background: linear-gradient(120deg, rgba(100, 46, 198, .22), rgba(37, 121, 255, .12)); transform: translateY(-1px); }
+.realty-buyer-item strong, .realty-buyer-item span, .realty-buyer-item small, .realty-property-match strong, .realty-property-match span, .realty-property-match small { display: block; }
+.realty-buyer-item span, .realty-property-match span { margin-top: 5px; color: #d5d9e6; font-size: .85rem; }.realty-buyer-item small, .realty-property-match small { margin-top: 4px; color: var(--text-muted); font-size: .78rem; }
+.realty-match-panel { min-height: 230px; padding: 16px; border: 1px solid rgba(140, 87, 255, .18); border-radius: 15px; background: radial-gradient(circle at 100% 0, rgba(43, 130, 255, .12), transparent 42%), rgba(5, 8, 21, .62); }
+.realty-match-heading { display: flex; justify-content: space-between; gap: 12px; align-items: start; margin-bottom: 15px; }.realty-match-heading span { color: var(--text-muted); font-size: .78rem; }.realty-match-heading h3 { margin: 4px 0 0; font-size: 1.05rem; }
+.realty-match-heading > strong, .realty-property-match b { color: #d6b2ff; font-size: .83rem; white-space: nowrap; }.realty-property-match { display: flex; justify-content: space-between; gap: 15px; padding: 13px; border-radius: 12px; border: 1px solid rgba(93, 125, 206, .2); background: rgba(12, 18, 38, .7); }
+@media (max-width: 980px) { .realty-buyer-workspace, .realty-buyer-layout { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .realty-match-heading, .realty-property-match { flex-direction: column; } }
+
+.workshop-vehicle-history { display: grid; gap: 14px; }.workshop-vehicle-history > select { max-width: 520px; }
+.workshop-history-detail { display: grid; gap: 12px; }.workshop-history-owner { display: grid; gap: 5px; padding: 14px; border: 1px solid rgba(138, 46, 255, .36); border-radius: 13px; background: linear-gradient(120deg, rgba(138, 46, 255, .12), rgba(46, 139, 255, .06)); }.workshop-history-owner span, .workshop-history-owner small { color: var(--text-muted); }
+.workshop-history-list { display: grid; gap: 9px; }.workshop-history-list article { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .55fr); gap: 10px 18px; padding: 13px; border: 1px solid var(--border); border-radius: 12px; background: rgba(5, 7, 13, .42); }.workshop-history-list article > div { display: grid; gap: 5px; }.workshop-history-list span, .workshop-history-list small, .workshop-history-list p { color: var(--text-muted); font-size: .84rem; }.workshop-history-list b { color: #c4b5fd; }.workshop-history-list p { grid-column: 1 / -1; margin: 0; line-height: 1.45; }
+@media (max-width: 640px) { .workshop-history-list article { grid-template-columns: 1fr; } }

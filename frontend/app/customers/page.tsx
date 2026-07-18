@@ -4,15 +4,19 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import {
+  createRealtyBuyer,
   createIndustryRecord,
   getIndustryRecords,
+  getLeads,
   getMe,
+  getRealtyLeadMatches,
   updateIndustryRecord,
   type IndustryRecord
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
+import type { Lead } from "@/lib/types";
 
-type CustomerMode = "GASTRONOMY" | "HEALTH" | "DENTAL" | "VETERINARY" | "GENERAL";
+type CustomerMode = "GASTRONOMY" | "HEALTH" | "DENTAL" | "VETERINARY" | "REAL_ESTATE" | "GENERAL";
 type CustomerDocument = {
   name: string;
   type: string;
@@ -77,6 +81,15 @@ const modeConfig: Record<CustomerMode, {
     segmentLabel: "Motivo",
     placeholder: "Ej: Laura Torres / Luna"
   },
+  REAL_ESTATE: {
+    eyebrow: "Rubro inmobiliario",
+    title: "Compradores y propiedades compatibles",
+    subtitle: "Registra lo que busca cada comprador y revisa propiedades que calzan con su presupuesto y preferencias.",
+    entityLabel: "Comprador potencial",
+    preferenceLabel: "Tipo de propiedad",
+    segmentLabel: "Comuna de interes",
+    placeholder: "Ej: Camila Rojas"
+  },
   GENERAL: {
     eyebrow: "Operacion multirubro",
     title: "Clientes y fichas comerciales",
@@ -94,6 +107,7 @@ function detectMode(industry?: string | null): CustomerMode {
   if (value.includes("DENT")) return "DENTAL";
   if (value.includes("HEALTH") || value.includes("SALUD") || value.includes("CLINIC")) return "HEALTH";
   if (value.includes("VETER")) return "VETERINARY";
+  if (value.includes("REAL_ESTATE") || value.includes("INMOBIL") || value.includes("CORRETAJE")) return "REAL_ESTATE";
   return "GENERAL";
 }
 
@@ -111,6 +125,183 @@ function initials(name = "") {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "CL";
+}
+
+type BuyerForm = {
+  name: string;
+  phone: string;
+  email: string;
+  budget: string;
+  commune: string;
+  propertyType: string;
+  interest: string;
+};
+
+type BuyerPropertyMatch = {
+  score: number;
+  reasons: string[];
+  property: { id: string; title: string; status: string; price: number; commune: string; operation: string };
+};
+
+const emptyBuyerForm: BuyerForm = {
+  name: "",
+  phone: "",
+  email: "",
+  budget: "",
+  commune: "",
+  propertyType: "",
+  interest: "COMPRA"
+};
+
+function formatMoney(value?: number | null) {
+  if (!value) return "Sin presupuesto";
+  return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(value);
+}
+
+function RealtyBuyerWorkspace() {
+  const [buyers, setBuyers] = useState<Lead[]>([]);
+  const [selectedBuyerId, setSelectedBuyerId] = useState<string | null>(null);
+  const [matches, setMatches] = useState<BuyerPropertyMatch[]>([]);
+  const [form, setForm] = useState<BuyerForm>(emptyBuyerForm);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function loadBuyers(selectId?: string) {
+    try {
+      setLoading(true);
+      const result = await getLeads();
+      const activeBuyers = result
+        .filter((lead) => !["WON", "LOST", "ARCHIVED"].includes(String(lead.status).toUpperCase()))
+        .sort((a, b) => Date.parse(b.updatedAt || b.createdAt || "") - Date.parse(a.updatedAt || a.createdAt || ""));
+      setBuyers(activeBuyers);
+      if (selectId) setSelectedBuyerId(selectId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudieron cargar los compradores");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadBuyers();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedBuyerId) {
+      setMatches([]);
+      return;
+    }
+    getRealtyLeadMatches(selectedBuyerId)
+      .then((result) => setMatches(result.matches))
+      .catch((err) => setError(err instanceof Error ? err.message : "No se pudieron calcular las recomendaciones"));
+  }, [selectedBuyerId]);
+
+  async function saveBuyer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const budget = Number(form.budget);
+    if (!form.name.trim() || !Number.isFinite(budget) || budget <= 0) {
+      setError("Indica el nombre y un presupuesto estimado para poder recomendar propiedades.");
+      return;
+    }
+    try {
+      setSaving(true);
+      setError(null);
+      const result = await createRealtyBuyer({ ...form, name: form.name.trim(), budget });
+      setForm(emptyBuyerForm);
+      setMessage("Comprador guardado. Ya puedes revisar sus propiedades recomendadas.");
+      await loadBuyers(result.buyer.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo guardar el comprador");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const selectedBuyer = buyers.find((buyer) => buyer.id === selectedBuyerId) || null;
+
+  return (
+    <section className="realty-buyer-workspace">
+      <form className="vertical-card vertical-form realty-buyer-form" onSubmit={saveBuyer}>
+        <div>
+          <span>Nuevo comprador</span>
+          <h2>¿Qué propiedad está buscando?</h2>
+          <p>Con estos datos EVOLUM compara automáticamente las propiedades disponibles.</p>
+        </div>
+        <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Nombre del comprador" required />
+        <div className="vertical-two">
+          <input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="Teléfono" />
+          <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Correo" />
+        </div>
+        <div className="vertical-two">
+          <input type="number" min="1" value={form.budget} onChange={(event) => setForm({ ...form, budget: event.target.value })} placeholder="Presupuesto en pesos" required />
+          <input value={form.commune} onChange={(event) => setForm({ ...form, commune: event.target.value })} placeholder="Comuna de interés" />
+        </div>
+        <div className="vertical-two">
+          <select value={form.propertyType} onChange={(event) => setForm({ ...form, propertyType: event.target.value })}>
+            <option value="">Tipo de propiedad</option>
+            <option value="DEPARTAMENTO">Departamento</option>
+            <option value="CASA">Casa</option>
+            <option value="OFICINA">Oficina</option>
+            <option value="TERRENO">Terreno</option>
+          </select>
+          <select value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })}>
+            <option value="COMPRA">Compra</option>
+            <option value="ARRIENDO">Arriendo</option>
+          </select>
+        </div>
+        <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar y recomendar"}</button>
+        {error ? <p className="sales-queue-error">{error}</p> : null}
+        {message ? <p className="admin-notice success">{message}</p> : null}
+      </form>
+
+      <section className="vertical-card realty-buyer-results">
+        <div className="vertical-card-head">
+          <div>
+            <span>Recomendación automática</span>
+            <h2>Compradores y propiedades</h2>
+          </div>
+        </div>
+        <div className="realty-buyer-layout">
+          <div className="realty-buyer-list">
+            {loading ? <p className="meta-line">Cargando compradores...</p> : null}
+            {!loading && !buyers.length ? <p className="meta-line">Aún no hay compradores. Puedes crear el primero desde el formulario.</p> : null}
+            {buyers.map((buyer) => (
+              <button key={buyer.id} type="button" className={`realty-buyer-item ${selectedBuyerId === buyer.id ? "is-selected" : ""}`} onClick={() => setSelectedBuyerId(buyer.id)}>
+                <strong>{buyer.name || "Comprador sin nombre"}</strong>
+                <span>{formatMoney(buyer.budget)} · {buyer.commune || "Comuna por definir"}</span>
+                <small>{buyer.propertyType || "Tipo por definir"} · {buyer.interest || "Compra"}</small>
+              </button>
+            ))}
+          </div>
+          <div className="realty-match-panel">
+            {!selectedBuyer ? <p className="meta-line">Selecciona un comprador para ver las propiedades que mejor calzan.</p> : (
+              <>
+                <div className="realty-match-heading">
+                  <div><span>Para {selectedBuyer.name || "este comprador"}</span><h3>Propiedades recomendadas</h3></div>
+                  <strong>{formatMoney(selectedBuyer.budget)}</strong>
+                </div>
+                {!matches.length ? <p className="meta-line">Todavía no hay una propiedad disponible que calce con los datos registrados. Puedes ajustar la búsqueda o ingresar nuevas propiedades.</p> : null}
+                <div className="realty-property-match-list">
+                  {matches.map((match) => (
+                    <article key={match.property.id} className="realty-property-match">
+                      <div>
+                        <strong>{match.property.title}</strong>
+                        <span>{formatMoney(match.property.price)} · {match.property.commune || "Comuna por definir"}</span>
+                        <small>{match.reasons.join(" · ")}</small>
+                      </div>
+                      <b>{match.score}% compatible</b>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </section>
+    </section>
+  );
 }
 
 export default function CustomersPage() {
@@ -227,16 +418,25 @@ export default function CustomersPage() {
               <h1>{config.title}</h1>
               <p>{config.subtitle}</p>
             </div>
-            <div className="vertical-hero-stats">
-              <article><strong>{active.length}</strong><span>Fichas</span></article>
-              <article><strong>{pending}</strong><span>Pendientes</span></article>
-              <article><strong>{withNextAction}</strong><span>Seguimientos</span></article>
-            </div>
+            {mode === "REAL_ESTATE" ? (
+              <div className="vertical-hero-stats">
+                <article><strong>IA</strong><span>Matching activo</span></article>
+                <article><strong>CLP</strong><span>Presupuesto considerado</span></article>
+                <article><strong>Chat&apos;s</strong><span>Recomendación en tiempo real</span></article>
+              </div>
+            ) : (
+              <div className="vertical-hero-stats">
+                <article><strong>{active.length}</strong><span>Fichas</span></article>
+                <article><strong>{pending}</strong><span>Pendientes</span></article>
+                <article><strong>{withNextAction}</strong><span>Seguimientos</span></article>
+              </div>
+            )}
           </header>
 
           {error ? <div className="sales-queue-error">{error}</div> : null}
           {message ? <div className="admin-notice success">{message}</div> : null}
 
+          {mode === "REAL_ESTATE" ? <RealtyBuyerWorkspace /> : (
           <section className="service-grid">
             <form className="vertical-card vertical-form" onSubmit={handleCreate}>
               <div>
@@ -299,6 +499,7 @@ export default function CustomersPage() {
               </div>
             </section>
           </section>
+          )}
         </main>
       </div>
     </ModuleGate>

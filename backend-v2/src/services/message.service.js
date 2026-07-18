@@ -21,6 +21,7 @@ import { evaluateAiUsageLimits, getAiGovernance } from "./ai-governance.service.
 import { registerSalesSignal } from "./sales-engine.service.js";
 import { traceError, traceStep } from "../lib/trace.js";
 import { metadataOrNull } from "../lib/metadata.js";
+import { buildRealtyBuyerReply } from "./realty-intelligence.service.js";
 
 function mapMessageType(type) {
   switch ((type || "").toLowerCase()) {
@@ -32,6 +33,11 @@ function mapMessageType(type) {
     case "template": return "TEMPLATE";
     default: return "OTHER";
   }
+}
+
+function isRealtyTenant(tenant) {
+  const source = `${tenant?.industry || ""} ${tenant?.businessPrompt || ""} ${tenant?.name || ""}`.toLowerCase();
+  return source.includes("real_estate") || source.includes("inmobili") || source.includes("corretaje");
 }
 
 async function emitConversationUpdate(conversationId) {
@@ -330,7 +336,9 @@ export async function processIncomingText({
 
   const messageCount = await getConversationMessageCount(conversation.id);
 
-  if (channel === "whatsapp" && isFirstInboundForConversation(messageCount)) {
+  // En inmobiliaria priorizamos una respuesta útil basada en la necesidad que la
+  // persona ya expresó (por ejemplo, su presupuesto), incluso en su primer mensaje.
+  if (channel === "whatsapp" && isFirstInboundForConversation(messageCount) && !isRealtyTenant(tenant)) {
     try {
       await sendWelcomeInteractive({ tenant, contact, channel, trace });
       await persistInteractiveOutbound({
@@ -382,6 +390,22 @@ export async function processIncomingText({
 
   let reply;
   let aiUsageAllowed = true;
+
+  // En inmobiliaria, un presupuesto declarado por el cliente puede activar una
+  // recomendación inmediata basada solamente en propiedades activas del tenant.
+  if (isRealtyTenant(tenant)) {
+    try {
+      const entities = await extractEntities({ message: userMessage });
+      reply = await buildRealtyBuyerReply({
+        tenantId: tenant.id,
+        conversationId: conversation.id,
+        detectedBudget: entities?.budget
+      });
+      traceStep(trace, "8D_REALTY_MATCHING_RESULT", { hasReply: Boolean(reply), budget: entities?.budget || null });
+    } catch (error) {
+      traceError(trace, "8D_REALTY_MATCHING_ERROR", error);
+    }
+  }
 
   try {
     // 1) Reglas primero: permiten respuestas controladas por el negocio.

@@ -782,6 +782,23 @@ export async function getRealtyLeadMatches(leadId: string): Promise<{ lead: { id
   return request(`/realty/leads/${encodeURIComponent(leadId)}/matches`);
 }
 
+export type RealtyBuyerMatch = {
+  score: number;
+  reasons: string[];
+  buyer: { id: string; name: string; phone?: string | null; budget?: number | null; commune?: string | null; propertyType?: string | null; interest?: string | null; closeProbability?: number | null; conversationId: string };
+};
+
+export async function getRealtyPropertyMatches(propertyId: string): Promise<{ property: { id: string; title: string; price: number; commune: string }; matches: RealtyBuyerMatch[] }> {
+  return request(`/realty/properties/${encodeURIComponent(propertyId)}/buyers`);
+}
+
+export async function createRealtyBuyer(input: { name: string; phone?: string; email?: string; budget?: number; commune?: string; propertyType?: string; interest?: string }): Promise<{ buyer: Lead }> {
+  return request<{ buyer: Lead }>("/realty/buyers", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function createRealtyPropertyCampaignDraft(propertyId: string, input: { platforms?: CampaignPlatform[]; variantCount?: number; tone?: string } = {}): Promise<CampaignProResult> {
   return request<CampaignProResult>(`/campaigns/realty/property/${encodeURIComponent(propertyId)}/draft`, {
     method: "POST",
