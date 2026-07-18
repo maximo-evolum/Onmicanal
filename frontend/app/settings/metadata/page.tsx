@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
-import { ModuleHelpCard } from "@/components/module-help-card";
 import { ModuleGate } from "@/components/module-gate";
 import { createMetadataSchema, getMetadataSchemas, migrateMetadataSchema, publishMetadataSchema, type MetadataSchema } from "@/lib/api";
 
@@ -237,8 +236,6 @@ export default function MetadataSettingsPage() {
           </div>
           <AccountPill />
         </header>
-
-        <ModuleHelpCard title="Datos y formularios" description="te ayuda a decidir qué información debe completar tu equipo en cada tipo de ficha, como una propiedad, un paciente o un vehículo." steps={["Elige una plantilla parecida a tu operación.", "Agrega, quita o cambia los datos que necesitas pedir.", "Activa la ficha cuando estés conforme para que tu equipo la use."]} />
 
         <section className="metadata-guide">
           <article><b>1</b><div><strong>Elige una ficha</strong><span>Parte desde una plantilla conocida.</span></div></article>

@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { ThemeBootstrap } from "@/components/theme-bootstrap";
+import { ContextualModuleHelp } from "@/components/contextual-module-help";
 
 export const metadata: Metadata = {
   title: "Inbox Omnicanal",
@@ -13,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ThemeBootstrap />
         {children}
+        <ContextualModuleHelp />
       </body>
     </html>
   );

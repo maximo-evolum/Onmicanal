@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
-import { ModuleHelpCard } from "@/components/module-help-card";
 import { ModuleGate } from "@/components/module-gate";
 import {
   createWorkflow,
@@ -207,16 +206,6 @@ export default function WorkflowsPage() {
             </div>
             <AccountPill fallbackName={agent?.name || "Usuario"} />
           </header>
-
-          <ModuleHelpCard
-            title="Automatizaciones"
-            description="te permite dejar tareas repetitivas preparadas para que EVOLUM las realice en el momento indicado."
-            steps={[
-              "Elige cuándo quieres que ocurra algo.",
-              "Define la tarea que EVOLUM debe realizar.",
-              "Guárdala y revísala cuando quieras.",
-            ]}
-          />
 
           {error ? <div className="workflow-notice error">{error}</div> : null}
           {notice ? <div className="workflow-notice success">{notice}</div> : null}

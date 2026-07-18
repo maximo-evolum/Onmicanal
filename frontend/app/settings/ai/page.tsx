@@ -3,7 +3,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
-import { ModuleHelpCard } from "@/components/module-help-card";
 import { ModuleGate } from "@/components/module-gate";
 import { approveAiAction, createAiEvaluation, getAiGovernance, getAIConfig, rejectAiAction, updateAIConfig, type AiGovernanceRecord } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
@@ -119,7 +118,6 @@ export default function AiGovernancePage() {
     <EvolumSidebar active="Control de IA" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
     <main className="workflow-page ai-governance-page">
       <header className="workflow-hero"><div><p className="eyebrow">CONTROL DE IA</p><h1>Decide cómo te ayuda la IA</h1><p>Indica qué tareas puede preparar sola, cuándo debe pedir aprobación y qué temas prefieres revisar antes de responder.</p></div><AccountPill fallbackName={agent?.name || "Usuario"} /></header>
-      <ModuleHelpCard title="Control de IA" description="te permite decidir qué tareas puede preparar la IA y en cuáles debe esperar tu aprobación." steps={["Elige las tareas que quieres revisar antes de que se hagan.", "Define límites para usar la IA con tranquilidad.", "Revisa las propuestas pendientes y apruébalas solo si estás de acuerdo."]} />
       {error ? <div className="workflow-notice error">{error}</div> : null}{notice ? <div className="workflow-notice success">{notice}</div> : null}
       <section className="workflow-overview"><article><strong>{approvals.length}</strong><span>Tareas esperando tu visto bueno</span></article><article><strong>{maxActions}</strong><span>Tareas que puede preparar por conversación</span></article><article><strong>{blockedTerms.split(/\n|,/).filter(Boolean).length}</strong><span>Temas que requieren cuidado</span></article><article><strong>{evaluations.filter((item) => item.status === "PASSED").length}</strong><span>Respuestas revisadas correctamente</span></article></section>
       <section className="workflow-grid">
