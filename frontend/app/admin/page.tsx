@@ -69,9 +69,12 @@ const MODULE_LABELS: Record<string, string> = {
   properties: "Propiedades",
   property_assignments: "Asignación de ventas",
   customers: "Clientes o pacientes según rubro",
+  realty_clients: "Clientes inmobiliarios",
+  patients: "Pacientes",
   exams: "Exámenes y presupuestos",
   veterinary: "Veterinaria",
   vehicles: "Dueños y vehículos",
+  vehicle_owners: "Dueños y vehículos",
   workshop: "Taller",
   parts_inventory: "Repuestos",
   mechanic_assignments: "Asignación de mecánicos",
@@ -123,9 +126,12 @@ const PROJECT_MODULE_CATALOG = [
   "properties",
   "property_assignments",
   "customers",
+  "realty_clients",
+  "patients",
   "exams",
   "veterinary",
   "vehicles",
+  "vehicle_owners",
   "workshop",
   "parts_inventory",
   "mechanic_assignments",
@@ -151,12 +157,12 @@ const MODULE_GROUPS = [
   {
     title: "Inmobiliaria",
     description: "Carga, portal, corredores, clientes compradores, actividad y asignacion de propiedades.",
-    modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "realty_leads", "property_assignments", "customers"],
+    modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "realty_leads", "property_assignments", "realty_clients"],
   },
   {
     title: "Salud clínica y dental",
     description: "Son rubros distintos, pero ambos comparten Pacientes y Exámenes y presupuestos.",
-    modules: ["customers", "exams"],
+    modules: ["patients", "exams"],
   },
   {
     title: "Veterinaria",
@@ -166,7 +172,7 @@ const MODULE_GROUPS = [
   {
     title: "Automotriz y taller",
     description: "Dueños, vehículos, historial técnico, repuestos, presupuestos y avisos de retiro.",
-    modules: ["vehicles", "workshop", "parts_inventory", "mechanic_assignments", "ready_notifications"],
+    modules: ["vehicle_owners", "workshop", "parts_inventory", "mechanic_assignments", "ready_notifications"],
   },
 ];
 

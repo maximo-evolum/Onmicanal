@@ -24,10 +24,13 @@ export type ModuleAccessKey =
   | "broker_portal"
   | "brokers"
   | "customers"
+  | "realty_clients"
+  | "patients"
   | "exams"
   | "metadata"
   | "revenue"
   | "vehicles"
+  | "vehicle_owners"
   | "parts_inventory"
   | "mechanic_assignments"
   | "ready_notifications"
@@ -62,10 +65,13 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   broker_portal: ["broker_portal", "portal_corredor"],
   brokers: ["brokers", "corredores"],
   customers: ["customers", "clientes", "pacientes"],
+  realty_clients: ["realty_clients", "clientes_inmobiliarios", "clientes"],
+  patients: ["patients", "pacientes"],
   exams: ["exams", "examenes", "presupuestos", "examenes_y_presupuestos"],
   metadata: ["metadata", "esquemas_de_datos"],
   revenue: ["revenue", "ganancias", "ingresos"],
   vehicles: ["vehicles", "vehiculos"],
+  vehicle_owners: ["vehicle_owners", "duenos_vehiculos", "vehiculos"],
   parts_inventory: ["parts_inventory", "repuestos", "inventario_repuestos"],
   mechanic_assignments: ["mechanic_assignments", "asignacion_mecanicos"],
   ready_notifications: ["ready_notifications", "avisos_retiro"],

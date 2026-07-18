@@ -218,7 +218,7 @@ export default function WorkshopPage() {
   }
 
   return (
-    <ModuleGate moduleKey="vehicles">
+    <ModuleGate moduleKey="vehicle_owners">
       <div className={`executive-shell vertical-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active="Dueños y vehículos" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
         <main className="vertical-page">

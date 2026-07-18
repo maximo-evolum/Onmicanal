@@ -42,9 +42,10 @@ const baseItems: SidebarItem[] = [
   ["Actividad inmobiliaria", "/realty-activity", "Visitas, propietarios y alertas", "AC", "realty_activity"],
   ["Portal corredor", "/broker-portal", "Propiedades asignadas y seguimiento", "PC", "broker_portal"],
   ["Corredores", "/brokers", "Perfiles y reparto comercial", "CO", "brokers"],
-  ["Clientes / Pacientes", "/customers", "Fichas, historial y seguimiento", "CP", "customers"],
+  ["Clientes", "/customers", "Compradores, preferencias e historial comercial", "CL", "realty_clients"],
+  ["Pacientes", "/patients", "Fichas de atención, historial y seguimiento", "PA", "patients"],
   ["Exámenes y presupuestos", "/exams", "Órdenes, resultados y cotizaciones clínicas", "EP", "exams"],
-  ["Taller", "/workshop", "Vehiculos, repuestos y mecanicos", "TA", "vehicles"],
+  ["Dueños y vehículos", "/workshop", "Fichas, historial técnico, repuestos y presupuestos", "DV", "vehicle_owners"],
 ];
 
 const developerItems: SidebarItem[] = [
@@ -79,6 +80,15 @@ function contextualizeItem(item: SidebarItem, industry?: string | null): Sidebar
     return ["Dueños y vehículos", href, "Fichas, historial técnico, repuestos y presupuestos", icon, moduleKey];
   }
   return item;
+}
+
+function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
+  if (!industry) return true;
+  const moduleKey = item[4];
+  if (moduleKey === "realty_clients") return isRealtyIndustry(industry);
+  if (moduleKey === "patients") return isCareIndustry(industry);
+  if (moduleKey === "vehicle_owners") return isAutomotiveIndustry(industry);
+  return true;
 }
 
 export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
@@ -119,9 +129,10 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     const showDeveloperItems = isDeveloper || String(role || "").toUpperCase() === "SUPER_ADMIN";
     const allItems = (showDeveloperItems ? [...baseItems, ...developerItems] : baseItems)
       .map((item) => contextualizeItem(item, industry));
+    const applicableItems = allItems.filter((item) => itemBelongsToIndustry(item, industry));
     const availableItems = enabledModules === null
-      ? allItems
-      : allItems.filter(([, , , , moduleKey]) =>
+      ? applicableItems
+      : applicableItems.filter(([, , , , moduleKey]) =>
       moduleAllowed(moduleKey, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle),
     );
 

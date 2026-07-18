@@ -45,7 +45,7 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
       moduleItem(MODULES.REALTY_ACTIVITY, "Actividad inmobiliaria", "Visitas, propietarios, portal corredor, alertas y propiedades activas.", "PRO"),
       moduleItem(MODULES.BOOKINGS, "Agenda de visitas", "Visitas por propiedad, sucursal o direccion.", "PRO"),
       moduleItem(MODULES.SALES, "Pipeline inmobiliario", "Estados comerciales por propiedad y comprador.", "PRO"),
-      moduleItem(MODULES.CUSTOMERS, "Clientes", "Fichas de compradores, presupuesto, preferencias y propiedades compatibles.", "PRO"),
+      moduleItem(MODULES.REALTY_CLIENTS, "Clientes", "Fichas de compradores, presupuesto, preferencias y propiedades compatibles.", "PRO"),
       moduleItem(MODULES.MARKETING, "Campanas inmobiliarias", "Publicaciones y mensajes por propiedad.", "BUSINESS"),
       moduleItem(MODULES.PAYMENTS, "Pagos y reservas", "Reservas, abonos y compromisos de compra.", "BUSINESS"),
       moduleItem(MODULES.ANALYTICS, "Dashboard", "Ventas, visitas, conversion y rendimiento de vendedores.", "PRO")
@@ -212,7 +212,7 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     summary: "Vehiculos, repuestos, mecanicos, agenda de taller y aviso de retiro.",
     modules: [
       moduleItem(MODULES.INBOX, "Inbox taller", "Mensajes por cliente, vehiculo y estado de servicio."),
-      moduleItem(MODULES.VEHICLES, "Dueños y vehículos", "Ficha de dueño, vehículo, historial técnico, repuestos y presupuestos.", "PRO"),
+      moduleItem(MODULES.VEHICLE_OWNERS, "Dueños y vehículos", "Ficha de dueño, vehículo, historial técnico, repuestos y presupuestos.", "PRO"),
       moduleItem(MODULES.PARTS_INVENTORY, "Repuestos", "Fotos, stock, ubicacion, costo y compatibilidad.", "BUSINESS"),
       moduleItem(MODULES.MECHANIC_ASSIGNMENTS, "Asignacion de mecanicos", "Distribucion de trabajos segun carga y especialidad.", "PRO"),
       moduleItem(MODULES.READY_NOTIFICATIONS, "Aviso de retiro", "Mensaje automatico al cliente cuando el vehiculo esta listo.", "PRO"),
@@ -234,7 +234,7 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     modules: [
       moduleItem(MODULES.INBOX, "Inbox pacientes", "Consultas, confirmaciones y recordatorios."),
       moduleItem(MODULES.BOOKINGS, "Agenda clinica", "Citas por profesional, box y tratamiento."),
-      moduleItem(MODULES.CUSTOMERS, "Pacientes", "Ficha, historial y continuidad de atencion dental."),
+      moduleItem(MODULES.PATIENTS, "Pacientes", "Ficha, historial y continuidad de atencion dental."),
       moduleItem(MODULES.EXAMS, "Examenes y presupuestos", "Ordenes, resultados, planes de tratamiento y cotizaciones."),
       moduleItem(MODULES.PAYMENTS, "Pagos", "Abonos y saldos de tratamiento.", "BUSINESS"),
       moduleItem(MODULES.ANALYTICS, "Dashboard", "Citas, asistencia y conversion.", "PRO")
@@ -253,7 +253,7 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     modules: [
       moduleItem(MODULES.INBOX, "Inbox clinico", "Consultas, confirmaciones y recordatorios de pacientes."),
       moduleItem(MODULES.BOOKINGS, "Agenda clinica", "Citas por profesional, box y especialidad.", "PRO"),
-      moduleItem(MODULES.CUSTOMERS, "Pacientes", "Ficha de paciente, antecedentes y continuidad de atencion."),
+      moduleItem(MODULES.PATIENTS, "Pacientes", "Ficha de paciente, antecedentes y continuidad de atencion."),
       moduleItem(MODULES.EXAMS, "Examenes y presupuestos", "Ordenes, resultados, prestaciones y presupuestos clinicos."),
       moduleItem(MODULES.PAYMENTS, "Pagos", "Abonos y saldos de prestaciones.", "BUSINESS"),
       moduleItem(MODULES.ANALYTICS, "Dashboard clinico", "Citas, asistencia y capacidad operativa.", "PRO")
@@ -272,7 +272,7 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     modules: [
       moduleItem(MODULES.INBOX, "Inbox tutores", "Consultas y seguimiento de mascotas."),
       moduleItem(MODULES.BOOKINGS, "Agenda veterinaria", "Citas, controles y vacunacion."),
-      moduleItem(MODULES.CUSTOMERS, "Tutores y mascotas", "Ficha del tutor, mascota e historial.", "PRO"),
+      moduleItem(MODULES.PATIENTS, "Pacientes", "Ficha de paciente animal, tutor e historial veterinario.", "PRO"),
       moduleItem(MODULES.PAYMENTS, "Pagos", "Abonos, tratamientos y productos.", "BUSINESS"),
       moduleItem(MODULES.ANALYTICS, "Dashboard", "Citas, tratamientos y recurrencia.", "PRO")
     ],
