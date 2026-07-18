@@ -5,6 +5,7 @@ import {
   disconnectConnectionProvider,
   getConnectionCenter,
   getConnectionOAuthUrl,
+  reconcileMetaConnections,
   saveConnectionProvider,
   testConnectionProvider,
   type ConnectionCenterResponse,
@@ -61,10 +62,6 @@ function providerActionLabel(provider: ConnectionProvider) {
   return "Validar conexion";
 }
 
-function missingOAuthEnvironment(provider: ConnectionProvider) {
-  return provider.missingOAuthEnvironment || [];
-}
-
 function providerNextStep(provider: ConnectionProvider) {
   if (provider.status === "CONNECTED") {
     return {
@@ -74,8 +71,10 @@ function providerNextStep(provider: ConnectionProvider) {
   }
   if (provider.oauthProvider) {
     return {
-      title: "Vincula una cuenta externa",
-      description: "La cuenta de este proveedor puede ser distinta a la usada para entrar a EVOLUM. No se guardan contraseñas.",
+      title: provider.oauthReady === false ? "Proveedor en activacion" : "Vincula una cuenta externa",
+      description: provider.oauthReady === false
+        ? "EVOLUM esta terminando de habilitar este proveedor. No necesitas ingresar claves ni credenciales manuales."
+        : "La cuenta de este proveedor puede ser distinta a la usada para entrar a EVOLUM. No se guardan contraseñas.",
     };
   }
   if (provider.missing.length) {
@@ -248,15 +247,22 @@ export default function ConnectionsPage() {
     }
   }
 
-  async function openOAuth(provider: ConnectionProvider) {
-    const missingEnvironment = missingOAuthEnvironment(provider);
-    if (missingEnvironment.length) {
-      setNotice({
-        type: "error",
-        text: `OAuth todavía no está configurado para ${provider.label}. Faltan en Railway: ${missingEnvironment.join(", ")}.`,
-      });
-      return;
+  async function reconcileMeta() {
+    try {
+      setSaving(true);
+      setNotice(null);
+      const result = await reconcileMetaConnections();
+      const detected = Object.entries(result.assetsDetected).filter(([, active]) => active).map(([key]) => key).join(", ");
+      setNotice({ type: "success", text: `Meta reconciliado desde ${result.sourceChannel}. Activos detectados: ${detected || "sin activos"}.` });
+      await load(true);
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudieron reconciliar los activos Meta" });
+    } finally {
+      setSaving(false);
     }
+  }
+
+  async function openOAuth(provider: ConnectionProvider) {
     try {
       setNotice(null);
       const response = await getConnectionOAuthUrl(provider.key);
@@ -290,6 +296,9 @@ export default function ConnectionsPage() {
               <div className="meta-line">OAuth, credenciales, respaldo, replica y sincronizacion offline por tenant.</div>
             </div>
             <div className="module-app-actions">
+              <button className="ghost-btn" type="button" onClick={reconcileMeta} disabled={saving}>
+                {saving ? "Reconciliando Meta..." : "Detectar activos Meta"}
+              </button>
               <AccountPill fallbackName={agent?.name || "Usuario"} />
             </div>
           </header>
@@ -489,11 +498,15 @@ export default function ConnectionsPage() {
                             ) : (
                               <>
                                 <strong>{selected.status === "CONNECTED" ? "¿Necesitas cambiar la cuenta externa?" : "Vincula la cuenta que el cliente quiere usar"}</strong>
-                                <p>{missingOAuthEnvironment(selected).length
-                                  ? `La aplicación OAuth aún requiere configuración de plataforma: ${missingOAuthEnvironment(selected).join(", ")}.`
+                                <p>{selected.oauthReady === false
+                                  ? "Este proveedor está siendo habilitado por EVOLUM. Cuando esté disponible, solo tendrás que iniciar sesión y autorizar la cuenta externa."
                                   : `Se abrirá la pantalla oficial de ${selected.label}. El cliente puede iniciar sesión con una cuenta diferente a su usuario EVOLUM.`}</p>
-                                <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={Boolean(missingOAuthEnvironment(selected).length)}>
-                                  {selected.status === "CONNECTED" ? `Cambiar cuenta de ${selected.label}` : `Vincular con ${selected.label}`}
+                                <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={selected.oauthReady === false}>
+                                  {selected.oauthReady === false
+                                    ? "Proveedor en activación"
+                                    : selected.status === "CONNECTED"
+                                      ? `Cambiar cuenta de ${selected.label}`
+                                      : `Vincular con ${selected.label}`}
                                 </button>
                               </>
                             )}

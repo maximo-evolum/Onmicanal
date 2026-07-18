@@ -330,14 +330,17 @@ function publicProvider(provider, config) {
     oauthProvider: provider.oauthProvider || null,
     module: provider.module,
     description: provider.description,
-    requiredEnv: provider.requiredEnv || [],
-    oauthRequiredEnv: provider.oauthRequiredEnv || [],
+    // Las credenciales OAuth pertenecen a EVOLUM como plataforma. Nunca se
+    // exponen al tenant ni se solicitan al usuario que vincula su cuenta.
+    oauthReady: !envMissing.length,
+    requiredEnv: [],
+    oauthRequiredEnv: [],
     requiredFields: provider.requiredFields || [],
     scopes: provider.scopes || [],
     // `missing` describe la conexión del tenant; la plataforma OAuth se
     // comunica aparte para no degradar una cuenta existente.
     missing: fieldMissing,
-    missingOAuthEnvironment: envMissing,
+    missingOAuthEnvironment: [],
     status: providerStatus(provider, config),
     config: publicConfig(config)
   };
@@ -818,6 +821,80 @@ async function testOAuthConnection(provider, config) {
   return { config: refreshed, discovery };
 }
 
+async function reconcileMetaAssets(tenantId) {
+  const configs = await prisma.tenantChannelConfig.findMany({ where: { tenantId } });
+  const sourceCandidates = ["facebook", "instagram", "whatsapp"]
+    .map((channel) => configs.find((item) => item.channel === channel && item.isActive && hasSecret(item.accessToken)))
+    .filter(Boolean);
+  const metaBusiness = PROVIDER_BY_KEY.get("meta_business");
+  let source = null;
+  let discovery = null;
+  for (const candidate of sourceCandidates) {
+    try {
+      const token = decryptSecret(candidate.accessToken);
+      if (!token) continue;
+      const result = await discoverOAuthAccount(metaBusiness, token);
+      if (Array.isArray(result?.discovery?.availableAccounts) && result.discovery.availableAccounts.length) {
+        source = candidate;
+        discovery = result.discovery;
+        break;
+      }
+    } catch {
+      // Se prueba el siguiente token Meta activo sin exponer el error ni el secreto.
+    }
+  }
+  if (!source || !discovery) throw new Error("No se encontró un token Meta activo con activos administrables");
+
+  const available = discovery.availableAccounts || [];
+  const page = available.find((item) => item.pageId) || null;
+  const instagram = available.find((item) => item.instagram?.id)?.instagram || null;
+  const whatsappAccount = available.find((item) => item.whatsapp?.phoneNumbers?.length)?.whatsapp || available.find((item) => item.whatsapp)?.whatsapp || null;
+  const phone = whatsappAccount?.phoneNumbers?.[0] || null;
+  const updates = [];
+
+  async function saveAsset(key, values, { reuseSourceToken = false } = {}) {
+    const provider = PROVIDER_BY_KEY.get(key);
+    if (!provider) return;
+    const channel = providerStorageChannel(provider);
+    const existing = configs.find((item) => item.channel === channel) || null;
+    const metadata = normalizeMetadata({
+      ...configMetadata(existing),
+      providerType: provider.type,
+      providerGroup: provider.groupKey,
+      oauthProvider: "meta",
+      oauthReconciledAt: new Date().toISOString(),
+      oauthReconciledFrom: source.channel,
+      lastTestStatus: "OK",
+      lastTestMessage: "Activo Meta detectado y reconciliado",
+      oauthDiscovery: compactDiscovery({ account: values.account || null, availableAccounts: available })
+    }, {});
+    const data = {
+      label: values.label || existing?.label || provider.label,
+      phoneNumberId: values.phoneNumberId || existing?.phoneNumberId || null,
+      businessAccountId: values.businessAccountId || existing?.businessAccountId || null,
+      externalAccountId: values.externalAccountId || existing?.externalAccountId || null,
+      // Solo Instagram reemplaza un token histórico: fue el canal que no
+      // pudo validarse y el token fuente ya probó acceso al mismo negocio.
+      accessToken: reuseSourceToken ? source.accessToken : (existing?.accessToken || source.accessToken),
+      verifyToken: existing?.verifyToken || source.verifyToken || null,
+      metadata,
+      isActive: true
+    };
+    const config = existing
+      ? await prisma.tenantChannelConfig.update({ where: { id: existing.id }, data })
+      : await prisma.tenantChannelConfig.create({ data: { tenantId, channel, ...data } });
+    updates.push({ provider: key, channel: config.channel, status: "CONNECTED" });
+  }
+
+  if (page) await saveAsset("facebook_business", { label: page.pageName, externalAccountId: `meta-page:${page.pageId}`, account: page });
+  if (instagram) await saveAsset("meta_instagram", { label: instagram.username || page?.pageName, externalAccountId: `meta-instagram:${instagram.id}`, businessAccountId: instagram.id, account: { page, instagram } }, { reuseSourceToken: true });
+  if (whatsappAccount) await saveAsset("meta_whatsapp", { label: phone?.verifiedName || whatsappAccount.name || page?.pageName, externalAccountId: phone?.id ? `meta-whatsapp:${phone.id}` : null, businessAccountId: whatsappAccount.id, phoneNumberId: phone?.id || null, account: { page, whatsapp: whatsappAccount } });
+  const metaBusinessId = whatsappAccount?.id || instagram?.id || page?.pageId || null;
+  if (metaBusinessId) await saveAsset("meta_business", { label: page?.pageName || whatsappAccount?.name || instagram?.username, externalAccountId: `meta-business:${metaBusinessId}`, businessAccountId: metaBusinessId, account: { page, instagram, whatsapp: whatsappAccount } });
+
+  return { sourceChannel: source.channel, assetsDetected: { facebook: Boolean(page), instagram: Boolean(instagram), whatsapp: Boolean(whatsappAccount) }, updates };
+}
+
 function oauthCallbackHandler(expectedProvider) {
   return async (req, res) => {
     try {
@@ -938,6 +1015,16 @@ connectionsRouter.get("/connections", async (req, res, next) => {
       },
       groups: groupProviders(providers)
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+connectionsRouter.post("/connections/meta/reconcile", requireRole(ROLE_GROUPS.MANAGERS), async (req, res, next) => {
+  try {
+    const result = await reconcileMetaAssets(req.tenantId);
+    await recordAuditLog(req, "META_CONNECTIONS_RECONCILED", "tenant_channel_config", null, result);
+    res.json({ ok: true, ...result });
   } catch (error) {
     next(error);
   }
@@ -1086,7 +1173,12 @@ connectionsRouter.post("/connections/:key/oauth-url", requireRole(ROLE_GROUPS.MA
     if (!provider.oauthProvider) return res.status(400).json({ error: "Este proveedor no usa OAuth" });
 
     const missing = missingOAuthEnv(provider);
-    if (missing.length) return res.status(400).json({ error: "Faltan variables de entorno OAuth", missing });
+    if (missing.length) {
+      return res.status(503).json({
+        error: "Este proveedor aún está siendo habilitado por EVOLUM. No necesitas ingresar credenciales manuales.",
+        code: "OAUTH_PROVIDER_NOT_READY"
+      });
+    }
 
     const url = buildOAuthUrl(req, provider);
     if (!url) return res.status(400).json({ error: "No se pudo construir URL OAuth" });

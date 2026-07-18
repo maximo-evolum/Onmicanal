@@ -1566,6 +1566,7 @@ export type ConnectionProvider = {
   requiredFields: string[];
   scopes: string[];
   missing: string[];
+  oauthReady?: boolean;
   missingOAuthEnvironment?: string[];
   status: ConnectionStatus;
   config: ConnectionPublicConfig | null;
@@ -1617,6 +1618,10 @@ export type ConnectionCenterResponse = {
 
 export async function getConnectionCenter(): Promise<ConnectionCenterResponse> {
   return request<ConnectionCenterResponse>("/connections");
+}
+
+export async function reconcileMetaConnections(): Promise<{ ok: boolean; sourceChannel: string; assetsDetected: { facebook: boolean; instagram: boolean; whatsapp: boolean }; updates: Array<{ provider: string; channel: string; status: string }> }> {
+  return request("/connections/meta/reconcile", { method: "POST" });
 }
 
 export async function saveConnectionProvider(
