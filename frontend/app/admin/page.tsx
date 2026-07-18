@@ -81,6 +81,32 @@ const MODULE_LABELS: Record<string, string> = {
   ready_notifications: "Aviso de retiro",
 };
 
+const MODULE_DESCRIPTIONS: Record<string, string> = {
+  inbox: "Core CRM: conversaciones y atención omnicanal.",
+  agenda: "Core CRM: citas, reservas y disponibilidad.",
+  pipeline: "Core CRM: leads, oportunidades y seguimiento comercial.",
+  campaigns: "Core CRM: marketing y publicaciones.",
+  payments: "Core CRM: cobros, abonos y enlaces de pago.",
+  dashboard: "Core CRM: indicadores y reporte ejecutivo PDF.",
+  ai_ops: "Core EVOLUM: análisis, alertas y apoyo de IA.",
+  onboarding: "Core EVOLUM: contexto, reglas y conocimiento de IA.",
+  documents: "Core EVOLUM: archivos y documentos de la operación.",
+  workflows: "Core EVOLUM: automatizaciones y flujos operativos.",
+  realty_clients: "Exclusivo inmobiliaria: compradores y propiedades compatibles.",
+  properties: "Exclusivo inmobiliaria: inventario y fichas de propiedades.",
+  realty_loads: "Exclusivo inmobiliaria: carga e importación de propiedades.",
+  realty_activity: "Exclusivo inmobiliaria: visitas, propietarios y alertas.",
+  broker_portal: "Exclusivo inmobiliaria: espacio de trabajo del corredor.",
+  brokers: "Exclusivo inmobiliaria: perfiles y reparto comercial.",
+  property_assignments: "Exclusivo inmobiliaria: asignación de propiedades.",
+  patients: "Exclusivo salud/dental/veterinaria: fichas de pacientes por tenant.",
+  exams: "Exclusivo salud/dental: exámenes, órdenes y presupuestos.",
+  vehicle_owners: "Exclusivo automotriz: dueños, vehículos e historial técnico.",
+  parts_inventory: "Exclusivo automotriz: stock y compatibilidad de repuestos.",
+  mechanic_assignments: "Exclusivo automotriz: órdenes y responsables mecánicos.",
+  ready_notifications: "Exclusivo automotriz: avisos de retiro del vehículo.",
+};
+
 // Claves que existieron como servicios internos del backend. En la consola se
 // administran con sus nombres de experiencia EVOLUM para no duplicar módulos
 // ni presentar conceptos técnicos a los clientes.
@@ -91,6 +117,8 @@ const LEGACY_MODULE_TO_EXPERIENCE: Record<string, string> = {
   followups: "ai_ops",
   analytics: "dashboard",
 };
+
+const HIDDEN_LEGACY_MODULES = new Set(["customers", "vehicles", "workshop", "veterinary", "realty_leads"]);
 
 function modulePickerKey(module: string) {
   return LEGACY_MODULE_TO_EXPERIENCE[module] || module;
@@ -125,14 +153,10 @@ const PROJECT_MODULE_CATALOG = [
   "realty_leads",
   "properties",
   "property_assignments",
-  "customers",
   "realty_clients",
   "patients",
   "exams",
-  "veterinary",
-  "vehicles",
   "vehicle_owners",
-  "workshop",
   "parts_inventory",
   "mechanic_assignments",
   "ready_notifications",
@@ -140,14 +164,9 @@ const PROJECT_MODULE_CATALOG = [
 
 const MODULE_GROUPS = [
   {
-    title: "Core EVOLUM",
-    description: "Capacidades base de EVOLUM presentes en toda operación.",
-    modules: ["inbox", "ai_ops", "onboarding", "documents", "workflows"],
-  },
-  {
-    title: "Operación CRM",
-    description: "Capacidades comerciales comunes, independientes de cada vertical.",
-    modules: ["agenda", "pipeline", "campaigns", "payments", "revenue", "dashboard", "saas", "users"],
+    title: "Core EVOLUM OS y CRM",
+    description: "Módulos transversales: no son exclusivos de ningún rubro. Cada vertical los utiliza con su propio contexto operativo.",
+    modules: ["inbox", "agenda", "pipeline", "campaigns", "payments", "revenue", "dashboard", "ai_ops", "onboarding", "documents", "workflows", "saas", "users"],
   },
   {
     title: "Integraciones y continuidad",
@@ -156,23 +175,18 @@ const MODULE_GROUPS = [
   },
   {
     title: "Inmobiliaria",
-    description: "Carga, portal, corredores, clientes compradores, actividad y asignacion de propiedades.",
-    modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "realty_leads", "property_assignments", "realty_clients"],
+    description: "Módulos exclusivos de inmobiliaria. Agenda, Pipeline, Campañas, Pagos, Dashboard y Chat's están en el Core CRM.",
+    modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "property_assignments", "realty_clients"],
   },
   {
-    title: "Salud clínica y dental",
-    description: "Son rubros distintos, pero ambos comparten Pacientes y Exámenes y presupuestos.",
+    title: "Salud, dental y veterinaria",
+    description: "Módulos clínicos. Pacientes se mantiene separado por tenant y nunca se mezcla con Clientes inmobiliarios.",
     modules: ["patients", "exams"],
   },
   {
-    title: "Veterinaria",
-    description: "Operación separada para tutores, mascotas, controles y documentos veterinarios.",
-    modules: ["veterinary"],
-  },
-  {
     title: "Automotriz y taller",
-    description: "Dueños, vehículos, historial técnico, repuestos, presupuestos y avisos de retiro.",
-    modules: ["vehicle_owners", "workshop", "parts_inventory", "mechanic_assignments", "ready_notifications"],
+    description: "Módulos exclusivos de automotriz. Agenda, pagos, dashboard y Chat's pertenecen al Core CRM.",
+    modules: ["vehicle_owners", "parts_inventory", "mechanic_assignments", "ready_notifications"],
   },
 ];
 
@@ -549,9 +563,9 @@ export default function AdminPage() {
     const industryModules = industryTemplates.flatMap((template) => template.modules.map((module) => modulePickerKey(module.key)));
     const backendModules = moduleCatalog
       .map(modulePickerKey)
-      .filter((module) => !["bot_lab"].includes(module));
+      .filter((module) => !["bot_lab", ...HIDDEN_LEGACY_MODULES].includes(module));
     const merged = new Set([...PROJECT_MODULE_CATALOG, ...backendModules, ...industryModules]);
-    return Array.from(merged);
+    return Array.from(merged).filter((module) => !HIDDEN_LEGACY_MODULES.has(module));
   }, [industryTemplates, moduleCatalog]);
 
   const groupedAvailableModules = useMemo(() => {
@@ -1547,6 +1561,7 @@ export default function AdminPage() {
                             return (
                               <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => handleModuleToggle(module)}>
                                 <span>{MODULE_LABELS[module] || module}</span>
+                                {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
                                 <small>{active ? "Activo" : "Bloqueado"}{active !== saved ? " - pendiente" : ""}</small>
                               </button>
                             );
