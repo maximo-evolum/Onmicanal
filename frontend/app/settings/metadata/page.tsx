@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { ModuleHelpCard } from "@/components/module-help-card";
 import { ModuleGate } from "@/components/module-gate";
 import { createMetadataSchema, getMetadataSchemas, migrateMetadataSchema, publishMetadataSchema, type MetadataSchema } from "@/lib/api";
 
@@ -226,16 +227,18 @@ export default function MetadataSettingsPage() {
   return (
     <ModuleGate moduleKey="metadata">
     <div className={`module-with-menu-shell metadata-settings-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
-      <EvolumSidebar active="Esquemas de datos" isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
+      <EvolumSidebar active="Datos y formularios" isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
       <main className="main dashboard-page metadata-settings-main">
         <header className="module-app-header metadata-header">
           <div>
-            <span className="eyebrow">CONFIGURADOR DE FICHAS</span>
-            <h1>Diseña los datos que necesita tu equipo</h1>
-            <p>No necesitas programar. Elige una plantilla, define los datos y activa la ficha cuando esté lista.</p>
+            <span className="eyebrow">DATOS Y FORMULARIOS</span>
+            <h1>Organiza los formularios de tu equipo</h1>
+            <p>Elige qué información se pedirá en cada ficha. EVOLUM se encarga de la parte técnica.</p>
           </div>
           <AccountPill />
         </header>
+
+        <ModuleHelpCard title="Datos y formularios" description="te ayuda a decidir qué información debe completar tu equipo en cada tipo de ficha, como una propiedad, un paciente o un vehículo." steps={["Elige una plantilla parecida a tu operación.", "Agrega, quita o cambia los datos que necesitas pedir.", "Activa la ficha cuando estés conforme para que tu equipo la use."]} />
 
         <section className="metadata-guide">
           <article><b>1</b><div><strong>Elige una ficha</strong><span>Parte desde una plantilla conocida.</span></div></article>
@@ -258,7 +261,7 @@ export default function MetadataSettingsPage() {
             <label className="metadata-name-field">
               <span>Nombre que verá tu equipo</span>
               <input value={label} onChange={(event) => { setLabel(event.target.value); setSelectedPreset("custom"); }} placeholder="Ej: Ficha de paciente" required />
-              <small>Se organizará internamente como “{generatedType}”. No necesitas editar códigos.</small>
+              <small>EVOLUM lo organiza internamente. Tú solo defines el nombre que verá tu equipo.</small>
             </label>
           </section>
 
@@ -282,7 +285,7 @@ export default function MetadataSettingsPage() {
 
           <section className="vertical-card metadata-step-card metadata-publish-card">
             <div><span>PASO 3</span><h2>Guarda con tranquilidad</h2><p>Primero crearemos un borrador. Nada cambia para tu equipo hasta que presiones “Activar” en la lista inferior.</p></div>
-            <label className="metadata-safety-toggle"><input type="checkbox" checked={strict} onChange={(event) => setStrict(event.target.checked)} /><span><strong>Bloquear datos que no estén en esta lista</strong><small>Déjalo desactivado mientras pruebas la ficha. Puedes activarlo cuando el formulario esté definido.</small></span></label>
+            <label className="metadata-safety-toggle"><input type="checkbox" checked={strict} onChange={(event) => setStrict(event.target.checked)} /><span><strong>Solo permitir los datos de este formulario</strong><small>Déjalo desactivado mientras pruebas. Actívalo cuando estés seguro de que no falta ningún dato.</small></span></label>
             <div className="metadata-publish-actions"><span>{fieldCount} datos configurados</span><button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar como borrador"}</button></div>
           </section>
         </form>
