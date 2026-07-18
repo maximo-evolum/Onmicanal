@@ -4,6 +4,7 @@ import { getRedisClient } from "../lib/redis.js";
 import { runtimeAlertSnapshot, runtimeMetrics } from "../lib/runtime-metrics.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { env } from "../lib/env.js";
+import { platformJobStatus } from "../services/platform-jobs.service.js";
 
 export const operationsRouter = Router();
 operationsRouter.get("/operations/health", requireRole(ROLE_GROUPS.MANAGERS), async (_req, res) => {
@@ -25,6 +26,14 @@ operationsRouter.get("/operations/alerts", requireRole(ROLE_GROUPS.MANAGERS), as
     try { redis = (await getRedisClient()) ? "connected" : "unavailable"; } catch { redis = "unavailable"; }
   }
   res.status(database ? 200 : 503).json(runtimeAlertSnapshot({ database, redis }));
+});
+
+operationsRouter.get("/operations/jobs", requireRole(ROLE_GROUPS.MANAGERS), async (_req, res) => {
+  try {
+    res.json({ ok: true, ...(await platformJobStatus()) });
+  } catch (error) {
+    res.status(500).json({ error: "No se pudo consultar el estado de los trabajos automáticos" });
+  }
 });
 
 // Verificación de controles sin devolver valores de variables ni credenciales.

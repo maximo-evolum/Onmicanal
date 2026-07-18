@@ -70,6 +70,8 @@ type ScreenKey =
   | "brokerPortal"
   | "brokers"
   | "customers"
+  | "patients"
+  | "vehicleOwners"
   | "campaigns"
   | "admin";
 
@@ -130,7 +132,9 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "realtyActivity", label: "Actividad inmobiliaria", short: "AC", module: "realty_activity" },
   { key: "brokerPortal", label: "Portal corredor", short: "PC", module: "broker_portal" },
   { key: "brokers", label: "Corredores", short: "CO", module: "brokers" },
-  { key: "customers", label: "Clientes", short: "CL", module: "customers" },
+  { key: "customers", label: "Clientes inmobiliarios", short: "CL", module: "realty_clients" },
+  { key: "patients", label: "Pacientes", short: "PA", module: "patients" },
+  { key: "vehicleOwners", label: "Dueños y vehículos", short: "DV", module: "vehicle_owners" },
   { key: "campaigns", label: "Campañas", short: "CA", module: "marketing" },
   { key: "admin", label: "Admin", short: "SA" }
 ];
@@ -145,7 +149,9 @@ const moduleAliases: Record<string, string[]> = {
   realty_activity: ["realty_activity", "actividad_inmobiliaria"],
   broker_portal: ["broker_portal", "portal_corredor"],
   brokers: ["brokers", "corredores"],
-  customers: ["customers", "clientes", "pacientes"],
+  realty_clients: ["realty_clients", "clientes_inmobiliarios", "clientes"],
+  patients: ["patients", "pacientes"],
+  vehicle_owners: ["vehicle_owners", "dueños", "duenos", "vehiculos"],
   marketing: ["marketing", "campaigns"],
   admin: ["admin", "developer", "desarrollador"]
 };
@@ -432,6 +438,8 @@ export default function App() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [properties, setProperties] = useState<IndustryRecord[]>([]);
   const [customers, setCustomers] = useState<IndustryRecord[]>([]);
+  const [patients, setPatients] = useState<IndustryRecord[]>([]);
+  const [vehicleOwners, setVehicleOwners] = useState<IndustryRecord[]>([]);
   const [adminTenants, setAdminTenants] = useState<AdminTenant[]>([]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -449,6 +457,11 @@ export default function App() {
     const isSuperAdmin = session?.user?.role === "SUPER_ADMIN";
     return navItems.filter((item) => {
       if (item.key === "admin") return isSuperAdmin;
+      // Las fichas operativas son realmente independientes; una cuenta de
+      // salud no ve clientes inmobiliarios y una inmobiliaria no ve pacientes.
+      if (item.key === "customers" && profile.code !== "real_estate" && !isSuperAdmin) return false;
+      if (item.key === "patients" && !["health", "dental", "veterinary"].includes(profile.code) && !isSuperAdmin) return false;
+      if (item.key === "vehicleOwners" && profile.code !== "automotive" && !isSuperAdmin) return false;
       return mobileModuleAllowed(item, modules, session?.user?.role);
     });
   }, [modules, session?.user?.role]);
@@ -501,7 +514,7 @@ export default function App() {
   }
 
   async function loadAll() {
-    await Promise.allSettled([loadModules(), loadDashboard(false), loadRealtyIntelligence(), loadConversations(false), loadBookings(false), loadCampaigns(false), loadProperties(false), loadCustomers(false)]);
+    await Promise.allSettled([loadModules(), loadDashboard(false), loadRealtyIntelligence(), loadConversations(false), loadBookings(false), loadCampaigns(false), loadProperties(false), loadCustomers(false), loadPatients(false), loadVehicleOwners(false)]);
   }
 
   async function loadModules() {
@@ -562,6 +575,20 @@ export default function App() {
     if (showLoading) setRefreshing(false);
   }
 
+  async function loadPatients(showLoading = true) {
+    if (showLoading) setRefreshing(true);
+    const data = await getIndustryRecords("patient").catch(() => []);
+    setPatients(data);
+    if (showLoading) setRefreshing(false);
+  }
+
+  async function loadVehicleOwners(showLoading = true) {
+    if (showLoading) setRefreshing(true);
+    const data = await getIndustryRecords("vehicle").catch(() => []);
+    setVehicleOwners(data);
+    if (showLoading) setRefreshing(false);
+  }
+
   async function loadAdminTenants() {
     const data = await getAdminTenants().catch(() => []);
     setAdminTenants(data);
@@ -603,6 +630,8 @@ export default function App() {
     setBookings([]);
     setProperties([]);
     setCustomers([]);
+    setPatients([]);
+    setVehicleOwners([]);
     setModules([]);
   }
 
@@ -629,6 +658,8 @@ export default function App() {
     if (screen === "brokers") return loadProperties();
     if (screen === "properties") return loadProperties();
     if (screen === "customers") return loadCustomers();
+    if (screen === "patients") return loadPatients();
+    if (screen === "vehicleOwners") return loadVehicleOwners();
     if (screen === "campaigns") return loadCampaigns();
     if (screen === "admin") return loadAdminTenants();
   }
@@ -799,7 +830,9 @@ export default function App() {
         {screen === "realtyActivity" && <RealtyActivityScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />}
         {screen === "brokerPortal" && <BrokerPortalScreen records={properties} session={session} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
         {screen === "brokers" && <BrokersScreen records={properties} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
-        {screen === "customers" && <CustomersScreen records={customers} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadCustomers(false); await loadDashboard(false); }} />}
+        {screen === "customers" && <CustomersScreen records={customers} profile={profile} recordType="customer" entityLabel="Cliente inmobiliario" entityPlural="Clientes inmobiliarios" description="Ficha comercial para relacionar compradores con propiedades y mantener su seguimiento." documentLabel="Subir documentos del cliente" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadCustomers(false); await loadDashboard(false); }} />}
+        {screen === "patients" && <CustomersScreen records={patients} profile={profile} recordType="patient" entityLabel="Paciente" entityPlural="Pacientes" description="Ficha clínica independiente para registrar antecedentes, atención y seguimiento." documentLabel="Subir exámenes o documentos" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadPatients(false); await loadDashboard(false); }} />}
+        {screen === "vehicleOwners" && <CustomersScreen records={vehicleOwners} profile={profile} recordType="vehicle" entityLabel="Dueño y vehículo" entityPlural="Dueños y vehículos" description="Ficha automotriz para mantener vehículo, dueño, presupuestos e historial de taller." documentLabel="Subir presupuesto o documentos del vehículo" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadVehicleOwners(false); await loadDashboard(false); }} />}
         {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} campaigns={campaigns} onRefresh={loadCampaigns} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
       </View>
@@ -2194,12 +2227,22 @@ function BrokersScreen({
 function CustomersScreen({
   records,
   profile,
+  recordType,
+  entityLabel,
+  entityPlural,
+  description,
+  documentLabel,
   refreshing,
   onRefresh,
   onCreated
 }: {
   records: IndustryRecord[];
   profile: IndustryProfile;
+  recordType: "customer" | "patient" | "vehicle";
+  entityLabel: string;
+  entityPlural: string;
+  description: string;
+  documentLabel: string;
   refreshing: boolean;
   onRefresh: () => void;
   onCreated: () => void;
@@ -2240,13 +2283,13 @@ function CustomersScreen({
 
   async function saveCustomer() {
     if (!name.trim()) {
-      Alert.alert("Falta cliente", "Agrega el nombre del cliente o paciente.");
+      Alert.alert(`Falta ${entityLabel.toLowerCase()}`, `Agrega el nombre del ${entityLabel.toLowerCase()}.`);
       return;
     }
     try {
       setSaving(true);
       await createIndustryRecord({
-        recordType: "customer",
+          recordType,
         title: name.trim(),
         status: "active",
         data: {
@@ -2260,7 +2303,7 @@ function CustomersScreen({
           source: "mobile"
         }
       });
-      Alert.alert("Ficha guardada", "El cliente quedo disponible para seguimiento e inbox.");
+      Alert.alert("Ficha guardada", `${entityLabel} quedó disponible para seguimiento e inbox.`);
       setName("");
       setPhone("");
       setEmail("");
@@ -2279,20 +2322,20 @@ function CustomersScreen({
 
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
-      <Text style={styles.eyebrow}>Clientes / pacientes</Text>
-      <Text style={styles.screenTitle}>Clientes</Text>
-      <Text style={styles.screenSubtitle}>Ficha comercial con documentos para enviar por WhatsApp o email.</Text>
-      <Panel title="Nueva ficha">
-        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Nombre del cliente" placeholderTextColor={colors.muted} />
+      <Text style={styles.eyebrow}>{entityPlural}</Text>
+      <Text style={styles.screenTitle}>{entityPlural}</Text>
+      <Text style={styles.screenSubtitle}>{description}</Text>
+      <Panel title={`Nueva ficha: ${entityLabel}`}>
+        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder={`Nombre de ${entityLabel.toLowerCase()}`} placeholderTextColor={colors.muted} />
         <View style={styles.formRow}>
           <TextInput style={[styles.input, styles.formHalf]} value={phone} onChangeText={setPhone} placeholder="Telefono" placeholderTextColor={colors.muted} keyboardType="phone-pad" />
           <TextInput style={[styles.input, styles.formHalf]} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor={colors.muted} keyboardType="email-address" autoCapitalize="none" />
         </View>
-        <TextInput style={styles.input} value={interest} onChangeText={setInterest} placeholder="Interes, tratamiento o presupuesto" placeholderTextColor={colors.muted} />
-        <TextInput style={styles.input} value={segment} onChangeText={setSegment} placeholder="Segmento o rubro" placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={interest} onChangeText={setInterest} placeholder={recordType === "vehicle" ? "Patente, marca o modelo" : recordType === "patient" ? "Motivo de consulta o tratamiento" : "Interés o presupuesto"} placeholderTextColor={colors.muted} />
+        <TextInput style={styles.input} value={segment} onChangeText={setSegment} placeholder={recordType === "vehicle" ? "Kilometraje o tipo de servicio" : "Segmento o especialidad"} placeholderTextColor={colors.muted} />
         <TextInput style={styles.input} value={nextAction} onChangeText={setNextAction} placeholder="Proxima accion / recordatorio" placeholderTextColor={colors.muted} />
         <TouchableOpacity style={styles.uploadButton} onPress={pickDocuments}>
-          <Text style={styles.uploadButtonText}>Subir examenes o presupuestos</Text>
+          <Text style={styles.uploadButtonText}>{documentLabel}</Text>
         </TouchableOpacity>
         {documents.map((doc, index) => (
           <View key={`${doc.name}-${index}`} style={styles.documentChip}>
@@ -2300,12 +2343,12 @@ function CustomersScreen({
             <TouchableOpacity onPress={() => setDocuments((current) => current.filter((_, docIndex) => docIndex !== index))}><Text style={styles.rowRight}>Quitar</Text></TouchableOpacity>
           </View>
         ))}
-        <TextInput style={[styles.input, styles.textArea]} value={notes} onChangeText={setNotes} placeholder="Notas de contexto, historial o preferencias" placeholderTextColor={colors.muted} multiline />
+        <TextInput style={[styles.input, styles.textArea]} value={notes} onChangeText={setNotes} placeholder={recordType === "vehicle" ? "Historial de arreglos, repuestos y observaciones" : "Notas de contexto, historial o preferencias"} placeholderTextColor={colors.muted} multiline />
         <TouchableOpacity style={styles.primaryButton} onPress={saveCustomer} disabled={saving}>
           <Text style={styles.primaryButtonText}>{saving ? "Guardando..." : "Guardar ficha"}</Text>
         </TouchableOpacity>
       </Panel>
-      <Panel title={`Clientes ${profile.label}`}>
+      <Panel title={`${entityPlural} · ${profile.label}`}>
         {records.slice(0, 12).map((record) => (
           <ListRow
             key={record.id}
@@ -2315,7 +2358,7 @@ function CustomersScreen({
             right={record.status}
           />
         ))}
-        {!records.length && <Text style={styles.muted}>Aun no hay clientes cargados.</Text>}
+        {!records.length && <Text style={styles.muted}>Aún no hay fichas cargadas.</Text>}
       </Panel>
     </ScrollView>
   );

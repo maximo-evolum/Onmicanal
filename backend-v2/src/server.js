@@ -44,10 +44,11 @@ import { MODULES } from "./lib/modules.js";
 import { basicRateLimit } from "./middleware/rate-limit.js";
 import { apiErrorHandler, requestContext } from "./middleware/request-context.js";
 import { runAutonomousSalesFollowUps } from "./services/autonomous-sales-followup.service.js";
-import { observeRequest, runtimeMetrics } from "./lib/runtime-metrics.js";
+import { observeRequest, prometheusMetrics, runtimeMetrics } from "./lib/runtime-metrics.js";
 import { operationsRouter } from "./routes/operations.routes.js";
 import { getRedisClient } from "./lib/redis.js";
 import { realtyIntelligenceRouter } from "./routes/realty-intelligence.routes.js";
+import { runPlatformJobs } from "./services/platform-jobs.service.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -159,6 +160,14 @@ app.get("/health", async (_req, res) => {
 app.get("/api/health", async (_req, res) => {
   const status = await readinessStatus();
   res.status(status.ok ? 200 : 503).json({ ok: status.ok, db: status.database, redis: status.redis, timestamp: status.timestamp, metrics: runtimeMetrics() });
+});
+
+// Endpoint de scrape sin información de clientes. Debe protegerse mediante la
+// red privada o allowlist del proveedor de observabilidad si se publica.
+app.get("/metrics", async (_req, res) => {
+  const status = await readinessStatus();
+  res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
+  res.status(status.database ? 200 : 503).send(prometheusMetrics({ database: status.database, redis: status.redis }));
 });
 
 app.get("/", (_req, res) => {
@@ -299,6 +308,10 @@ if (env.enableAutomation) {
     runAutonomousSalesFollowUps({ dryRun: false, limit: 100 })
       .catch((error) => console.error("Autonomous sales follow-up error:", error));
   }, 15 * 60_000);
+
+  const executePlatformJobs = () => runPlatformJobs().catch((error) => console.error("Platform jobs error:", error));
+  executePlatformJobs();
+  setInterval(executePlatformJobs, 60_000);
 }
 
 io.on("connection", (socket) => {

@@ -10,6 +10,7 @@ import { recordAuditLog } from "../lib/audit.js";
 import { ensureAutomatedMetadataDraft, getPublishedMetadataSchema } from "../services/metadata-schemas.service.js";
 import { evaluateMetadataRecord } from "../services/metadata-quality.service.js";
 import { redactMetadataForRole } from "../lib/metadata-access.js";
+import { runWorkflowsForEvent } from "./workflows.routes.js";
 
 export const industryRecordsRouter = Router();
 
@@ -311,10 +312,19 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_CREATED", recordType, record.id, { recordType, status: record.status });
+    // Los workflows por evento trabajan en segundo plano lógico: si uno falla,
+    // queda en su cola de errores y no se pierde la ficha recién creada.
+    const workflowDispatch = await runWorkflowsForEvent({
+      tenantId: req.tenantId,
+      event: "record.created",
+      input: { recordType, status: record.status },
+      target: { id: record.id, recordType, status: record.status }
+    }).catch((error) => ({ event: "record.created", matched: 0, error: error?.message || "dispatch_failed" }));
     res.status(201).json({
       ...(await redactRecordForViewer(req, record)),
       metadataValidation: metadataValidationResponse(evaluation),
-      automatedSchema: automatedSchema ? { id: automatedSchema.id, label: automatedSchema.label, version: automatedSchema.version } : null
+      automatedSchema: automatedSchema ? { id: automatedSchema.id, label: automatedSchema.label, version: automatedSchema.version } : null,
+      workflowDispatch
     });
   } catch (error) {
     console.error("Create industry record error:", error);
@@ -357,7 +367,13 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
     await recordAuditLog(req, "INDUSTRY_RECORD_UPDATED", existing.recordType, record.id, { recordType: existing.recordType, status: record.status });
-    res.json({ ...(await redactRecordForViewer(req, record)), metadataValidation: metadataValidationResponse(evaluation) });
+    const workflowDispatch = await runWorkflowsForEvent({
+      tenantId: req.tenantId,
+      event: "record.updated",
+      input: { recordType: existing.recordType, status: record.status },
+      target: { id: record.id, recordType: existing.recordType, status: record.status }
+    }).catch((error) => ({ event: "record.updated", matched: 0, error: error?.message || "dispatch_failed" }));
+    res.json({ ...(await redactRecordForViewer(req, record)), metadataValidation: metadataValidationResponse(evaluation), workflowDispatch });
   } catch (error) {
     console.error("Update industry record error:", error);
     res.status(500).json({ error: "No se pudo actualizar el registro" });

@@ -10,7 +10,8 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "cl.evolum.mobile"
     },
     "android": {
       "package": "com.evolum.mobile",

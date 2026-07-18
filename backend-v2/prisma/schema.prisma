@@ -117,6 +117,22 @@ model MetadataSchema {
   @@index([tenantId, recordType, status])
 }
 
+// Registro inmutable de trabajos automáticos. Permite demostrar qué tarea se
+// ejecutó, cuándo y con qué resultado sin guardar información de negocio.
+model ScheduledJobRun {
+  id         String    @id @default(cuid())
+  jobKey     String
+  runKey     String    @unique
+  status     String    @default("RUNNING") // RUNNING | COMPLETED | FAILED | SKIPPED
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  details    Json?
+  error      String?
+
+  @@index([jobKey, startedAt])
+  @@index([status, startedAt])
+}
+
 
 model TenantAiProfile {
   id             String   @id @default(cuid())

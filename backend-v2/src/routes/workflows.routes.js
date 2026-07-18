@@ -156,7 +156,7 @@ async function applyWorkflowActions({ actions, tenantId, targetRecord, workflow,
   return { applied, target: currentTarget };
 }
 
-async function runWorkflow({ req, workflow, input, target, rootRunId = null, attempt = 1 }) {
+async function runWorkflow({ req, workflow, input, target, rootRunId = null, attempt = 1, trigger = "manual" }) {
   const targetRecord = target.id
     ? await prisma.industryRecord.findFirst({ where: { id: String(target.id), tenantId: req.tenantId } })
     : null;
@@ -166,7 +166,7 @@ async function runWorkflow({ req, workflow, input, target, rootRunId = null, att
       recordType: "workflow_run",
       title: `Run ${workflow.title}`,
       status: "RUNNING",
-      data: normalizeMetadata({ workflowId: workflow.id, workflowTitle: workflow.title, input, target, rootRunId, attempt, startedAt: new Date().toISOString(), ranByUserId: req.user?.id || null }, {})
+      data: normalizeMetadata({ workflowId: workflow.id, workflowTitle: workflow.title, input, target, rootRunId, attempt, trigger, startedAt: new Date().toISOString(), ranByUserId: req.user?.id || null }, {})
     }
   });
 
@@ -205,6 +205,71 @@ async function runWorkflow({ req, workflow, input, target, rootRunId = null, att
     });
     throw Object.assign(new Error(message), { workflowRun: failed });
   }
+}
+
+function workflowTrigger(workflow) {
+  return cleanText(workflow?.data?.trigger, "manual").toLowerCase();
+}
+
+function scheduledIntervalMinutes(workflow) {
+  const raw = Number(workflow?.data?.schedule?.intervalMinutes || workflow?.data?.intervalMinutes || 60);
+  return Math.min(24 * 60, Math.max(5, Number.isFinite(raw) ? Math.floor(raw) : 60));
+}
+
+// Dispara flujos configurados por un evento del negocio. Un fallo se registra
+// en su DLQ, pero jamás revierte la creación o actualización original.
+export async function runWorkflowsForEvent({ tenantId, event, input = {}, target = {} }) {
+  const normalizedEvent = cleanText(event).toLowerCase();
+  const workflows = await prisma.industryRecord.findMany({
+    where: { tenantId, recordType: "workflow_definition", status: "ACTIVE" },
+    take: 200
+  });
+  const matched = workflows.filter((workflow) => workflowTrigger(workflow) === normalizedEvent);
+  const results = [];
+  for (const workflow of matched) {
+    try {
+      const result = await runWorkflow({
+        req: { tenantId, user: { id: null } }, workflow,
+        input: normalizeMetadata(input, {}), target: normalizeMetadata(target, {}), trigger: normalizedEvent
+      });
+      results.push({ workflowId: workflow.id, status: result.run.status, runId: result.run.id });
+    } catch (error) {
+      results.push({ workflowId: workflow.id, status: "FAILED", runId: error?.workflowRun?.id || null });
+    }
+  }
+  return { event: normalizedEvent, matched: matched.length, results };
+}
+
+// Ejecución periódica para flujos con trigger `schedule`. El control de
+// duplicados entre instancias lo realiza el programador de plataforma.
+export async function runScheduledWorkflows({ now = new Date() } = {}) {
+  const workflows = await prisma.industryRecord.findMany({
+    where: { recordType: "workflow_definition", status: "ACTIVE" },
+    take: 500
+  });
+  const scheduled = workflows.filter((workflow) => workflowTrigger(workflow) === "schedule");
+  const results = [];
+  for (const workflow of scheduled) {
+    const intervalMinutes = scheduledIntervalMinutes(workflow);
+    const latest = await prisma.industryRecord.findFirst({
+      where: { tenantId: workflow.tenantId, recordType: "workflow_run", data: { path: ["workflowId"], equals: workflow.id } },
+      orderBy: { createdAt: "desc" }, select: { createdAt: true }
+    });
+    if (latest && now.getTime() - latest.createdAt.getTime() < intervalMinutes * 60_000) {
+      results.push({ workflowId: workflow.id, status: "SKIPPED", reason: "not_due" });
+      continue;
+    }
+    try {
+      const result = await runWorkflow({
+        req: { tenantId: workflow.tenantId, user: { id: null } }, workflow,
+        input: { scheduledAt: now.toISOString() }, target: {}, trigger: "schedule"
+      });
+      results.push({ workflowId: workflow.id, status: result.run.status, runId: result.run.id });
+    } catch (error) {
+      results.push({ workflowId: workflow.id, status: "FAILED", runId: error?.workflowRun?.id || null });
+    }
+  }
+  return { processed: results.length, results };
 }
 
 workflowsRouter.get("/workflows", async (req, res) => {
@@ -285,7 +350,7 @@ workflowsRouter.post("/workflows/:id/run", requireRole(ROLE_GROUPS.STAFF), async
   try {
     const workflow = await prisma.industryRecord.findFirst({ where: workflowWhere(req, "workflow_definition", { id: req.params.id, status: "ACTIVE" }) });
     if (!workflow) return res.status(404).json({ error: "Workflow activo no encontrado" });
-    const result = await runWorkflow({ req, workflow, input: normalizeMetadata(req.body?.input || {}, {}), target: normalizeMetadata(req.body?.target || {}, {}) });
+    const result = await runWorkflow({ req, workflow, input: normalizeMetadata(req.body?.input || {}, {}), target: normalizeMetadata(req.body?.target || {}, {}), trigger: "manual" });
     await recordAuditLog(req, "WORKFLOW_RUN", "workflow_run", result.run.id, { workflowId: workflow.id, status: result.run.status });
     res.status(201).json(result);
   } catch (error) { console.error("Run workflow error:", error); res.status(500).json({ error: "No se pudo ejecutar workflow", run: error.workflowRun || null }); }

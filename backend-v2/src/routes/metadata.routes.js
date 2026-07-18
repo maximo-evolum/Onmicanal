@@ -103,7 +103,7 @@ metadataRouter.get("/metadata/retention/report", requireRole(ROLE_GROUPS.MANAGER
   const records = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: { in: schemas.map((item) => item.recordType) } }, take: 1000 });
   const schemaByType = new Map(schemas.map((item) => [item.recordType, item]));
   const due = records.flatMap((record) => retentionDueFields(record, schemaByType.get(record.recordType)).map((field) => ({ recordId: record.id, recordType: record.recordType, ...field })));
-  res.json({ generatedAt: new Date().toISOString(), automaticDeletionEnabled: false, reviewedRecords: records.length, due });
+  res.json({ generatedAt: new Date().toISOString(), automaticDeletionEnabled: env.metadataRetentionEnabled, reviewedRecords: records.length, due });
 });
 
 metadataRouter.post("/metadata/retention/anonymize", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {

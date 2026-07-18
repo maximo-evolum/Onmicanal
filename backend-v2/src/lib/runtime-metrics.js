@@ -104,3 +104,34 @@ export function runtimeAlertSnapshot({ database = true, redis = "not_configured"
     metrics
   };
 }
+
+// Formato Prometheus/OpenMetrics: no expone tenants, rutas, tokens ni datos
+// personales. Permite conectar Railway, Grafana Cloud u otro monitor externo.
+export function prometheusMetrics({ database = true, redis = "not_configured" } = {}) {
+  const metrics = runtimeMetrics();
+  const redisValue = redis === "connected" ? 1 : 0;
+  const lines = [
+    "# HELP evolum_process_uptime_seconds Tiempo de actividad del proceso.",
+    "# TYPE evolum_process_uptime_seconds gauge",
+    `evolum_process_uptime_seconds ${metrics.uptimeSeconds}`,
+    "# HELP evolum_http_requests_total Solicitudes atendidas desde el inicio del proceso.",
+    "# TYPE evolum_http_requests_total counter",
+    `evolum_http_requests_total ${metrics.requests.total}`,
+    "# HELP evolum_http_errors_total Respuestas HTTP 5xx desde el inicio del proceso.",
+    "# TYPE evolum_http_errors_total counter",
+    `evolum_http_errors_total ${metrics.requests.errors}`,
+    "# HELP evolum_http_average_latency_milliseconds Latencia promedio de solicitudes.",
+    "# TYPE evolum_http_average_latency_milliseconds gauge",
+    `evolum_http_average_latency_milliseconds ${metrics.requests.averageLatencyMs}`,
+    "# HELP evolum_database_ready Base de datos disponible (1 = sí).",
+    "# TYPE evolum_database_ready gauge",
+    `evolum_database_ready ${database ? 1 : 0}`,
+    "# HELP evolum_redis_ready Redis disponible (1 = sí).",
+    "# TYPE evolum_redis_ready gauge",
+    `evolum_redis_ready ${redisValue}`,
+    "# HELP evolum_process_heap_used_bytes Heap usado por Node.js.",
+    "# TYPE evolum_process_heap_used_bytes gauge",
+    `evolum_process_heap_used_bytes ${metrics.memory.heapUsedBytes}`
+  ];
+  return `${lines.join("\n")}\n`;
+}
