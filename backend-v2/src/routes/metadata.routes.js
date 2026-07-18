@@ -60,6 +60,14 @@ metadataRouter.get("/metadata/catalog", async (req, res) => {
       ...templateEntities.filter((entity) => !overrides.some((schema) => schema.recordType === entity.recordType)),
       ...overrides.map((schema) => ({ recordType: schema.recordType, label: schema.label, fields: Object.entries(schema.fields || {}).map(([name, config]) => ({ name, type: config?.type || "string", required: Boolean(config?.required), options: config?.options })) }))
     ];
+    const allEntities = req.user?.role === "SUPER_ADMIN"
+      ? (await listAllIndustryTemplates()).flatMap((industry) => {
+        const rawEntities = Array.isArray(industry?.entities)
+          ? industry.entities
+          : Object.entries(industry?.entities || {}).map(([type, config]) => ({ type, ...(config || {}) }));
+        return rawEntities.map((entity) => ({ ...entityToSchema(entity), industry: industry.code, industryLabel: industry.name }));
+      })
+      : [];
 
     res.json({
       tenantId: req.tenantId,
@@ -68,6 +76,7 @@ metadataRouter.get("/metadata/catalog", async (req, res) => {
       modules: MODULES,
       plans: PLAN_DEFINITIONS,
       entities,
+      allEntities,
       industries: await listAllIndustryTemplates()
     });
   } catch (error) {

@@ -1382,6 +1382,13 @@ export type MetadataCatalog = {
     label?: string;
     fields: Array<{ name: string; type: string; required: boolean; options?: unknown[] }>;
   }>;
+  allEntities?: Array<{
+    recordType?: string;
+    label?: string;
+    industry?: string;
+    industryLabel?: string;
+    fields: Array<{ name: string; type: string; required: boolean; options?: unknown[] }>;
+  }>;
   industries: unknown[];
 };
 

@@ -129,7 +129,11 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     const showDeveloperItems = isDeveloper || String(role || "").toUpperCase() === "SUPER_ADMIN";
     const allItems = (showDeveloperItems ? [...baseItems, ...developerItems] : baseItems)
       .map((item) => contextualizeItem(item, industry));
-    const applicableItems = allItems.filter((item) => itemBelongsToIndustry(item, industry));
+    // Un superadmin administra toda la plataforma: ve el catálogo completo
+    // de EVOLUM OS, no solo las verticales del tenant con que inició sesión.
+    const applicableItems = showDeveloperItems
+      ? allItems
+      : allItems.filter((item) => itemBelongsToIndustry(item, industry));
     const availableItems = enabledModules === null
       ? applicableItems
       : applicableItems.filter(([, , , , moduleKey]) =>

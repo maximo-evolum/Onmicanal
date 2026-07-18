@@ -5,6 +5,7 @@ import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { createMetadataSchema, getMetadataCatalog, getMetadataSchemas, migrateMetadataSchema, publishMetadataSchema, type MetadataCatalog, type MetadataSchema } from "@/lib/api";
+import { getStoredSession } from "@/lib/auth";
 
 type FieldType = "string" | "number" | "date" | "boolean" | "array" | "relation";
 type DataCare = "INTERNAL" | "PERSONAL" | "SENSITIVE" | "CONFIDENTIAL";
@@ -153,16 +154,22 @@ export default function MetadataSettingsPage() {
 
   const generatedType = useMemo(() => toKey(recordType || label), [label, recordType]);
   const fieldCount = fieldRows.filter((item) => item.label.trim()).length;
+  const isSuperAdmin = String(getStoredSession()?.role || "").toUpperCase() === "SUPER_ADMIN";
   const visiblePresets = useMemo(() => {
-    const fromIndustry = (catalog?.entities || []).map(catalogPreset).filter((item): item is Preset => Boolean(item));
-    return [...fromIndustry, presets.find((item) => item.id === "blank")!];
-  }, [catalog]);
+    const source = isSuperAdmin ? (catalog?.allEntities || []) : (catalog?.entities || []);
+    const unique = new Map<string, Preset>();
+    for (const entity of source) {
+      const preset = catalogPreset(entity);
+      if (preset && !unique.has(preset.recordType)) unique.set(preset.recordType, preset);
+    }
+    return [...unique.values(), presets.find((item) => item.id === "blank")!];
+  }, [catalog, isSuperAdmin]);
   const allowedRecordTypes = useMemo(() => new Set(visiblePresets.map((preset) => preset.recordType)), [visiblePresets]);
   const visibleSchemas = useMemo(() => schemas.filter((schema) => {
-    if (!catalog) return true;
+    if (!catalog || isSuperAdmin) return true;
     const schemaIndustry = String(schema.policies?.industry || "").toUpperCase();
     return allowedRecordTypes.has(schema.recordType) || schemaIndustry === String(catalog.industry || "").toUpperCase();
-  }), [allowedRecordTypes, catalog, schemas]);
+  }), [allowedRecordTypes, catalog, isSuperAdmin, schemas]);
 
   useEffect(() => {
     if (!catalog || !visiblePresets.length) return;
