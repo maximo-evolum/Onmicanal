@@ -29,6 +29,9 @@ export default function AiGovernancePage() {
   const [maxActions, setMaxActions] = useState(3);
   const [blockedTerms, setBlockedTerms] = useState("");
   const [recordEvaluations, setRecordEvaluations] = useState(true);
+  const [maxRepliesPerDay, setMaxRepliesPerDay] = useState<number | "">("");
+  const [monthlyCostLimit, setMonthlyCostLimit] = useState<number | "">("");
+  const [usageStatus, setUsageStatus] = useState<{ allowed: boolean; reason: string | null; dailyReplies: number; monthlyReplies: number; monthlyCost: number } | null>(null);
   const [approvals, setApprovals] = useState<AiGovernanceRecord[]>([]);
   const [evaluations, setEvaluations] = useState<AiGovernanceRecord[]>([]);
   const [scenario, setScenario] = useState("");
@@ -48,6 +51,15 @@ export default function AiGovernancePage() {
       setMaxActions(policy?.maxAutonomousActions ?? 3);
       setBlockedTerms((policy?.blockedTerms || []).join("\n"));
       setRecordEvaluations(policy?.recordEvaluations ?? true);
+      setMaxRepliesPerDay(policy?.maxAiRepliesPerDay ?? "");
+      setMonthlyCostLimit(policy?.monthlyCostLimit ?? "");
+      setUsageStatus(governance.usageLimits ? {
+        allowed: governance.usageLimits.allowed,
+        reason: governance.usageLimits.reason,
+        dailyReplies: governance.usageLimits.usage.dailyReplies,
+        monthlyReplies: governance.usageLimits.usage.monthlyReplies,
+        monthlyCost: governance.usageLimits.usage.monthlyCost
+      } : null);
       setApprovals(governance.approvals || []);
       setEvaluations(governance.evaluations || []);
       setError(null);
@@ -65,7 +77,14 @@ export default function AiGovernancePage() {
     event.preventDefault();
     try {
       setSaving(true); setError(null);
-      await updateAIConfig({ governance: { requireApprovalFor: approvalActions, maxAutonomousActions: Number(maxActions), blockedTerms: blockedTerms.split(/\n|,/).map((item) => item.trim()).filter(Boolean), recordEvaluations } });
+      await updateAIConfig({ governance: {
+        requireApprovalFor: approvalActions,
+        maxAutonomousActions: Number(maxActions),
+        blockedTerms: blockedTerms.split(/\n|,/).map((item) => item.trim()).filter(Boolean),
+        recordEvaluations,
+        maxAiRepliesPerDay: maxRepliesPerDay === "" ? null : Number(maxRepliesPerDay),
+        monthlyCostLimit: monthlyCostLimit === "" ? null : Number(monthlyCostLimit)
+      } });
       setNotice("Política de gobierno IA guardada. Las nuevas acciones respetarán esta configuración.");
       await load();
     } catch (err) { setError(err instanceof Error ? err.message : "No se pudo guardar la política."); }
@@ -107,6 +126,9 @@ export default function AiGovernancePage() {
             <p className="workflow-empty">Si seleccionas una acción, la IA la preparará y un administrador deberá aprobarla antes de que se ejecute.</p>
             <div className="governance-check-grid">{controlledActions.map((item) => <label key={item.key} className="governance-check"><input type="checkbox" checked={approvalActions.includes(item.key)} onChange={() => toggleAction(item.key)} /> <span><strong>{item.label}</strong><small>{item.key}</small></span></label>)}</div>
             <label>Máximo de acciones automáticas por interacción<input type="number" min="0" max="10" value={maxActions} onChange={(event) => setMaxActions(Math.min(10, Math.max(0, Number(event.target.value))))} /></label>
+            <label>Máximo de respuestas IA por día (opcional)<input type="number" min="1" max="100000" value={maxRepliesPerDay} onChange={(event) => setMaxRepliesPerDay(event.target.value === "" ? "" : Math.max(1, Number(event.target.value)))} placeholder="Sin límite" /></label>
+            <label>Tope mensual de costo IA (opcional)<input type="number" min="0" step="0.01" value={monthlyCostLimit} onChange={(event) => setMonthlyCostLimit(event.target.value === "" ? "" : Math.max(0, Number(event.target.value)))} placeholder="Sin límite" /></label>
+            {usageStatus ? <p className={`workflow-empty ${usageStatus.allowed ? "" : "workflow-notice error"}`}>Uso actual: {usageStatus.dailyReplies} respuestas IA hoy · {usageStatus.monthlyReplies} este mes · costo registrado {usageStatus.monthlyCost}. {!usageStatus.allowed ? "La política pausó la IA hasta revisar el límite." : ""}</p> : null}
             <label>Términos que deben detener una respuesta<textarea rows={4} value={blockedTerms} onChange={(event) => setBlockedTerms(event.target.value)} placeholder="Un término por línea. Ej.: diagnóstico definitivo" /></label>
             <label className="governance-check"><input type="checkbox" checked={recordEvaluations} onChange={(event) => setRecordEvaluations(event.target.checked)} /><span><strong>Guardar evaluaciones</strong><small>Mantiene evidencia para auditoría y mejora continua.</small></span></label>
             <button className="primary-btn" type="submit" disabled={saving || loading}>{saving ? "Guardando..." : "Guardar política"}</button>

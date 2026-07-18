@@ -1051,6 +1051,8 @@ export type AISettings = {
     maxAutonomousActions: number;
     blockedTerms: string[];
     recordEvaluations: boolean;
+    maxAiRepliesPerDay: number | null;
+    monthlyCostLimit: number | null;
   };
 };
 
@@ -1128,7 +1130,7 @@ export async function updateAIConfig(input: Partial<AISettings>): Promise<{ sett
   });
 }
 
-export async function getAiGovernance(): Promise<{ governance: NonNullable<AISettings["governance"]>; approvals: AiGovernanceRecord[]; evaluations: AiGovernanceRecord[] }> {
+export async function getAiGovernance(): Promise<{ governance: NonNullable<AISettings["governance"]>; usageLimits: { allowed: boolean; reason: string | null; usage: { dailyReplies: number; monthlyReplies: number; monthlyCost: number } }; approvals: AiGovernanceRecord[]; evaluations: AiGovernanceRecord[] }> {
   return request("/saas/ai-governance");
 }
 

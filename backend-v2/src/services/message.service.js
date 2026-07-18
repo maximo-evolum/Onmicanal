@@ -17,6 +17,7 @@ import { runActionOrchestrator } from "./ai-action-orchestrator.service.js";
 import { captureLearningSignal } from "./ai-performance-learning.service.js";
 import { buildAutonomousFollowUpPlan } from "./autonomous-followup-strategy.service.js";
 import { recordUsageEvent } from "./saas-commercial.service.js";
+import { evaluateAiUsageLimits, getAiGovernance } from "./ai-governance.service.js";
 import { registerSalesSignal } from "./sales-engine.service.js";
 import { traceError, traceStep } from "../lib/trace.js";
 import { metadataOrNull } from "../lib/metadata.js";
@@ -380,6 +381,7 @@ export async function processIncomingText({
   });
 
   let reply;
+  let aiUsageAllowed = true;
 
   try {
     // 1) Reglas primero: permiten respuestas controladas por el negocio.
@@ -397,6 +399,16 @@ export async function processIncomingText({
     traceStep(trace, "8D_RULE_REPLY_RESULT", { hasRuleReply: Boolean(reply), reply });
     // 2) Si no hay regla, usa IA comercial con productos/servicios y modo cierre.
     if (!reply) {
+      const usageLimit = await evaluateAiUsageLimits({
+        tenantId: tenant.id,
+        governance: await getAiGovernance(tenant.id)
+      });
+      if (!usageLimit.allowed) {
+        aiUsageAllowed = false;
+        reply = "Gracias por escribirnos. Un miembro del equipo continuará tu solicitud para ayudarte a la brevedad.";
+      }
+    }
+    if (!reply) {
       traceStep(trace, "8E_OPENAI_SALES_REPLY_START");
       reply = await generateSalesReply({
         tenantId: tenant.id,
@@ -410,16 +422,19 @@ export async function processIncomingText({
       traceStep(trace, "8E_OPENAI_SALES_REPLY_OK", { reply });
     }
 
-    // 3) Ejecuta análisis experto para mantener resumen/sugerencia/score actualizados.
-    const analysis = await generateExpertAnalysis({
-      tenantId: tenant.id,
-      conversationId: conversation.id,
-      message: userMessage
-    });
+    // 3) El límite de uso también detiene análisis que consumen IA. Los datos
+    // operativos y la respuesta de derivación siguen quedando registrados.
+    if (aiUsageAllowed) {
+      const analysis = await generateExpertAnalysis({
+        tenantId: tenant.id,
+        conversationId: conversation.id,
+        message: userMessage
+      });
 
-    await updateConversationAI({ conversationId: conversation.id, analysis });
-    const leadForDecision = await refreshLeadPrediction({ conversationId: conversation.id });
-    await updateAIDecision({ conversationId: conversation.id, memory, lead: leadForDecision, message: userMessage });
+      await updateConversationAI({ conversationId: conversation.id, analysis });
+      const leadForDecision = await refreshLeadPrediction({ conversationId: conversation.id });
+      await updateAIDecision({ conversationId: conversation.id, memory, lead: leadForDecision, message: userMessage });
+    }
 
   } catch (error) {
     console.error("Error IA:", error);

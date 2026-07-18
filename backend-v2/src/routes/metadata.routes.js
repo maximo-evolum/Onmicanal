@@ -11,6 +11,7 @@ import { anonymizeExpiredSensitiveFields, retentionDueFields } from "../lib/meta
 import { env } from "../lib/env.js";
 import { prisma } from "../lib/db.js";
 import { migrateMetadataValue } from "../lib/metadata-migration.js";
+import { getMetadataSchemaQuality } from "../services/metadata-quality.service.js";
 
 export const metadataRouter = Router();
 
@@ -78,6 +79,19 @@ metadataRouter.get("/metadata/catalog", async (req, res) => {
 metadataRouter.get("/metadata/schemas", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
   const recordType = cleanRecordType(req.query.recordType);
   res.json({ schemas: await listMetadataSchemas(req.tenantId, recordType) });
+});
+
+// Preflight de calidad antes de publicar o endurecer un esquema. No retorna
+// valores de negocio: solo IDs, conteos y tipos de incumplimiento.
+metadataRouter.get("/metadata/schemas/:id/quality", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    const schema = await prisma.metadataSchema.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
+    if (!schema) return res.status(404).json({ error: "Esquema no encontrado" });
+    return res.json(await getMetadataSchemaQuality({ tenantId: req.tenantId, schema, limit: req.query.limit }));
+  } catch (error) {
+    console.error("Metadata quality report error:", error);
+    return res.status(500).json({ error: "No se pudo generar el reporte de calidad" });
+  }
 });
 
 metadataRouter.get("/metadata/governance-catalog", requireRole(ROLE_GROUPS.MANAGERS), (_req, res) => {

@@ -15,3 +15,13 @@ test("la evaluación de salida detecta términos restringidos", () => {
   assert.equal(result.matches[0], "secreto");
   assert.equal(result.score, 65);
 });
+
+test("los límites de uso IA son opcionales y se normalizan en rangos seguros", () => {
+  const unlimited = normalizeAiGovernance({});
+  assert.equal(unlimited.maxAiRepliesPerDay, null);
+  assert.equal(unlimited.monthlyCostLimit, null);
+
+  const limited = normalizeAiGovernance({ maxAiRepliesPerDay: 999999, monthlyCostLimit: -5 });
+  assert.equal(limited.maxAiRepliesPerDay, 100000);
+  assert.equal(limited.monthlyCostLimit, 0);
+});

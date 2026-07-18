@@ -8,7 +8,7 @@ import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { mergeMetadata, normalizeMetadata } from "../lib/metadata.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { ensureAutomatedMetadataDraft, getPublishedMetadataSchema } from "../services/metadata-schemas.service.js";
-import { evaluateMetadataSchema } from "../lib/metadata-enforcement.js";
+import { evaluateMetadataRecord } from "../services/metadata-quality.service.js";
 import { redactMetadataForRole } from "../lib/metadata-access.js";
 
 export const industryRecordsRouter = Router();
@@ -59,21 +59,7 @@ async function assertRecordModule(req, recordType) {
 
 async function evaluateRecordMetadata(tenantId, recordType, data) {
   const schema = await getPublishedMetadataSchema(tenantId, recordType);
-  const evaluation = evaluateMetadataSchema({ data, schema });
-  if (!schema || !evaluation.result) return evaluation;
-  for (const [field, config] of Object.entries(schema.fields || {})) {
-    if (String(config?.type || "").toLowerCase() !== "relation" || !data?.[field]) continue;
-    const targetType = String(config.relationRecordType || "").trim();
-    if (!targetType) {
-      evaluation.result.errors.push({ field, code: "RELATION_TARGET_REQUIRED", message: "La relación debe declarar relationRecordType" });
-      continue;
-    }
-    const exists = await prisma.industryRecord.findFirst({ where: { id: String(data[field]), tenantId, recordType: targetType }, select: { id: true } });
-    if (!exists) evaluation.result.errors.push({ field, code: "INVALID_RELATION", message: "El registro relacionado no existe en este tenant" });
-  }
-  evaluation.result.ok = evaluation.result.errors.length === 0;
-  evaluation.blocking = evaluation.mode === "STRICT" && !evaluation.result.ok;
-  return evaluation;
+  return evaluateMetadataRecord({ tenantId, data, schema });
 }
 
 function metadataValidationResponse(evaluation) {

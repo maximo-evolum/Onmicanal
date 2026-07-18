@@ -4,7 +4,7 @@ import { prisma } from "../lib/db.js";
 import { resolveIndustryRole } from "../lib/industry-roles.js";
 import { requireRole } from "../middleware/tenant-access.js";
 import { runAutonomousSalesFollowUps } from "../services/autonomous-sales-followup.service.js";
-import { createAiEvaluation, getAiGovernance } from "../services/ai-governance.service.js";
+import { createAiEvaluation, evaluateAiUsageLimits, getAiGovernance } from "../services/ai-governance.service.js";
 import { runAiTool } from "../services/ai-tools.service.js";
 import { getConversationMemory } from "../services/memory.service.js";
 import {
@@ -76,7 +76,8 @@ saasRouter.get("/saas/ai-governance", requireRole("OWNER", "ADMIN"), async (req,
       prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "ai_action_approval", status: "PENDING" }, orderBy: { createdAt: "desc" }, take: 100 }),
       prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "ai_evaluation" }, orderBy: { createdAt: "desc" }, take: 50 })
     ]);
-    res.json({ governance, approvals, evaluations });
+    const usageLimits = await evaluateAiUsageLimits({ tenantId: req.tenantId, governance });
+    res.json({ governance, usageLimits, approvals, evaluations });
   } catch (error) { next(error); }
 });
 

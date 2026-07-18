@@ -5,7 +5,9 @@ export const DEFAULT_AI_GOVERNANCE = Object.freeze({
   requireApprovalFor: ["create_booking", "mark_payment_ready"],
   maxAutonomousActions: 3,
   blockedTerms: [],
-  recordEvaluations: true
+  recordEvaluations: true,
+  maxAiRepliesPerDay: null,
+  monthlyCostLimit: null
 });
 
 function asObject(value) {
@@ -18,6 +20,13 @@ function cleanTerms(value) {
     : [];
 }
 
+function boundedOptionalNumber(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.min(max, Math.max(min, number));
+}
+
 export function normalizeAiGovernance(value = {}) {
   const input = asObject(value);
   const maxAutonomousActions = Number(input.maxAutonomousActions);
@@ -27,7 +36,9 @@ export function normalizeAiGovernance(value = {}) {
       ? Math.max(0, Math.min(Math.floor(maxAutonomousActions), 10))
       : DEFAULT_AI_GOVERNANCE.maxAutonomousActions,
     blockedTerms: cleanTerms(input.blockedTerms),
-    recordEvaluations: input.recordEvaluations === undefined ? true : Boolean(input.recordEvaluations)
+    recordEvaluations: input.recordEvaluations === undefined ? true : Boolean(input.recordEvaluations),
+    maxAiRepliesPerDay: boundedOptionalNumber(input.maxAiRepliesPerDay, { min: 1, max: 100_000 }),
+    monthlyCostLimit: boundedOptionalNumber(input.monthlyCostLimit, { min: 0, max: 10_000_000 })
   };
 }
 
@@ -49,6 +60,52 @@ export function evaluateAiOutput({ output = "", governance = DEFAULT_AI_GOVERNAN
 
 export function needsHumanApproval(governance, toolName) {
   return normalizeAiGovernance(governance).requireApprovalFor.includes(String(toolName || "").trim());
+}
+
+function periodStarts(reference = new Date()) {
+  const date = new Date(reference);
+  return {
+    dayStart: new Date(date.getFullYear(), date.getMonth(), date.getDate()),
+    monthStart: new Date(date.getFullYear(), date.getMonth(), 1),
+    nextMonthStart: new Date(date.getFullYear(), date.getMonth() + 1, 1)
+  };
+}
+
+/** Uso agregado, sin contenido de conversaciones, para controles de IA. */
+export async function getAiGovernanceUsage(tenantId, reference = new Date()) {
+  const { dayStart, monthStart, nextMonthStart } = periodStarts(reference);
+  const [dailyReplies, monthlyAi] = await Promise.all([
+    prisma.usageEvent.aggregate({
+      where: { tenantId, type: "AI_REPLY", createdAt: { gte: dayStart } },
+      _sum: { quantity: true }
+    }),
+    prisma.usageEvent.aggregate({
+      where: { tenantId, type: "AI_REPLY", createdAt: { gte: monthStart, lt: nextMonthStart } },
+      _sum: { quantity: true, cost: true }
+    })
+  ]);
+  return {
+    period: { dayStart, monthStart, nextMonthStart },
+    dailyReplies: dailyReplies._sum.quantity || 0,
+    monthlyReplies: monthlyAi._sum.quantity || 0,
+    monthlyCost: monthlyAi._sum.cost || 0
+  };
+}
+
+/**
+ * Bloquea generación y herramientas autónomas cuando el tenant definió un
+ * límite. Si no se configuró un límite, conserva exactamente el flujo actual.
+ */
+export async function evaluateAiUsageLimits({ tenantId, governance, reference = new Date() }) {
+  const policy = normalizeAiGovernance(governance);
+  const usage = await getAiGovernanceUsage(tenantId, reference);
+  if (policy.maxAiRepliesPerDay !== null && usage.dailyReplies >= policy.maxAiRepliesPerDay) {
+    return { allowed: false, reason: "DAILY_AI_REPLY_LIMIT", policy, usage };
+  }
+  if (policy.monthlyCostLimit !== null && usage.monthlyCost >= policy.monthlyCostLimit) {
+    return { allowed: false, reason: "MONTHLY_AI_COST_LIMIT", policy, usage };
+  }
+  return { allowed: true, reason: null, policy, usage };
 }
 
 export async function createAiActionApproval({ tenantId, conversationId = null, tool, args = {}, reason = "Política de gobierno IA", requestedBy = "agent" }) {

@@ -3,6 +3,8 @@ import { prisma } from "../lib/db.js";
 import { authMiddleware, clearBrowserSession, setBrowserSession } from "../lib/auth.js";
 import { loginUser, registerTenantOwner } from "../services/auth.service.js";
 import { ensureTenantSubscriptionAndModules, getTenantModules } from "../services/tenant-modules.service.js";
+import { basicRateLimit } from "../middleware/rate-limit.js";
+import { recordAuditLog } from "../lib/audit.js";
 
 export const authRouter = Router();
 
@@ -40,13 +42,17 @@ authRouter.post("/auth/register", async (req, res) => {
   }
 });
 
-authRouter.post("/auth/login", async (req, res) => {
+authRouter.post("/auth/login", basicRateLimit({ windowMs: 15 * 60_000, max: Number(process.env.AUTH_LOGIN_RATE_LIMIT || 12) }), async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || typeof password !== "string" || !password) {
       return res.status(400).json({ error: "email y password son requeridos" });
     }
     const result = await loginUser({ email, password });
+    await recordAuditLog({ ...req, user: result.user, tenantId: result.user.tenantId }, "AUTH_LOGIN_SUCCESS", "workspace_user", result.user.id, {
+      authMethod: "password",
+      client: isMobileClient(req) ? "mobile" : "browser"
+    });
     return sendAuthenticatedSession(req, res, result);
   } catch {
     res.status(401).json({ error: "Credenciales inválidas" });

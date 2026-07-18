@@ -7,7 +7,7 @@ import { runAiTool, AI_TOOLS } from "./ai-tools.service.js";
 import { detectConversationState, detectPaymentReadySignal, buildSalesWorkflowContext, CONVERSATION_STATES, nextActionForState } from "./sales-workflow.service.js";
 import { buildReasoningSnapshot, buildReasoningPromptContext } from "./ai-reasoning.service.js";
 import { buildAutonomousWorkflow, buildWorkflowPromptContext } from "./autonomous-workflow.service.js";
-import { createAiActionApproval, getAiGovernance, needsHumanApproval } from "./ai-governance.service.js";
+import { createAiActionApproval, evaluateAiUsageLimits, getAiGovernance, needsHumanApproval } from "./ai-governance.service.js";
 
 function includesAny(text, patterns) {
   return patterns.some((pattern) => pattern.test(text));
@@ -219,8 +219,18 @@ export async function runActionOrchestrator({ tenant, conversation, contact, use
   const plan = getActionPlan({ tenant, userMessage, memory, lead });
   const results = [];
   const governance = await getAiGovernance(tenant?.id);
+  const usageLimit = await evaluateAiUsageLimits({ tenantId: tenant.id, governance });
 
-  for (const action of plan.actions.slice(0, governance.maxAutonomousActions)) {
+  if (!usageLimit.allowed) {
+    results.push({
+      ok: false,
+      blocked: true,
+      tool: "ai_usage_limit",
+      message: "La automatización IA está pausada temporalmente por la política de uso del tenant."
+    });
+  }
+
+  for (const action of (usageLimit.allowed ? plan.actions : []).slice(0, governance.maxAutonomousActions)) {
     try {
       if (needsHumanApproval(governance, action.tool)) {
         const approval = await createAiActionApproval({
@@ -285,6 +295,7 @@ export async function runActionOrchestrator({ tenant, conversation, contact, use
   return {
     ...plan,
     results,
+    usageLimit,
     workflowContext,
     contextText: buildToolExecutionContext(results, workflowContext)
   };
