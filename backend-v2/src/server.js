@@ -44,8 +44,9 @@ import { MODULES } from "./lib/modules.js";
 import { basicRateLimit } from "./middleware/rate-limit.js";
 import { apiErrorHandler, requestContext } from "./middleware/request-context.js";
 import { runAutonomousSalesFollowUps } from "./services/autonomous-sales-followup.service.js";
-import { observeRequest } from "./lib/runtime-metrics.js";
+import { observeRequest, runtimeMetrics } from "./lib/runtime-metrics.js";
 import { operationsRouter } from "./routes/operations.routes.js";
+import { getRedisClient } from "./lib/redis.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -108,14 +109,42 @@ app.use("/tenant-documents", express.static(tenantDocumentsDir, {
   maxAge: "1h"
 }));
 
-app.get("/health", async (_req, res) => {
+async function readinessStatus() {
+  let database = false;
+  let redis = "not_configured";
   try {
     await prisma.$queryRaw`SELECT 1`;
+    database = true;
+  } catch {
+    database = false;
+  }
+  if (process.env.REDIS_URL) {
+    try {
+      redis = (await getRedisClient()) ? "connected" : "unavailable";
+    } catch {
+      redis = "unavailable";
+    }
+  }
+  return { ok: database, database, redis, timestamp: new Date().toISOString() };
+}
+
+app.get("/health/live", (_req, res) => {
+  res.json({ ok: true, service: "onmicanal-backend-v2", uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
+app.get("/health/ready", async (_req, res) => {
+  const status = await readinessStatus();
+  res.status(status.ok ? 200 : 503).json(status);
+});
+
+app.get("/health", async (_req, res) => {
+  try {
+    const status = await readinessStatus();
+    if (!status.ok) throw new Error("Database health check failed");
     res.json({
-      ok: true,
+      ...status,
       service: "onmicanal-backend-v2",
-      uptime: process.uptime(),
-      timestamp: new Date().toISOString()
+      uptime: process.uptime()
     });
   } catch (error) {
     res.status(503).json({
@@ -127,12 +156,8 @@ app.get("/health", async (_req, res) => {
 });
 
 app.get("/api/health", async (_req, res) => {
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    res.json({ ok: true, db: true, timestamp: new Date().toISOString() });
-  } catch {
-    res.status(503).json({ ok: false, db: false, timestamp: new Date().toISOString() });
-  }
+  const status = await readinessStatus();
+  res.status(status.ok ? 200 : 503).json({ ok: status.ok, db: status.database, redis: status.redis, timestamp: status.timestamp, metrics: runtimeMetrics() });
 });
 
 app.get("/", (_req, res) => {
@@ -313,6 +338,15 @@ async function bootstrap() {
 
 bootstrap().catch((error) => {
   console.error("Bootstrap error:", error);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (error) => {
+  console.error(JSON.stringify({ event: "process.unhandled_rejection", message: error?.message, stack: env.nodeEnv === "production" ? undefined : error?.stack }));
+});
+
+process.on("uncaughtException", (error) => {
+  console.error(JSON.stringify({ event: "process.uncaught_exception", message: error?.message, stack: env.nodeEnv === "production" ? undefined : error?.stack }));
   process.exit(1);
 });
 

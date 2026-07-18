@@ -11,3 +11,7 @@ operationsRouter.get("/operations/health", requireRole(ROLE_GROUPS.MANAGERS), as
   try { redis = Boolean(await getRedisClient()); } catch {}
   res.status(database ? 200 : 503).json({ ok: database, database, redis, ...runtimeMetrics(), timestamp: new Date().toISOString() });
 });
+
+operationsRouter.get("/operations/metrics", requireRole(ROLE_GROUPS.MANAGERS), (_req, res) => {
+  res.json({ ok: true, ...runtimeMetrics(), timestamp: new Date().toISOString() });
+});

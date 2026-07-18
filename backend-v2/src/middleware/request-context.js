@@ -11,7 +11,8 @@ export function apiErrorHandler(error, req, res, _next) {
   const safeStatus = status >= 400 && status < 600 ? status : 500;
   const detail = process.env.NODE_ENV === "production" ? undefined : error?.message;
 
-  console.error("[API_ERROR]", {
+  console.error(JSON.stringify({
+    event: "api.request.failed",
     requestId: req?.requestId,
     method: req?.method,
     path: req?.originalUrl || req?.url,
@@ -20,7 +21,7 @@ export function apiErrorHandler(error, req, res, _next) {
     message: error?.message,
     code: error?.code,
     stack: process.env.NODE_ENV === "production" ? undefined : error?.stack
-  });
+  }));
 
   res.status(safeStatus).json({
     error: safeStatus === 500 ? "Error interno del servidor" : (error?.message || "Solicitud inválida"),
