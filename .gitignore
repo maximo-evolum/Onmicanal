@@ -6,6 +6,7 @@ node_modules
 **/.expo
 .env
 .env.*
+*-firebase-adminsdk-*.json
 !.env.example
 !.env.local.example
 dist
