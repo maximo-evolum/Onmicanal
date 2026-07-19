@@ -3,10 +3,11 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import * as Updates from "expo-updates";
-import { useEffect, useMemo, useState } from "react";
+import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -54,7 +55,9 @@ import {
   sendReengagementTemplate,
   takeConversation,
   updateAdminTenantModules,
-  updateIndustryRecord
+  updateIndustryRecord,
+  getOfflineQueueCount,
+  syncOfflineQueue
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
@@ -420,7 +423,39 @@ function parseCsvRows(source: string): Record<string, string>[] {
   return values.map((valuesRow) => Object.fromEntries(headers.map((header, index) => [header, valuesRow[index] || ""])));
 }
 
+class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("EVOLUM mobile render error", error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <SafeAreaView style={styles.centerScreen}>
+        <StatusBar style="light" />
+        <View style={styles.recoveryCard}>
+          <Text style={styles.loginTitle}>EVOLUM se recuperó</Text>
+          <Text style={styles.muted}>Una pantalla tuvo un problema. Tus datos locales no se borraron.</Text>
+          <TouchableOpacity style={styles.primaryButton} onPress={() => this.setState({ error: null })}>
+            <Text style={styles.primaryButtonText}>Volver a intentar</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+}
+
 export default function App() {
+  return <AppErrorBoundary><EvolumApp /></AppErrorBoundary>;
+}
+
+function EvolumApp() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [modules, setModules] = useState<string[]>([]);
   const [screen, setScreen] = useState<ScreenKey>("dashboard");
@@ -447,6 +482,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("");
+  const [pendingOfflineSync, setPendingOfflineSync] = useState(0);
 
   const profile = useMemo(() => getIndustryProfile(session?.tenant?.industry), [session?.tenant?.industry]);
   const selectedConversation = useMemo(
@@ -512,6 +548,24 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    void refreshOfflineQueueCount();
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") void syncPendingOfflineActions();
+    });
+    return () => subscription.remove();
+  }, []);
+
+  async function refreshOfflineQueueCount() {
+    setPendingOfflineSync(await getOfflineQueueCount());
+  }
+
+  async function syncPendingOfflineActions() {
+    const result = await syncOfflineQueue();
+    setPendingOfflineSync(result.pending);
+    if (result.synced && session) await loadAll();
+  }
+
+  useEffect(() => {
     if (!selectedConversation?.id) return;
     loadMessages(selectedConversation.id);
   }, [selectedConversation?.id]);
@@ -538,6 +592,7 @@ export default function App() {
       const cached = await getMobileSession<any>();
       if (cached?.user) {
         setSession({ user: cached.user, tenant: cached.tenant });
+        await syncPendingOfflineActions();
         await loadAll();
       }
       const me = await getMe().catch(() => null);
@@ -635,6 +690,7 @@ export default function App() {
       setAuthLoading(true);
       const data = await loginWithEmail(email.trim(), password);
       setSession({ user: data.user, tenant: data.tenant });
+      await syncPendingOfflineActions();
       await loadAll();
     } catch (error) {
       Alert.alert("No se pudo iniciar sesion", error instanceof Error ? error.message : "Intenta nuevamente");
@@ -669,6 +725,7 @@ export default function App() {
     setPatients([]);
     setVehicleOwners([]);
     setModules([]);
+    setPendingOfflineSync(0);
   }
 
   async function refreshCurrent() {
@@ -833,6 +890,12 @@ export default function App() {
         </View>
       )}
       <View style={styles.contentShell}>
+        {pendingOfflineSync > 0 && (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>{pendingOfflineSync} acción{pendingOfflineSync === 1 ? "" : "es"} pendiente{pendingOfflineSync === 1 ? "" : "s"} de sincronizar.</Text>
+            <TouchableOpacity onPress={() => void syncPendingOfflineActions()}><Text style={styles.offlineBannerAction}>Sincronizar</Text></TouchableOpacity>
+          </View>
+        )}
         {screen === "dashboard" && (
           <DashboardScreen dashboard={dashboard} realtyIntelligence={realtyIntelligence} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />
         )}
@@ -3309,5 +3372,9 @@ const styles = StyleSheet.create({
   moduleToggle: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, minHeight: 36, justifyContent: "center" },
   moduleToggleOn: { backgroundColor: colors.purple, borderColor: colors.borderStrong },
   moduleToggleText: { color: colors.muted, fontWeight: "800" },
-  moduleToggleTextOn: { color: colors.text }
+  moduleToggleTextOn: { color: colors.text },
+  recoveryCard: { width: "88%", maxWidth: 420, gap: 16, borderWidth: 1, borderColor: colors.border, borderRadius: 20, padding: 24, backgroundColor: colors.panel },
+  offlineBanner: { marginHorizontal: 14, marginTop: 12, paddingHorizontal: 14, minHeight: 44, borderRadius: 12, backgroundColor: "rgba(249, 115, 22, 0.16)", borderWidth: 1, borderColor: "rgba(249, 115, 22, 0.55)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  offlineBannerText: { color: colors.text, fontSize: 12, fontWeight: "700", flex: 1 },
+  offlineBannerAction: { color: "#fdba74", fontSize: 12, fontWeight: "900" }
 });

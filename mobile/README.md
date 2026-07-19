@@ -69,6 +69,8 @@ npm run build:ios:testflight
 npm run update:preview -- --message "Describe la mejora"
 ```
 
+Los comandos de build ya evitan automáticamente el clonado temporal de todo el repositorio. Esto es importante en Windows porque el frontend puede mantener archivos bloqueados mientras está abierto en desarrollo.
+
 Los cambios que agreguen permisos, dependencias nativas o funciones propias de Android/iOS requieren un nuevo build; los demás se publican mediante actualización OTA.
 
 ## Arquitectura

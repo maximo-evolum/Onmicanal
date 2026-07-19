@@ -12,14 +12,14 @@
     "web": "expo start --web",
     "doctor": "expo install --check",
     "typecheck": "tsc --noEmit",
-    "build:android:apk": "npx eas-cli build --platform android --profile preview",
-    "build:ios:testflight": "npx eas-cli build --platform ios --profile ios-testflight",
-    "update:preview": "npx eas-cli update --channel preview",
-    "update:production": "npx eas-cli update --channel production"
+    "build:android:apk": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli build --platform android --profile preview\"",
+    "build:ios:testflight": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli build --platform ios --profile ios-testflight\"",
+    "update:preview": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli update --channel preview\"",
+    "update:production": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli update --channel production\""
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
-    "expo": "54.0.35",
+    "expo": "~54.0.36",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.23",
     "expo-image-picker": "~17.0.11",

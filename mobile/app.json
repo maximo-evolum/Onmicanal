@@ -24,7 +24,6 @@
     },
     "android": {
       "package": "com.evolum.mobile",
-      "usesCleartextTraffic": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#070711"
