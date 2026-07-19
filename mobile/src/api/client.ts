@@ -6,6 +6,7 @@ import {
   Campaign,
   Conversation,
   CrmOperationalDashboard,
+  EvolumNotification,
   IndustryRecord,
   IndustryUser,
   Message,
@@ -274,6 +275,19 @@ export async function unregisterMobilePushDevice(expoPushToken: string) {
     method: "POST",
     body: JSON.stringify({ expoPushToken })
   });
+}
+
+export async function getNotifications(): Promise<EvolumNotification[]> {
+  const data = await request<{ notifications?: EvolumNotification[] }>("/notifications?limit=60");
+  return data.notifications || [];
+}
+
+export async function markNotificationRead(id: string) {
+  return request<{ notification: EvolumNotification }>(`/notifications/${id}/read`, { method: "PATCH" });
+}
+
+export async function markAllNotificationsRead() {
+  return request<{ updated: number }>("/notifications/read-all", { method: "PATCH" });
 }
 
 export async function getCrmOperationalDashboard(): Promise<CrmOperationalDashboard> {

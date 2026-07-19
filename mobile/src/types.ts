@@ -62,6 +62,17 @@ export type Message = {
   createdAt: string;
 };
 
+export type EvolumNotification = {
+  id: string;
+  title: string;
+  body?: string | null;
+  status: string;
+  severity?: string | null;
+  targetUrl?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+};
+
 export type Booking = {
   id: string;
   tenantId: string;

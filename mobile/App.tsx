@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import Constants from "expo-constants";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
@@ -55,8 +56,11 @@ import {
   getMessages,
   getMobileSession,
   getLatestMobileNativeRelease,
+  getNotifications,
   getMyModules,
   loginWithEmail,
+  markAllNotificationsRead,
+  markNotificationRead,
   publishCampaign,
   releaseConversation,
   resolveConversation,
@@ -72,9 +76,10 @@ import {
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
-import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, IndustryRecord, IndustryUser, Message, RealtyIntelligence, TenantSession } from "./src/types";
+import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, EvolumNotification, IndustryRecord, IndustryUser, Message, RealtyIntelligence, TenantSession } from "./src/types";
 
 const evolumLogo = require("./assets/evolum-logo.png");
+const PERMISSION_ONBOARDING_PREFIX = "evolum_permission_onboarding_v1:";
 
 type ScreenKey =
   | "dashboard"
@@ -90,6 +95,7 @@ type ScreenKey =
   | "patients"
   | "vehicleOwners"
   | "campaigns"
+  | "notifications"
   | "settings"
   | "admin";
 
@@ -154,7 +160,7 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "patients", label: "Pacientes", short: "PA", module: "patients" },
   { key: "vehicleOwners", label: "Dueños y vehículos", short: "DV", module: "vehicle_owners" },
   { key: "campaigns", label: "Campañas", short: "CA", module: "marketing" },
-  { key: "settings", label: "Permisos y alertas", short: "PA" },
+  { key: "settings", label: "Permisos", short: "PR" },
   { key: "admin", label: "Admin", short: "SA" }
 ];
 
@@ -603,6 +609,7 @@ function EvolumApp() {
   const [expoPushToken, setExpoPushToken] = useState("");
   const [notificationPermission, setNotificationPermission] = useState("Sin revisar");
   const [photoPermission, setPhotoPermission] = useState("Sin revisar");
+  const [tenantNotifications, setTenantNotifications] = useState<EvolumNotification[]>([]);
 
   const profile = useMemo(() => getIndustryProfile(session?.tenant?.industry), [session?.tenant?.industry]);
   const selectedConversation = useMemo(
@@ -627,6 +634,10 @@ function EvolumApp() {
     if (chatFilter === "all") return conversations;
     return conversations.filter((item) => item.contact.channel === chatFilter);
   }, [chatFilter, conversations]);
+  const unreadNotifications = useMemo(
+    () => tenantNotifications.filter((item) => String(item.status).toUpperCase() !== "READ").length,
+    [tenantNotifications]
+  );
 
   async function applyAvailableUpdate() {
     try {
@@ -775,10 +786,46 @@ function EvolumApp() {
     if (photos) setPhotoPermission(photos.granted ? "Permitido" : photos.canAskAgain ? "Pendiente" : "Bloqueado en el dispositivo");
   }
 
+  async function requestInitialPermissions() {
+    await registerForPushNotifications();
+    await requestPhotoLibraryAccess();
+    Alert.alert(
+      "Archivos protegidos",
+      "Para Excel, PDF y documentos EVOLUM abre el selector seguro de tu teléfono cuando eliges cargar un archivo. No solicita acceso total a tu almacenamiento."
+    );
+  }
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let active = true;
+    void (async () => {
+      await refreshPermissionStatus();
+      const storageKey = `${PERMISSION_ONBOARDING_PREFIX}${session.user.id}`;
+      const alreadyPrompted = await AsyncStorage.getItem(storageKey).catch(() => "yes");
+      if (!active || alreadyPrompted) return;
+      Alert.alert(
+        "Activa tu experiencia EVOLUM",
+        "Permite notificaciones para nuevos chats, reservas y pagos. También puedes permitir fotos para subir imágenes. Los documentos se eligen de forma segura cada vez que los cargues.",
+        [
+          { text: "Más tarde", style: "cancel", onPress: () => void AsyncStorage.setItem(storageKey, "yes") },
+          { text: "Continuar", onPress: () => {
+            void AsyncStorage.setItem(storageKey, "yes");
+            void requestInitialPermissions();
+          } }
+        ],
+        { cancelable: true }
+      );
+    })();
+    return () => { active = false; };
+  }, [session?.user?.id]);
+
   useEffect(() => {
     void refreshOfflineQueueCount();
     const subscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") void syncPendingOfflineActions();
+      if (nextState === "active") {
+        void syncPendingOfflineActions();
+        void loadNotifications();
+      }
     });
     return () => subscription.remove();
   }, []);
@@ -805,6 +852,13 @@ function EvolumApp() {
     }, 15000);
     return () => clearInterval(id);
   }, [screen, session]);
+
+  useEffect(() => {
+    if (!session) return;
+    void loadNotifications();
+    const id = setInterval(() => void loadNotifications(), 60_000);
+    return () => clearInterval(id);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!session || screen !== "inbox") return;
@@ -837,7 +891,12 @@ function EvolumApp() {
   }
 
   async function loadAll() {
-    await Promise.allSettled([loadModules(), loadDashboard(false), loadRealtyIntelligence(), loadConversations(false), loadBookings(false), loadCampaigns(false), loadProperties(false), loadCustomers(false), loadPatients(false), loadVehicleOwners(false)]);
+    await Promise.allSettled([loadModules(), loadDashboard(false), loadRealtyIntelligence(), loadConversations(false), loadBookings(false), loadCampaigns(false), loadProperties(false), loadCustomers(false), loadPatients(false), loadVehicleOwners(false), loadNotifications()]);
+  }
+
+  async function loadNotifications() {
+    const data = await getNotifications().catch(() => null);
+    if (data) setTenantNotifications(data);
   }
 
   async function loadModules() {
@@ -959,8 +1018,27 @@ function EvolumApp() {
     setCustomers([]);
     setPatients([]);
     setVehicleOwners([]);
+    setTenantNotifications([]);
     setModules([]);
     setPendingOfflineSync(0);
+  }
+
+  async function handleReadNotification(id: string) {
+    try {
+      await markNotificationRead(id);
+      setTenantNotifications((current) => current.map((item) => item.id === id ? { ...item, status: "READ" } : item));
+    } catch (error) {
+      Alert.alert("No se pudo actualizar", error instanceof Error ? error.message : "Inténtalo nuevamente.");
+    }
+  }
+
+  async function handleReadAllNotifications() {
+    try {
+      await markAllNotificationsRead();
+      setTenantNotifications((current) => current.map((item) => ({ ...item, status: "READ" })));
+    } catch (error) {
+      Alert.alert("No se pudo actualizar", error instanceof Error ? error.message : "Inténtalo nuevamente.");
+    }
   }
 
   async function refreshCurrent() {
@@ -1119,11 +1197,13 @@ function EvolumApp() {
             <Text style={styles.topContactName}>{selectedConversation?.contact.name || selectedConversation?.contact.externalId || "Inbox"}</Text>
             <Text style={styles.topContactSub}>{selectedConversation ? `${selectedConversation.contact.channel} / ${selectedConversation.status} / ${selectedConversation.mode}` : "Selecciona una conversacion"}</Text>
           </View>
+          <NotificationBell count={unreadNotifications} compact onPress={() => setScreen("notifications")} />
           <TouchableOpacity style={styles.chatsButtonCompact} onPress={() => setChatDrawerOpen(true)}>
             <Text style={styles.chatsButtonText}>CHATS</Text>
           </TouchableOpacity>
         </View>
       )}
+      {screen !== "inbox" && <NotificationBell count={unreadNotifications} onPress={() => setScreen("notifications")} />}
       <View style={styles.contentShell}>
         {pendingOfflineSync > 0 && (
           <View style={styles.offlineBanner}>
@@ -1168,10 +1248,64 @@ function EvolumApp() {
         {screen === "patients" && <CustomersScreen records={patients} profile={profile} recordType="patient" entityLabel="Paciente" entityPlural="Pacientes" description="Ficha clínica independiente para registrar antecedentes, atención y seguimiento." documentLabel="Subir exámenes o documentos" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadPatients(false); await loadDashboard(false); }} />}
         {screen === "vehicleOwners" && <CustomersScreen records={vehicleOwners} profile={profile} recordType="vehicle" entityLabel="Dueño y vehículo" entityPlural="Dueños y vehículos" description="Ficha automotriz para mantener vehículo, dueño, presupuestos e historial de taller." documentLabel="Subir presupuesto o documentos del vehículo" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadVehicleOwners(false); await loadDashboard(false); }} />}
         {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} campaigns={campaigns} onRefresh={loadCampaigns} />}
+        {screen === "notifications" && <NotificationsScreen notifications={tenantNotifications} onRefresh={loadNotifications} onRead={handleReadNotification} onReadAll={handleReadAllNotifications} />}
         {screen === "settings" && <PermissionsAndAlertsScreen notificationPermission={notificationPermission} photoPermission={photoPermission} onEnableNotifications={registerForPushNotifications} onEnablePhotos={requestPhotoLibraryAccess} onOpenImports={() => setScreen("realtyLoads")} onRefresh={refreshPermissionStatus} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
       </View>
     </SafeAreaView>
+  );
+}
+
+function NotificationBell({ count, onPress, compact = false }: { count: number; onPress: () => void; compact?: boolean }) {
+  return (
+    <TouchableOpacity
+      accessibilityRole="button"
+      accessibilityLabel={count ? `${count} notificaciones sin leer` : "Notificaciones"}
+      style={[styles.notificationBell, compact && styles.notificationBellCompact]}
+      onPress={onPress}
+    >
+      <Text style={styles.notificationBellIcon}>🔔</Text>
+      {count > 0 && <View style={styles.notificationBadge}><Text style={styles.notificationBadgeText}>{count > 99 ? "99+" : count}</Text></View>}
+    </TouchableOpacity>
+  );
+}
+
+function NotificationsScreen({
+  notifications,
+  onRefresh,
+  onRead,
+  onReadAll
+}: {
+  notifications: EvolumNotification[];
+  onRefresh: () => Promise<void>;
+  onRead: (id: string) => Promise<void>;
+  onReadAll: () => Promise<void>;
+}) {
+  const unread = notifications.filter((item) => String(item.status).toUpperCase() !== "READ").length;
+  return (
+    <ScrollView contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Centro de actividad</Text>
+      <Text style={styles.screenTitle}>Notificaciones</Text>
+      <Text style={styles.screenSubtitle}>Chats, reservas, pagos y eventos relevantes de tu operación.</Text>
+      <View style={styles.notificationActions}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => void onRefresh()}><Text style={styles.secondaryButtonText}>Actualizar</Text></TouchableOpacity>
+        {unread > 0 && <TouchableOpacity style={styles.primaryButton} onPress={() => void onReadAll()}><Text style={styles.primaryButtonText}>Marcar todas leídas</Text></TouchableOpacity>}
+      </View>
+      {!notifications.length && <Panel title="Sin novedades"><Text style={styles.muted}>Cuando haya actividad relevante en tu cuenta, aparecerá aquí y en la campanita.</Text></Panel>}
+      {notifications.map((item) => {
+        const unreadItem = String(item.status).toUpperCase() !== "READ";
+        return (
+          <TouchableOpacity key={item.id} style={[styles.notificationCard, unreadItem && styles.notificationCardUnread]} onPress={() => unreadItem ? void onRead(item.id) : undefined}>
+            <View style={[styles.notificationSeverity, item.severity === "critical" && styles.notificationSeverityCritical]} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.notificationTitle}>{item.title}</Text>
+              {!!item.body && <Text style={styles.detailText}>{item.body}</Text>}
+              <Text style={styles.notificationDate}>{dateLabel(item.createdAt)}{unreadItem ? " · Nueva" : ""}</Text>
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </ScrollView>
   );
 }
 
@@ -3269,6 +3403,48 @@ const styles = StyleSheet.create({
     borderColor: colors.borderStrong,
     ...shadow
   },
+  notificationBell: {
+    position: "absolute",
+    top: Platform.OS === "android" ? 34 : 22,
+    right: 12,
+    zIndex: 28,
+    width: 54,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: colors.panel,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadow
+  },
+  notificationBellCompact: {
+    position: "relative",
+    top: undefined,
+    right: undefined,
+    zIndex: undefined,
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    flexShrink: 0,
+    ...shadow
+  },
+  notificationBellIcon: { fontSize: 22 },
+  notificationBadge: {
+    position: "absolute",
+    top: -5,
+    right: -5,
+    minWidth: 19,
+    height: 19,
+    paddingHorizontal: 4,
+    borderRadius: 10,
+    backgroundColor: colors.purple2,
+    borderWidth: 1,
+    borderColor: colors.bg,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  notificationBadgeText: { color: colors.text, fontSize: 9, fontWeight: "900" },
   sideNav: {
     width: 66,
     margin: 10,
@@ -3402,6 +3578,21 @@ const styles = StyleSheet.create({
   logoutMini: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, minHeight: 40, justifyContent: "center" },
   logoutMiniText: { color: colors.text, fontWeight: "800" },
   screenContent: { paddingTop: 6, paddingBottom: 42, gap: 14 },
+  notificationActions: { flexDirection: "row", gap: 10, alignItems: "center" },
+  notificationCard: {
+    flexDirection: "row",
+    gap: 11,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    backgroundColor: colors.panel,
+    padding: 14
+  },
+  notificationCardUnread: { borderColor: colors.borderStrong, backgroundColor: "#15102a" },
+  notificationSeverity: { width: 4, alignSelf: "stretch", borderRadius: 4, backgroundColor: colors.purple2 },
+  notificationSeverityCritical: { backgroundColor: "#ff6b8a" },
+  notificationTitle: { color: colors.text, fontSize: 15, fontWeight: "900", marginBottom: 4 },
+  notificationDate: { color: colors.muted, fontSize: 11, marginTop: 8 },
   eyebrow: { color: colors.purple2, fontSize: 12, fontWeight: "900", letterSpacing: 1.8, textTransform: "uppercase" },
   screenTitle: { color: colors.text, fontSize: 30, fontWeight: "900" },
   screenSubtitle: { color: colors.muted, lineHeight: 20 },
