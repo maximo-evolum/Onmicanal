@@ -23,6 +23,7 @@ const REQUEST_TIMEOUT_MS = 15000;
 
 type RequestOptions = {
   queueWhenOffline?: boolean;
+  timeoutMs?: number;
 };
 
 type QueuedRequest = {
@@ -148,9 +149,9 @@ async function getToken() {
   return AsyncStorage.getItem(TOKEN_KEY);
 }
 
-async function fetchWithTimeout(url: string, init?: RequestInit) {
+async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
@@ -172,7 +173,7 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init?.headers || {})
       }
-    });
+    }, options.timeoutMs);
   } catch {
     if (isRead) {
       const cached = await readCachedResponse<T>(path);
@@ -182,7 +183,7 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
       const queued = await queueOfflineRequest(path, method, init?.body);
       return { id: queued.id, status: "PENDING_SYNC", offline: true } as T;
     }
-    throw new Error(`No se pudo conectar con ${API_BASE_URL}. Revisa internet, VPN/DNS privado o vuelve a escanear el QR de Expo.`);
+    throw new Error(`No se pudo conectar con ${API_BASE_URL}. Revisa internet e intentalo nuevamente.`);
   }
 
   if (!response.ok) {
@@ -210,13 +211,24 @@ export async function checkApiHealth() {
 }
 
 export async function loginWithEmail(email: string, password?: string) {
-  const data = await request<any>("/auth/login", {
-    method: "POST",
-    headers: { "X-Auth-Client": "mobile" },
-    body: JSON.stringify({ email, password })
-  });
-  await saveMobileSession(data, data.token);
-  return data;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const data = await request<any>("/auth/login", {
+        method: "POST",
+        headers: { "X-Auth-Client": "mobile" },
+        body: JSON.stringify({ email, password })
+      }, { timeoutMs: 25000 });
+      await saveMobileSession(data, data.token);
+      return data;
+    } catch (error) {
+      lastError = error;
+      const isConnectionError = error instanceof Error && error.message.includes("No se pudo conectar");
+      if (!isConnectionError || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 900 * (attempt + 1)));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("No se pudo iniciar sesion.");
 }
 
 export async function getMe() {

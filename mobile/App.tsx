@@ -1016,7 +1016,7 @@ function EvolumApp() {
       <SafeAreaView style={styles.loginScreen}>
         <StatusBar style="light" />
         <View style={styles.loginCard}>
-          <View style={styles.logoLarge}><Text style={styles.logoText}>EV</Text></View>
+          <View style={styles.logoLarge}><Image source={evolumLogo} style={styles.logoLargeImage} /></View>
           <Text style={styles.loginTitle}>EVOLUM</Text>
           <Text style={styles.loginSubtitle}>App movil para operacion, inbox y super admin.</Text>
           <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor={colors.muted} autoCapitalize="none" />
@@ -3147,12 +3147,15 @@ const styles = StyleSheet.create({
   logoLarge: {
     width: 62,
     height: 62,
-    borderRadius: 22,
-    backgroundColor: colors.purple,
+    borderRadius: 31,
+    backgroundColor: colors.black,
+    overflow: "hidden",
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.borderStrong
   },
-  logoText: { color: colors.text, fontWeight: "900" },
+  logoLargeImage: { width: "100%", height: "100%", borderRadius: 31, transform: [{ scale: 1.24 }] },
   loginTitle: { color: colors.text, fontSize: 34, fontWeight: "900" },
   loginSubtitle: { color: colors.muted, lineHeight: 20 },
   input: {
