@@ -6,6 +6,15 @@
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "scheme": "evolum",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "url": "https://u.expo.dev/8fd3d44e-a57f-4b60-b627-3dd9f72da108"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -22,7 +31,11 @@
       }
     },
     "extra": {
-      "apiBaseUrl": "http://localhost:3000/api"
-    }
+      "apiBaseUrl": "http://localhost:3000/api",
+      "eas": {
+        "projectId": "8fd3d44e-a57f-4b60-b627-3dd9f72da108"
+      }
+    },
+    "owner": "tronquitoxd"
   }
 }

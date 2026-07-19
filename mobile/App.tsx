@@ -2,6 +2,7 @@ import { StatusBar } from "expo-status-bar";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
+import * as Updates from "expo-updates";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -471,8 +472,43 @@ export default function App() {
     return conversations.filter((item) => item.contact.channel === chatFilter);
   }, [chatFilter, conversations]);
 
+  async function applyAvailableUpdate() {
+    try {
+      await Updates.fetchUpdateAsync();
+      Alert.alert(
+        "Actualización lista",
+        "La nueva versión de EVOLUM ya está descargada.",
+        [{ text: "Reiniciar ahora", onPress: () => void Updates.reloadAsync() }]
+      );
+    } catch {
+      Alert.alert("No se pudo actualizar", "Revisa tu conexión e inténtalo nuevamente.");
+    }
+  }
+
+  async function checkForApplicationUpdate() {
+    // Expo Go y las compilaciones de desarrollo no reciben actualizaciones de producción.
+    if (__DEV__ || !Updates.isEnabled) return;
+
+    try {
+      const update = await Updates.checkForUpdateAsync();
+      if (!update.isAvailable) return;
+
+      Alert.alert(
+        "Nueva versión disponible",
+        "Hay una mejora disponible para EVOLUM. Puedes instalarla ahora sin perder tu sesión.",
+        [
+          { text: "Más tarde", style: "cancel" },
+          { text: "Actualizar ahora", onPress: () => void applyAvailableUpdate() }
+        ]
+      );
+    } catch {
+      // La aplicación sigue funcionando con la última versión almacenada si no hay red.
+    }
+  }
+
   useEffect(() => {
     bootstrap();
+    void checkForApplicationUpdate();
   }, []);
 
   useEffect(() => {

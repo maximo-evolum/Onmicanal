@@ -39,6 +39,38 @@ npm run start
 
 No uses `localhost` para un telefono fisico, porque en Android `localhost` apunta al propio telefono, no al PC.
 
+## Distribución privada y actualizaciones
+
+La app está preparada para distribución privada, sin depender de Expo Go en los teléfonos de uso diario:
+
+- **Android:** genera una APK firmada, instalable desde un enlace privado. Cuando haya un cambio nativo, se genera otra APK y Android solicitará al usuario confirmar la instalación.
+- **iPhone/iPad:** Apple no permite APK ni instalación directa general. La distribución privada se hace con **TestFlight**; activa sus actualizaciones automáticas para que los usuarios reciban los nuevos builds sin publicar la app en la búsqueda de App Store.
+- **Cambios de pantallas, lógica y estilos:** se publican por EAS Update. La app busca una versión al abrirse, muestra el aviso de actualización y reinicia solo cuando el usuario lo acepta.
+
+Antes de crear el primer build, inicia sesión con la cuenta corporativa de Expo y enlaza este proyecto una sola vez. Esto agregará el identificador y URL privada de actualizaciones al `app.json`:
+
+```bash
+cd E:\Onmicanal\mobile
+npx eas-cli login
+npx eas-cli init
+npx eas-cli update:configure
+```
+
+Luego usa estos comandos:
+
+```bash
+# APK privada para Android
+npm run build:android:apk
+
+# Build iOS para subir a TestFlight (requiere Apple Developer)
+npm run build:ios:testflight
+
+# Actualización rápida de la app, sin nueva APK/IPA
+npm run update:preview -- --message "Describe la mejora"
+```
+
+Los cambios que agreguen permisos, dependencias nativas o funciones propias de Android/iOS requieren un nuevo build; los demás se publican mediante actualización OTA.
+
 ## Arquitectura
 
 - `src/api/client.ts`: cliente API compartido conceptualmente con la web.
