@@ -17,16 +17,22 @@ function keyFor(req) {
   return `${tenant}:${user}:${ip}`;
 }
 
-export function basicRateLimit({ windowMs = 60_000, max = 240 } = {}) {
+/**
+ * Límite reutilizable con espacios de nombres independientes. No se deben
+ * compartir contadores entre el límite global de API y rutas sensibles como
+ * login: de lo contrario, actividad normal puede bloquear un inicio válido.
+ */
+export function basicRateLimit({ windowMs = 60_000, max = 240, keyPrefix = "api", keyForRequest } = {}) {
   return async (req, res, next) => {
     // No limitar preflight ni health.
     if (req.method === "OPTIONS" || req.path === "/health" || req.path === "/api/health") return next();
 
     const now = Date.now();
-    const key = keyFor(req);
+    const key = String(keyForRequest?.(req) || keyFor(req));
+    const bucketKey = `${keyPrefix}:${key}`;
     const redis = await getRedisClient();
     if (redis) {
-      const redisKey = `rate-limit:${key}:${Math.floor(now / windowMs)}`;
+      const redisKey = `rate-limit:${bucketKey}:${Math.floor(now / windowMs)}`;
       const current = await redis.incr(redisKey);
       if (current === 1) await redis.pExpire(redisKey, windowMs);
       const ttl = Math.max(0, await redis.pTTL(redisKey));
@@ -42,7 +48,7 @@ export function basicRateLimit({ windowMs = 60_000, max = 240 } = {}) {
       }
       if (buckets.size >= MAX_BUCKETS) buckets.delete(buckets.keys().next().value);
     }
-    const current = buckets.get(key) || { count: 0, resetAt: now + windowMs };
+    const current = buckets.get(bucketKey) || { count: 0, resetAt: now + windowMs };
 
     if (now > current.resetAt) {
       current.count = 0;
@@ -50,7 +56,7 @@ export function basicRateLimit({ windowMs = 60_000, max = 240 } = {}) {
     }
 
     current.count += 1;
-    buckets.set(key, current);
+    buckets.set(bucketKey, current);
 
     res.setHeader("X-RateLimit-Limit", String(max));
     res.setHeader("X-RateLimit-Remaining", String(Math.max(0, max - current.count)));

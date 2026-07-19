@@ -12,6 +12,17 @@ function isMobileClient(req) {
   return String(req.get("x-auth-client") || "").toLowerCase() === "mobile";
 }
 
+function loginRateLimitKey(req) {
+  // Una red corporativa o móvil puede compartir una misma IP. Añadir el correo
+  // normalizado evita que la actividad legítima de otra cuenta bloquee este
+  // acceso, manteniendo protección contra fuerza bruta por cuenta e IP.
+  const email = String(req.body?.email || "unknown").trim().toLowerCase().slice(0, 320);
+  const ip = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "ip")
+    .split(",")[0]
+    .trim();
+  return `${email}:${ip}`;
+}
+
 function sendAuthenticatedSession(req, res, result) {
   if (isMobileClient(req)) return res.json(result);
   setBrowserSession(res, result.token);
@@ -44,7 +55,12 @@ authRouter.post("/auth/register", async (req, res) => {
   }
 });
 
-authRouter.post("/auth/login", basicRateLimit({ windowMs: 15 * 60_000, max: Number(process.env.AUTH_LOGIN_RATE_LIMIT || 12) }), async (req, res) => {
+authRouter.post("/auth/login", basicRateLimit({
+  windowMs: 15 * 60_000,
+  max: Number(process.env.AUTH_LOGIN_RATE_LIMIT || 12),
+  keyPrefix: "auth-login",
+  keyForRequest: loginRateLimitKey
+}), async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || typeof password !== "string" || !password) {

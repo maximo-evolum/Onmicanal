@@ -67,7 +67,11 @@ app.use(express.json({
 }));
 app.use(requestContext);
 app.use(observeRequest);
-app.use(basicRateLimit({ windowMs: 60_000, max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 300) }));
+app.use(basicRateLimit({
+  windowMs: 60_000,
+  max: Number(process.env.API_RATE_LIMIT_PER_MINUTE || 300),
+  keyPrefix: "api"
+}));
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
