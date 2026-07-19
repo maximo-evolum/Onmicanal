@@ -1,4 +1,5 @@
 .expo/
+.expo-export-check/
 node_modules/
 .env
 .env.*
