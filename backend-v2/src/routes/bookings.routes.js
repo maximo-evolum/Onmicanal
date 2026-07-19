@@ -3,6 +3,7 @@ import { prisma } from "../lib/db.js";
 import { createBooking, getAvailableSlots } from "../services/booking.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { redactCoreMetadataForViewer } from "../services/core-metadata-access.service.js";
+import { createTenantNotification } from "../lib/notifications.js";
 
 export const bookingsRouter = Router();
 
@@ -42,6 +43,15 @@ bookingsRouter.post("/bookings", requireRole(ROLE_GROUPS.STAFF), async (req, res
       total,
       notes,
       metadata
+    });
+
+    void createTenantNotification({
+      tenantId: req.tenantId,
+      title: "Nueva reserva o cita",
+      body: `${name || "Cliente"} agendó para ${new Date(date).toLocaleString("es-CL")}.`,
+      severity: "info",
+      targetUrl: "/agenda",
+      metadata: { notificationType: "booking", screen: "agenda", bookingId: booking.id }
     });
 
     res.json(await redactCoreMetadataForViewer({ tenantId: req.tenantId, role: req.user?.role, recordType: "booking", record: booking, key: "metadata" }));

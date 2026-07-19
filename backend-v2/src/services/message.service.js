@@ -22,6 +22,7 @@ import { registerSalesSignal } from "./sales-engine.service.js";
 import { traceError, traceStep } from "../lib/trace.js";
 import { metadataOrNull } from "../lib/metadata.js";
 import { buildRealtyBuyerReply } from "./realty-intelligence.service.js";
+import { createTenantNotification } from "../lib/notifications.js";
 
 function mapMessageType(type) {
   switch ((type || "").toLowerCase()) {
@@ -106,6 +107,15 @@ export async function persistInboundMessage({
   });
 
   const contact = await prisma.contact.findUnique({ where: { id: contactId } });
+
+  void createTenantNotification({
+    tenantId,
+    title: `Nuevo mensaje${contact?.name ? ` de ${contact.name}` : ""}`,
+    body: normalizedContent.slice(0, 220),
+    severity: "info",
+    targetUrl: "/inbox",
+    metadata: { notificationType: "message", screen: "inbox", conversationId }
+  }).catch((error) => console.warn("[MESSAGE_PUSH_NOTIFICATION_WARNING]", error?.message || error));
 
   traceStep(trace, "7C_AI_SIDE_EFFECTS_START");
   const intent = await detectIntent({ message: normalizedContent });

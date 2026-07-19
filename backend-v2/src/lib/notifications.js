@@ -1,5 +1,6 @@
 import { prisma } from "./db.js";
 import { normalizeMetadata } from "./metadata.js";
+import { sendTenantPushNotification } from "./push-notifications.js";
 
 export async function createTenantNotification({
   tenantId,
@@ -12,7 +13,7 @@ export async function createTenantNotification({
 } = {}) {
   if (!tenantId || !title) return null;
 
-  return prisma.industryRecord.create({
+  const notification = await prisma.industryRecord.create({
     data: {
       tenantId,
       recordType: "notification",
@@ -27,4 +28,21 @@ export async function createTenantNotification({
       }, {})
     }
   });
+
+  // La creación del aviso interno no depende del proveedor push. Si Expo/FCM
+  // no responde, el aviso sigue disponible dentro de EVOLUM.
+  void sendTenantPushNotification({
+    tenantId,
+    assignedToId,
+    title: notification.title,
+    body,
+    type: String(metadata?.notificationType || "general"),
+    data: {
+      notificationId: notification.id,
+      targetUrl,
+      screen: metadata?.screen || null
+    }
+  });
+
+  return notification;
 }

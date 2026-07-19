@@ -10,6 +10,7 @@ import {
   PAYMENT_STATUS
 } from "../services/payment.service.js";
 import { redactCoreMetadataForViewer } from "../services/core-metadata-access.service.js";
+import { createTenantNotification } from "../lib/notifications.js";
 
 export const paymentsRouter = Router();
 
@@ -77,6 +78,14 @@ paymentsRouter.post("/payments/:paymentId/confirm", requireRole(ROLE_GROUPS.MANA
       externalId: req.body?.externalId || null,
       metadata: req.body?.metadata || { confirmedBy: req.user?.id || null },
       status: req.body?.status || PAYMENT_STATUS.PAID
+    });
+    void createTenantNotification({
+      tenantId,
+      title: "Pago confirmado",
+      body: `Se confirmó un pago de ${updated.currency || "CLP"} ${Number(updated.amount || 0).toLocaleString("es-CL")}.`,
+      severity: "success",
+      targetUrl: "/dashboard",
+      metadata: { notificationType: "payment", screen: "dashboard", paymentId: updated.id }
     });
     res.json(updated);
   } catch (error) { next(error); }

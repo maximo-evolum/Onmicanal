@@ -43,6 +43,51 @@ notificationsRouter.get("/notifications", async (req, res) => {
   }
 });
 
+notificationsRouter.post("/mobile/push-devices/register", async (req, res) => {
+  try {
+    const expoPushToken = String(req.body?.expoPushToken || "").trim();
+    if (!/^(Expo|Exponent)PushToken\[[^\]]+\]$/.test(expoPushToken)) {
+      return res.status(400).json({ error: "Token de notificación inválido" });
+    }
+    const device = await prisma.mobilePushDevice.upsert({
+      where: { expoPushToken },
+      create: {
+        tenantId: req.tenantId,
+        userId: req.user.id,
+        expoPushToken,
+        platform: req.body?.platform ? String(req.body.platform).slice(0, 20) : null,
+        deviceName: req.body?.deviceName ? String(req.body.deviceName).slice(0, 120) : null,
+        preferences: req.body?.preferences && typeof req.body.preferences === "object" ? req.body.preferences : {},
+        isActive: true
+      },
+      update: {
+        tenantId: req.tenantId,
+        userId: req.user.id,
+        platform: req.body?.platform ? String(req.body.platform).slice(0, 20) : null,
+        deviceName: req.body?.deviceName ? String(req.body.deviceName).slice(0, 120) : null,
+        preferences: req.body?.preferences && typeof req.body.preferences === "object" ? req.body.preferences : undefined,
+        isActive: true,
+        lastSeenAt: new Date()
+      }
+    });
+    res.status(201).json({ id: device.id, registered: true });
+  } catch (error) {
+    console.error("Push device register error:", error);
+    res.status(500).json({ error: "No se pudo registrar este teléfono" });
+  }
+});
+
+notificationsRouter.post("/mobile/push-devices/unregister", async (req, res) => {
+  const expoPushToken = String(req.body?.expoPushToken || "").trim();
+  if (expoPushToken) {
+    await prisma.mobilePushDevice.updateMany({
+      where: { expoPushToken, tenantId: req.tenantId, userId: req.user.id },
+      data: { isActive: false }
+    });
+  }
+  res.json({ unregistered: true });
+});
+
 notificationsRouter.post("/notifications", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
   try {
     const notification = await createTenantNotification({

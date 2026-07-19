@@ -217,6 +217,20 @@ export async function getMyModules(): Promise<TenantModulesResponse> {
   return request<TenantModulesResponse>("/modules/me");
 }
 
+export async function registerMobilePushDevice(input: { expoPushToken: string; platform: string; preferences?: Record<string, boolean> }) {
+  return request<{ id: string; registered: boolean }>("/mobile/push-devices/register", {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function unregisterMobilePushDevice(expoPushToken: string) {
+  return request<{ unregistered: boolean }>("/mobile/push-devices/unregister", {
+    method: "POST",
+    body: JSON.stringify({ expoPushToken })
+  });
+}
+
 export async function getCrmOperationalDashboard(): Promise<CrmOperationalDashboard> {
   return request<CrmOperationalDashboard>("/crm/operational");
 }

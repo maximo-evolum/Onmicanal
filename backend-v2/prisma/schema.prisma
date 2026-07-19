@@ -96,6 +96,7 @@ model Tenant {
   channelConfigs      TenantChannelConfig[]
   onboardingImports      TenantOnboardingImport[]
   industryRecords        IndustryRecord[]
+  mobilePushDevices      MobilePushDevice[]
 }
 
 model MetadataSchema {
@@ -212,6 +213,27 @@ model WorkspaceUser {
   tenant                Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignedConversations Conversation[]    @relation("AssignedConversations")
   assignedIndustryRecords IndustryRecord[] @relation("AssignedIndustryRecords")
+  mobilePushDevices      MobilePushDevice[]
+}
+
+model MobilePushDevice {
+  id            String   @id @default(cuid())
+  tenantId      String
+  userId        String
+  expoPushToken String   @unique
+  platform      String?
+  deviceName    String?
+  preferences   Json?
+  isActive      Boolean  @default(true)
+  lastSeenAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user          WorkspaceUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId, isActive])
+  @@index([tenantId, isActive])
 }
 
 

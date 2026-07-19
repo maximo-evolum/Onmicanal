@@ -2,6 +2,7 @@
   "expo": {
     "name": "EVOLUM",
     "slug": "evolum-mobile",
+    "icon": "./assets/evolum-logo.png",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -15,6 +16,7 @@
       "fallbackToCacheTimeout": 0,
       "url": "https://u.expo.dev/8fd3d44e-a57f-4b60-b627-3dd9f72da108"
     },
+    "plugins": [["expo-notifications", { "icon": "./assets/evolum-logo.png", "color": "#8A2EFF", "defaultChannel": "evolum-alerts" }]],
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -26,6 +28,7 @@
       "package": "com.evolum.mobile",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/evolum-logo.png",
         "backgroundColor": "#070711"
       }
     },

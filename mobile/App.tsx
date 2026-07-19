@@ -1,4 +1,6 @@
 import { StatusBar } from "expo-status-bar";
+import Constants from "expo-constants";
+import * as Notifications from "expo-notifications";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
@@ -57,11 +59,19 @@ import {
   updateAdminTenantModules,
   updateIndustryRecord,
   getOfflineQueueCount,
-  syncOfflineQueue
+  syncOfflineQueue,
+  registerMobilePushDevice,
+  unregisterMobilePushDevice
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
 import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, IndustryRecord, IndustryUser, Message, RealtyIntelligence, TenantSession } from "./src/types";
+
+const evolumLogo = require("./assets/evolum-logo.png");
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true })
+});
 
 type ScreenKey =
   | "dashboard"
@@ -483,6 +493,7 @@ function EvolumApp() {
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("");
   const [pendingOfflineSync, setPendingOfflineSync] = useState(0);
+  const [expoPushToken, setExpoPushToken] = useState("");
 
   const profile = useMemo(() => getIndustryProfile(session?.tenant?.industry), [session?.tenant?.industry]);
   const selectedConversation = useMemo(
@@ -546,6 +557,54 @@ function EvolumApp() {
     bootstrap();
     void checkForApplicationUpdate();
   }, []);
+
+  useEffect(() => {
+    if (!session || Platform.OS === "web") return;
+    void registerForPushNotifications();
+    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
+      const screen = response.notification.request.content.data?.screen;
+      if (typeof screen === "string" && navItems.some((item) => item.key === screen)) setScreen(screen as ScreenKey);
+    });
+    const tokenListener = Notifications.addPushTokenListener((token) => {
+      if (token.type === "expo") void savePushToken(token.data);
+    });
+    return () => {
+      responseListener.remove();
+      tokenListener.remove();
+    };
+  }, [session?.tenant?.id, session?.user?.id]);
+
+  async function savePushToken(token: string) {
+    if (!token) return;
+    await registerMobilePushDevice({
+      expoPushToken: token,
+      platform: Platform.OS,
+      preferences: { enabled: true, message: true, booking: true, payment: true, general: true }
+    }).catch(() => undefined);
+    setExpoPushToken(token);
+  }
+
+  async function registerForPushNotifications() {
+    try {
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("evolum-alerts", {
+          name: "Alertas EVOLUM",
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: "#8A2EFF"
+        });
+      }
+      const existing = await Notifications.getPermissionsAsync();
+      const permission = existing.status === "granted" ? existing : await Notifications.requestPermissionsAsync();
+      if (permission.status !== "granted") return;
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+      if (!projectId) return;
+      const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      await savePushToken(token);
+    } catch (error) {
+      console.warn("No se pudo registrar notificaciones push", error);
+    }
+  }
 
   useEffect(() => {
     void refreshOfflineQueueCount();
@@ -713,6 +772,7 @@ function EvolumApp() {
   }
 
   async function handleLogout() {
+    if (expoPushToken) await unregisterMobilePushDevice(expoPushToken).catch(() => undefined);
     await clearMobileSession();
     setSession(null);
     setDashboard(null);
@@ -964,7 +1024,7 @@ function SideNav({
     <>
       {!open && (
         <TouchableOpacity style={styles.floatingMenuButton} onPress={() => setOpen(true)}>
-          <Text style={styles.sideLogoText}>EV</Text>
+          <Image source={evolumLogo} style={styles.sideLogoImage} />
         </TouchableOpacity>
       )}
 
@@ -972,7 +1032,7 @@ function SideNav({
         <View style={styles.menuOverlay}>
           <View style={[styles.fullMenu, { width: menuWidth }]}>
             <View style={styles.fullMenuTop}>
-              <View style={styles.sideLogo}><Text style={styles.sideLogoText}>EV</Text></View>
+              <View style={styles.sideLogo}><Image source={evolumLogo} style={styles.sideLogoImage} /></View>
               <TouchableOpacity style={styles.iconButton} onPress={() => setOpen(false)}><Text style={styles.iconButtonText}>x</Text></TouchableOpacity>
             </View>
             <View style={styles.accountBlock}>
@@ -2897,6 +2957,7 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   sideLogoText: { color: colors.text, fontWeight: "900" },
+  sideLogoImage: { width: "100%", height: "100%", borderRadius: 999 },
   sideItems: { gap: 8, alignItems: "center" },
   sideItem: {
     width: 42,
