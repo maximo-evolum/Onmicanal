@@ -610,12 +610,12 @@ export default function AdminPage() {
       null;
   }, [industryTemplates, selectedTenant]);
 
+  const selectedIndustryCode = selectedIndustryTemplate?.code || "GENERAL";
+
   const groupedAvailableModules = useMemo(() => {
     const available = new Set(availableModules);
-    const selectedIndustryCode = selectedIndustryTemplate?.code || "GENERAL";
     const verticalModules = new Set(MODULE_GROUPS.flatMap((group) => group.industries ? group.modules : []));
     const grouped = MODULE_GROUPS
-      .filter((group) => !group.industries || group.industries.includes(selectedIndustryCode))
       .map((group) => ({
       ...group,
       modules: group.modules.filter((module) => available.has(module)),
@@ -1609,14 +1609,15 @@ export default function AdminPage() {
                             <strong>{group.title}</strong>
                             <p>{group.description}</p>
                           </div>
-                          <small>{group.modules.length} módulos</small>
+                          <small>{group.modules.length} módulos{group.industries ? (group.industries.includes(selectedIndustryCode) ? " · rubro actual" : " · otro rubro") : ""}</small>
                         </div>
                         {group.modules.length ? <div className="module-toggle-grid compact">
                           {group.modules.map((module) => {
                             const active = pendingModules.includes(module);
                             const saved = enabledModulesOf(selectedTenant).includes(module);
+                            const belongsToSelectedTenant = !group.industries || group.industries.includes(selectedIndustryCode);
                             return (
-                              <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>
+                              <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={!belongsToSelectedTenant || savingId === `modules-${selectedTenant.id}`} title={belongsToSelectedTenant ? undefined : "Selecciona una cuenta de este rubro para configurar sus módulos"}>
                                 <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
                                 {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
                                 <small>{active ? "Activo" : "Bloqueado"}{active !== saved ? " - pendiente" : ""}</small>
