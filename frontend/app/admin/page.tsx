@@ -224,6 +224,33 @@ const MODULE_GROUPS: ModuleGroup[] = [
   },
 ];
 
+function industryCodeForTenant(industry?: string | null) {
+  const value = String(industry || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+  if (value.includes("REAL_ESTATE") || value.includes("INMOBILI") || value.includes("REALTY")) return "REAL_ESTATE";
+  if (value.includes("GASTRONOM") || value.includes("RESTAUR") || value.includes("FOOD")) return "GASTRONOMY";
+  if (value.includes("DENTAL") || value.includes("ODONTO")) return "DENTAL";
+  if (value.includes("VETERIN")) return "VETERINARY";
+  if (value.includes("AUTOMOT") || value.includes("TALLER")) return "AUTOMOTIVE";
+  if (value.includes("HEALTH") || value.includes("SALUD") || value.includes("CLINIC")) return "HEALTH";
+  return "GENERAL";
+}
+
+function moduleAllowedForIndustry(module: string, industryCode: string) {
+  const ownerGroups = MODULE_GROUPS.filter((group) => group.industries?.length && group.modules.includes(module));
+  // Core, integraciones y módulos personalizados no pertenecen a una vertical
+  // conocida: quedan disponibles. Los módulos verticales solo aparecen en su
+  // propio rubro.
+  return !ownerGroups.length || ownerGroups.some((group) => group.industries?.includes(industryCode));
+}
+
+function modulesAllowedForIndustry(modules: string[], industryCode: string) {
+  return [...new Set(modules.filter((module) => !HIDDEN_LEGACY_MODULES.has(module) && moduleAllowedForIndustry(module, industryCode)))];
+}
+
 const CONTINUITY_CARDS = [
   {
     title: "Correo y documentos",
@@ -488,7 +515,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!selectedTenant) return;
 
-    setPendingModules(enabledModulesOf(selectedTenant));
+    setPendingModules(modulesAllowedForIndustry(enabledModulesOf(selectedTenant), industryCodeForTenant(selectedTenant.industry)));
 
     const whatsapp = selectedTenant.channelConfigs?.find((item) => item.channel === "whatsapp");
     const instagram = selectedTenant.channelConfigs?.find((item) => item.channel === "instagram");
@@ -588,9 +615,12 @@ export default function AdminPage() {
 
   const moduleDirty = useMemo(() => {
     if (!selectedTenant) return false;
-    const saved = [...enabledModulesOf(selectedTenant)].sort().join("|");
+    const industryCode = industryCodeForTenant(selectedTenant.industry);
+    const saved = [...modulesAllowedForIndustry(enabledModulesOf(selectedTenant), industryCode)].sort().join("|");
     const pending = [...pendingModules].sort().join("|");
-    return saved !== pending;
+    // Si existe una configuración antigua de otra vertical, el botón Guardar
+    // la elimina de forma explícita al confirmar.
+    return saved !== pending || enabledModulesOf(selectedTenant).length !== modulesAllowedForIndustry(enabledModulesOf(selectedTenant), industryCode).length;
   }, [selectedTenant, pendingModules]);
 
   const availableModules = useMemo(() => {
@@ -610,12 +640,13 @@ export default function AdminPage() {
       null;
   }, [industryTemplates, selectedTenant]);
 
-  const selectedIndustryCode = selectedIndustryTemplate?.code || "GENERAL";
+  const selectedIndustryCode = industryCodeForTenant(selectedTenant?.industry || selectedIndustryTemplate?.code);
 
   const groupedAvailableModules = useMemo(() => {
     const available = new Set(availableModules);
     const verticalModules = new Set(MODULE_GROUPS.flatMap((group) => group.industries ? group.modules : []));
     const grouped = MODULE_GROUPS
+      .filter((group) => !group.industries || group.industries.includes(selectedIndustryCode))
       .map((group) => ({
       ...group,
       modules: group.modules.filter((module) => available.has(module)),
@@ -829,10 +860,11 @@ export default function AdminPage() {
 
   async function handleModuleToggle(module: string) {
     if (!selectedTenant || savingId === `modules-${selectedTenant.id}`) return;
-    const next = new Set(pendingModules);
+    const industryCode = industryCodeForTenant(selectedTenant.industry);
+    const next = new Set(modulesAllowedForIndustry(pendingModules, industryCode));
     if (next.has(module)) next.delete(module);
     else next.add(module);
-    const nextModules = Array.from(next);
+    const nextModules = modulesAllowedForIndustry(Array.from(next), industryCode);
 
     // Cada click persiste de inmediato. Así no existe el riesgo de perder una
     // habilitación al recargar por olvidar un segundo botón de guardado.
@@ -844,7 +876,7 @@ export default function AdminPage() {
       const result = await updateAdminTenantModules(selectedTenant.id, nextModules);
       if (result.tenant) {
         updateTenantLocal(result.tenant);
-        setPendingModules(enabledModulesOf(result.tenant as AdminTenant));
+        setPendingModules(modulesAllowedForIndustry(enabledModulesOf(result.tenant as AdminTenant), industryCode));
       }
       setSuccess(`${MODULE_LABELS[module] || module} ${next.has(module) ? "habilitado" : "bloqueado"} y guardado.`);
     } catch (err) {
@@ -910,12 +942,14 @@ export default function AdminPage() {
       setSavingId(`modules-${selectedTenant.id}`);
       setError(null);
       setSuccess(null);
-      const result = await updateAdminTenantModules(selectedTenant.id, pendingModules);
+      const industryCode = industryCodeForTenant(selectedTenant.industry);
+      const cleanModules = modulesAllowedForIndustry(pendingModules, industryCode);
+      const result = await updateAdminTenantModules(selectedTenant.id, cleanModules);
       if (result.tenant) {
         updateTenantLocal(result.tenant);
-        setPendingModules(enabledModulesOf(result.tenant as AdminTenant));
+        setPendingModules(modulesAllowedForIndustry(enabledModulesOf(result.tenant as AdminTenant), industryCode));
       }
-      setSuccess("Módulos guardados en la base de datos. Los usuarios del cliente verán el cambio al recargar o volver a iniciar sesión.");
+      setSuccess("Módulos guardados según el rubro de esta cuenta. Los usuarios del cliente verán el cambio al recargar o volver a iniciar sesión.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron guardar los módulos");
     } finally {
@@ -1585,7 +1619,7 @@ export default function AdminPage() {
                     <div>
                       <strong>Servicios / módulos habilitados</strong>
                       <div className="meta-line">
-                        Activa solo lo que este cliente paga o necesita. Cada cambio se guarda de inmediato en la cuenta.
+                        Se muestran el Core EVOLUM y los módulos propios del rubro de esta cuenta. Cada cambio se guarda de inmediato.
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -1609,22 +1643,12 @@ export default function AdminPage() {
                             <strong>{group.title}</strong>
                             <p>{group.description}</p>
                           </div>
-                          <small>{group.modules.length} módulos{group.industries ? (group.industries.includes(selectedIndustryCode) ? " · rubro actual" : " · catálogo de otra vertical") : ""}</small>
+                          <small>{group.modules.length} módulos{group.industries ? " · rubro actual" : ""}</small>
                         </div>
                         {group.modules.length ? <div className="module-toggle-grid compact">
                           {group.modules.map((module) => {
                             const active = pendingModules.includes(module);
                             const saved = enabledModulesOf(selectedTenant).includes(module);
-                            const belongsToSelectedTenant = !group.industries || group.industries.includes(selectedIndustryCode);
-                            if (!belongsToSelectedTenant) {
-                              return (
-                                <div key={module} className="module-toggle" title="Este módulo se configura desde una cuenta de su propio rubro">
-                                  <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
-                                  {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
-                                  <small>Vertical independiente</small>
-                                </div>
-                              );
-                            }
                             return (
                               <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>
                                 <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
