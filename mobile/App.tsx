@@ -16,6 +16,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -53,6 +54,7 @@ import {
   getMe,
   getMessages,
   getMobileSession,
+  getLatestMobileNativeRelease,
   getMyModules,
   loginWithEmail,
   publishCampaign,
@@ -231,6 +233,21 @@ function initials(value?: string | null) {
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function compareVersions(left: string, right: string) {
+  const parts = (value: string) => String(value || "0")
+    .replace(/^v/i, "")
+    .split("-")[0]
+    .split(".")
+    .map((item) => Number.parseInt(item, 10) || 0);
+  const a = parts(left);
+  const b = parts(right);
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index += 1) {
+    if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) - (b[index] || 0);
+  }
+  return 0;
 }
 
 function parseTemplateData(value: any) {
@@ -645,9 +662,54 @@ function EvolumApp() {
     }
   }
 
+  async function openNativeRelease(downloadUrl: string) {
+    try {
+      const supported = await Linking.canOpenURL(downloadUrl);
+      if (!supported) throw new Error("unsupported_url");
+      await Linking.openURL(downloadUrl);
+    } catch {
+      Alert.alert("No se pudo abrir la descarga", "Inténtalo nuevamente o contacta a soporte EVOLUM.");
+    }
+  }
+
+  async function checkForNativeUpdate() {
+    const platform = Platform.OS === "android" || Platform.OS === "ios" ? Platform.OS : null;
+    if (!platform || __DEV__) return false;
+
+    try {
+      const release = await getLatestMobileNativeRelease(platform);
+      if (!release) return false;
+
+      // runtimeVersion queda incrustada en la APK/IPA. Por eso no cambia con
+      // una actualización OTA y sirve para detectar cambios realmente nativos.
+      const installedVersion = Updates.runtimeVersion || Constants.expoConfig?.version || "0.0.0";
+      if (compareVersions(release.latestVersion, installedVersion) <= 0) return false;
+
+      const isRequired = Boolean(release.minimumVersion && compareVersions(release.minimumVersion, installedVersion) > 0);
+      const target = platform === "android" ? "la nueva APK" : "TestFlight";
+      const notes = release.releaseNotes ? `\n\nNovedades: ${release.releaseNotes}` : "";
+      const message = `Está disponible EVOLUM ${release.latestVersion}. Esta mejora requiere instalar ${target}.${notes}`;
+      const actions: Array<{ text: string; style?: "cancel"; onPress?: () => void }> = [
+        { text: "Instalar actualización", onPress: () => void openNativeRelease(release.downloadUrl) }
+      ];
+      if (!isRequired) actions.unshift({ text: "Más tarde", style: "cancel" });
+
+      Alert.alert(isRequired ? "Actualización requerida" : "Nueva versión de EVOLUM", message, actions, {
+        cancelable: !isRequired
+      });
+      return true;
+    } catch {
+      // El aviso nativo nunca bloquea el uso normal ni el modo offline.
+      return false;
+    }
+  }
+
   useEffect(() => {
     bootstrap();
-    void checkForApplicationUpdate();
+    void (async () => {
+      const nativeUpdateAvailable = await checkForNativeUpdate();
+      if (!nativeUpdateAvailable) await checkForApplicationUpdate();
+    })();
   }, []);
 
   async function savePushToken(token: string) {

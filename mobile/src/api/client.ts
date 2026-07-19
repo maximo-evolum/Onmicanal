@@ -39,6 +39,15 @@ export type OfflineSyncResult = {
   pending: number;
 };
 
+export type MobileNativeRelease = {
+  platform: "android" | "ios";
+  latestVersion: string;
+  minimumVersion: string | null;
+  downloadUrl: string;
+  releaseNotes: string | null;
+  publishedAt: string;
+};
+
 async function readCachedResponse<T>(path: string): Promise<T | null> {
   const raw = await AsyncStorage.getItem(`${CACHE_PREFIX}${path}`).catch(() => null);
   if (!raw) return null;
@@ -157,6 +166,18 @@ async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = REQ
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Consulta pública para saber si existe una actualización que cambie la parte
+ * nativa. Es diferente de EAS Update, que actualiza JavaScript sin APK nueva.
+ */
+export async function getLatestMobileNativeRelease(platform: "android" | "ios") {
+  const url = `${API_BASE_URL}/mobile/releases/latest?platform=${encodeURIComponent(platform)}`;
+  const response = await fetchWithTimeout(url, { headers: { Accept: "application/json" } }, 7_000);
+  if (response.status === 204 || response.status === 404) return null;
+  if (!response.ok) throw new Error(`No se pudo consultar la actualización (${response.status})`);
+  return response.json() as Promise<MobileNativeRelease>;
 }
 
 async function request<T>(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<T> {

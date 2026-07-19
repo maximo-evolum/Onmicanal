@@ -49,6 +49,7 @@ import { operationsRouter } from "./routes/operations.routes.js";
 import { getRedisClient } from "./lib/redis.js";
 import { realtyIntelligenceRouter } from "./routes/realty-intelligence.routes.js";
 import { runPlatformJobs } from "./services/platform-jobs.service.js";
+import { mobileReleasesRouter } from "./routes/mobile-releases.routes.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -177,6 +178,7 @@ app.get("/", (_req, res) => {
 app.use("/meta", metaRouter);
 app.use("/api", authRouter);
 app.use("/api", connectionsPublicRouter);
+app.use("/api", mobileReleasesRouter);
 if (env.enableDevTools) {
   app.use("/api", workspaceUsersRouter); // helper local/demo, deshabilitado en producción por defecto
 }

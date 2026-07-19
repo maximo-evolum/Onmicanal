@@ -111,6 +111,19 @@ export const env = {
 
   paymentProvider:
     firstEnv("PAYMENT_PROVIDER", "paymentProvider") || "manual",
+
+  // Lanzamientos nativos de la app. Se publican por variable de entorno para
+  // no acoplar el backend a un proveedor particular de archivos (S3, R2,
+  // GitHub Releases, sitio web, etc.). El enlace es intencionalmente público:
+  // se muestra antes de que una persona inicie sesión en la app.
+  mobileAndroidLatestVersion: firstEnv("MOBILE_ANDROID_LATEST_VERSION"),
+  mobileAndroidMinimumVersion: firstEnv("MOBILE_ANDROID_MINIMUM_VERSION"),
+  mobileAndroidDownloadUrl: normalizeUrl(firstEnv("MOBILE_ANDROID_DOWNLOAD_URL")),
+  mobileAndroidReleaseNotes: firstEnv("MOBILE_ANDROID_RELEASE_NOTES"),
+  mobileIosLatestVersion: firstEnv("MOBILE_IOS_LATEST_VERSION"),
+  mobileIosMinimumVersion: firstEnv("MOBILE_IOS_MINIMUM_VERSION"),
+  mobileIosDownloadUrl: normalizeUrl(firstEnv("MOBILE_IOS_DOWNLOAD_URL")),
+  mobileIosReleaseNotes: firstEnv("MOBILE_IOS_RELEASE_NOTES"),
 };
 
 const required = ["DATABASE_URL", "jwtSecret"];
