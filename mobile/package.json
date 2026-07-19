@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "build:android:apk": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli build --platform android --profile preview\"",
     "build:ios:testflight": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli build --platform ios --profile ios-testflight\"",
+    "submit:ios:testflight": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli submit --platform ios --latest\"",
     "update:preview": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli update --channel preview\"",
     "update:production": "powershell -NoProfile -Command \"$env:EAS_NO_VCS='1'; $env:EAS_PROJECT_ROOT=(Get-Location).Path; npx eas-cli update --channel production\""
   },
