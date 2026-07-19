@@ -650,23 +650,6 @@ function EvolumApp() {
     void checkForApplicationUpdate();
   }, []);
 
-  useEffect(() => {
-    if (!session || Platform.OS === "web") return;
-    void refreshPermissionStatus();
-    void registerForPushNotifications();
-    const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
-      const screen = response.notification.request.content.data?.screen;
-      if (typeof screen === "string" && navItems.some((item) => item.key === screen)) setScreen(screen as ScreenKey);
-    });
-    const tokenListener = Notifications.addPushTokenListener((token) => {
-      if (token.type === "expo") void savePushToken(token.data);
-    });
-    return () => {
-      responseListener.remove();
-      tokenListener.remove();
-    };
-  }, [session?.tenant?.id, session?.user?.id]);
-
   async function savePushToken(token: string) {
     if (!token) return;
     await registerMobilePushDevice({
@@ -771,20 +754,24 @@ function EvolumApp() {
   }, [screen, session, selectedConversation?.id]);
 
   async function bootstrap() {
+    let cached: any = null;
     try {
-      const cached = await getMobileSession<any>();
+      cached = await getMobileSession<any>();
       if (cached?.user) {
         setSession({ user: cached.user, tenant: cached.tenant });
-        await syncPendingOfflineActions();
-        await loadAll();
-      }
-      const me = await getMe().catch(() => null);
-      if (me?.user) {
-        setSession({ user: me.user, tenant: me.tenant });
       }
     } finally {
+      // La app nunca queda detenida esperando API, Redis o red al abrirse.
       setBooting(false);
     }
+
+    void (async () => {
+      await syncPendingOfflineActions();
+      await loadAll();
+      const me = await getMe().catch(() => null);
+      if (me?.user) setSession({ user: me.user, tenant: me.tenant });
+      if (!me?.user && !cached?.user) setSession(null);
+    })();
   }
 
   async function loadAll() {
@@ -873,8 +860,10 @@ function EvolumApp() {
       setAuthLoading(true);
       const data = await loginWithEmail(email.trim(), password);
       setSession({ user: data.user, tenant: data.tenant });
-      await syncPendingOfflineActions();
-      await loadAll();
+      // La pantalla se habilita de inmediato. Las consultas secundarias no deben
+      // dejar el inicio de sesion esperando ni afectar la estabilidad del login.
+      void syncPendingOfflineActions();
+      void loadAll();
     } catch (error) {
       Alert.alert("No se pudo iniciar sesion", error instanceof Error ? error.message : "Intenta nuevamente");
     } finally {

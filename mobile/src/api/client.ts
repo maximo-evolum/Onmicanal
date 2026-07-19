@@ -19,6 +19,7 @@ const TOKEN_KEY = "evolum_mobile_token";
 const SESSION_KEY = "evolum_mobile_session";
 const CACHE_PREFIX = "evolum_mobile_cache_v1:";
 const OFFLINE_QUEUE_KEY = "evolum_mobile_offline_queue_v1";
+const REQUEST_TIMEOUT_MS = 15000;
 
 type RequestOptions = {
   queueWhenOffline?: boolean;
@@ -147,6 +148,16 @@ async function getToken() {
   return AsyncStorage.getItem(TOKEN_KEY);
 }
 
+async function fetchWithTimeout(url: string, init?: RequestInit) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit, options: RequestOptions = {}): Promise<T> {
   const token = await getToken();
   const url = `${API_BASE_URL}${path}`;
@@ -154,7 +165,7 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
   const isRead = method === "GET";
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       ...init,
       headers: {
         "Content-Type": "application/json",

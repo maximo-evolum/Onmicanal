@@ -3,7 +3,7 @@
     "name": "EVOLUM",
     "slug": "evolum-mobile",
     "icon": "./assets/evolum-logo.png",
-    "version": "0.1.2",
+    "version": "0.1.4",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "scheme": "evolum",
