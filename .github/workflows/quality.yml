@@ -8,6 +8,10 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://evolum_test:evolum_test@127.0.0.1:5432/evolum_test
+      JWT_SECRET: ci_test_secret_evolum_2026_minimum_32_characters
     defaults:
       run:
         working-directory: backend-v2
