@@ -100,7 +100,7 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
   brokers: "Exclusivo inmobiliaria: perfiles y reparto comercial.",
   property_assignments: "Exclusivo inmobiliaria: asignación de propiedades.",
   patients: "Exclusivo salud/dental/veterinaria: fichas de pacientes por tenant.",
-  exams: "Exclusivo salud/dental: exámenes, órdenes y presupuestos.",
+  exams: "Exclusivo salud/dental/veterinaria: exámenes, órdenes y presupuestos por tenant.",
   vehicle_owners: "Exclusivo automotriz: dueños, vehículos e historial técnico.",
   parts_inventory: "Exclusivo automotriz: stock y compatibilidad de repuestos.",
   mechanic_assignments: "Exclusivo automotriz: órdenes y responsables mecánicos.",
@@ -213,8 +213,8 @@ const MODULE_GROUPS: ModuleGroup[] = [
     title: "Clínica veterinaria",
     description: "Mascotas, tutores e historial veterinario. Nunca comparte pacientes con salud humana o dental.",
     industries: ["VETERINARY"],
-    modules: ["patients"],
-    labels: { patients: "Mascotas y tutores" },
+    modules: ["patients", "exams"],
+    labels: { patients: "Mascotas y tutores", exams: "Exámenes y presupuestos veterinarios" },
   },
   {
     title: "Automotriz y taller",
@@ -1609,15 +1609,24 @@ export default function AdminPage() {
                             <strong>{group.title}</strong>
                             <p>{group.description}</p>
                           </div>
-                          <small>{group.modules.length} módulos{group.industries ? (group.industries.includes(selectedIndustryCode) ? " · rubro actual" : " · otro rubro") : ""}</small>
+                          <small>{group.modules.length} módulos{group.industries ? (group.industries.includes(selectedIndustryCode) ? " · rubro actual" : " · catálogo de otra vertical") : ""}</small>
                         </div>
                         {group.modules.length ? <div className="module-toggle-grid compact">
                           {group.modules.map((module) => {
                             const active = pendingModules.includes(module);
                             const saved = enabledModulesOf(selectedTenant).includes(module);
                             const belongsToSelectedTenant = !group.industries || group.industries.includes(selectedIndustryCode);
+                            if (!belongsToSelectedTenant) {
+                              return (
+                                <div key={module} className="module-toggle" title="Este módulo se configura desde una cuenta de su propio rubro">
+                                  <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
+                                  {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
+                                  <small>Vertical independiente</small>
+                                </div>
+                              );
+                            }
                             return (
-                              <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={!belongsToSelectedTenant || savingId === `modules-${selectedTenant.id}`} title={belongsToSelectedTenant ? undefined : "Selecciona una cuenta de este rubro para configurar sus módulos"}>
+                              <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>
                                 <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
                                 {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
                                 <small>{active ? "Activo" : "Bloqueado"}{active !== saved ? " - pendiente" : ""}</small>

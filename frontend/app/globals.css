@@ -10550,6 +10550,21 @@ html, body {
   box-shadow: 0 12px 26px var(--theme-glow);
 }
 
+.evolum-brand-logo {
+  width: 36px;
+  height: 36px;
+  display: block;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.evolum-menu-bubble .evolum-brand-logo {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
 .inbox-nav-brand strong {
   overflow: hidden;
   font-size: 20px;

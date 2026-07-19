@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   AdminTenant,
   Booking,
@@ -446,6 +447,22 @@ export async function publishCampaign(payload: {
 
 export async function getPaymentsMetrics(): Promise<PaymentMetrics> {
   return request<PaymentMetrics>("/payments/metrics");
+}
+
+export async function downloadExecutiveReportPdf(destinationUri: string) {
+  const token = await getToken();
+  const result = await FileSystem.downloadAsync(`${API_BASE_URL}/reports/executive.pdf`, destinationUri, {
+    headers: {
+      Accept: "application/pdf",
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+  });
+
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error(`No se pudo descargar el reporte (${result.status})`);
+  }
+
+  return result.uri;
 }
 
 export async function getAdminTenants(): Promise<AdminTenant[]> {

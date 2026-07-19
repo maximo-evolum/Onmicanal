@@ -273,12 +273,14 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
       moduleItem(MODULES.INBOX, "Inbox tutores", "Consultas y seguimiento de mascotas."),
       moduleItem(MODULES.BOOKINGS, "Agenda veterinaria", "Citas, controles y vacunacion."),
       moduleItem(MODULES.PATIENTS, "Pacientes", "Ficha de paciente animal, tutor e historial veterinario.", "PRO"),
+      moduleItem(MODULES.EXAMS, "Examenes y presupuestos veterinarios", "Ordenes, resultados, tratamientos y presupuestos de cada mascota.", "PRO"),
       moduleItem(MODULES.PAYMENTS, "Pagos", "Abonos, tratamientos y productos.", "BUSINESS"),
       moduleItem(MODULES.ANALYTICS, "Dashboard", "Citas, tratamientos y recurrencia.", "PRO")
     ],
     entities: [
       { key: "pet", label: "Mascota", fields: ["nombre", "especie", "raza", "edad", "tutor", "historial"] },
-      { key: "appointment", label: "Cita veterinaria", fields: ["mascota", "motivo", "fecha", "hora", "profesional"] }
+      { key: "appointment", label: "Cita veterinaria", fields: ["mascota", "motivo", "fecha", "hora", "profesional"] },
+      { key: "exam", label: "Examen o presupuesto veterinario", fields: ["mascota", "tipo", "monto", "resultado", "tratamiento", "notas"] }
     ],
     workflows: ["consulta", "agendar", "atender", "recordar vacuna/control", "cobrar", "seguimiento"]
   }

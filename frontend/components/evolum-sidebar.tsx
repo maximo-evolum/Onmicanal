@@ -169,7 +169,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   if (!isOpen) {
     return (
       <button className="evolum-menu-bubble" type="button" onClick={onToggle} aria-label="Abrir menu EVOLUM">
-        EV
+        <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
       </button>
     );
   }
@@ -178,7 +178,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     <aside className="inbox-unified-nav evolum-unified-nav">
       <div className="inbox-nav-head">
         <div className="inbox-nav-brand" title="EVOLUM OS">
-          <span>EV</span>
+          <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
           <strong>EVOLUM OS</strong>
         </div>
         <button className="inbox-nav-toggle" type="button" onClick={onToggle} aria-label="Cerrar menu">

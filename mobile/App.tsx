@@ -2,9 +2,12 @@ import { StatusBar } from "expo-status-bar";
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
+import * as Sharing from "expo-sharing";
 import * as Updates from "expo-updates";
+import { strFromU8, unzipSync } from "fflate";
+import { XMLParser } from "fast-xml-parser";
 import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,6 +16,7 @@ import {
   FlatList,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -42,6 +46,7 @@ import {
   getCampaigns,
   getConversations,
   getCrmOperationalDashboard,
+  downloadExecutiveReportPdf,
   getRealtyIntelligence,
   getIndustryRecords,
   getIndustryUsers,
@@ -286,6 +291,33 @@ function realtyPrice(record: IndustryRecord) {
   return recordNumber(record, "price") || recordNumber(record, "value") || recordNumber(record, "askingPrice");
 }
 
+function propertyImageUrls(record: IndustryRecord) {
+  const candidates = [record.data?.photoUrl, record.data?.photoUrls, record.data?.images, record.data?.photos];
+  const urls: string[] = [];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      urls.push(...candidate.map((item) => String(item || "")));
+      continue;
+    }
+    if (typeof candidate !== "string") continue;
+    const source = candidate.trim();
+    if (!source) continue;
+    if (source.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(source);
+        if (Array.isArray(parsed)) urls.push(...parsed.map((item) => String(item || "")));
+        continue;
+      } catch {
+        // Si no es JSON, se conserva como una única URL.
+      }
+    }
+    urls.push(...source.split(",").map((item) => item.trim()));
+  }
+
+  return Array.from(new Set(urls.filter((url) => /^(https?:|data:image\/)/i.test(url))));
+}
+
 function commissionProjection(value: number) {
   const total = Math.round(value * 0.02);
   return {
@@ -431,6 +463,66 @@ function parseCsvRows(source: string): Record<string, string>[] {
 
   const [headers = [], ...values] = rows;
   return values.map((valuesRow) => Object.fromEntries(headers.map((header, index) => [header, valuesRow[index] || ""])));
+}
+
+function asSpreadsheetArray<T>(value: T | T[] | undefined | null): T[] {
+  if (Array.isArray(value)) return value;
+  return value === undefined || value === null ? [] : [value];
+}
+
+function spreadsheetText(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(spreadsheetText).join("");
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !key.startsWith("@"))
+      .map(([, child]) => spreadsheetText(child))
+      .join("");
+  }
+  return "";
+}
+
+function excelColumnIndex(reference: string) {
+  const letters = String(reference || "").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "A";
+  return letters.split("").reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+}
+
+function base64ToUint8Array(value: string) {
+  const decode = (globalThis as unknown as { atob?: (input: string) => string }).atob;
+  if (!decode) throw new Error("Este dispositivo no puede leer archivos Excel. Usa CSV como alternativa.");
+  const binary = decode(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function parseXlsxRows(base64: string): Record<string, string>[] {
+  const archive = unzipSync(base64ToUint8Array(base64));
+  const sheetPath = Object.keys(archive).find((path) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(path));
+  if (!sheetPath) throw new Error("No se encontro una hoja de datos en el archivo Excel.");
+
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@" });
+  const sharedFile = archive["xl/sharedStrings.xml"];
+  const shared = sharedFile
+    ? asSpreadsheetArray((parser.parse(strFromU8(sharedFile)) as any)?.sst?.si).map((item) => spreadsheetText(item))
+    : [];
+  const sourceRows = asSpreadsheetArray((parser.parse(strFromU8(archive[sheetPath])) as any)?.worksheet?.sheetData?.row);
+  const matrix = sourceRows.map((row: any) => {
+    const cells: Record<number, string> = {};
+    for (const cell of asSpreadsheetArray(row?.c)) {
+      const column = excelColumnIndex(String(cell?.["@_r"] || "A1"));
+      const raw = cell?.v ?? cell?.is?.t ?? "";
+      cells[column] = cell?.["@_t"] === "s" ? (shared[Number(raw)] || "") : spreadsheetText(raw);
+    }
+    return cells;
+  }).filter((row) => Object.values(row).some((value) => String(value).trim()));
+
+  const headerRow = matrix.shift();
+  if (!headerRow) return [];
+  const maxColumn = Math.max(...Object.keys(headerRow).map(Number), 0);
+  const headers = Array.from({ length: maxColumn + 1 }, (_, index) => String(headerRow[index] || `Columna ${index + 1}`).trim());
+  return matrix.map((row) => Object.fromEntries(headers.map((header, index) => [header, String(row[index] || "").trim()])));
 }
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -1063,6 +1155,27 @@ function SideNav({
 }
 
 function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, onRefresh }: { dashboard: CrmOperationalDashboard | null; realtyIntelligence: RealtyIntelligence | null; profile: IndustryProfile; refreshing: boolean; onRefresh: () => void }) {
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  async function downloadReport() {
+    try {
+      setDownloadingReport(true);
+      const date = new Date().toISOString().slice(0, 10);
+      const directory = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+      if (!directory) throw new Error("No se encontro almacenamiento local para el reporte.");
+      const uri = await downloadExecutiveReportPdf(`${directory}evolum-reporte-ejecutivo-${date}.pdf`);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Reporte ejecutivo EVOLUM" });
+      } else {
+        Alert.alert("Reporte descargado", `El reporte quedo guardado en ${uri}`);
+      }
+    } catch (error) {
+      Alert.alert("No se pudo descargar", error instanceof Error ? error.message : "Revisa tu conexion e intentalo nuevamente.");
+    } finally {
+      setDownloadingReport(false);
+    }
+  }
+
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>Dashboard</Text>
@@ -1074,6 +1187,9 @@ function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, o
         <Kpi label={profile.bookingLabel} value={dashboard?.kpis.bookingsConfirmed ?? 0} detail={`${dashboard?.kpis.bookingsPending ?? 0} pendientes`} />
         <Kpi label="Revenue" value={money(dashboard?.revenue.paid)} detail={`${money(dashboard?.revenue.pending)} pendiente`} />
       </View>
+      <TouchableOpacity style={styles.primaryButton} onPress={downloadReport} disabled={downloadingReport}>
+        <Text style={styles.primaryButtonText}>{downloadingReport ? "Preparando reporte..." : "Descargar reporte ejecutivo PDF"}</Text>
+      </TouchableOpacity>
       <Panel title="Estado comercial">
         <View style={styles.compactMetrics}>
           <Kpi label="Listos cierre" value={dashboard?.kpis.readyToClose ?? 0} detail={`${dashboard?.kpis.averageCloseScore ?? 0}% score IA`} />
@@ -1536,35 +1652,45 @@ function RealtyLoadsScreen({
     setPhotoFileName(asset.fileName || "foto-propiedad.jpg");
   }
 
-  async function pickPropertyCsv() {
+  async function pickPropertyFile() {
     const result = await DocumentPicker.getDocumentAsync({
-      type: ["text/csv", "text/comma-separated-values"],
+      type: [
+        "text/csv",
+        "text/comma-separated-values",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ],
       copyToCacheDirectory: true,
       multiple: false
     });
     if (result.canceled || !result.assets?.[0]) return;
 
     const asset = result.assets[0];
-    if (asset.size && asset.size > 6 * 1024 * 1024) {
-      Alert.alert("Archivo muy grande", "Sube un CSV de hasta 6 MB para mantener la app rapida.");
+    if (asset.size && asset.size > 10 * 1024 * 1024) {
+      Alert.alert("Archivo muy grande", "Sube un CSV o Excel de hasta 10 MB para mantener la app rapida.");
       return;
     }
 
     try {
-      const csv = await FileSystem.readAsStringAsync(asset.uri, { encoding: "utf8" as any });
-      const rows = parseCsvRows(csv);
-      if (!rows.length) {
-        Alert.alert("CSV sin datos", "No se encontraron filas validas.");
+      const isExcel = /\.(xlsx|xls)$/i.test(asset.name || "");
+      if (/\.xls$/i.test(asset.name || "")) {
+        throw new Error("El formato .xls antiguo no es compatible. Guarda el archivo como .xlsx o CSV e intentalo nuevamente.");
+      }
+      const parsedRows = isExcel
+        ? parseXlsxRows(await FileSystem.readAsStringAsync(asset.uri, { encoding: "base64" as any }))
+        : parseCsvRows(await FileSystem.readAsStringAsync(asset.uri, { encoding: "utf8" as any }));
+      if (!parsedRows.length) {
+        Alert.alert("Archivo sin datos", "No se encontraron filas validas.");
         return;
       }
-      const preview = rows.slice(0, 250).map((row, index) => parsePropertyImportRow(row, index));
+      const preview = parsedRows.slice(0, 250).map((row, index) => parsePropertyImportRow(row, index));
       setImportFileName(asset.name || "propiedades.csv");
       setImportPreview(preview);
       setImportSummary(`${preview.filter((row) => !row.errors.length).length} listas / ${preview.length} filas leidas`);
     } catch (error) {
       setImportPreview([]);
       setImportSummary("");
-      Alert.alert("No se pudo leer el CSV", error instanceof Error ? error.message : "Revisa el formato del archivo.");
+      Alert.alert("No se pudo leer el archivo", error instanceof Error ? error.message : "Revisa el formato del CSV o Excel.");
     }
   }
 
@@ -1955,11 +2081,11 @@ function RealtyLoadsScreen({
         <Kpi label="Visitas" value={visits.length} detail={`${leads.length} leads`} />
         <Kpi label="Score IA" value={`${predictiveScore}%`} detail={`${forecasts.length} forecasts`} />
       </View>
-      <Panel title="Importar CSV para IA">
-        <Text style={styles.muted}>Sube un CSV con propiedades, propietarios, atributos y vendedor sugerido. EVOLUM creara fichas y dejara metadata para el aprendizaje predictivo.</Text>
+      <Panel title="Importar propiedades para IA">
+        <Text style={styles.muted}>Sube un CSV o Excel con propiedades, propietarios, atributos y vendedor sugerido. EVOLUM creara fichas y dejara metadata para el aprendizaje predictivo.</Text>
         <View style={styles.importActionRow}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={pickPropertyCsv} disabled={importing}>
-            <Text style={styles.secondaryButtonText}>{importFileName || "Seleccionar CSV"}</Text>
+          <TouchableOpacity style={styles.secondaryButton} onPress={pickPropertyFile} disabled={importing}>
+            <Text style={styles.secondaryButtonText}>{importFileName || "Seleccionar archivo"}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.primaryButton} onPress={importPropertiesFromCsv} disabled={importing || !validImportRows.length}>
             <Text style={styles.primaryButtonText}>{importing ? "Importando..." : "Importar"}</Text>
@@ -2110,6 +2236,8 @@ function PropertiesScreen({
   onRefresh: () => void;
   onCreated: () => void | Promise<void>;
 }) {
+  const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
+
   async function updatePropertyStage(record: IndustryRecord, stage: string) {
     try {
       await updateIndustryRecord(record.id, {
@@ -2130,7 +2258,7 @@ function PropertiesScreen({
       {records.map((record) => (
         <View key={record.id} style={styles.portalPropertyCard}>
           <View style={styles.portalImageWrap}>
-            {recordText(record, "photoUrl", "") ? <Image source={{ uri: recordText(record, "photoUrl", "") }} style={styles.portalImage} resizeMode="cover" /> : <Text style={styles.portalImageInitials}>PR</Text>}
+            {propertyImageUrls(record)[0] ? <Image source={{ uri: propertyImageUrls(record)[0] }} style={styles.portalImage} resizeMode="cover" /> : <Text style={styles.portalImageInitials}>PR</Text>}
           </View>
           <View style={styles.portalBody}>
             <Text style={styles.cardTitle}>{record.title}</Text>
@@ -2143,6 +2271,9 @@ function PropertiesScreen({
               <Text style={styles.specPill}>{recordText(record, "meters", "0")} m2</Text>
             </View>
             <Text style={styles.muted}>Corredor: {record.assignedTo?.name || recordText(record, "assignedToName", "Sin asignar")}</Text>
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => setSelectedProperty(record)}>
+              <Text style={styles.secondaryButtonText}>Ver ficha completa</Text>
+            </TouchableOpacity>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
               {REALTY_STAGES.map((stage) => (
                 <TouchableOpacity key={stage} style={[styles.filterPill, realtyStage(record) === stage && styles.filterPillActive]} onPress={() => updatePropertyStage(record, stage)}>
@@ -2154,6 +2285,54 @@ function PropertiesScreen({
         </View>
       ))}
       {!records.length && <Text style={styles.muted}>Aun no hay propiedades cargadas.</Text>}
+      <Modal visible={!!selectedProperty} animationType="slide" transparent onRequestClose={() => setSelectedProperty(null)}>
+        <View style={styles.propertyModalBackdrop}>
+          <View style={styles.propertyModalSheet}>
+            <View style={styles.propertyModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.eyebrow}>Ficha inmobiliaria</Text>
+                <Text style={styles.propertyModalTitle} numberOfLines={2}>{selectedProperty?.title}</Text>
+              </View>
+              <TouchableOpacity style={styles.iconButton} onPress={() => setSelectedProperty(null)} accessibilityLabel="Cerrar ficha de propiedad">
+                <Text style={styles.iconButtonText}>x</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.propertyModalContent} showsVerticalScrollIndicator={false}>
+              {!!selectedProperty && (
+                <>
+                  {propertyImageUrls(selectedProperty).length ? (
+                    <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.propertyGallery}>
+                      {propertyImageUrls(selectedProperty).map((uri, index) => (
+                        <Image key={`${uri}-${index}`} source={{ uri }} style={styles.propertyGalleryImage} resizeMode="cover" />
+                      ))}
+                    </ScrollView>
+                  ) : (
+                    <View style={styles.propertyGalleryEmpty}><Text style={styles.portalImageInitials}>PR</Text><Text style={styles.muted}>Esta propiedad aun no tiene fotografias.</Text></View>
+                  )}
+                  <Text style={styles.portalPrice}>{realtyPrice(selectedProperty) ? money(realtyPrice(selectedProperty)) : recordText(selectedProperty, "price", "Sin precio")}</Text>
+                  <Text style={styles.muted}>{recordText(selectedProperty, "location", "Sin ubicacion")}</Text>
+                  <View style={styles.portalSpecs}>
+                    <Text style={styles.specPill}>{recordText(selectedProperty, "rooms", "0")} dormitorios</Text>
+                    <Text style={styles.specPill}>{recordText(selectedProperty, "bathrooms", "0")} banos</Text>
+                    <Text style={styles.specPill}>{recordText(selectedProperty, "parking", "0")} estacionamientos</Text>
+                    <Text style={styles.specPill}>{recordText(selectedProperty, "meters", "0")} m2</Text>
+                  </View>
+                  <Panel title="Caracteristicas">
+                    <Text style={styles.detailText}>Tipo: {recordText(selectedProperty, "propertyType", "Propiedad")}</Text>
+                    <Text style={styles.detailText}>Operacion: {recordText(selectedProperty, "operation", "Venta")}</Text>
+                    <Text style={styles.detailText}>Material: {recordText(selectedProperty, "material", "No informado")}</Text>
+                    <Text style={styles.detailText}>Etapa comercial: {realtyStage(selectedProperty)}</Text>
+                    <Text style={styles.detailText}>Corredor: {selectedProperty.assignedTo?.name || recordText(selectedProperty, "assignedToName", "Sin asignar")}</Text>
+                  </Panel>
+                  <Panel title="Descripcion y observaciones">
+                    <Text style={styles.detailText}>{recordText(selectedProperty, "notes", recordText(selectedProperty, "observations", "Sin observaciones registradas."))}</Text>
+                  </Panel>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -3406,6 +3585,50 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8
   },
+  propertyModalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(1, 3, 10, 0.78)"
+  },
+  propertyModalSheet: {
+    maxHeight: "92%",
+    minHeight: "70%",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.bg,
+    overflow: "hidden"
+  },
+  propertyModalHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    padding: 18,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border
+  },
+  propertyModalTitle: { color: colors.text, fontSize: 22, fontWeight: "900", marginTop: 4 },
+  propertyModalContent: { padding: 18, gap: 14, paddingBottom: 36 },
+  propertyGallery: { gap: 10 },
+  propertyGalleryImage: {
+    width: 300,
+    height: 220,
+    borderRadius: 20,
+    backgroundColor: "rgba(139,63,244,0.16)"
+  },
+  propertyGalleryEmpty: {
+    height: 180,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(139,63,244,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8
+  },
+  detailText: { color: colors.text, fontSize: 14, lineHeight: 21 },
   specPill: {
     color: colors.text,
     fontWeight: "800",
