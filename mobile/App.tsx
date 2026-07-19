@@ -74,10 +74,6 @@ import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperatio
 
 const evolumLogo = require("./assets/evolum-logo.png");
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true })
-});
-
 type ScreenKey =
   | "dashboard"
   | "inbox"
@@ -92,6 +88,7 @@ type ScreenKey =
   | "patients"
   | "vehicleOwners"
   | "campaigns"
+  | "settings"
   | "admin";
 
 type SessionState = {
@@ -155,6 +152,7 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "patients", label: "Pacientes", short: "PA", module: "patients" },
   { key: "vehicleOwners", label: "Dueños y vehículos", short: "DV", module: "vehicle_owners" },
   { key: "campaigns", label: "Campañas", short: "CA", module: "marketing" },
+  { key: "settings", label: "Permisos y alertas", short: "PA" },
   { key: "admin", label: "Admin", short: "SA" }
 ];
 
@@ -586,6 +584,8 @@ function EvolumApp() {
   const [connectionStatus, setConnectionStatus] = useState("");
   const [pendingOfflineSync, setPendingOfflineSync] = useState(0);
   const [expoPushToken, setExpoPushToken] = useState("");
+  const [notificationPermission, setNotificationPermission] = useState("Sin revisar");
+  const [photoPermission, setPhotoPermission] = useState("Sin revisar");
 
   const profile = useMemo(() => getIndustryProfile(session?.tenant?.industry), [session?.tenant?.industry]);
   const selectedConversation = useMemo(
@@ -604,7 +604,7 @@ function EvolumApp() {
       if (item.key === "vehicleOwners" && profile.code !== "automotive" && !isSuperAdmin) return false;
       return mobileModuleAllowed(item, modules, session?.user?.role);
     });
-  }, [modules, session?.user?.role]);
+  }, [modules, profile.code, session?.user?.role]);
 
   const filteredConversations = useMemo(() => {
     if (chatFilter === "all") return conversations;
@@ -652,6 +652,7 @@ function EvolumApp() {
 
   useEffect(() => {
     if (!session || Platform.OS === "web") return;
+    void refreshPermissionStatus();
     void registerForPushNotifications();
     const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
       const screen = response.notification.request.content.data?.screen;
@@ -678,6 +679,9 @@ function EvolumApp() {
 
   async function registerForPushNotifications() {
     try {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true })
+      });
       if (Platform.OS === "android") {
         await Notifications.setNotificationChannelAsync("evolum-alerts", {
           name: "Alertas EVOLUM",
@@ -688,14 +692,42 @@ function EvolumApp() {
       }
       const existing = await Notifications.getPermissionsAsync();
       const permission = existing.status === "granted" ? existing : await Notifications.requestPermissionsAsync();
-      if (permission.status !== "granted") return;
+      setNotificationPermission(permission.status === "granted" ? "Permitidas" : permission.canAskAgain ? "Pendientes" : "Bloqueadas en el dispositivo");
+      if (permission.status !== "granted") return false;
       const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-      if (!projectId) return;
+      if (!projectId) return false;
       const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
       await savePushToken(token);
+      return true;
     } catch (error) {
       console.warn("No se pudo registrar notificaciones push", error);
+      setNotificationPermission("No disponibles en esta instalacion");
+      return false;
     }
+  }
+
+  async function requestPhotoLibraryAccess() {
+    try {
+      const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+      const permission = current.granted ? current : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      setPhotoPermission(permission.granted ? "Permitido" : permission.canAskAgain ? "Pendiente" : "Bloqueado en el dispositivo");
+      if (!permission.granted) {
+        Alert.alert("Acceso no concedido", "Puedes permitir fotos desde Ajustes del telefono cuando quieras cargar imagenes.");
+      }
+      return permission.granted;
+    } catch {
+      setPhotoPermission("No disponible");
+      return false;
+    }
+  }
+
+  async function refreshPermissionStatus() {
+    const [notifications, photos] = await Promise.all([
+      Notifications.getPermissionsAsync().catch(() => null),
+      ImagePicker.getMediaLibraryPermissionsAsync().catch(() => null)
+    ]);
+    if (notifications) setNotificationPermission(notifications.status === "granted" ? "Permitidas" : notifications.canAskAgain ? "Pendientes" : "Bloqueadas en el dispositivo");
+    if (photos) setPhotoPermission(photos.granted ? "Permitido" : photos.canAskAgain ? "Pendiente" : "Bloqueado en el dispositivo");
   }
 
   useEffect(() => {
@@ -1076,7 +1108,7 @@ function EvolumApp() {
         )}
         {screen === "agenda" && <AgendaScreen bookings={bookings} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadBookings(false); await loadDashboard(false); }} />}
         {screen === "pipeline" && <PipelineScreen dashboard={dashboard} profile={profile} conversations={conversations} properties={properties} refreshing={refreshing} onRefresh={refreshCurrent} onPropertyUpdated={async () => { await loadProperties(false); await loadDashboard(false); }} onOpenConversation={(conversation) => { setSelectedConversationId(conversation.id); setScreen("inbox"); }} />}
-        {screen === "realtyLoads" && <RealtyLoadsScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
+        {screen === "realtyLoads" && <RealtyLoadsScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onRequestPhotoAccess={requestPhotoLibraryAccess} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
         {screen === "properties" && <PropertiesScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
         {screen === "realtyActivity" && <RealtyActivityScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />}
         {screen === "brokerPortal" && <BrokerPortalScreen records={properties} session={session} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
@@ -1085,6 +1117,7 @@ function EvolumApp() {
         {screen === "patients" && <CustomersScreen records={patients} profile={profile} recordType="patient" entityLabel="Paciente" entityPlural="Pacientes" description="Ficha clínica independiente para registrar antecedentes, atención y seguimiento." documentLabel="Subir exámenes o documentos" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadPatients(false); await loadDashboard(false); }} />}
         {screen === "vehicleOwners" && <CustomersScreen records={vehicleOwners} profile={profile} recordType="vehicle" entityLabel="Dueño y vehículo" entityPlural="Dueños y vehículos" description="Ficha automotriz para mantener vehículo, dueño, presupuestos e historial de taller." documentLabel="Subir presupuesto o documentos del vehículo" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadVehicleOwners(false); await loadDashboard(false); }} />}
         {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} campaigns={campaigns} onRefresh={loadCampaigns} />}
+        {screen === "settings" && <PermissionsAndAlertsScreen notificationPermission={notificationPermission} photoPermission={photoPermission} onEnableNotifications={registerForPushNotifications} onEnablePhotos={requestPhotoLibraryAccess} onOpenImports={() => setScreen("realtyLoads")} onRefresh={refreshPermissionStatus} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
       </View>
     </SafeAreaView>
@@ -1215,6 +1248,74 @@ function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, o
         ))}
         {!dashboard?.upcomingBookings?.length && <Text style={styles.muted}>Sin reservas proximas.</Text>}
       </Panel>
+    </ScrollView>
+  );
+}
+
+function PermissionsAndAlertsScreen({
+  notificationPermission,
+  photoPermission,
+  onEnableNotifications,
+  onEnablePhotos,
+  onOpenImports,
+  onRefresh
+}: {
+  notificationPermission: string;
+  photoPermission: string;
+  onEnableNotifications: () => Promise<boolean>;
+  onEnablePhotos: () => Promise<boolean>;
+  onOpenImports: () => void;
+  onRefresh: () => Promise<void>;
+}) {
+  const [working, setWorking] = useState<"notifications" | "photos" | "" >("");
+
+  async function enable(kind: "notifications" | "photos") {
+    try {
+      setWorking(kind);
+      await (kind === "notifications" ? onEnableNotifications() : onEnablePhotos());
+    } finally {
+      setWorking("");
+    }
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Configuracion</Text>
+      <Text style={styles.screenTitle}>Permisos y alertas</Text>
+      <Text style={styles.screenSubtitle}>Controla que puede usar EVOLUM en este telefono. Nada se habilita sin tu autorizacion.</Text>
+
+      <Panel title="Notificaciones">
+        <Text style={styles.detailText}>Recibe alertas por nuevos chats, reservas, pagos y actividad relevante de tu cuenta.</Text>
+        <View style={styles.permissionStatusRow}>
+          <Text style={styles.muted}>Estado</Text>
+          <Text style={notificationPermission === "Permitidas" ? styles.greenText : styles.permissionPending}>{notificationPermission}</Text>
+        </View>
+        <TouchableOpacity style={styles.primaryButton} onPress={() => void enable("notifications")} disabled={working !== ""}>
+          <Text style={styles.primaryButtonText}>{working === "notifications" ? "Solicitando permiso..." : "Activar notificaciones"}</Text>
+        </TouchableOpacity>
+      </Panel>
+
+      <Panel title="Fotos y contenido">
+        <Text style={styles.detailText}>Autoriza fotos para cargar imagenes de propiedades, vehiculos, documentos visuales o campañas.</Text>
+        <View style={styles.permissionStatusRow}>
+          <Text style={styles.muted}>Estado</Text>
+          <Text style={photoPermission === "Permitido" ? styles.greenText : styles.permissionPending}>{photoPermission}</Text>
+        </View>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => void enable("photos")} disabled={working !== ""}>
+          <Text style={styles.secondaryButtonText}>{working === "photos" ? "Solicitando permiso..." : "Autorizar fotos"}</Text>
+        </TouchableOpacity>
+      </Panel>
+
+      <Panel title="Archivos Excel, CSV y documentos">
+        <Text style={styles.detailText}>Android y iOS abren el selector seguro del sistema para cada archivo. Por seguridad, EVOLUM no solicita acceso total a tus archivos: eliges exactamente que documento compartir.</Text>
+        <TouchableOpacity style={styles.secondaryButton} onPress={onOpenImports}>
+          <Text style={styles.secondaryButtonText}>Ir a cargar archivo</Text>
+        </TouchableOpacity>
+      </Panel>
+
+      <TouchableOpacity style={styles.ghostActionButton} onPress={() => void onRefresh()}>
+        <Text style={styles.secondaryButtonText}>Actualizar estados de permisos</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -1553,12 +1654,14 @@ function RealtyLoadsScreen({
   profile,
   refreshing,
   onRefresh,
+  onRequestPhotoAccess,
   onCreated
 }: {
   records: IndustryRecord[];
   profile: IndustryProfile;
   refreshing: boolean;
   onRefresh: () => void;
+  onRequestPhotoAccess: () => Promise<boolean>;
   onCreated: () => void | Promise<void>;
 }) {
   const [title, setTitle] = useState("");
@@ -1635,11 +1738,7 @@ function RealtyLoadsScreen({
   }, [records.length, selectedPropertyId]);
 
   async function pickPhoto() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Permiso necesario", "Autoriza acceso a tus fotos para cargar imagenes de propiedades.");
-      return;
-    }
+    if (!await onRequestPhotoAccess()) return;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.72,
@@ -3629,6 +3728,26 @@ const styles = StyleSheet.create({
     gap: 8
   },
   detailText: { color: colors.text, fontSize: 14, lineHeight: 21 },
+  permissionStatusRow: {
+    minHeight: 38,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    marginTop: 4
+  },
+  permissionPending: { color: colors.orange, fontWeight: "800", textAlign: "right", flex: 1 },
+  ghostActionButton: {
+    minHeight: 46,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "rgba(255,255,255,0.03)"
+  },
   specPill: {
     color: colors.text,
     fontWeight: "800",
