@@ -162,7 +162,16 @@ const PROJECT_MODULE_CATALOG = [
   "ready_notifications",
 ];
 
-const MODULE_GROUPS = [
+type ModuleGroup = {
+  title: string;
+  description: string;
+  modules: string[];
+  industries?: string[];
+  labels?: Record<string, string>;
+  infoOnly?: boolean;
+};
+
+const MODULE_GROUPS: ModuleGroup[] = [
   {
     title: "Core EVOLUM OS y CRM",
     description: "Módulos transversales: no son exclusivos de ningún rubro. Cada vertical los utiliza con su propio contexto operativo.",
@@ -176,16 +185,41 @@ const MODULE_GROUPS = [
   {
     title: "Inmobiliaria",
     description: "Módulos exclusivos de inmobiliaria. Agenda, Pipeline, Campañas, Pagos, Dashboard y Chat's están en el Core CRM.",
+    industries: ["REAL_ESTATE"],
     modules: ["realty_loads", "properties", "realty_activity", "broker_portal", "brokers", "property_assignments", "realty_clients"],
   },
   {
-    title: "Salud, dental y veterinaria",
-    description: "Módulos clínicos. Pacientes se mantiene separado por tenant y nunca se mezcla con Clientes inmobiliarios.",
+    title: "Gastronomía",
+    description: "Vertical independiente: utiliza Chat's, Agenda, Pipeline, Campañas, Pagos y Dashboard del Core CRM sin duplicarlos.",
+    industries: ["GASTRONOMY"],
+    modules: [],
+    infoOnly: true,
+  },
+  {
+    title: "Salud clínica",
+    description: "Fichas y exámenes de atención humana. Sus datos nunca se mezclan con dental, veterinaria ni otros tenants.",
+    industries: ["HEALTH"],
     modules: ["patients", "exams"],
+    labels: { patients: "Pacientes clínicos", exams: "Exámenes y presupuestos clínicos" },
+  },
+  {
+    title: "Clínica dental",
+    description: "Fichas y presupuestos dentales independientes de salud general y veterinaria.",
+    industries: ["DENTAL"],
+    modules: ["patients", "exams"],
+    labels: { patients: "Pacientes dentales", exams: "Exámenes y presupuestos dentales" },
+  },
+  {
+    title: "Clínica veterinaria",
+    description: "Mascotas, tutores e historial veterinario. Nunca comparte pacientes con salud humana o dental.",
+    industries: ["VETERINARY"],
+    modules: ["patients"],
+    labels: { patients: "Mascotas y tutores" },
   },
   {
     title: "Automotriz y taller",
     description: "Módulos exclusivos de automotriz. Agenda, pagos, dashboard y Chat's pertenecen al Core CRM.",
+    industries: ["AUTOMOTIVE"],
     modules: ["vehicle_owners", "parts_inventory", "mechanic_assignments", "ready_notifications"],
   },
 ];
@@ -568,19 +602,6 @@ export default function AdminPage() {
     return Array.from(merged).filter((module) => !HIDDEN_LEGACY_MODULES.has(module));
   }, [industryTemplates, moduleCatalog]);
 
-  const groupedAvailableModules = useMemo(() => {
-    const available = new Set(availableModules);
-    const grouped = MODULE_GROUPS.map((group) => ({
-      ...group,
-      modules: group.modules.filter((module) => available.has(module)),
-    })).filter((group) => group.modules.length > 0);
-    const used = new Set(grouped.flatMap((group) => group.modules));
-    const otherModules = availableModules.filter((module) => !used.has(module));
-    return otherModules.length
-      ? [...grouped, { title: "Otros módulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules }]
-      : grouped;
-  }, [availableModules]);
-
   const selectedIndustryTemplate = useMemo(() => {
     if (!selectedTenant) return null;
     const industry = String(selectedTenant.industry || "");
@@ -588,6 +609,24 @@ export default function AdminPage() {
       industryTemplates.find((template) => template.code === "GENERAL") ||
       null;
   }, [industryTemplates, selectedTenant]);
+
+  const groupedAvailableModules = useMemo(() => {
+    const available = new Set(availableModules);
+    const selectedIndustryCode = selectedIndustryTemplate?.code || "GENERAL";
+    const verticalModules = new Set(MODULE_GROUPS.flatMap((group) => group.industries ? group.modules : []));
+    const grouped = MODULE_GROUPS
+      .filter((group) => !group.industries || group.industries.includes(selectedIndustryCode))
+      .map((group) => ({
+      ...group,
+      modules: group.modules.filter((module) => available.has(module)),
+      }))
+      .filter((group) => group.modules.length > 0 || group.infoOnly);
+    const used = new Set(grouped.flatMap((group) => group.modules));
+    const otherModules = availableModules.filter((module) => !used.has(module) && !verticalModules.has(module));
+    return otherModules.length
+      ? [...grouped, { title: "Otros módulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules }]
+      : grouped;
+  }, [availableModules, selectedIndustryTemplate]);
 
   const selectedPlanCode = normalizePlanLabel(billingForm.planCode || selectedTenant?.plan || "STARTER");
   const selectedIndustryModules = useMemo(
@@ -1572,19 +1611,19 @@ export default function AdminPage() {
                           </div>
                           <small>{group.modules.length} módulos</small>
                         </div>
-                        <div className="module-toggle-grid compact">
+                        {group.modules.length ? <div className="module-toggle-grid compact">
                           {group.modules.map((module) => {
                             const active = pendingModules.includes(module);
                             const saved = enabledModulesOf(selectedTenant).includes(module);
                             return (
                               <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>
-                                <span>{MODULE_LABELS[module] || module}</span>
+                                <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
                                 {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
                                 <small>{active ? "Activo" : "Bloqueado"}{active !== saved ? " - pendiente" : ""}</small>
                               </button>
                             );
                           })}
-                        </div>
+                        </div> : <p className="meta-line">Esta vertical usa los módulos Core EVOLUM OS con sus propios flujos, reglas y datos aislados.</p>}
                       </section>
                     ))}
                   </div>
