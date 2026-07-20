@@ -52,6 +52,7 @@ import { runPlatformJobs } from "./services/platform-jobs.service.js";
 import { mobileReleasesRouter } from "./routes/mobile-releases.routes.js";
 
 const app = express();
+app.disable("x-powered-by");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
 const tenantDocumentsDir = path.resolve(__dirname, "../public/tenant-documents");
@@ -79,6 +80,7 @@ app.use((req, res, next) => {
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Content-Security-Policy", "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
   if (env.nodeEnv === "production") {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }

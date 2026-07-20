@@ -1,6 +1,7 @@
 import { prisma } from "../lib/db.js";
 import { MODULES, PLAN_DEFINITIONS, getModulesForPlan, normalizePlanCode } from "../lib/modules.js";
 import { getAnyIndustryTemplate, getTemplateModules } from "./industry-templates.service.js";
+import { filterModulesForIndustry } from "../lib/industry-module-access.js";
 
 // Tenants creados durante las primeras versiones guardaron nombres visibles
 // (agenda, pipeline, campanas). Las rutas nuevas usan las claves canonicas.
@@ -203,7 +204,19 @@ export async function ensureTenantModuleEligibility({ tenantId, module, tenant: 
 }
 
 export async function setTenantModules({ tenantId, modules = [], source = "MANUAL" }) {
-  const normalized = [...new Set(modules.map((m) => String(m).trim()).filter(Boolean))];
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { industry: true }
+  });
+  if (!tenant) {
+    const error = new Error("Cliente no encontrado");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // La UI oculta módulos de otros rubros; esta misma regla en servidor evita
+  // que una llamada manual a la API vuelva a mezclar verticales.
+  const normalized = filterModulesForIndustry(modules, tenant.industry);
   await prisma.tenantModule.updateMany({ where: { tenantId }, data: { enabled: false, source } });
   for (const module of normalized) {
     await prisma.tenantModule.upsert({

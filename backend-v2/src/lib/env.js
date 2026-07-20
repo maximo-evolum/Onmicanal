@@ -120,10 +120,12 @@ export const env = {
   mobileAndroidMinimumVersion: firstEnv("MOBILE_ANDROID_MINIMUM_VERSION"),
   mobileAndroidDownloadUrl: normalizeUrl(firstEnv("MOBILE_ANDROID_DOWNLOAD_URL")),
   mobileAndroidReleaseNotes: firstEnv("MOBILE_ANDROID_RELEASE_NOTES"),
+  mobileAndroidReleaseEnabled: firstEnv("MOBILE_ANDROID_RELEASE_ENABLED") === "true",
   mobileIosLatestVersion: firstEnv("MOBILE_IOS_LATEST_VERSION"),
   mobileIosMinimumVersion: firstEnv("MOBILE_IOS_MINIMUM_VERSION"),
   mobileIosDownloadUrl: normalizeUrl(firstEnv("MOBILE_IOS_DOWNLOAD_URL")),
   mobileIosReleaseNotes: firstEnv("MOBILE_IOS_RELEASE_NOTES"),
+  mobileIosReleaseEnabled: firstEnv("MOBILE_IOS_RELEASE_ENABLED") === "true",
 };
 
 const required = ["DATABASE_URL", "jwtSecret"];
