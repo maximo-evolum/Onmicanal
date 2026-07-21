@@ -13086,3 +13086,80 @@ textarea:focus {
   transform: scale(1.28);
   transform-origin: center;
 }
+
+/* El acceso EV nunca debe depender de la grilla de un módulo vertical. */
+.vertical-shell.nav-collapsed {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.vertical-shell.nav-collapsed .vertical-main {
+  grid-column: 1;
+  padding-left: var(--ev-rail-width) !important;
+}
+
+.vertical-shell .evolum-menu-bubble {
+  position: fixed !important;
+  top: var(--ev-bubble-top) !important;
+  left: var(--ev-bubble-left) !important;
+  margin: 0 !important;
+}
+
+.metadata-header-actions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.metadata-industry-filter {
+  display: grid;
+  gap: 5px;
+  min-width: 210px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.metadata-industry-filter select {
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 11px;
+}
+
+.module-catalog-only {
+  cursor: default;
+  border-style: dashed !important;
+  opacity: .82;
+}
+
+.module-catalog-only small:last-child {
+  color: var(--theme-accent) !important;
+}
+
+.exams-page .reports-summary-grid {
+  margin: 26px 24px 22px;
+}
+
+.phase5-page > .profile-settings-panel {
+  margin-top: 24px;
+}
+
+@media (max-width: 700px) {
+  .vertical-shell.nav-collapsed .vertical-main {
+    padding-left: var(--ev-rail-width) !important;
+  }
+
+  .metadata-header-actions {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .metadata-industry-filter {
+    width: 100%;
+  }
+
+  .exams-page .reports-summary-grid {
+    margin: 18px 14px;
+  }
+}

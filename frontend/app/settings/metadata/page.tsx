@@ -134,6 +134,7 @@ export default function MetadataSettingsPage() {
   const [schemas, setSchemas] = useState<MetadataSchema[]>([]);
   const [catalog, setCatalog] = useState<MetadataCatalog | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedIndustry, setSelectedIndustry] = useState<string>("");
   const [selectedPreset, setSelectedPreset] = useState("property");
   const [recordType, setRecordType] = useState("property");
   const [label, setLabel] = useState("Propiedad");
@@ -142,10 +143,11 @@ export default function MetadataSettingsPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function reload() {
-    const [response, currentCatalog] = await Promise.all([getMetadataSchemas(), getMetadataCatalog()]);
+  async function reload(industry = selectedIndustry) {
+    const [response, currentCatalog] = await Promise.all([getMetadataSchemas(), getMetadataCatalog(industry || undefined)]);
     setSchemas(response.schemas || []);
     setCatalog(currentCatalog);
+    if (!industry) setSelectedIndustry(String(currentCatalog.industry || ""));
   }
 
   useEffect(() => {
@@ -156,7 +158,7 @@ export default function MetadataSettingsPage() {
   const fieldCount = fieldRows.filter((item) => item.label.trim()).length;
   const isSuperAdmin = String(getStoredSession()?.role || "").toUpperCase() === "SUPER_ADMIN";
   const visiblePresets = useMemo(() => {
-    const source = isSuperAdmin ? (catalog?.allEntities || []) : (catalog?.entities || []);
+    const source = catalog?.entities || [];
     const unique = new Map<string, Preset>();
     for (const entity of source) {
       const preset = catalogPreset(entity);
@@ -166,10 +168,11 @@ export default function MetadataSettingsPage() {
   }, [catalog, isSuperAdmin]);
   const allowedRecordTypes = useMemo(() => new Set(visiblePresets.map((preset) => preset.recordType)), [visiblePresets]);
   const visibleSchemas = useMemo(() => schemas.filter((schema) => {
-    if (!catalog || isSuperAdmin) return true;
+    if (!catalog) return true;
     const schemaIndustry = String(schema.policies?.industry || "").toUpperCase();
-    return allowedRecordTypes.has(schema.recordType) || schemaIndustry === String(catalog.industry || "").toUpperCase();
-  }), [allowedRecordTypes, catalog, isSuperAdmin, schemas]);
+    const catalogIndustry = String(catalog.industry || "").toUpperCase();
+    return schemaIndustry === catalogIndustry || (!schemaIndustry && allowedRecordTypes.has(schema.recordType));
+  }), [allowedRecordTypes, catalog, schemas]);
 
   useEffect(() => {
     if (!catalog || !visiblePresets.length) return;
@@ -285,7 +288,23 @@ export default function MetadataSettingsPage() {
             <h1>Organiza los formularios de tu equipo</h1>
             <p>Elige qué información se pedirá en cada ficha. EVOLUM se encarga de la parte técnica.</p>
           </div>
-          <AccountPill />
+          <div className="metadata-header-actions">
+            {isSuperAdmin ? <label className="metadata-industry-filter">
+              <span>Ver fichas del rubro</span>
+              <select value={selectedIndustry} onChange={(event) => {
+                const nextIndustry = event.target.value;
+                setSelectedIndustry(nextIndustry);
+                void reload(nextIndustry).catch((error) => setStatus(error instanceof Error ? error.message : "No se pudo cambiar el rubro"));
+              }}>
+                {(catalog?.industries || []).map((item) => {
+                  const industry = item as { code?: string; name?: string };
+                  const code = String(industry.code || "");
+                  return code ? <option key={code} value={code}>{industry.name || code}</option> : null;
+                })}
+              </select>
+            </label> : null}
+            <AccountPill />
+          </div>
         </header>
 
         <section className="metadata-guide">

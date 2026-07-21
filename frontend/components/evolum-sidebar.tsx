@@ -166,9 +166,21 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     }
   }
 
+  function toggleMenu() {
+    // Al desmontar el menú cerrado el navegador puede intentar reenfocar el
+    // documento y mover la página. Conservamos la lectura actual del módulo.
+    const pageY = typeof window === "undefined" ? 0 : window.scrollY;
+    const pageX = typeof window === "undefined" ? 0 : window.scrollX;
+    saveMenuPosition();
+    onToggle();
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => window.scrollTo(pageX, pageY));
+    }
+  }
+
   if (!isOpen) {
     return (
-      <button className="evolum-menu-bubble" type="button" onClick={onToggle} aria-label="Abrir menu EVOLUM">
+      <button className="evolum-menu-bubble" type="button" onClick={toggleMenu} aria-label="Abrir menu EVOLUM">
         <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
       </button>
     );
@@ -181,7 +193,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
           <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
           <strong>EVOLUM OS</strong>
         </div>
-        <button className="inbox-nav-toggle" type="button" onClick={onToggle} aria-label="Cerrar menu">
+        <button className="inbox-nav-toggle" type="button" onClick={toggleMenu} aria-label="Cerrar menu">
           x
         </button>
       </div>

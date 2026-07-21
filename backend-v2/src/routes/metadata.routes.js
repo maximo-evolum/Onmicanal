@@ -49,7 +49,13 @@ function entityToSchema(entity = {}) {
 metadataRouter.get("/metadata/catalog", async (req, res) => {
   try {
     const tenantIndustry = req.tenant?.industry || "GENERAL";
-    const template = await getAnyIndustryTemplate(req.query.industry || tenantIndustry);
+    const requestedIndustry = String(req.query.industry || "").trim();
+    // Solo el Super Admin puede explorar fichas de otras verticales. Para el
+    // resto, incluso si modifica la URL manualmente, se conserva su rubro.
+    const selectedIndustry = req.user?.role === "SUPER_ADMIN" && requestedIndustry
+      ? requestedIndustry
+      : tenantIndustry;
+    const template = await getAnyIndustryTemplate(selectedIndustry);
     const modules = await getTenantModules(req.tenantId);
     const templateEntities = Array.isArray(template?.entities)
       ? template.entities.map(entityToSchema)
