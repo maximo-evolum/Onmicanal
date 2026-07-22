@@ -104,6 +104,10 @@ type SessionState = {
   tenant?: TenantSession;
 };
 
+type LoginUpdate =
+  | { kind: "ota" }
+  | { kind: "native"; version: string; downloadUrl: string; required: boolean; notes?: string | null };
+
 type CampaignVariant = {
   id?: string;
   title?: string;
@@ -605,6 +609,8 @@ function EvolumApp() {
   const [authLoading, setAuthLoading] = useState(false);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("");
+  const [loginUpdate, setLoginUpdate] = useState<LoginUpdate | null>(null);
+  const [checkingLoginUpdate, setCheckingLoginUpdate] = useState(true);
   const [networkState, setNetworkState] = useState<"checking" | "online" | "offline">("checking");
   const [pendingOfflineSync, setPendingOfflineSync] = useState(0);
   const [expoPushToken, setExpoPushToken] = useState("");
@@ -641,6 +647,7 @@ function EvolumApp() {
     () => tenantNotifications.filter((item) => String(item.status).toUpperCase() !== "READ").length,
     [tenantNotifications]
   );
+  const currentAppVersion = Constants.nativeAppVersion || Constants.expoConfig?.version || Updates.runtimeVersion || "0.0.0";
 
   async function applyAvailableUpdate() {
     try {
@@ -657,22 +664,16 @@ function EvolumApp() {
 
   async function checkForApplicationUpdate() {
     // Expo Go y las compilaciones de desarrollo no reciben actualizaciones de producción.
-    if (__DEV__ || !Updates.isEnabled) return;
+    if (__DEV__ || !Updates.isEnabled) return false;
 
     try {
       const update = await Updates.checkForUpdateAsync();
-      if (!update.isAvailable) return;
-
-      Alert.alert(
-        "Nueva versión disponible",
-        "Hay una mejora disponible para EVOLUM. Puedes instalarla ahora sin perder tu sesión.",
-        [
-          { text: "Más tarde", style: "cancel" },
-          { text: "Actualizar ahora", onPress: () => void applyAvailableUpdate() }
-        ]
-      );
+      if (!update.isAvailable) return false;
+      setLoginUpdate({ kind: "ota" });
+      return true;
     } catch {
       // La aplicación sigue funcionando con la última versión almacenada si no hay red.
+      return false;
     }
   }
 
@@ -711,16 +712,12 @@ function EvolumApp() {
       if (compareVersions(release.latestVersion, installedVersion) <= 0) return false;
 
       const isRequired = Boolean(release.minimumVersion && compareVersions(release.minimumVersion, installedVersion) > 0);
-      const target = platform === "android" ? "la nueva APK" : "TestFlight";
-      const notes = release.releaseNotes ? `\n\nNovedades: ${release.releaseNotes}` : "";
-      const message = `Está disponible EVOLUM ${release.latestVersion}. Esta mejora requiere instalar ${target}.${notes}`;
-      const actions: Array<{ text: string; style?: "cancel"; onPress?: () => void }> = [
-        { text: "Instalar actualización", onPress: () => void openNativeRelease(release.downloadUrl) }
-      ];
-      if (!isRequired) actions.unshift({ text: "Más tarde", style: "cancel" });
-
-      Alert.alert(isRequired ? "Actualización requerida" : "Nueva versión de EVOLUM", message, actions, {
-        cancelable: !isRequired
+      setLoginUpdate({
+        kind: "native",
+        version: release.latestVersion,
+        downloadUrl: release.downloadUrl,
+        required: isRequired,
+        notes: release.releaseNotes
       });
       return true;
     } catch {
@@ -732,8 +729,12 @@ function EvolumApp() {
   useEffect(() => {
     bootstrap();
     void (async () => {
-      const nativeUpdateAvailable = await checkForNativeUpdate();
-      if (!nativeUpdateAvailable) await checkForApplicationUpdate();
+      try {
+        const nativeUpdateAvailable = await checkForNativeUpdate();
+        if (!nativeUpdateAvailable) await checkForApplicationUpdate();
+      } finally {
+        setCheckingLoginUpdate(false);
+      }
     })();
   }, []);
 
@@ -1212,6 +1213,28 @@ function EvolumApp() {
           <View style={styles.logoLarge}><Image source={evolumAppIcon} style={styles.logoLargeImage} resizeMode="contain" /></View>
           <Text style={styles.loginTitle}>EVOLUM</Text>
           <Text style={styles.loginSubtitle}>App movil para operacion, inbox y super admin.</Text>
+          <View style={styles.loginVersionRow}>
+            <Text style={styles.loginVersionLabel}>Versión instalada</Text>
+            <Text style={styles.loginVersionValue}>v{currentAppVersion}</Text>
+          </View>
+          {checkingLoginUpdate ? <Text style={styles.loginUpdateChecking}>Buscando actualizaciones...</Text> : null}
+          {loginUpdate ? (
+            <View style={[styles.loginUpdateCard, loginUpdate.kind === "native" && loginUpdate.required && styles.loginUpdateRequired]}>
+              <Text style={styles.loginUpdateEyebrow}>{loginUpdate.kind === "native" ? "NUEVA VERSIÓN DISPONIBLE" : "ACTUALIZACIÓN DISPONIBLE"}</Text>
+              <Text style={styles.loginUpdateTitle}>
+                {loginUpdate.kind === "native" ? `EVOLUM v${loginUpdate.version}` : "Una mejora está lista para instalar"}
+              </Text>
+              <Text style={styles.loginUpdateText}>
+                {loginUpdate.kind === "native"
+                  ? `${loginUpdate.required ? "Esta actualización es necesaria. " : ""}Descárgala antes de iniciar sesión para mantener tu app al día.`
+                  : "La actualización se instala sin descargar otra APK y sin perder tu sesión."}
+              </Text>
+              {loginUpdate.kind === "native" && loginUpdate.notes ? <Text style={styles.loginUpdateNotes}>{loginUpdate.notes}</Text> : null}
+              <TouchableOpacity style={styles.loginUpdateButton} onPress={() => void (loginUpdate.kind === "native" ? openNativeRelease(loginUpdate.downloadUrl) : applyAvailableUpdate())}>
+                <Text style={styles.loginUpdateButtonText}>{loginUpdate.kind === "native" ? "Descargar actualización" : "Actualizar ahora"}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
           <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor={colors.muted} autoCapitalize="none" />
           <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={colors.muted} secureTextEntry />
           <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={authLoading}>
@@ -3411,6 +3434,18 @@ const styles = StyleSheet.create({
   logoLargeImage: { width: "100%", height: "100%", borderRadius: 22 },
   loginTitle: { color: colors.text, fontSize: 34, fontWeight: "900" },
   loginSubtitle: { color: colors.muted, lineHeight: 20 },
+  loginVersionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: "rgba(168,85,247,0.2)" },
+  loginVersionLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+  loginVersionValue: { color: colors.purple2, fontSize: 13, fontWeight: "900" },
+  loginUpdateChecking: { color: colors.muted, fontSize: 12 },
+  loginUpdateCard: { gap: 8, borderRadius: 18, padding: 14, backgroundColor: "rgba(46,139,255,0.10)", borderWidth: 1, borderColor: "rgba(46,139,255,0.45)" },
+  loginUpdateRequired: { backgroundColor: "rgba(138,46,255,0.16)", borderColor: "rgba(184,77,255,0.75)" },
+  loginUpdateEyebrow: { color: colors.purple2, fontSize: 10, fontWeight: "900", letterSpacing: 1.4 },
+  loginUpdateTitle: { color: colors.text, fontSize: 16, fontWeight: "900" },
+  loginUpdateText: { color: colors.muted, fontSize: 12, lineHeight: 18 },
+  loginUpdateNotes: { color: colors.text, fontSize: 12, lineHeight: 17 },
+  loginUpdateButton: { minHeight: 42, borderRadius: 13, backgroundColor: colors.purple, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  loginUpdateButtonText: { color: colors.text, fontSize: 13, fontWeight: "900" },
   input: {
     minHeight: 52,
     borderWidth: 1,
