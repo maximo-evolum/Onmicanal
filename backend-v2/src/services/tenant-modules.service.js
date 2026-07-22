@@ -1,7 +1,7 @@
 import { prisma } from "../lib/db.js";
 import { MODULES, PLAN_DEFINITIONS, getModulesForPlan, normalizePlanCode } from "../lib/modules.js";
 import { getAnyIndustryTemplate, getTemplateModules } from "./industry-templates.service.js";
-import { filterModulesForIndustry } from "../lib/industry-module-access.js";
+import { filterModulesForIndustry, isModuleAllowedForIndustry } from "../lib/industry-module-access.js";
 
 // Tenants creados durante las primeras versiones guardaron nombres visibles
 // (agenda, pipeline, campanas). Las rutas nuevas usan las claves canonicas.
@@ -142,15 +142,25 @@ export async function ensureTenantSubscriptionAndModules({ tenantId, planCode = 
 }
 
 export async function getTenantModules(tenantId) {
-  const modules = await prisma.tenantModule.findMany({
-    where: { tenantId, enabled: true },
-    orderBy: { module: "asc" }
-  });
-  return modules.map((m) => m.module);
+  const [modules, tenant] = await Promise.all([
+    prisma.tenantModule.findMany({
+      where: { tenantId, enabled: true },
+      orderBy: { module: "asc" }
+    }),
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { industry: true } })
+  ]);
+  // También protegemos cuentas antiguas que conservaron módulos de otra
+  // vertical en la base de datos antes de que existiera la regla de rubros.
+  return filterModulesForIndustry(modules.map((m) => m.module), tenant?.industry);
 }
 
 export async function hasTenantModule(tenantId, module) {
   if (!module) return true;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { industry: true }
+  });
+  if (!tenant || !isModuleAllowedForIndustry(module, tenant.industry)) return false;
   const found = await prisma.tenantModule.findFirst({
     where: {
       tenantId,
@@ -229,7 +239,12 @@ export async function setTenantModules({ tenantId, modules = [], source = "MANUA
 }
 
 export async function enableTenantModules({ tenantId, modules = [], source = "INDUSTRY" }) {
-  const normalized = [...new Set(modules.map((m) => String(m).trim()).filter(Boolean))];
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { industry: true }
+  });
+  if (!tenant) return [];
+  const normalized = filterModulesForIndustry(modules, tenant.industry);
   for (const module of normalized) {
     await prisma.tenantModule.upsert({
       where: { tenantId_module: { tenantId, module } },

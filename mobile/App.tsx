@@ -9,7 +9,7 @@ import * as Sharing from "expo-sharing";
 import * as Updates from "expo-updates";
 import { strFromU8, unzipSync } from "fflate";
 import { XMLParser } from "fast-xml-parser";
-import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useState } from "react";
+import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -78,7 +78,7 @@ import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfil
 import { colors, shadow } from "./src/theme";
 import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, EvolumNotification, IndustryRecord, IndustryUser, Message, RealtyIntelligence, TenantSession } from "./src/types";
 
-const evolumLogo = require("./assets/evolum-logo.png");
+const evolumAppIcon = require("./assets/evolum-app-icon.png");
 const PERMISSION_ONBOARDING_PREFIX = "evolum_permission_onboarding_v1:";
 
 type ScreenKey =
@@ -605,11 +605,14 @@ function EvolumApp() {
   const [authLoading, setAuthLoading] = useState(false);
   const [connectionLoading, setConnectionLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState("");
+  const [networkState, setNetworkState] = useState<"checking" | "online" | "offline">("checking");
   const [pendingOfflineSync, setPendingOfflineSync] = useState(0);
   const [expoPushToken, setExpoPushToken] = useState("");
   const [notificationPermission, setNotificationPermission] = useState("Sin revisar");
   const [photoPermission, setPhotoPermission] = useState("Sin revisar");
   const [tenantNotifications, setTenantNotifications] = useState<EvolumNotification[]>([]);
+  const wasOfflineRef = useRef(false);
+  const networkCheckInFlightRef = useRef(false);
 
   const profile = useMemo(() => getIndustryProfile(session?.tenant?.industry), [session?.tenant?.industry]);
   const selectedConversation = useMemo(
@@ -675,11 +678,22 @@ function EvolumApp() {
 
   async function openNativeRelease(downloadUrl: string) {
     try {
+      // No abrimos una ruta rota en el navegador. Esto evita el mensaje
+      // "ruta no encontrada" cuando aún no se ha publicado la nueva APK.
+      if (/^https?:\/\//i.test(downloadUrl)) {
+        const response = await fetch(downloadUrl, { method: "HEAD" });
+        if (!response.ok) throw new Error("release_not_available");
+      }
       const supported = await Linking.canOpenURL(downloadUrl);
       if (!supported) throw new Error("unsupported_url");
       await Linking.openURL(downloadUrl);
-    } catch {
-      Alert.alert("No se pudo abrir la descarga", "Inténtalo nuevamente o contacta a soporte EVOLUM.");
+    } catch (error) {
+      Alert.alert(
+        "Descarga aún no disponible",
+        error instanceof Error && error.message === "release_not_available"
+          ? "La nueva instalación todavía no está publicada. Puedes seguir usando esta versión y reintentar más tarde."
+          : "No se pudo abrir la descarga. Inténtalo nuevamente o contacta a soporte EVOLUM."
+      );
     }
   }
 
@@ -820,21 +834,58 @@ function EvolumApp() {
   }, [session?.user?.id]);
 
   useEffect(() => {
+    void refreshNetworkState();
     void refreshOfflineQueueCount();
+    const heartbeat = setInterval(() => void refreshNetworkState(), 15_000);
     const subscription = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") {
         void syncPendingOfflineActions();
         void loadNotifications();
       }
     });
-    return () => subscription.remove();
+    return () => {
+      clearInterval(heartbeat);
+      subscription.remove();
+    };
   }, []);
 
   async function refreshOfflineQueueCount() {
     setPendingOfflineSync(await getOfflineQueueCount());
   }
 
+  async function refreshNetworkState() {
+    if (networkCheckInFlightRef.current) return false;
+    networkCheckInFlightRef.current = true;
+    try {
+      await checkApiHealth();
+      const recovered = wasOfflineRef.current;
+      wasOfflineRef.current = false;
+      setNetworkState("online");
+      if (recovered) {
+        const pending = await getOfflineQueueCount();
+        Alert.alert(
+          "Conexión recuperada",
+          pending
+            ? `Tienes ${pending} acción${pending === 1 ? "" : "es"} pendiente${pending === 1 ? "" : "s"}. EVOLUM intentará sincronizarlas ahora.`
+            : "Tu conexión volvió. Puedes continuar trabajando normalmente."
+        );
+      }
+      return true;
+    } catch {
+      wasOfflineRef.current = true;
+      setNetworkState("offline");
+      return false;
+    } finally {
+      networkCheckInFlightRef.current = false;
+    }
+  }
+
   async function syncPendingOfflineActions() {
+    const online = await refreshNetworkState();
+    if (!online) {
+      await refreshOfflineQueueCount();
+      return;
+    }
     const result = await syncOfflineQueue();
     setPendingOfflineSync(result.pending);
     if (result.synced && session) await loadAll();
@@ -997,8 +1048,10 @@ function EvolumApp() {
       setConnectionLoading(true);
       setConnectionStatus("Probando conexion...");
       const data = await checkApiHealth();
+      setNetworkState("online");
       setConnectionStatus(data?.db ? "Conexion OK: API y base de datos en linea." : "Conexion OK: API en linea.");
     } catch (error) {
+      setNetworkState("offline");
       setConnectionStatus(error instanceof Error ? error.message : "No se pudo probar la conexion.");
     } finally {
       setConnectionLoading(false);
@@ -1156,7 +1209,7 @@ function EvolumApp() {
       <SafeAreaView style={styles.loginScreen}>
         <StatusBar style="light" />
         <View style={styles.loginCard}>
-          <View style={styles.logoLarge}><Image source={evolumLogo} style={styles.logoLargeImage} /></View>
+          <View style={styles.logoLarge}><Image source={evolumAppIcon} style={styles.logoLargeImage} resizeMode="contain" /></View>
           <Text style={styles.loginTitle}>EVOLUM</Text>
           <Text style={styles.loginSubtitle}>App movil para operacion, inbox y super admin.</Text>
           <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor={colors.muted} autoCapitalize="none" />
@@ -1205,10 +1258,14 @@ function EvolumApp() {
       )}
       {screen !== "inbox" && <NotificationBell count={unreadNotifications} onPress={() => setScreen("notifications")} />}
       <View style={styles.contentShell}>
-        {pendingOfflineSync > 0 && (
-          <View style={styles.offlineBanner}>
-            <Text style={styles.offlineBannerText}>{pendingOfflineSync} acción{pendingOfflineSync === 1 ? "" : "es"} pendiente{pendingOfflineSync === 1 ? "" : "s"} de sincronizar.</Text>
-            <TouchableOpacity onPress={() => void syncPendingOfflineActions()}><Text style={styles.offlineBannerAction}>Sincronizar</Text></TouchableOpacity>
+        {(networkState === "offline" || pendingOfflineSync > 0) && (
+          <View style={[styles.offlineBanner, networkState === "offline" && styles.offlineBannerDisconnected]}>
+            <Text style={styles.offlineBannerText}>
+              {networkState === "offline"
+                ? "Sin conexión. Puedes seguir viendo tu último trabajo; los cambios se guardarán para sincronizarse al volver la señal."
+                : `${pendingOfflineSync} acción${pendingOfflineSync === 1 ? "" : "es"} pendiente${pendingOfflineSync === 1 ? "" : "s"} de sincronizar.`}
+            </Text>
+            {networkState === "online" && pendingOfflineSync > 0 ? <TouchableOpacity onPress={() => void syncPendingOfflineActions()}><Text style={styles.offlineBannerAction}>Sincronizar</Text></TouchableOpacity> : null}
           </View>
         )}
         {screen === "dashboard" && (
@@ -1334,7 +1391,7 @@ function SideNav({
     <>
       {!open && (
         <TouchableOpacity style={styles.floatingMenuButton} onPress={() => setOpen(true)}>
-          <Image source={evolumLogo} style={styles.sideLogoImage} />
+          <Image source={evolumAppIcon} style={styles.sideLogoImage} resizeMode="contain" />
         </TouchableOpacity>
       )}
 
@@ -1342,7 +1399,7 @@ function SideNav({
         <View style={styles.menuOverlay}>
           <View style={[styles.fullMenu, { width: menuWidth }]}>
             <View style={styles.fullMenuTop}>
-              <View style={styles.sideLogo}><Image source={evolumLogo} style={styles.sideLogoImage} /></View>
+              <View style={styles.sideLogo}><Image source={evolumAppIcon} style={styles.sideLogoImage} resizeMode="contain" /></View>
               <TouchableOpacity style={styles.iconButton} onPress={() => setOpen(false)}><Text style={styles.iconButtonText}>x</Text></TouchableOpacity>
             </View>
             <View style={styles.accountBlock}>
@@ -3341,17 +3398,17 @@ const styles = StyleSheet.create({
     ...shadow
   },
   logoLarge: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: colors.black,
+    width: 70,
+    height: 70,
+    borderRadius: 22,
+    backgroundColor: "transparent",
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.borderStrong
   },
-  logoLargeImage: { width: "100%", height: "100%", borderRadius: 31, transform: [{ scale: 1.24 }] },
+  logoLargeImage: { width: "100%", height: "100%", borderRadius: 22 },
   loginTitle: { color: colors.text, fontSize: 34, fontWeight: "900" },
   loginSubtitle: { color: colors.muted, lineHeight: 20 },
   input: {
@@ -3396,7 +3453,7 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 18,
-    backgroundColor: colors.purple,
+    backgroundColor: colors.panel,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -3460,12 +3517,12 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 16,
-    backgroundColor: colors.purple,
+    backgroundColor: "transparent",
     alignItems: "center",
     justifyContent: "center"
   },
   sideLogoText: { color: colors.text, fontWeight: "900" },
-  sideLogoImage: { width: "100%", height: "100%", borderRadius: 999 },
+  sideLogoImage: { width: "88%", height: "88%", borderRadius: 14 },
   sideItems: { gap: 8, alignItems: "center" },
   sideItem: {
     width: 42,
@@ -4023,6 +4080,7 @@ const styles = StyleSheet.create({
   moduleToggleTextOn: { color: colors.text },
   recoveryCard: { width: "88%", maxWidth: 420, gap: 16, borderWidth: 1, borderColor: colors.border, borderRadius: 20, padding: 24, backgroundColor: colors.panel },
   offlineBanner: { marginHorizontal: 14, marginTop: 12, paddingHorizontal: 14, minHeight: 44, borderRadius: 12, backgroundColor: "rgba(249, 115, 22, 0.16)", borderWidth: 1, borderColor: "rgba(249, 115, 22, 0.55)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  offlineBannerDisconnected: { backgroundColor: "rgba(239, 68, 68, 0.14)", borderColor: "rgba(248, 113, 113, 0.65)" },
   offlineBannerText: { color: colors.text, fontSize: 12, fontWeight: "700", flex: 1 },
   offlineBannerAction: { color: "#fdba74", fontSize: 12, fontWeight: "900" }
 });

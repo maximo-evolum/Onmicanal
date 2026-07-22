@@ -860,34 +860,19 @@ export default function AdminPage() {
     }
   }
 
-  async function handleModuleToggle(module: string) {
-    if (!selectedTenant || savingId === `modules-${selectedTenant.id}`) return;
+  function handleModuleToggle(module: string) {
+    if (!selectedTenant) return;
     const industryCode = industryCodeForTenant(selectedTenant.industry);
     const next = new Set(modulesAllowedForIndustry(pendingModules, industryCode));
     if (next.has(module)) next.delete(module);
     else next.add(module);
     const nextModules = modulesAllowedForIndustry(Array.from(next), industryCode);
 
-    // Cada click persiste de inmediato. Así no existe el riesgo de perder una
-    // habilitación al recargar por olvidar un segundo botón de guardado.
+    // El selector es un borrador: el cambio se aplica solo al presionar
+    // "Guardar módulos", permitiendo revisar varios cambios juntos.
     setPendingModules(nextModules);
-    try {
-      setSavingId(`modules-${selectedTenant.id}`);
-      setError(null);
-      setSuccess(null);
-      const result = await updateAdminTenantModules(selectedTenant.id, nextModules);
-      if (result.tenant) {
-        updateTenantLocal(result.tenant);
-        setPendingModules(modulesAllowedForIndustry(enabledModulesOf(result.tenant as AdminTenant), industryCode));
-      }
-      setSuccess(`${MODULE_LABELS[module] || module} ${next.has(module) ? "habilitado" : "bloqueado"} y guardado.`);
-    } catch (err) {
-      // Volvemos al estado confirmado si la red o el backend rechazó el cambio.
-      setPendingModules(enabledModulesOf(selectedTenant));
-      setError(err instanceof Error ? err.message : "No se pudo guardar el módulo");
-    } finally {
-      setSavingId(null);
-    }
+    setError(null);
+    setSuccess(`${MODULE_LABELS[module] || module} ${next.has(module) ? "habilitado" : "bloqueado"}. Presiona Guardar módulos para aplicar los cambios.`);
   }
 
   function addModulesToPending(modules: string[]) {

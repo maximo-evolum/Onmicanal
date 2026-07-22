@@ -2,7 +2,7 @@
   "expo": {
     "name": "EVOLUM",
     "slug": "evolum-mobile",
-    "icon": "./assets/evolum-logo.png",
+    "icon": "./assets/evolum-app-icon.png",
     "version": "0.1.6",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
@@ -17,7 +17,7 @@
       "url": "https://u.expo.dev/8fd3d44e-a57f-4b60-b627-3dd9f72da108"
     },
     "plugins": [
-      ["expo-notifications", { "icon": "./assets/evolum-logo.png", "color": "#8A2EFF", "defaultChannel": "evolum-alerts" }],
+      ["expo-notifications", { "icon": "./assets/evolum-app-icon.png", "color": "#8A2EFF", "defaultChannel": "evolum-alerts" }],
       ["expo-image-picker", { "photosPermission": "EVOLUM necesita acceso a tus fotos solo cuando elijas cargar imagenes." }]
     ],
     "assetBundlePatterns": [
@@ -35,7 +35,7 @@
       "permissions": ["POST_NOTIFICATIONS"],
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/evolum-logo.png",
+        "foregroundImage": "./assets/evolum-app-icon.png",
         "backgroundColor": "#070711"
       }
     },

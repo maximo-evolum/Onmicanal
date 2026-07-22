@@ -301,6 +301,23 @@ function providerStatus(provider, config) {
 
 function publicConfig(config) {
   if (!config) return null;
+  const metadata = configMetadata(config);
+  const discovery = metadata.oauthDiscovery && typeof metadata.oauthDiscovery === "object"
+    ? metadata.oauthDiscovery
+    : null;
+  const account = discovery?.account && typeof discovery.account === "object"
+    ? discovery.account
+    : null;
+  // El centro de conexiones solo necesita una referencia humana de la cuenta
+  // OAuth. Nunca devolvemos JSON operativo, tokens, errores internos ni datos
+  // de trazabilidad que puedan revelar detalles técnicos al usuario.
+  const publicAccount = account
+    ? Object.fromEntries(
+      ["email", "name", "username", "verifiedName", "displayPhoneNumber", "nickname"]
+        .filter((key) => typeof account[key] === "string" && account[key].trim())
+        .map((key) => [key, account[key]])
+    )
+    : {};
   return {
     id: config.id,
     channel: config.channel,
@@ -308,7 +325,7 @@ function publicConfig(config) {
     phoneNumberId: config.phoneNumberId,
     businessAccountId: config.businessAccountId,
     externalAccountId: config.externalAccountId,
-    metadata: configMetadata(config),
+    metadata: Object.keys(publicAccount).length ? { oauthDiscovery: { account: publicAccount } } : {},
     isActive: config.isActive,
     hasAccessToken: hasSecret(config.accessToken),
     hasVerifyToken: hasSecret(config.verifyToken),

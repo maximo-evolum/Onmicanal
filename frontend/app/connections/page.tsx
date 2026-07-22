@@ -31,16 +31,6 @@ const statusHelp: Record<ConnectionStatus, string> = {
   DISCONNECTED: "Sin conexion activa para este tenant.",
 };
 
-function safeJson(value: unknown) {
-  return JSON.stringify(value || {}, null, 2);
-}
-
-function parseJson(value: string) {
-  const text = value.trim();
-  if (!text) return {};
-  return JSON.parse(text);
-}
-
 function providerByKey(data: ConnectionCenterResponse | null, key: string | null) {
   if (!data || !key) return null;
   return data.groups.flatMap((group) => group.providers).find((provider) => provider.key === key) || null;
@@ -79,8 +69,8 @@ function providerNextStep(provider: ConnectionProvider) {
   }
   if (provider.missing.length) {
     return {
-      title: "Completar credenciales",
-      description: `Faltan ${provider.missing.slice(0, 2).join(", ")}${provider.missing.length > 2 ? "..." : ""}.`,
+      title: "Configuración pendiente",
+      description: "EVOLUM necesita completar una configuración segura de este proveedor. No compartas claves ni secretos por este medio.",
     };
   }
   return {
@@ -139,9 +129,6 @@ export default function ConnectionsPage() {
     phoneNumberId: "",
     businessAccountId: "",
     externalAccountId: "",
-    accessToken: "",
-    verifyToken: "",
-    metadata: "{}",
     isActive: true,
   });
 
@@ -179,9 +166,6 @@ export default function ConnectionsPage() {
       phoneNumberId: selected.config?.phoneNumberId || "",
       businessAccountId: selected.config?.businessAccountId || "",
       externalAccountId: selected.config?.externalAccountId || "",
-      accessToken: "",
-      verifyToken: "",
-      metadata: safeJson(selected.config?.metadata || {}),
       isActive: selected.config?.isActive ?? true,
     });
   }, [selected?.key]);
@@ -197,9 +181,6 @@ export default function ConnectionsPage() {
         phoneNumberId: form.phoneNumberId,
         businessAccountId: form.businessAccountId,
         externalAccountId: form.externalAccountId,
-        accessToken: form.accessToken || undefined,
-        verifyToken: form.verifyToken || undefined,
-        metadata: parseJson(form.metadata),
         isActive: form.isActive,
       });
       setNotice({ type: "success", text: "Conexion guardada" });
@@ -559,20 +540,7 @@ export default function ConnectionsPage() {
                               Phone number ID
                               <input value={form.phoneNumberId} onChange={(event) => setForm((current) => ({ ...current, phoneNumberId: event.target.value }))} />
                             </label>
-                            <label>
-                              Access token / API key
-                              <input type="password" value={form.accessToken} placeholder={selected.config?.hasAccessToken ? "Token guardado. Escribe uno nuevo para reemplazar." : ""} onChange={(event) => setForm((current) => ({ ...current, accessToken: event.target.value }))} />
-                            </label>
-                            <label>
-                              Verify token / secreto
-                              <input type="password" value={form.verifyToken} placeholder={selected.config?.hasVerifyToken ? "Secreto guardado. Escribe uno nuevo para reemplazar." : ""} onChange={(event) => setForm((current) => ({ ...current, verifyToken: event.target.value }))} />
-                            </label>
                           </div>
-
-                          <label className="connection-metadata-field">
-                            Metadatos JSON
-                            <textarea value={form.metadata} onChange={(event) => setForm((current) => ({ ...current, metadata: event.target.value }))} />
-                          </label>
 
                           <div className="connection-actions">
                             <button className="primary" type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar conexión"}</button>
@@ -582,15 +550,6 @@ export default function ConnectionsPage() {
                         </>
                       )}
 
-                      <details className="connection-advanced-fields">
-                        <summary>Información técnica para integradores</summary>
-                        <div className="connection-callbacks">
-                          <span>Callbacks OAuth y webhook</span>
-                          {Object.entries(data?.callbacks || {}).map(([key, value]) => (
-                            value ? <code key={key}>{key}: {value}</code> : null
-                          ))}
-                        </div>
-                      </details>
                     </form>
                   ) : (
                     <p>Selecciona una conexion.</p>

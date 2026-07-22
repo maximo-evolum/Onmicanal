@@ -85,9 +85,20 @@ function contextualizeItem(item: SidebarItem, industry?: string | null): Sidebar
 function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
   if (!industry) return true;
   const moduleKey = item[4];
-  if (moduleKey === "realty_clients") return isRealtyIndustry(industry);
-  if (moduleKey === "patients") return isCareIndustry(industry);
-  if (moduleKey === "vehicle_owners") return isAutomotiveIndustry(industry);
+  // Las capacidades transversales (CRM, agenda, inbox y dashboard) se
+  // mantienen disponibles para todas las verticales. La operación propia de
+  // cada rubro no debe aparecer jamás en el tenant de otro rubro.
+  const realtyModules = new Set<ModuleAccessKey>([
+    "realty_loads", "properties", "realty_activity", "broker_portal",
+    "brokers", "realty_clients", "property_assignments"
+  ]);
+  const careModules = new Set<ModuleAccessKey>(["patients", "exams"]);
+  const automotiveModules = new Set<ModuleAccessKey>([
+    "vehicle_owners", "vehicles", "parts_inventory", "mechanic_assignments", "ready_notifications"
+  ]);
+  if (realtyModules.has(moduleKey)) return isRealtyIndustry(industry);
+  if (careModules.has(moduleKey)) return isCareIndustry(industry);
+  if (automotiveModules.has(moduleKey)) return isAutomotiveIndustry(industry);
   return true;
 }
 
