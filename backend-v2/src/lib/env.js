@@ -154,6 +154,13 @@ if (env.nodeEnv === "production") {
   if (configuredDefaultTenantSlug && String(configuredDefaultTenantSlug).startsWith("demo")) {
     console.warn("[ENV_WARNING] DEFAULT_TENANT_SLUG apunta a un tenant demo. Revisa configuración productiva.");
   }
+
+  // A signed Meta webhook cannot be accepted without this secret. We keep the
+  // backend available for tenants that do not use Meta, but make the condition
+  // explicit instead of looking like an unresponsive inbox AI.
+  if (!env.metaAppSecret) {
+    console.warn("[ENV_WARNING] META_APP_SECRET is not configured; signed Meta webhooks will be rejected.");
+  }
 }
 
 if (env.nodeEnv !== "production" && firstEnv("ENABLE_DEV_TOOLS", "enableDevTools") === undefined) {

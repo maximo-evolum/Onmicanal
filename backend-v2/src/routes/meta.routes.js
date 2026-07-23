@@ -83,6 +83,13 @@ metaRouter.get("/webhook", async (req, res) => {
 
 metaRouter.post("/webhook", async (req, res) => {
   if (!hasValidMetaSignature(req)) {
+    // Do not log payloads, tokens, or signatures. This is enough to diagnose
+    // whether the production Meta app secret is missing or simply mismatched.
+    console.warn("[META_WEBHOOK_SIGNATURE_REJECTED]", {
+      reason: env.metaAppSecret ? "signature_mismatch" : "missing_meta_app_secret",
+      signatureReceived: Boolean(req.get("x-hub-signature-256")),
+      rawBodyReceived: Boolean(req.rawBody?.length)
+    });
     return res.status(401).json({ error: "Invalid webhook signature" });
   }
 
