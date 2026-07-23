@@ -564,12 +564,14 @@ export function PropertyDetailModal({
   property,
   brokers,
   onClose,
-  onCreateCampaign
+  onCreateCampaign,
+  onRemovePhoto
 }: {
   property: IndustryRecord;
   brokers: Broker[];
   onClose: () => void;
   onCreateCampaign?: (property: IndustryRecord) => Promise<void> | void;
+  onRemovePhoto?: (property: IndustryRecord, photo: string) => Promise<void> | void;
 }) {
   const data = asData(property);
   const photos = propertyPhotos(data);
@@ -612,7 +614,10 @@ export function PropertyDetailModal({
             </div>
             {photos.length > 1 ? (
               <div className="property-detail-thumbnails">
-                {photos.map((photo, index) => <button type="button" className={index === activePhoto ? "active" : ""} onClick={() => setActivePhoto(index)} key={photo}><img src={photo} alt={`${property.title} foto ${index + 1}`} /></button>)}
+                {photos.map((photo, index) => <div className="property-thumbnail-wrap" key={photo}>
+                  <button type="button" className={index === activePhoto ? "active" : ""} onClick={() => setActivePhoto(index)}><img src={photo} alt={`${property.title} foto ${index + 1}`} /></button>
+                  {onRemovePhoto ? <button type="button" className="property-thumbnail-remove" onClick={() => onRemovePhoto(property, photo)}>Quitar</button> : null}
+                </div>)}
               </div>
             ) : null}
             {videos.length ? (
@@ -710,6 +715,11 @@ export function RealtyLoadsPageContent() {
     });
   }
 
+  function clearPendingPhotos() {
+    setPropertyForm((current) => ({ ...current, photoUrl: "", galleryUrls: "" }));
+    setMessage("Fotos quitadas de la ficha antes de guardarla.");
+  }
+
   async function onCsvFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -800,6 +810,7 @@ export function RealtyLoadsPageContent() {
           <div className="file-picker-row">
             <input value={propertyForm.photoUrl} onChange={(e) => setPropertyForm({ ...propertyForm, photoUrl: e.target.value })} placeholder="URL foto principal o archivo" />
             <label className="secondary-btn">Subir fotos<input type="file" accept="image/*" multiple hidden onChange={onPhotoFile} /></label>
+            {(propertyForm.photoUrl || propertyForm.galleryUrls) ? <button type="button" className="ghost-btn danger" onClick={clearPendingPhotos}>Quitar fotos</button> : null}
           </div>
           <input value={propertyForm.galleryUrls} onChange={(e) => setPropertyForm({ ...propertyForm, galleryUrls: e.target.value })} placeholder="URLs de galeria, una por linea (opcional)" />
           <input value={propertyForm.videoUrl} onChange={(e) => setPropertyForm({ ...propertyForm, videoUrl: e.target.value })} placeholder="URL de video o recorrido virtual (opcional)" />
@@ -885,6 +896,22 @@ export function RealtyPropertiesPageContent() {
     }
   }
 
+  async function removePropertyPhoto(property: IndustryRecord, photo: string) {
+    if (!window.confirm("Quitar esta imagen de la propiedad? La ficha y sus demás datos se mantienen.")) return;
+    try {
+      const metadata = asData(property);
+      const remaining = propertyPhotos(metadata).filter((item) => item !== photo);
+      const updated = await updateIndustryRecord(property.id, {
+        data: { ...metadata, photoUrl: remaining[0] || "", gallery: remaining, galleryUrls: remaining }
+      });
+      setSelectedProperty(updated);
+      setMessage("Imagen eliminada de la propiedad.");
+      await reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo eliminar la imagen.");
+    }
+  }
+
   return (
     <>
       <RealtyHeader
@@ -901,7 +928,7 @@ export function RealtyPropertiesPageContent() {
         <div className="vertical-card-head"><div><span>Inventario</span><h2>Portal de propiedades</h2></div></div>
         <PropertyPortalCards properties={data.properties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
       </section>
-      {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} onCreateCampaign={createPropertyCampaign} /> : null}
+      {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} onCreateCampaign={createPropertyCampaign} onRemovePhoto={removePropertyPhoto} /> : null}
     </>
   );
 }

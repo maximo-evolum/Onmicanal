@@ -126,3 +126,38 @@ documentsRouter.patch("/documents/:id", requireRole(ROLE_GROUPS.STAFF), async (r
     res.status(500).json({ error: "No se pudo actualizar documento" });
   }
 });
+
+// Los documentos se guardan como un registro para conservar trazabilidad, pero
+// el archivo vive en el disco del tenant. Al eliminarlo debemos retirar ambos;
+// dejar solo el registro produciria enlaces rotos y dejar solo el archivo
+// ocuparia almacenamiento sin que nadie pueda administrarlo desde EVOLUM.
+documentsRouter.delete("/documents/:id", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const existing = await prisma.industryRecord.findFirst({
+      where: { id: req.params.id, tenantId: req.tenantId, recordType: "document" }
+    });
+    if (!existing) return res.status(404).json({ error: "Documento no encontrado" });
+
+    const metadata = existing.data && typeof existing.data === "object" ? existing.data : {};
+    const fileName = path.basename(String(metadata.fileName || ""));
+    const tenantDirectory = path.join(documentsRoot, req.tenantId);
+    const filePath = fileName ? path.join(tenantDirectory, fileName) : null;
+
+    // path.basename evita que metadata manipulada pueda apuntar fuera de la
+    // carpeta del tenant. Si el archivo ya no existe, igualmente eliminamos el
+    // registro para que el usuario pueda limpiar referencias antiguas.
+    if (filePath && filePath.startsWith(tenantDirectory) && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    await prisma.industryRecord.delete({ where: { id: existing.id } });
+    await recordAuditLog(req, "DOCUMENT_DELETED", "document", existing.id, {
+      originalName: metadata.originalName || existing.title,
+      category: metadata.category || "general"
+    });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Delete document error:", error);
+    res.status(500).json({ error: "No se pudo eliminar el documento" });
+  }
+});

@@ -118,6 +118,13 @@ function valueOf(record: IndustryRecord, key: string): string | number {
   return "";
 }
 
+function recordDocuments(record: IndustryRecord): CustomerDocument[] {
+  const value = record.data?.documents;
+  return Array.isArray(value)
+    ? value.filter((item): item is CustomerDocument => Boolean(item && typeof item === "object" && typeof (item as CustomerDocument).name === "string"))
+    : [];
+}
+
 function initials(name = "") {
   return name
     .split(" ")
@@ -313,6 +320,7 @@ export default function CustomersPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [removingDocument, setRemovingDocument] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -397,6 +405,27 @@ export default function CustomersPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "No se pudieron adjuntar documentos"));
   }
 
+  function removePendingDocument(index: number) {
+    setForm((current) => ({ ...current, documents: current.documents.filter((_, documentIndex) => documentIndex !== index) }));
+  }
+
+  async function removeSavedDocument(record: IndustryRecord, document: CustomerDocument, index: number) {
+    const label = document.name || "este archivo";
+    if (!window.confirm(`Quitar ${label} de la ficha de ${record.title}? La ficha se mantiene; solo se elimina el adjunto.`)) return;
+    const actionKey = `${record.id}-${index}`;
+    try {
+      setRemovingDocument(actionKey);
+      const documents = recordDocuments(record).filter((_, documentIndex) => documentIndex !== index);
+      await updateIndustryRecord(record.id, { data: { ...(record.data || {}), documents } });
+      setMessage("Adjunto eliminado de la ficha.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el adjunto");
+    } finally {
+      setRemovingDocument(null);
+    }
+  }
+
   async function updateStatus(record: IndustryRecord, status: string) {
     try {
       setError(null);
@@ -461,7 +490,12 @@ export default function CustomersPage() {
               </label>
               {form.documents.length ? (
                 <div className="document-chip-list">
-                  {form.documents.map((document) => <span key={`${document.name}-${document.size}`}>{document.name}</span>)}
+                  {form.documents.map((document, index) => (
+                    <span key={`${document.name}-${document.size}-${index}`}>
+                      {document.name}
+                      <button type="button" className="document-chip-remove" onClick={() => removePendingDocument(index)} aria-label={`Quitar ${document.name}`}>Quitar</button>
+                    </span>
+                  ))}
                 </div>
               ) : null}
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
@@ -494,6 +528,21 @@ export default function CustomersPage() {
                       <option value="FOLLOWUP">Seguimiento</option>
                       <option value="ARCHIVED">Archivada</option>
                     </select>
+                    {recordDocuments(record).length ? (
+                      <div className="service-record-documents">
+                        {recordDocuments(record).map((document, index) => (
+                          <span key={`${document.name}-${index}`}>
+                            {document.name}
+                            <button
+                              type="button"
+                              className="document-chip-remove"
+                              disabled={removingDocument === `${record.id}-${index}`}
+                              onClick={() => removeSavedDocument(record, document, index)}
+                            >{removingDocument === `${record.id}-${index}` ? "Quitando..." : "Eliminar"}</button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </article>
                 )) : <p className="meta-line">Aun no hay fichas creadas para este rubro.</p>}
               </div>

@@ -276,6 +276,7 @@ export default function WorkshopPage() {
                   Subir foto
                   <input type="file" accept="image/*" onChange={handlePartPhotoFile} />
                 </label>
+                {partForm.photoUrl ? <button type="button" className="ghost-btn danger" onClick={() => setPartForm((current) => ({ ...current, photoUrl: "", photoFileName: "" }))}>Quitar foto</button> : null}
               </div>
               {partForm.photoFileName ? <span className="meta-line">Foto seleccionada: {partForm.photoFileName}</span> : null}
               {partForm.photoUrl ? (

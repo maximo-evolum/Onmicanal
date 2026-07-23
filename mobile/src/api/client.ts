@@ -426,6 +426,50 @@ export async function updateIndustryRecord(id: string, input: {
   }, { queueWhenOffline: true });
 }
 
+export type MobileTenantDocument = IndustryRecord & {
+  recordType: "document";
+  data?: Record<string, any> | null;
+};
+
+export async function getTenantDocuments(): Promise<{ documents: MobileTenantDocument[] }> {
+  return request<{ documents: MobileTenantDocument[] }>("/documents");
+}
+
+export async function uploadTenantDocument(input: {
+  uri: string;
+  name: string;
+  mimeType?: string | null;
+  title?: string;
+  category?: string;
+  description?: string;
+}): Promise<{ documents: MobileTenantDocument[] }> {
+  const token = await getToken();
+  const form = new FormData();
+  form.append("files", {
+    uri: input.uri,
+    name: input.name || "archivo",
+    type: input.mimeType || "application/octet-stream"
+  } as unknown as Blob);
+  if (input.title) form.append("title", input.title);
+  if (input.category) form.append("category", input.category);
+  if (input.description) form.append("description", input.description);
+
+  const response = await fetchWithTimeout(`${API_BASE_URL}/documents`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error || `No se pudo guardar el archivo (${response.status})`);
+  }
+  return response.json();
+}
+
+export async function deleteTenantDocument(id: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }, { queueWhenOffline: true });
+}
+
 export async function getIndustryUsers(): Promise<IndustryUser[]> {
   return request<IndustryUser[]>("/industry-records/users");
 }

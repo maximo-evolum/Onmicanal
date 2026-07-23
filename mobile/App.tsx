@@ -39,6 +39,7 @@ import {
   createBooking,
   createCampaignDraft,
   createIndustryRecord,
+  deleteTenantDocument,
   generateCampaignCopy,
   generateCampaignImages,
   getAdminTenants,
@@ -58,6 +59,7 @@ import {
   getLatestMobileNativeRelease,
   getNotifications,
   getMyModules,
+  getTenantDocuments,
   loginWithEmail,
   markAllNotificationsRead,
   markNotificationRead,
@@ -72,7 +74,8 @@ import {
   getOfflineQueueCount,
   syncOfflineQueue,
   registerMobilePushDevice,
-  unregisterMobilePushDevice
+  unregisterMobilePushDevice,
+  uploadTenantDocument
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
@@ -95,6 +98,7 @@ type ScreenKey =
   | "patients"
   | "vehicleOwners"
   | "campaigns"
+  | "documents"
   | "notifications"
   | "settings"
   | "admin";
@@ -150,6 +154,13 @@ type PropertyImportRow = {
   errors: string[];
 };
 
+type PickedFile = {
+  uri: string;
+  name: string;
+  mimeType?: string | null;
+  size?: number | null;
+};
+
 const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: string }> = [
   { key: "dashboard", label: "Dashboard", short: "DA", module: "analytics" },
   { key: "inbox", label: "Inbox", short: "IO", module: "inbox" },
@@ -164,11 +175,12 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "patients", label: "Pacientes", short: "PA", module: "patients" },
   { key: "vehicleOwners", label: "Dueños y vehículos", short: "DV", module: "vehicle_owners" },
   { key: "campaigns", label: "Campañas", short: "CA", module: "marketing" },
+  { key: "documents", label: "Archivos", short: "AR", module: "documents" },
   { key: "settings", label: "Permisos", short: "PR" },
   { key: "admin", label: "Admin", short: "SA" }
 ];
 
-const mobileModuleSymbols: Record<ScreenKey, string> = {
+const mobileModuleSymbols: Partial<Record<ScreenKey, string>> = {
   dashboard: "▥",
   inbox: "◌",
   agenda: "◷",
@@ -201,6 +213,7 @@ const moduleAliases: Record<string, string[]> = {
   patients: ["patients", "pacientes"],
   vehicle_owners: ["vehicle_owners", "dueños", "duenos", "vehiculos"],
   marketing: ["marketing", "campaigns"],
+  documents: ["documents", "documentos", "archivos"],
   admin: ["admin", "developer", "desarrollador"]
 };
 
@@ -220,6 +233,14 @@ function mobileModuleAllowed(item: { key: ScreenKey; module?: string }, modules:
 
 function money(value?: number | null) {
   return `$${Math.round(Number(value || 0)).toLocaleString("es-CL")}`;
+}
+
+function formatBytes(value?: number | null) {
+  const size = Number(value || 0);
+  if (!size) return "Sin tamaño informado";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function timeLabel(value?: string | null) {
@@ -533,11 +554,23 @@ function excelColumnIndex(reference: string) {
 }
 
 function base64ToUint8Array(value: string) {
-  const decode = (globalThis as unknown as { atob?: (input: string) => string }).atob;
-  if (!decode) throw new Error("Este dispositivo no puede leer archivos Excel. Usa CSV como alternativa.");
-  const binary = decode(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const source = String(value || "").replace(/^data:[^,]+,/, "").replace(/\s/g, "");
+  if (!source || source.length % 4 === 1) throw new Error("El archivo Excel parece dañado o no se pudo leer completo.");
+  const padding = source.endsWith("==") ? 2 : source.endsWith("=") ? 1 : 0;
+  const bytes = new Uint8Array(Math.floor(source.length * 3 / 4) - padding);
+  let output = 0;
+  for (let index = 0; index < source.length; index += 4) {
+    const first = alphabet.indexOf(source[index]);
+    const second = alphabet.indexOf(source[index + 1]);
+    const third = source[index + 2] === "=" ? 0 : alphabet.indexOf(source[index + 2]);
+    const fourth = source[index + 3] === "=" ? 0 : alphabet.indexOf(source[index + 3]);
+    if (first < 0 || second < 0 || third < 0 || fourth < 0) throw new Error("El archivo Excel no tiene un formato válido.");
+    const packed = (first << 18) | (second << 12) | (third << 6) | fourth;
+    if (output < bytes.length) bytes[output++] = (packed >> 16) & 255;
+    if (output < bytes.length) bytes[output++] = (packed >> 8) & 255;
+    if (output < bytes.length) bytes[output++] = packed & 255;
+  }
   return bytes;
 }
 
@@ -1347,6 +1380,7 @@ function EvolumApp() {
         {screen === "patients" && <CustomersScreen records={patients} profile={profile} recordType="patient" entityLabel="Paciente" entityPlural="Pacientes" description="Ficha clínica independiente para registrar antecedentes, atención y seguimiento." documentLabel="Subir exámenes o documentos" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadPatients(false); await loadDashboard(false); }} />}
         {screen === "vehicleOwners" && <CustomersScreen records={vehicleOwners} profile={profile} recordType="vehicle" entityLabel="Dueño y vehículo" entityPlural="Dueños y vehículos" description="Ficha automotriz para mantener vehículo, dueño, presupuestos e historial de taller." documentLabel="Subir presupuesto o documentos del vehículo" refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadVehicleOwners(false); await loadDashboard(false); }} />}
         {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} campaigns={campaigns} onRefresh={loadCampaigns} />}
+        {screen === "documents" && <DocumentsScreen profile={profile} />}
         {screen === "notifications" && <NotificationsScreen notifications={tenantNotifications} onRefresh={loadNotifications} onRead={handleReadNotification} onReadAll={handleReadAllNotifications} />}
         {screen === "settings" && <PermissionsAndAlertsScreen notificationPermission={notificationPermission} photoPermission={photoPermission} onEnableNotifications={registerForPushNotifications} onEnablePhotos={requestPhotoLibraryAccess} onOpenImports={() => setScreen("realtyLoads")} onRefresh={refreshPermissionStatus} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
@@ -1454,7 +1488,7 @@ function SideNav({
             <ScrollView style={styles.menuItems} contentContainerStyle={styles.menuItemsContent} showsVerticalScrollIndicator={false}>
               {items.map((item) => (
                 <TouchableOpacity key={item.key} style={[styles.menuItem, active === item.key && styles.menuItemActive]} onPress={() => onChange(item.key)}>
-                  <View style={[styles.menuIcon, active === item.key && styles.menuIconActive]}><Text style={styles.menuModuleIcon}>{mobileModuleSymbols[item.key]}</Text></View>
+<View style={[styles.menuIcon, active === item.key && styles.menuIconActive]}><Text style={styles.menuModuleIcon}>{mobileModuleSymbols[item.key] || item.short}</Text></View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.menuItemTitle}>{item.label}</Text>
                     <Text style={styles.menuItemSub}>{item.module || "cuenta"}</Text>
@@ -1859,6 +1893,29 @@ function PipelineScreen({
     }
   }
 
+  function confirmRemovePropertyImage(record: IndustryRecord, uri: string) {
+    Alert.alert("Quitar imagen", "Quitar esta imagen de la propiedad? La ficha y sus demás datos se mantienen.", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Quitar",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            try {
+              const remaining = propertyImageUrls(record).filter((item) => item !== uri);
+              const updated = await updateIndustryRecord(record.id, {
+                data: { ...(record.data || {}), photoUrl: remaining[0] || "", gallery: remaining, galleryUrls: remaining }
+              });
+              await onPropertyUpdated();
+            } catch (error) {
+              Alert.alert("No se pudo quitar la imagen", error instanceof Error ? error.message : "Inténtalo nuevamente.");
+            }
+          })();
+        }
+      }
+    ]);
+  }
+
   return (
     <ScrollView horizontal={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>CRM</Text>
@@ -1961,6 +2018,7 @@ function RealtyLoadsScreen({
   const [photoFileName, setPhotoFileName] = useState("");
   const [saving, setSaving] = useState(false);
   const [importFileName, setImportFileName] = useState("");
+  const [importSourceFile, setImportSourceFile] = useState<PickedFile | null>(null);
   const [importPreview, setImportPreview] = useState<PropertyImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [importSummary, setImportSummary] = useState("");
@@ -2036,27 +2094,32 @@ function RealtyLoadsScreen({
   }
 
   async function pickPropertyFile() {
-    const result = await DocumentPicker.getDocumentAsync({
-      type: [
-        "text/csv",
-        "text/comma-separated-values",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      ],
-      copyToCacheDirectory: true,
-      multiple: false
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-
-    const asset = result.assets[0];
-    if (asset.size && asset.size > 10 * 1024 * 1024) {
-      Alert.alert("Archivo muy grande", "Sube un CSV o Excel de hasta 10 MB para mantener la app rapida.");
-      return;
-    }
-
     try {
-      const isExcel = /\.(xlsx|xls)$/i.test(asset.name || "");
-      if (/\.xls$/i.test(asset.name || "")) {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "text/csv",
+          "text/comma-separated-values",
+          "application/csv",
+          "application/vnd.ms-excel",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ],
+        copyToCacheDirectory: true,
+        multiple: false
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      if (asset.size && asset.size > 10 * 1024 * 1024) {
+        Alert.alert("Archivo muy grande", "Sube un CSV o Excel de hasta 10 MB para mantener la app rapida.");
+        return;
+      }
+      const fileName = asset.name || "archivo-importado";
+      const fileType = `${fileName} ${asset.mimeType || ""}`.toLowerCase();
+      const isExcel = /\.(xlsx|xls)\b/.test(fileType) || fileType.includes("spreadsheetml");
+      // Algunos teléfonos marcan un .xlsx moderno con el MIME antiguo de
+      // Excel. El nombre real del archivo es la señal confiable para rechazar
+      // solo el formato .xls, que no podemos leer de forma segura en la app.
+      if (/\.xls$/i.test(fileName)) {
         throw new Error("El formato .xls antiguo no es compatible. Guarda el archivo como .xlsx o CSV e intentalo nuevamente.");
       }
       const parsedRows = isExcel
@@ -2067,14 +2130,23 @@ function RealtyLoadsScreen({
         return;
       }
       const preview = parsedRows.slice(0, 250).map((row, index) => parsePropertyImportRow(row, index));
-      setImportFileName(asset.name || "propiedades.csv");
+      setImportFileName(fileName);
+      setImportSourceFile({ uri: asset.uri, name: fileName, mimeType: asset.mimeType, size: asset.size });
       setImportPreview(preview);
       setImportSummary(`${preview.filter((row) => !row.errors.length).length} listas / ${preview.length} filas leidas`);
     } catch (error) {
       setImportPreview([]);
+      setImportSourceFile(null);
       setImportSummary("");
       Alert.alert("No se pudo leer el archivo", error instanceof Error ? error.message : "Revisa el formato del CSV o Excel.");
     }
+  }
+
+  function clearImportedFile() {
+    setImportFileName("");
+    setImportSourceFile(null);
+    setImportPreview([]);
+    setImportSummary("");
   }
 
   async function importPropertiesFromCsv() {
@@ -2166,10 +2238,23 @@ function RealtyLoadsScreen({
         }
       });
 
-      Alert.alert("CSV importado", `${importedIds.length} propiedades quedaron cargadas para la IA predictiva.`);
-      setImportPreview([]);
-      setImportFileName("");
-      setImportSummary("");
+      let sourceArchiveMessage = "";
+      if (importSourceFile) {
+        try {
+          await uploadTenantDocument({
+            ...importSourceFile,
+            title: `Importacion inmobiliaria ${new Date().toLocaleDateString("es-CL")}`,
+            category: "realty_import",
+            description: "Archivo fuente de una importacion de propiedades desde la app. Se puede eliminar desde Archivos sin borrar las fichas creadas."
+          });
+          sourceArchiveMessage = " El archivo fuente quedó disponible en Archivos.";
+        } catch {
+          sourceArchiveMessage = " Las fichas se importaron; el archivo fuente no se pudo respaldar y puedes intentar subirlo desde Archivos.";
+        }
+      }
+
+      Alert.alert("Importacion completada", `${importedIds.length} propiedades quedaron cargadas para la IA predictiva.${sourceArchiveMessage}`);
+      clearImportedFile();
       await onCreated();
     } catch (error) {
       Alert.alert("No se pudo importar", error instanceof Error ? error.message : "Revisa la conexion y el formato.");
@@ -2474,6 +2559,11 @@ function RealtyLoadsScreen({
             <Text style={styles.primaryButtonText}>{importing ? "Importando..." : "Importar"}</Text>
           </TouchableOpacity>
         </View>
+        {!!importFileName && (
+          <TouchableOpacity style={styles.inlineRemoveButton} onPress={clearImportedFile} disabled={importing}>
+            <Text style={styles.inlineRemoveButtonText}>Quitar archivo seleccionado</Text>
+          </TouchableOpacity>
+        )}
         {!!importSummary && <Text style={styles.greenText}>{importSummary}</Text>}
         {!!importPreview.length && (
           <View style={styles.importPreviewBox}>
@@ -2633,6 +2723,30 @@ function PropertiesScreen({
     }
   }
 
+  function confirmRemovePropertyImage(record: IndustryRecord, uri: string) {
+    Alert.alert("Quitar imagen", "Quitar esta imagen de la propiedad? La ficha y sus demÃ¡s datos se mantienen.", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Quitar",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            try {
+              const remaining = propertyImageUrls(record).filter((item) => item !== uri);
+              const updated = await updateIndustryRecord(record.id, {
+                data: { ...(record.data || {}), photoUrl: remaining[0] || "", gallery: remaining, galleryUrls: remaining }
+              });
+              setSelectedProperty(updated);
+              await onCreated();
+            } catch (error) {
+              Alert.alert("No se pudo quitar la imagen", error instanceof Error ? error.message : "Inténtalo nuevamente.");
+            }
+          })();
+        }
+      }
+    ]);
+  }
+
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>Portal inmobiliario</Text>
@@ -2686,7 +2800,12 @@ function PropertiesScreen({
                   {propertyImageUrls(selectedProperty).length ? (
                     <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.propertyGallery}>
                       {propertyImageUrls(selectedProperty).map((uri, index) => (
-                        <Image key={`${uri}-${index}`} source={{ uri }} style={styles.propertyGalleryImage} resizeMode="cover" />
+                        <View key={`${uri}-${index}`} style={styles.propertyGalleryItem}>
+                          <Image source={{ uri }} style={styles.propertyGalleryImage} resizeMode="cover" />
+                          <TouchableOpacity style={styles.propertyImageRemove} onPress={() => confirmRemovePropertyImage(selectedProperty, uri)}>
+                            <Text style={styles.propertyImageRemoveText}>Quitar imagen</Text>
+                          </TouchableOpacity>
+                        </View>
                       ))}
                     </ScrollView>
                   ) : (
@@ -2945,6 +3064,110 @@ function BrokersScreen({
   );
 }
 
+function DocumentsScreen({ profile }: { profile: IndustryProfile }) {
+  const [documents, setDocuments] = useState<IndustryRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function loadDocuments() {
+    try {
+      setLoading(true);
+      const response = await getTenantDocuments();
+      setDocuments(response.documents || []);
+    } catch (error) {
+      Alert.alert("No se pudieron cargar los archivos", error instanceof Error ? error.message : "Revisa tu conexion e intentalo nuevamente.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void loadDocuments(); }, []);
+
+  async function pickAndUploadDocument() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: "*/*", multiple: false, copyToCacheDirectory: true });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      if (asset.size && asset.size > 25 * 1024 * 1024) {
+        Alert.alert("Archivo muy grande", "Cada archivo puede pesar hasta 25 MB.");
+        return;
+      }
+      setUploading(true);
+      await uploadTenantDocument({
+        uri: asset.uri,
+        name: asset.name || "archivo",
+        mimeType: asset.mimeType,
+        title: asset.name || "Archivo operativo",
+        category: "general",
+        description: `Archivo cargado desde EVOLUM móvil para ${profile.label}.`
+      });
+      Alert.alert("Archivo guardado", "Quedó disponible para el equipo y puedes eliminarlo desde aquí cuando lo necesites.");
+      await loadDocuments();
+    } catch (error) {
+      Alert.alert("No se pudo subir el archivo", error instanceof Error ? error.message : "Revisa la conexión e inténtalo nuevamente.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function confirmDelete(document: IndustryRecord) {
+    const name = String(document.data?.originalName || document.title || "este archivo");
+    Alert.alert("Eliminar archivo", `Eliminar ${name}? Esta acción no borra fichas ni datos del CRM.`, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Eliminar",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            try {
+              setDeletingId(document.id);
+              await deleteTenantDocument(document.id);
+              setDocuments((current) => current.filter((item) => item.id !== document.id));
+            } catch (error) {
+              Alert.alert("No se pudo eliminar", error instanceof Error ? error.message : "Inténtalo nuevamente.");
+            } finally {
+              setDeletingId(null);
+            }
+          })();
+        }
+      }
+    ]);
+  }
+
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={loading} onRefresh={loadDocuments} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
+      <Text style={styles.eyebrow}>Archivo central</Text>
+      <Text style={styles.screenTitle}>Archivos y documentos</Text>
+      <Text style={styles.screenSubtitle}>Sube, consulta y elimina de forma segura documentos, imágenes, planillas y archivos operativos del equipo.</Text>
+      <Panel title="Agregar un archivo">
+        <Text style={styles.muted}>Selecciona solo el archivo que quieres compartir. EVOLUM no solicita acceso total al almacenamiento del teléfono.</Text>
+        <TouchableOpacity style={styles.primaryButton} onPress={pickAndUploadDocument} disabled={uploading}>
+          <Text style={styles.primaryButtonText}>{uploading ? "Subiendo..." : "Seleccionar y subir archivo"}</Text>
+        </TouchableOpacity>
+      </Panel>
+      <Panel title={`Archivos disponibles · ${documents.length}`}>
+        {documents.map((document) => {
+          const name = String(document.data?.originalName || document.title || "Archivo");
+          const category = String(document.data?.category || "general");
+          return (
+            <View key={document.id} style={styles.documentManagerRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle} numberOfLines={1}>{name}</Text>
+                <Text style={styles.muted}>{category} · {formatBytes(Number(document.data?.size || 0))}</Text>
+              </View>
+              <TouchableOpacity style={styles.removeFileButton} disabled={deletingId === document.id} onPress={() => confirmDelete(document)}>
+                <Text style={styles.removeFileButtonText}>{deletingId === document.id ? "Eliminando..." : "Eliminar"}</Text>
+              </TouchableOpacity>
+            </View>
+          );
+        })}
+        {!loading && !documents.length && <Text style={styles.muted}>Aún no hay archivos cargados en este espacio.</Text>}
+      </Panel>
+    </ScrollView>
+  );
+}
+
 function CustomersScreen({
   records,
   profile,
@@ -2977,6 +3200,7 @@ function CustomersScreen({
   const [notes, setNotes] = useState("");
   const [documents, setDocuments] = useState<Array<{ name: string; type?: string; size?: number; dataUrl?: string }>>([]);
   const [saving, setSaving] = useState(false);
+  const [removingDocument, setRemovingDocument] = useState<string | null>(null);
 
   async function pickDocuments() {
     const result = await DocumentPicker.getDocumentAsync({
@@ -3041,6 +3265,39 @@ function CustomersScreen({
     }
   }
 
+  function savedDocuments(record: IndustryRecord) {
+    const value = record.data?.documents;
+    return Array.isArray(value) ? value.filter((item) => item && typeof item === "object" && typeof item.name === "string") as Array<{ name: string; type?: string; size?: number; dataUrl?: string }> : [];
+  }
+
+  function confirmRemoveSavedDocument(record: IndustryRecord, index: number) {
+    const document = savedDocuments(record)[index];
+    if (!document) return;
+    Alert.alert("Quitar adjunto", `Quitar ${document.name} de esta ficha? La ficha se mantiene.`, [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Quitar",
+        style: "destructive",
+        onPress: () => {
+          void (async () => {
+            const actionKey = `${record.id}-${index}`;
+            try {
+              setRemovingDocument(actionKey);
+              await updateIndustryRecord(record.id, {
+                data: { ...(record.data || {}), documents: savedDocuments(record).filter((_, documentIndex) => documentIndex !== index) }
+              });
+              await onCreated();
+            } catch (error) {
+              Alert.alert("No se pudo quitar", error instanceof Error ? error.message : "Inténtalo nuevamente.");
+            } finally {
+              setRemovingDocument(null);
+            }
+          })();
+        }
+      }
+    ]);
+  }
+
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
       <Text style={styles.eyebrow}>{entityPlural}</Text>
@@ -3071,13 +3328,22 @@ function CustomersScreen({
       </Panel>
       <Panel title={`${entityPlural} · ${profile.label}`}>
         {records.slice(0, 12).map((record) => (
-          <ListRow
-            key={record.id}
-            left="CL"
-            title={record.title}
-            subtitle={`${recordText(record, "phone", "Sin telefono")} / ${recordText(record, "interest", "Sin interes registrado")}`}
-            right={record.status}
-          />
+          <View key={record.id}>
+            <ListRow
+              left="CL"
+              title={record.title}
+              subtitle={`${recordText(record, "phone", "Sin telefono")} / ${recordText(record, "interest", "Sin interes registrado")}`}
+              right={record.status}
+            />
+            {savedDocuments(record).map((document, index) => (
+              <View key={`${record.id}-${document.name}-${index}`} style={styles.savedDocumentRow}>
+                <Text style={styles.muted} numberOfLines={1}>{document.name}</Text>
+                <TouchableOpacity disabled={removingDocument === `${record.id}-${index}`} onPress={() => confirmRemoveSavedDocument(record, index)}>
+                  <Text style={styles.removeFileButtonText}>{removingDocument === `${record.id}-${index}` ? "Quitando..." : "Quitar"}</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
         ))}
         {!records.length && <Text style={styles.muted}>Aún no hay fichas cargadas.</Text>}
       </Panel>
@@ -4068,12 +4334,15 @@ const styles = StyleSheet.create({
   propertyModalTitle: { color: colors.text, fontSize: 22, fontWeight: "900", marginTop: 4 },
   propertyModalContent: { padding: 18, gap: 14, paddingBottom: 36 },
   propertyGallery: { gap: 10 },
+  propertyGalleryItem: { gap: 6 },
   propertyGalleryImage: {
     width: 300,
     height: 220,
     borderRadius: 20,
     backgroundColor: "rgba(139,63,244,0.16)"
   },
+  propertyImageRemove: { alignSelf: "flex-end", paddingHorizontal: 8, paddingVertical: 4 },
+  propertyImageRemoveText: { color: "#fda4af", fontSize: 12, fontWeight: "800" },
   propertyGalleryEmpty: {
     height: 180,
     borderRadius: 20,
@@ -4128,6 +4397,40 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.035)"
   },
   documentChipText: { color: colors.text, fontWeight: "800", flex: 1 },
+  inlineRemoveButton: { alignSelf: "flex-start", minHeight: 34, justifyContent: "center", paddingHorizontal: 4 },
+  inlineRemoveButtonText: { color: "#fda4af", fontSize: 12, fontWeight: "800" },
+  documentManagerRow: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border
+  },
+  removeFileButton: {
+    minHeight: 34,
+    paddingHorizontal: 10,
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(251,113,133,0.42)",
+    borderRadius: 10,
+    backgroundColor: "rgba(251,113,133,0.08)"
+  },
+  removeFileButtonText: { color: "#fda4af", fontSize: 12, fontWeight: "900" },
+  savedDocumentRow: {
+    minHeight: 34,
+    marginTop: -4,
+    marginBottom: 8,
+    marginLeft: 50,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    borderLeftWidth: 1,
+    borderLeftColor: "rgba(168,85,247,0.5)"
+  },
   moduleGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 },
   moduleToggle: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, minHeight: 36, justifyContent: "center" },
   moduleToggleOn: { backgroundColor: colors.purple, borderColor: colors.borderStrong },

@@ -5729,6 +5729,20 @@ button.primary-btn {
   padding-bottom: 2px;
 }
 
+.property-thumbnail-wrap {
+  display: grid;
+  gap: 4px;
+}
+
+.property-thumbnail-remove {
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: #fda4af;
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+
 .property-detail-thumbnails button {
   width: 82px;
   height: 64px;
@@ -8952,6 +8966,23 @@ body {
   font-size: 12px;
 }
 
+.onboarding-document-row {
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+}
+
+.onboarding-document-row > a {
+  flex: 1;
+  min-width: 0;
+}
+
+.compact-action {
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+}
+
 .integration-status-list article {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -11062,6 +11093,37 @@ body {
   background: rgba(255, 255, 255, 0.04);
   font-size: 12px;
   font-weight: 800;
+}
+
+.document-chip-remove {
+  border: 0;
+  margin-left: 8px;
+  padding: 2px 0;
+  color: #fda4af;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.document-chip-remove:hover {
+  color: #fff;
+}
+
+.service-record-documents {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 2px;
+}
+
+.service-record-documents > span {
+  border: 1px solid rgba(138, 46, 255, 0.35);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
 }
 
 .crm-main-agent-board {

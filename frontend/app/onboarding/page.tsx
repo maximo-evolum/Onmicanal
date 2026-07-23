@@ -6,6 +6,7 @@ import { ModuleGate } from "@/components/module-gate";
 import {
   applyOnboardingExtraction,
   createWorkflow,
+  deleteTenantDocument,
   getIntegrationsStatus,
   getMetadataCatalog,
   getOnboardingKnowledge,
@@ -342,6 +343,22 @@ export default function OnboardingPage() {
     }
   }
 
+  async function removeKnowledgeDocument(document: TenantDocument) {
+    const fileName = document.data?.originalName || document.title || "este archivo";
+    if (!window.confirm(`Eliminar ${fileName}? Se retirara del motor de conocimiento y no se podra recuperar.`)) return;
+    setOpsLoading(true);
+    setDocumentStatus(null);
+    try {
+      await deleteTenantDocument(document.id);
+      setDocumentStatus("Archivo eliminado del motor de conocimiento.");
+      await loadOperationalLayer();
+    } catch (err) {
+      setDocumentStatus(err instanceof Error ? err.message : "No se pudo eliminar el archivo.");
+    } finally {
+      setOpsLoading(false);
+    }
+  }
+
   async function createStarterWorkflow() {
     setOpsLoading(true);
     setDocumentStatus(null);
@@ -453,11 +470,14 @@ export default function OnboardingPage() {
               Guardar documentos
             </button>
             <div className="onboarding-core-list">
-              {documents.slice(0, 4).map((document) => (
-                <a key={document.id} href={document.data?.url || "#"} target="_blank" rel="noreferrer">
+              {documents.slice(0, 8).map((document) => (
+                <article key={document.id} className="onboarding-document-row">
+                  <a href={document.data?.url || "#"} target="_blank" rel="noreferrer">
                   <strong>{document.title || document.data?.originalName || "Documento"}</strong>
                   <span>{document.data?.category || "conocimiento"} · {formatBytes(document.data?.size)} · {formatShortDate(document.createdAt)}</span>
-                </a>
+                  </a>
+                  <button className="ghost-btn danger compact-action" type="button" disabled={opsLoading} onClick={() => removeKnowledgeDocument(document)}>Eliminar</button>
+                </article>
               ))}
               {!documents.length && <p className="meta-line">Aun no hay documentos del tenant en esta capa.</p>}
             </div>

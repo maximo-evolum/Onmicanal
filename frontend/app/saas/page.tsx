@@ -225,6 +225,7 @@ export default function SaasPage() {
                     placeholder="URL publica o imagen cargada"
                   />
                   <input className="profile-file-input" type="file" accept="image/*,.svg,.gif,.webp,.avif,.ico,.heic,.heif" onChange={handleAvatarFile} />
+                  {profileForm.avatarUrl ? <button className="ghost-btn danger" type="button" onClick={() => setProfileForm((value) => ({ ...value, avatarUrl: "" }))}>Quitar foto</button> : null}
                 </label>
                 <button className="primary-btn" type="submit" disabled={savingProfile || !profileForm.name.trim()}>
                   {savingProfile ? "Guardando..." : "Guardar perfil"}

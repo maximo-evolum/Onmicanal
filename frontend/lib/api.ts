@@ -1551,6 +1551,12 @@ export async function uploadTenantDocuments(input: {
   return response.json();
 }
 
+export async function deleteTenantDocument(id: string): Promise<{ ok: true }> {
+  return request<{ ok: true }>(`/documents/${encodeURIComponent(id)}`, {
+    method: "DELETE"
+  });
+}
+
 export async function getWorkflows(status?: string): Promise<{ workflows: WorkflowDefinition[] }> {
   const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
   return request<{ workflows: WorkflowDefinition[] }>(`/workflows${suffix}`);
