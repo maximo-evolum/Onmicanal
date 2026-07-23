@@ -168,6 +168,25 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "admin", label: "Admin", short: "SA" }
 ];
 
+const mobileModuleSymbols: Record<ScreenKey, string> = {
+  dashboard: "▥",
+  inbox: "◌",
+  agenda: "◷",
+  pipeline: "↗",
+  realtyLoads: "⇧",
+  properties: "⌂",
+  realtyActivity: "◴",
+  brokerPortal: "◉",
+  brokers: "♧",
+  customers: "◎",
+  patients: "✚",
+  vehicleOwners: "▱",
+  campaigns: "✦",
+  notifications: "♢",
+  settings: "⚙",
+  admin: "▦"
+};
+
 const moduleAliases: Record<string, string[]> = {
   analytics: ["analytics", "dashboard"],
   inbox: ["inbox"],
@@ -1435,7 +1454,7 @@ function SideNav({
             <ScrollView style={styles.menuItems} contentContainerStyle={styles.menuItemsContent} showsVerticalScrollIndicator={false}>
               {items.map((item) => (
                 <TouchableOpacity key={item.key} style={[styles.menuItem, active === item.key && styles.menuItemActive]} onPress={() => onChange(item.key)}>
-                  <View style={[styles.menuIcon, active === item.key && styles.menuIconActive]}><Text style={styles.sideItemTextActive}>{item.short}</Text></View>
+                  <View style={[styles.menuIcon, active === item.key && styles.menuIconActive]}><Text style={styles.menuModuleIcon}>{mobileModuleSymbols[item.key]}</Text></View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.menuItemTitle}>{item.label}</Text>
                     <Text style={styles.menuItemSub}>{item.module || "cuenta"}</Text>
@@ -3617,6 +3636,7 @@ const styles = StyleSheet.create({
   menuItemActive: { backgroundColor: "rgba(139,63,244,0.36)", borderColor: colors.borderStrong },
   menuIcon: { width: 36, height: 36, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(139,63,244,0.22)" },
   menuIconActive: { backgroundColor: colors.purple },
+  menuModuleIcon: { color: colors.text, fontSize: 19, fontWeight: "600", lineHeight: 21, fontFamily: Platform.OS === "ios" ? "Arial" : "sans-serif" },
   menuItemTitle: { color: colors.text, fontWeight: "900" },
   menuItemSub: { color: colors.muted, fontSize: 11 },
   logoutButton: { minHeight: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(127,29,29,0.5)", borderWidth: 1, borderColor: "rgba(248,113,113,0.35)", marginBottom: 8 },

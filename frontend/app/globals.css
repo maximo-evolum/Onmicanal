@@ -10629,6 +10629,13 @@ html, body {
   font-weight: 900;
 }
 
+.inbox-unified-nav-list a .evolum-module-symbol {
+  font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif;
+  font-size: 19px !important;
+  font-weight: 500;
+  line-height: 1;
+}
+
 .inbox-unified-nav-list a div,
 .inbox-nav-action strong {
   min-width: 0;
@@ -12290,7 +12297,67 @@ textarea:focus {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--theme-primary), var(--theme-accent));
+  transition: width 260ms ease;
 }
+
+.connection-card.working {
+  border-color: color-mix(in srgb, var(--theme-primary-2) 72%, transparent);
+  cursor: progress;
+}
+
+.connection-card.working .connection-progress i,
+.connection-activity-panel .connection-progress i {
+  background-size: 180% 100%;
+  animation: connection-progress-flow 1.15s linear infinite;
+}
+
+.connection-card-activity {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--theme-primary-2);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.connection-card-activity i {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border: 2px solid color-mix(in srgb, var(--theme-primary-2) 32%, transparent);
+  border-top-color: var(--theme-primary-2);
+  border-radius: 50%;
+  animation: connection-spinner .75s linear infinite;
+}
+
+.connection-activity-panel {
+  display: grid;
+  gap: 9px;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 52%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--theme-primary) 11%, var(--theme-surface));
+}
+
+.connection-activity-panel > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-strong);
+}
+
+.connection-activity-panel > div span {
+  color: var(--theme-primary-2);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.connection-activity-panel small { color: var(--text-muted); line-height: 1.4; }
+
+@keyframes connection-spinner { to { transform: rotate(360deg); } }
+@keyframes connection-progress-flow { to { background-position: 180% 0; } }
 
 .connection-icon {
   width: 44px;

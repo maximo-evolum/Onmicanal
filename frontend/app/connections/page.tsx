@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   disconnectConnectionProvider,
   getConnectionCenter,
@@ -29,6 +29,12 @@ const statusHelp: Record<ConnectionStatus, string> = {
   PENDING: "Faltan credenciales, campos o variables de entorno.",
   ERROR: "La ultima prueba fallo. Revisa credenciales.",
   DISCONNECTED: "Sin conexion activa para este tenant.",
+};
+
+type ConnectionActivity = {
+  key: string;
+  stage: string;
+  progress: number;
 };
 
 function providerByKey(data: ConnectionCenterResponse | null, key: string | null) {
@@ -122,6 +128,8 @@ export default function ConnectionsPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [connectionActivity, setConnectionActivity] = useState<ConnectionActivity | null>(null);
+  const oauthTimeoutRef = useRef<number | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const selected = providerByKey(data, selectedKey);
   const [form, setForm] = useState({
@@ -150,12 +158,16 @@ export default function ConnectionsPage() {
     load();
     const interval = window.setInterval(() => load(true), 20000);
     function onOAuthDone() {
+      if (oauthTimeoutRef.current) window.clearTimeout(oauthTimeoutRef.current);
+      oauthTimeoutRef.current = null;
+      setConnectionActivity(null);
       load(true);
     }
     window.addEventListener("message", onOAuthDone);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("message", onOAuthDone);
+      if (oauthTimeoutRef.current) window.clearTimeout(oauthTimeoutRef.current);
     };
   }, []);
 
@@ -172,10 +184,12 @@ export default function ConnectionsPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected || connectionActivity) return;
     try {
       setSaving(true);
+      setConnectionActivity({ key: selected.key, stage: "Guardando configuración segura...", progress: 28 });
       setNotice(null);
+      setConnectionActivity({ key: selected.key, stage: "Validando información...", progress: 68 });
       await saveConnectionProvider(selected.key, {
         label: form.label,
         phoneNumberId: form.phoneNumberId,
@@ -183,48 +197,65 @@ export default function ConnectionsPage() {
         externalAccountId: form.externalAccountId,
         isActive: form.isActive,
       });
+      setConnectionActivity({ key: selected.key, stage: "Configuración guardada", progress: 100 });
       setNotice({ type: "success", text: "Conexion guardada" });
       await load(true);
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudo guardar la conexion" });
     } finally {
       setSaving(false);
+      setConnectionActivity(null);
     }
   }
 
   async function runTest(provider: ConnectionProvider) {
+    if (connectionActivity) return;
     try {
+      setConnectionActivity({ key: provider.key, stage: "Probando conexión...", progress: 24 });
       setNotice(null);
+      setConnectionActivity({ key: provider.key, stage: "Validando acceso y disponibilidad...", progress: 68 });
       await testConnectionProvider(provider.key);
+      setConnectionActivity({ key: provider.key, stage: "Conexión validada", progress: 100 });
       setNotice({ type: "success", text: "Conexion validada" });
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "La prueba de conexion fallo" });
     } finally {
       await load(true);
+      setConnectionActivity(null);
     }
   }
 
   async function disconnect(provider: ConnectionProvider) {
+    if (connectionActivity) return;
     try {
+      setConnectionActivity({ key: provider.key, stage: "Desvinculando cuenta...", progress: 35 });
       setNotice(null);
       await disconnectConnectionProvider(provider.key);
+      setConnectionActivity({ key: provider.key, stage: "Cuenta desvinculada", progress: 100 });
       setNotice({ type: "success", text: "Conexion desactivada" });
       await load(true);
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudo desconectar" });
+    } finally {
+      setConnectionActivity(null);
     }
   }
 
   async function reactivate(provider: ConnectionProvider) {
+    if (connectionActivity) return;
     try {
+      setConnectionActivity({ key: provider.key, stage: "Reactivando conexión...", progress: 36 });
       setNotice(null);
       // Conserva token, IDs y metadatos ya registrados; solo vuelve a dejar
       // disponible la integración que el cliente había configurado antes.
       await saveConnectionProvider(provider.key, { isActive: true });
+      setConnectionActivity({ key: provider.key, stage: "Conexión reactivada", progress: 100 });
       setNotice({ type: "success", text: "Conexion existente reactivada" });
       await load(true);
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudo reactivar la conexion" });
+    } finally {
+      setConnectionActivity(null);
     }
   }
 
@@ -244,7 +275,9 @@ export default function ConnectionsPage() {
   }
 
   async function openOAuth(provider: ConnectionProvider) {
+    if (connectionActivity) return;
     try {
+      setConnectionActivity({ key: provider.key, stage: "Preparando vinculación segura...", progress: 26 });
       setNotice(null);
       const response = await getConnectionOAuthUrl(provider.key);
       // Mantener una ventana con nombre permite que el callback notifique al
@@ -254,9 +287,15 @@ export default function ConnectionsPage() {
         window.location.assign(response.url);
       } else {
         popup.focus();
+        setConnectionActivity({ key: provider.key, stage: "Esperando autorización en la ventana del proveedor...", progress: 72 });
+        oauthTimeoutRef.current = window.setTimeout(() => {
+          setConnectionActivity(null);
+          oauthTimeoutRef.current = null;
+        }, 180000);
       }
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudo iniciar OAuth" });
+      setConnectionActivity(null);
     }
   }
 
@@ -277,7 +316,7 @@ export default function ConnectionsPage() {
               <div className="meta-line">OAuth, credenciales, respaldo, replica y sincronizacion offline por tenant.</div>
             </div>
             <div className="module-app-actions">
-              <button className="ghost-btn" type="button" onClick={reconcileMeta} disabled={saving}>
+              <button className="ghost-btn" type="button" onClick={reconcileMeta} disabled={saving || Boolean(connectionActivity)}>
                 {saving ? "Reconciliando Meta..." : "Detectar activos Meta"}
               </button>
               <AccountPill fallbackName={agent?.name || "Usuario"} />
@@ -384,12 +423,16 @@ export default function ConnectionsPage() {
                         <p>{group.description}</p>
                       </div>
                       <div className="connection-card-grid">
-                        {group.providers.map((provider) => (
+                        {group.providers.map((provider) => {
+                          const activity = connectionActivity?.key === provider.key ? connectionActivity : null;
+                          return (
                           <button
-                            className={`connection-card ${selectedKey === provider.key ? "selected" : ""}`}
+                            className={`connection-card ${selectedKey === provider.key ? "selected" : ""} ${activity ? "working" : ""}`}
                             key={provider.key}
                             type="button"
                             onClick={() => setSelectedKey(provider.key)}
+                            disabled={Boolean(connectionActivity)}
+                            aria-busy={Boolean(activity)}
                           >
                             <span className="connection-icon">{provider.icon}</span>
                             <div className="connection-card-copy">
@@ -402,10 +445,12 @@ export default function ConnectionsPage() {
                                 <i />
                                 {statusLabels[provider.status]}
                               </span>
-                              <span className="connection-progress"><i style={{ width: `${providerProgress(provider)}%` }} /></span>
+                              <span className="connection-progress"><i style={{ width: `${activity?.progress ?? providerProgress(provider)}%` }} /></span>
+                              {activity ? <span className="connection-card-activity"><i />{activity.stage}</span> : null}
                             </div>
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </section>
                   ))}
@@ -425,8 +470,16 @@ export default function ConnectionsPage() {
 
                       <div className={`connection-status-banner status-${selected.status.toLowerCase()}`}>
                         <span>{statusLabels[selected.status]}</span>
-                        {selected.missing.length ? <small>Falta: {selected.missing.join(", ")}</small> : <small>Configuracion completa</small>}
+                        {selected.missing.length ? <small>Faltan datos de configuración</small> : <small>Configuracion completa</small>}
                       </div>
+
+                      {connectionActivity?.key === selected.key ? (
+                        <div className="connection-activity-panel" role="status" aria-live="polite">
+                          <div><strong>{connectionActivity.stage}</strong><span>{connectionActivity.progress}%</span></div>
+                          <span className="connection-progress"><i style={{ width: `${connectionActivity.progress}%` }} /></span>
+                          <small>No cierres esta pantalla ni presiones otra vez el botón mientras EVOLUM termina esta acción.</small>
+                        </div>
+                      ) : null}
 
                       {selected.oauthProvider ? (
                         <section className="connection-account-context" aria-label="Cuentas involucradas en la vinculación">
@@ -474,7 +527,7 @@ export default function ConnectionsPage() {
                               <>
                                 <strong>Ya existe una cuenta registrada</strong>
                                 <p>Sus credenciales e identificadores se conservaron. Reactívala para volver a usarla sin repetir la vinculación.</p>
-                                <button className="primary" type="button" onClick={() => reactivate(selected)}>Reactivar conexión registrada</button>
+                                <button className="primary" type="button" onClick={() => reactivate(selected)} disabled={Boolean(connectionActivity)}>Reactivar conexión registrada</button>
                               </>
                             ) : (
                               <>
@@ -482,7 +535,7 @@ export default function ConnectionsPage() {
                                 <p>{selected.oauthReady === false
                                   ? "Este proveedor está siendo habilitado por EVOLUM. Cuando esté disponible, solo tendrás que iniciar sesión y autorizar la cuenta externa."
                                   : `Se abrirá la pantalla oficial de ${selected.label}. El cliente puede iniciar sesión con una cuenta diferente a su usuario EVOLUM.`}</p>
-                                <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={selected.oauthReady === false}>
+                                <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={selected.oauthReady === false || Boolean(connectionActivity)}>
                                   {selected.oauthReady === false
                                     ? "Proveedor en activación"
                                     : selected.status === "CONNECTED"
@@ -513,12 +566,12 @@ export default function ConnectionsPage() {
                                 <input value={form.phoneNumberId} onChange={(event) => setForm((current) => ({ ...current, phoneNumberId: event.target.value }))} />
                               </label>
                             </div>
-                            <button type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar datos complementarios"}</button>
+                            <button type="submit" disabled={saving || Boolean(connectionActivity)}>{saving ? "Guardando..." : "Guardar datos complementarios"}</button>
                           </details>
 
                           <div className="connection-actions">
-                            <button type="button" onClick={() => runTest(selected)}>Probar conexión</button>
-                            {selected.status === "CONNECTED" ? <button className="danger" type="button" onClick={() => disconnect(selected)}>Desvincular cuenta</button> : null}
+                            <button type="button" onClick={() => runTest(selected)} disabled={Boolean(connectionActivity)}>Probar conexión</button>
+                            {selected.status === "CONNECTED" ? <button className="danger" type="button" onClick={() => disconnect(selected)} disabled={Boolean(connectionActivity)}>Desvincular cuenta</button> : null}
                           </div>
                         </>
                       ) : (
@@ -543,9 +596,9 @@ export default function ConnectionsPage() {
                           </div>
 
                           <div className="connection-actions">
-                            <button className="primary" type="submit" disabled={saving}>{saving ? "Guardando..." : "Guardar conexión"}</button>
-                            <button type="button" onClick={() => runTest(selected)}>Probar</button>
-                            <button className="danger" type="button" onClick={() => disconnect(selected)}>Desconectar</button>
+                            <button className="primary" type="submit" disabled={saving || Boolean(connectionActivity)}>{saving ? "Guardando..." : "Guardar conexión"}</button>
+                            <button type="button" onClick={() => runTest(selected)} disabled={Boolean(connectionActivity)}>Probar</button>
+                            <button className="danger" type="button" onClick={() => disconnect(selected)} disabled={Boolean(connectionActivity)}>Desconectar</button>
                           </div>
                         </>
                       )}

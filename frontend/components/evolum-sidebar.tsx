@@ -53,6 +53,19 @@ const developerItems: SidebarItem[] = [
   ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL", "bot_lab"],
 ];
 
+// Símbolos funcionales, no siglas: reducen el tiempo de reconocimiento del
+// módulo y mantienen un lenguaje visual coherente dentro del menú EV.
+const moduleSymbols: Record<string, string> = {
+  IN: "⌂", CH: "◌", AG: "◷", PI: "↗", CA: "✦", PA: "▣", CX: "⌁",
+  CG: "⚙", FW: "⇄", MD: "▤", PM: "◫", DA: "▥", AI: "✧", GI: "◈",
+  CI: "⇧", PR: "⌂", AC: "◴", PC: "◉", CO: "♧", CL: "◎", EP: "▤",
+  DV: "▱", DE: "▦", BL: "⚗"
+};
+
+function ModuleSymbol({ code, label }: { code: string; label: string }) {
+  return <span className="evolum-module-symbol" aria-hidden="true" title={label}>{moduleSymbols[code] || "◇"}</span>;
+}
+
 function isRealtyIndustry(industry?: string | null) {
   const value = String(industry || "").toUpperCase();
   return value.includes("REAL_ESTATE") || value.includes("INMOBIL") || value.includes("CORRETAJE");
@@ -214,7 +227,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
           const selected = pathname === href || pathname.startsWith(`${href}/`) || label === active;
           return (
           <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
-            <span>{icon}</span>
+            <ModuleSymbol code={icon} label={label} />
             <div>
               <strong>{label}</strong>
               <small>{description}</small>
