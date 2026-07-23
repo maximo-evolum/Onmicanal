@@ -210,6 +210,7 @@ const moduleAliases: Record<string, string[]> = {
   broker_portal: ["broker_portal", "portal_corredor"],
   brokers: ["brokers", "corredores"],
   realty_clients: ["realty_clients", "clientes_inmobiliarios", "clientes"],
+  customers: ["customers", "clientes"],
   patients: ["patients", "pacientes"],
   vehicle_owners: ["vehicle_owners", "dueños", "duenos", "vehiculos"],
   marketing: ["marketing", "campaigns"],
@@ -228,6 +229,12 @@ function mobileModuleAllowed(item: { key: ScreenKey; module?: string }, modules:
   if (!modules.length) return true;
   const normalized = new Set(modules.map(normalizeModuleName));
   const aliases = moduleAliases[item.module] || [item.module, item.key];
+  return aliases.some((alias) => normalized.has(normalizeModuleName(alias)));
+}
+
+function hasMobileModule(modules: string[], module: string) {
+  const normalized = new Set(modules.map(normalizeModuleName));
+  const aliases = moduleAliases[module] || [module];
   return aliases.some((alias) => normalized.has(normalizeModuleName(alias)));
 }
 
@@ -995,7 +1002,28 @@ function EvolumApp() {
   }
 
   async function loadAll() {
-    await Promise.allSettled([loadModules(), loadDashboard(false), loadRealtyIntelligence(), loadConversations(false), loadBookings(false), loadCampaigns(false), loadProperties(false), loadCustomers(false), loadPatients(false), loadVehicleOwners(false), loadNotifications()]);
+    // Primero conocemos el catálogo del tenant. Antes la app consultaba todas
+    // las verticales al abrirse, incluso las bloqueadas (por ejemplo,
+    // propiedades para una cuenta gastronómica), generando 403 innecesarios.
+    const activeModules = await loadModules();
+    const jobs: Array<Promise<unknown>> = [loadNotifications()];
+    if (hasMobileModule(activeModules, "analytics")) jobs.push(loadDashboard(false));
+    if (hasMobileModule(activeModules, "inbox")) jobs.push(loadConversations(false));
+    if (hasMobileModule(activeModules, "bookings")) jobs.push(loadBookings(false));
+    if (hasMobileModule(activeModules, "marketing")) jobs.push(loadCampaigns(false));
+    if (hasMobileModule(activeModules, "properties")) {
+      jobs.push(loadProperties(false, activeModules), loadRealtyIntelligence());
+    } else {
+      setProperties([]);
+      setRealtyIntelligence(null);
+    }
+    if (hasMobileModule(activeModules, "customers") || hasMobileModule(activeModules, "realty_clients")) jobs.push(loadCustomers(false, activeModules));
+    else setCustomers([]);
+    if (hasMobileModule(activeModules, "patients")) jobs.push(loadPatients(false, activeModules));
+    else setPatients([]);
+    if (hasMobileModule(activeModules, "vehicle_owners") || hasMobileModule(activeModules, "vehicles")) jobs.push(loadVehicleOwners(false, activeModules));
+    else setVehicleOwners([]);
+    await Promise.allSettled(jobs);
   }
 
   async function loadNotifications() {
@@ -1003,9 +1031,11 @@ function EvolumApp() {
     if (data) setTenantNotifications(data);
   }
 
-  async function loadModules() {
+  async function loadModules(): Promise<string[]> {
     const data = await getMyModules().catch(() => null);
-    if (data?.modules) setModules(data.modules);
+    const resolved = data?.modules || [];
+    setModules(resolved);
+    return resolved;
   }
 
   async function loadDashboard(showLoading = true) {
@@ -1047,28 +1077,44 @@ function EvolumApp() {
     if (showLoading) setRefreshing(false);
   }
 
-  async function loadProperties(showLoading = true) {
+  async function loadProperties(showLoading = true, availableModules = modules) {
+    if (!hasMobileModule(availableModules, "properties")) {
+      setProperties([]);
+      return;
+    }
     if (showLoading) setRefreshing(true);
     const data = await getIndustryRecords("property").catch(() => []);
     setProperties(data);
     if (showLoading) setRefreshing(false);
   }
 
-  async function loadCustomers(showLoading = true) {
+  async function loadCustomers(showLoading = true, availableModules = modules) {
+    if (!hasMobileModule(availableModules, "customers") && !hasMobileModule(availableModules, "realty_clients")) {
+      setCustomers([]);
+      return;
+    }
     if (showLoading) setRefreshing(true);
     const data = await getIndustryRecords("customer").catch(() => []);
     setCustomers(data);
     if (showLoading) setRefreshing(false);
   }
 
-  async function loadPatients(showLoading = true) {
+  async function loadPatients(showLoading = true, availableModules = modules) {
+    if (!hasMobileModule(availableModules, "patients")) {
+      setPatients([]);
+      return;
+    }
     if (showLoading) setRefreshing(true);
     const data = await getIndustryRecords("patient").catch(() => []);
     setPatients(data);
     if (showLoading) setRefreshing(false);
   }
 
-  async function loadVehicleOwners(showLoading = true) {
+  async function loadVehicleOwners(showLoading = true, availableModules = modules) {
+    if (!hasMobileModule(availableModules, "vehicle_owners") && !hasMobileModule(availableModules, "vehicles")) {
+      setVehicleOwners([]);
+      return;
+    }
     if (showLoading) setRefreshing(true);
     const data = await getIndustryRecords("vehicle").catch(() => []);
     setVehicleOwners(data);

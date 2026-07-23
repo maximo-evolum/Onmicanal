@@ -38,6 +38,7 @@ const corsOrigins = [
   frontendOrigin,
   publicBaseUrl
 ].filter(Boolean);
+const configuredDefaultTenantSlug = firstEnv("DEFAULT_TENANT_SLUG", "defaultTenantSlug");
 
 export const env = {
   nodeEnv: firstEnv("NODE_ENV", "nodeEnv") || "development",
@@ -70,7 +71,7 @@ export const env = {
   ),
 
   defaultTenantSlug:
-    firstEnv("DEFAULT_TENANT_SLUG", "defaultTenantSlug") ||
+    configuredDefaultTenantSlug ||
     "demo-inmobiliaria",
 
   jwtSecret: firstEnv("JWT_SECRET", "jwtSecret"),
@@ -148,7 +149,9 @@ if (env.nodeEnv === "production") {
     throw new Error("FRONTEND_ORIGIN debe apuntar al dominio real en producción.");
   }
 
-  if (env.defaultTenantSlug && String(env.defaultTenantSlug).startsWith("demo")) {
+  // El fallback demo sirve para desarrollo local. Solo advertimos si alguien
+  // configuró explícitamente un tenant demo en producción.
+  if (configuredDefaultTenantSlug && String(configuredDefaultTenantSlug).startsWith("demo")) {
     console.warn("[ENV_WARNING] DEFAULT_TENANT_SLUG apunta a un tenant demo. Revisa configuración productiva.");
   }
 }
