@@ -36,6 +36,10 @@ const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; det
   { key: "agentes", label: "Equipo IA", module: "finance_analytics", detail: "Cinco agentes especializados coordinados con controles humanos." }
 ];
 
+function resolveFinanceTab(value: string | null): FinanceTab {
+  return tabs.some((tab) => tab.key === value) ? value as FinanceTab : "resumen";
+}
+
 function asData(record: IndustryRecord) {
   return (record.data || {}) as Record<string, unknown>;
 }
@@ -77,8 +81,7 @@ export default function FinancePage() {
 
 function FinanceWorkspace() {
   const params = useSearchParams();
-  const queryTab = params.get("tab") as FinanceTab | null;
-  const activeTab = tabs.some((tab) => tab.key === queryTab) ? queryTab! : "resumen";
+  const [activeTab, setActiveTab] = useState<FinanceTab>(() => resolveFinanceTab(params.get("tab")));
   const active = tabs.find((tab) => tab.key === activeTab) || tabs[0];
   const agent = getStoredSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -95,6 +98,21 @@ function FinanceWorkspace() {
   const [invoiceForm, setInvoiceForm] = useState({ number: "", client: "", rut: "", amount: "", dueDate: "" });
   const [movementForm, setMovementForm] = useState({ date: "", amount: "", description: "", reference: "" });
   const [exceptionForm, setExceptionForm] = useState({ title: "", type: "Diferencia de monto", detail: "" });
+
+  useEffect(() => {
+    function syncBrowserNavigation() {
+      setActiveTab(resolveFinanceTab(new URLSearchParams(window.location.search).get("tab")));
+    }
+
+    window.addEventListener("popstate", syncBrowserNavigation);
+    return () => window.removeEventListener("popstate", syncBrowserNavigation);
+  }, []);
+
+  function selectTab(tab: FinanceTab) {
+    if (tab === activeTab) return;
+    setActiveTab(tab);
+    window.history.pushState({}, "", tab === "resumen" ? "/finance" : `/finance?tab=${tab}`);
+  }
 
   async function load() {
     setLoading(true);
@@ -246,7 +264,7 @@ function FinanceWorkspace() {
   }
 
   return (
-    <ModuleGate moduleKey={active.module}>
+    <ModuleGate moduleKey="finance_analytics">
       <div className={`module-with-menu-shell finance-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active={activeTab === "resumen" ? "Finance OS" : active.label} isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
         <main className="finance-workspace">
@@ -254,7 +272,7 @@ function FinanceWorkspace() {
             <div className="finance-title"><span>EVOLUM FINANCE OS</span><h1>{activeTab === "resumen" ? `Hola, ${agent?.name?.split(" ")[0] || "equipo"}` : active.label}</h1><p>{activeTab === "resumen" ? "Esto es lo que necesita tu atencion financiera hoy." : active.detail}</p></div>
             <div className="finance-header-actions"><label className="finance-search"><span>Buscar</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cliente, factura o movimiento..." /></label><div className="finance-notification-wrap"><button className="finance-bell" type="button" onClick={() => setNotificationsOpen((value) => !value)} aria-label="Ver notificaciones">{overview?.exceptions.open || overview?.invoices.overdue ? "!" : "o"}</button>{notificationsOpen ? <div className="finance-notification-panel"><strong>Notificaciones</strong>{overview?.invoices.overdue ? <span>{overview.invoices.overdue} facturas vencidas requieren atencion.</span> : null}{overview?.exceptions.open ? <span>{overview.exceptions.open} excepciones estan pendientes de revision.</span> : null}{!overview?.invoices.overdue && !overview?.exceptions.open ? <span>No hay alertas financieras nuevas.</span> : null}</div> : null}</div><AccountPill fallbackName={agent?.name || "Usuario"} /></div>
           </header>
-          <nav className="finance-tabs" aria-label="Secciones de Finance OS">{tabs.map((tab) => <a key={tab.key} href={tab.key === "resumen" ? "/finance" : `/finance?tab=${tab.key}`} className={tab.key === activeTab ? "active" : ""}>{tab.label}</a>)}</nav>
+          <nav className="finance-tabs" aria-label="Secciones de Finance OS">{tabs.map((tab) => <a key={tab.key} href={tab.key === "resumen" ? "/finance" : `/finance?tab=${tab.key}`} className={tab.key === activeTab ? "active" : ""} aria-current={tab.key === activeTab ? "page" : undefined} onClick={(event) => { event.preventDefault(); selectTab(tab.key); }}>{tab.label}</a>)}</nav>
           {message ? <div className="finance-message">{message}</div> : null}
           {loading ? <div className="finance-loading">Actualizando informacion financiera...</div> : null}
 
