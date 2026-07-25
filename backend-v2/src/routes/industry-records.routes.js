@@ -218,20 +218,47 @@ industryRecordsRouter.delete("/industry-records/brokers/:userId", requireRole(RO
       return res.status(403).json({ error: "Modulo de corredores no habilitado" });
     }
 
-    const broker = await prisma.workspaceUser.findFirst({
+    const requestedId = String(req.params.userId || "");
+    const brokerUser = await prisma.workspaceUser.findFirst({
       where: { id: req.params.userId, tenantId: req.tenantId },
       select: { id: true, name: true, email: true, role: true, jobTitle: true }
     });
-    if (!broker) return res.status(404).json({ error: "Corredor no encontrado" });
 
-    const jobTitle = String(broker.jobTitle || "").toLowerCase();
-    if (broker.role !== "SELLER" && !jobTitle.includes("corredor")) {
+    // Algunos corredores históricos existen solo como ficha (su usuario pudo
+    // haberse eliminado antes). El frontend los muestra igual, por lo que la
+    // baja debe poder limpiar esa ficha sin devolver un falso "no encontrado".
+    const brokerProfiles = await prisma.industryRecord.findMany({
+      where: { tenantId: req.tenantId, recordType: "broker_profile" },
+      select: { id: true, title: true, assignedToId: true, data: true }
+    });
+    const matchingProfiles = brokerProfiles.filter((profile) => {
+      const data = profile.data && typeof profile.data === "object" && !Array.isArray(profile.data) ? profile.data : {};
+      return profile.id === requestedId || profile.assignedToId === requestedId || String(data.userId || "") === requestedId;
+    });
+
+    if (!brokerUser && !matchingProfiles.length) return res.status(404).json({ error: "Corredor no encontrado" });
+
+    const jobTitle = String(brokerUser?.jobTitle || "").toLowerCase();
+    if (brokerUser && brokerUser.role !== "SELLER" && !jobTitle.includes("corredor")) {
       return res.status(400).json({ error: "Solo se pueden eliminar perfiles de corredor desde este modulo" });
     }
 
-    const assignedProperties = await prisma.industryRecord.findMany({
-      where: { tenantId: req.tenantId, recordType: "property", assignedToId: broker.id },
-      select: { id: true, data: true }
+    const brokerIds = new Set([requestedId]);
+    if (brokerUser?.id) brokerIds.add(brokerUser.id);
+    for (const profile of matchingProfiles) {
+      brokerIds.add(profile.id);
+      if (profile.assignedToId) brokerIds.add(profile.assignedToId);
+      const data = profile.data && typeof profile.data === "object" && !Array.isArray(profile.data) ? profile.data : {};
+      if (data.userId) brokerIds.add(String(data.userId));
+    }
+
+    const properties = await prisma.industryRecord.findMany({
+      where: { tenantId: req.tenantId, recordType: "property" },
+      select: { id: true, data: true, assignedToId: true }
+    });
+    const assignedProperties = properties.filter((property) => {
+      const data = property.data && typeof property.data === "object" && !Array.isArray(property.data) ? property.data : {};
+      return brokerIds.has(String(property.assignedToId || "")) || brokerIds.has(String(data.assignedBrokerId || ""));
     });
 
     await prisma.$transaction(async (tx) => {
@@ -253,15 +280,18 @@ industryRecordsRouter.delete("/industry-records/brokers/:userId", requireRole(RO
         });
       }
 
-      await tx.industryRecord.deleteMany({
-        where: { tenantId: req.tenantId, recordType: "broker_profile", assignedToId: broker.id }
-      });
-      await tx.workspaceUser.delete({ where: { id: broker.id } });
+      if (matchingProfiles.length) {
+        await tx.industryRecord.deleteMany({ where: { id: { in: matchingProfiles.map((profile) => profile.id) } } });
+      }
+      if (brokerUser) await tx.workspaceUser.delete({ where: { id: brokerUser.id } });
     });
 
-    await recordAuditLog(req, "BROKER_USER_DELETED", "broker_profile", broker.id, {
-      name: broker.name,
-      email: broker.email,
+    const profileData = matchingProfiles[0]?.data && typeof matchingProfiles[0].data === "object" && !Array.isArray(matchingProfiles[0].data)
+      ? matchingProfiles[0].data
+      : {};
+    await recordAuditLog(req, "BROKER_USER_DELETED", "broker_profile", brokerUser?.id || matchingProfiles[0]?.id || requestedId, {
+      name: brokerUser?.name || cleanText(profileData.name) || matchingProfiles[0]?.title || "Corredor sin usuario",
+      email: brokerUser?.email || cleanText(profileData.email),
       unassignedProperties: assignedProperties.length
     });
     res.json({ ok: true, unassignedProperties: assignedProperties.length });

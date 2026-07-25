@@ -14696,3 +14696,39 @@ textarea:focus {
   .login-card { min-height: auto; align-content: start; gap: 18px; }
   .login-card-foot { margin-top: 4px; }
 }
+
+/* Corredores: acción destructiva clara, legible y separada de la ficha. */
+:root[data-design-system="finance"] .broker-profile-card {
+  border-color: #d5dfdc !important;
+  background: #ffffff !important;
+  box-shadow: 0 7px 18px rgba(28, 48, 46, .05) !important;
+}
+
+:root[data-design-system="finance"] .broker-profile-body :is(strong, span, small) { color: #24212b !important; }
+:root[data-design-system="finance"] .broker-profile-body :is(span, small) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .broker-delete-btn {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 7px;
+  padding: 8px 12px;
+  color: #b42330 !important;
+  border-color: #efb8bd !important;
+  border-radius: 10px;
+  background: #fff1f2 !important;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+:root[data-design-system="finance"] .broker-delete-btn:hover:not(:disabled) {
+  color: #ffffff !important;
+  border-color: #c72d3c !important;
+  background: #d92d3b !important;
+  box-shadow: 0 8px 16px rgba(217, 45, 59, .18);
+}
+
+:root[data-design-system="finance"] .broker-delete-btn:disabled {
+  color: #8d5961 !important;
+  border-color: #ead4d7 !important;
+  background: #f8eaec !important;
+}
