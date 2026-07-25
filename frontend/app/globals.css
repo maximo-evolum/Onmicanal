@@ -13967,3 +13967,58 @@ textarea:focus {
 :root[data-design-system="finance"] .chile-calendar-day small { color: #bd4e61 !important; }
 :root[data-design-system="finance"] :is(.chile-calendar-day em, .chile-calendar-booking b, .chile-calendar-booking em, .chile-calendar-more) { color: #176e67 !important; }
 :root[data-design-system="finance"] .chile-calendar-booking { border-color: #b7e0da !important; background: #e9f8f4 !important; }
+
+/* Campañas: editor y preview claros, con distinción visual sin paneles nocturnos. */
+:root[data-design-system="finance"] :is(.campaign-form-card, .campaign-preview-panel, .campaign-variants-section) {
+  color: #24212b !important;
+  border-color: #d5dfdc !important;
+  background: #f8faf9 !important;
+  box-shadow: 0 10px 24px rgba(28, 48, 46, .06) !important;
+}
+
+:root[data-design-system="finance"] :is(.campaign-form-card, .campaign-preview-panel, .campaign-variants-section) :is(h2, h3, strong, b) { color: #17131f !important; }
+:root[data-design-system="finance"] :is(.campaign-form-card, .campaign-preview-panel, .campaign-variants-section) :is(p, span, small, label) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .campaign-platforms > span,
+:root[data-design-system="finance"] .campaign-form-grid label span,
+:root[data-design-system="finance"] .campaign-preview-header .eyebrow { color: #079b90 !important; }
+
+:root[data-design-system="finance"] .platform-btn {
+  color: #24212b !important;
+  border-color: #d6dfdd !important;
+  background: #f1f4f5 !important;
+}
+
+:root[data-design-system="finance"] .platform-btn small { color: #66717a !important; }
+:root[data-design-system="finance"] .platform-btn.active { border-color: #b995d5 !important; background: #f4ecfb !important; box-shadow: none !important; }
+
+:root[data-design-system="finance"] :is(.campaign-optimization-panel, .campaign-inline-check) {
+  color: #24212b !important;
+  border-color: #d8c7e9 !important;
+  background: #f6f0fb !important;
+}
+
+:root[data-design-system="finance"] :is(.campaign-optimization-panel, .campaign-inline-check) :is(span, small, label) { color: #59666d !important; }
+
+:root[data-design-system="finance"] .campaign-preview-panel { background: #f3f6f5 !important; }
+:root[data-design-system="finance"] .campaign-image-frame { border-color: #d5dfdc !important; background: #e9efed !important; }
+:root[data-design-system="finance"] .campaign-image-placeholder { color: #66717a !important; background: linear-gradient(135deg, #f1ebf7, #e8f6f3) !important; }
+:root[data-design-system="finance"] .campaign-image-placeholder span { color: #4b2d70 !important; }
+
+:root[data-design-system="finance"] .campaign-preview-card-v2 {
+  color: #24212b !important;
+  border-color: #d5dfdc !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .campaign-preview-card-v2.selected { border-color: #8b5fb5 !important; box-shadow: 0 0 0 2px rgba(139, 95, 181, .14) !important; }
+
+:root[data-design-system="finance"] :is(.campaign-loading-panel, .campaign-job-panel) {
+  color: #24212b !important;
+  border-color: #cfc0df !important;
+  background: #f5f0fa !important;
+  box-shadow: none !important;
+}
+
+:root[data-design-system="finance"] :is(.campaign-loading-panel, .campaign-job-panel) :is(strong, small, span) { color: #59666d !important; }
+:root[data-design-system="finance"] .campaign-job-bar { background: #dfe9e7 !important; }
