@@ -14061,3 +14061,43 @@ textarea:focus {
 
 :root[data-design-system="finance"] .pipeline-empty { color: #788480 !important; }
 :root[data-design-system="finance"] :is(.pipeline-next-action, .pipeline-next-action.critical) { color: #3f625f !important; border-color: #b8ded8 !important; background: #edf8f5 !important; }
+
+/* Cuenta activa: mismo identificador corporativo en todos los encabezados. */
+:root[data-design-system="finance"] :is(.module-account-pill, .account-pill, .mobile-account-pill, .agenda-account-pill).account-pill-with-avatar {
+  color: #ffffff !important;
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #4b2d70, #08a99b) !important;
+  box-shadow: 0 12px 28px rgba(8, 169, 155, .2) !important;
+}
+
+:root[data-design-system="finance"] :is(.module-account-pill, .account-pill, .mobile-account-pill, .agenda-account-pill).account-pill-with-avatar strong,
+:root[data-design-system="finance"] :is(.module-account-pill, .account-pill, .mobile-account-pill, .agenda-account-pill).account-pill-with-avatar i { color: #ffffff !important; }
+
+/* El cierre de sesión es una sola cápsula; sin marco ni foco rectangular externo. */
+.inbox-nav-footer {
+  padding-inline: 0 !important;
+  background: transparent !important;
+}
+
+.inbox-nav-logout {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0 !important;
+  outline: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.inbox-nav-logout .logout-button {
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  border-radius: 999px !important;
+  outline: none !important;
+}
+
+.inbox-nav-logout .logout-button:focus-visible {
+  outline: 3px solid rgba(248, 113, 113, .45) !important;
+  outline-offset: 3px !important;
+}
