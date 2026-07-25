@@ -137,6 +137,10 @@ export function LoginPage() {
           <h1>Entrar a la plataforma</h1>
           <div className="meta-line">Ingresa tus credenciales para acceder a la plataforma.</div>
         </div>
+        <div className="login-access-note">
+          <i>✓</i>
+          <span><strong>Tu espacio EVOLUM está listo</strong><small>Accede a tus herramientas, datos y tareas desde un solo lugar.</small></span>
+        </div>
         <form onSubmit={handleSubmit}>
           <input
             type="email"
@@ -156,6 +160,7 @@ export function LoginPage() {
           </button>
           
         </form>
+        <div className="login-card-foot"><i /> Acceso protegido para tu equipo y tu operación.</div>
       </div>
       </div>
     </div>
