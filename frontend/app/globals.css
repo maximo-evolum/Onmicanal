@@ -14452,3 +14452,89 @@ textarea:focus {
   background: linear-gradient(90deg, #643887, #08a99b) !important;
   box-shadow: 0 8px 18px rgba(8, 169, 155, .12);
 }
+
+/* Datos y formularios: construcción de fichas comprensible y consistente en modo claro. */
+:root[data-design-system="finance"] .metadata-settings-main {
+  color: #24212b;
+  background:
+    radial-gradient(circle at 92% 2%, rgba(8, 169, 155, .08), transparent 30%),
+    #f3f6f5;
+}
+
+:root[data-design-system="finance"] :is(.metadata-step-card, .metadata-existing) {
+  color: #24212b !important;
+  border-color: #d5dfdc !important;
+  background: rgba(255, 255, 255, .9) !important;
+  box-shadow: 0 8px 22px rgba(28, 48, 46, .055) !important;
+}
+
+:root[data-design-system="finance"] :is(.metadata-step-card, .metadata-existing) :is(h1, h2, h3, h4, strong, b) { color: #24212b !important; }
+:root[data-design-system="finance"] :is(.metadata-step-card, .metadata-existing) :is(p, small, .muted-copy) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .metadata-preset {
+  color: #24212b !important;
+  border-color: #d9e2e0 !important;
+  background: #f8faf9 !important;
+}
+
+:root[data-design-system="finance"] .metadata-preset:hover,
+:root[data-design-system="finance"] .metadata-preset.selected {
+  border-color: #8b5fb5 !important;
+  background: linear-gradient(135deg, #f4ecfb, #edf8f6) !important;
+}
+
+:root[data-design-system="finance"] .metadata-preset span,
+:root[data-design-system="finance"] :is(.metadata-name-field > span, .metadata-field-row label > span, .metadata-name-field small, .metadata-field-help) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .metadata-field-row {
+  color: #24212b !important;
+  border-color: #d5dfdc !important;
+  background: #f8faf9 !important;
+  box-shadow: 0 5px 14px rgba(28, 48, 46, .04);
+}
+
+:root[data-design-system="finance"] .metadata-field-row > b {
+  color: #4b2d70 !important;
+  border-color: #cdbdde !important;
+  background: #f1e8fa !important;
+}
+
+:root[data-design-system="finance"] .metadata-required { color: #44545c !important; }
+:root[data-design-system="finance"] .metadata-remove { color: #b42330 !important; border-color: #efb8bd !important; background: #fff1f2 !important; }
+
+:root[data-design-system="finance"] .metadata-live-preview {
+  background: linear-gradient(135deg, #f5effa, #eef8f5) !important;
+}
+
+:root[data-design-system="finance"] .metadata-preview-form {
+  border-color: #cbdcda !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .metadata-preview-form > strong { color: #24212b !important; }
+:root[data-design-system="finance"] .metadata-preview-fields label > span { color: #66717a !important; }
+:root[data-design-system="finance"] .metadata-preview-fields label > div {
+  color: #7b8885 !important;
+  border-color: #d5dfdc !important;
+  background: #f8faf9 !important;
+}
+
+:root[data-design-system="finance"] .metadata-publish-card {
+  background: linear-gradient(135deg, #f6effb, #eaf7f4) !important;
+}
+
+:root[data-design-system="finance"] .metadata-safety-toggle {
+  border-color: #b8ded8 !important;
+  background: rgba(255, 255, 255, .82) !important;
+}
+
+:root[data-design-system="finance"] .metadata-safety-toggle strong { color: #24212b !important; }
+:root[data-design-system="finance"] .metadata-safety-toggle small { color: #66717a !important; }
+:root[data-design-system="finance"] .metadata-publish-actions > span { color: #4b2d70 !important; }
+
+:root[data-design-system="finance"] .metadata-schema-list {
+  border-color: #d5dfdc !important;
+  background: #f8faf9 !important;
+}
+
+:root[data-design-system="finance"] .metadata-schema-list article { border-color: #dde5e3 !important; }
