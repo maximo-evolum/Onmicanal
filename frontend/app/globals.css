@@ -13686,6 +13686,41 @@ textarea:focus {
   background: rgba(255, 255, 255, .08) !important;
 }
 
+/* Marca EV: el menú permanece oscuro también en modo claro, por lo que su
+   nombre necesita un color propio y no el texto global de la aplicación. */
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) .inbox-nav-brand strong {
+  color: #ffffff !important;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, .32);
+}
+
+/* Buscador global: el desplegable es una paleta oscura intencional; sus
+   resultados no deben heredar los colores claros del dashboard. */
+:root[data-design-system="finance"] .crm-main-search input {
+  color: #24212b !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .crm-main-search-results {
+  border-color: #6f4698 !important;
+  background: linear-gradient(160deg, #171123, #25183d) !important;
+  box-shadow: 0 16px 34px rgba(24, 13, 43, .28) !important;
+}
+
+:root[data-design-system="finance"] .crm-main-search-results a,
+:root[data-design-system="finance"] .crm-main-search-empty {
+  border-color: rgba(220, 207, 238, .14) !important;
+  background: rgba(255, 255, 255, .055) !important;
+}
+
+:root[data-design-system="finance"] .crm-main-search-results a:hover {
+  border-color: rgba(120, 233, 213, .54) !important;
+  background: linear-gradient(90deg, rgba(100, 56, 135, .84), rgba(8, 169, 155, .28)) !important;
+}
+
+:root[data-design-system="finance"] .crm-main-search-results a strong { color: #ffffff !important; }
+:root[data-design-system="finance"] .crm-main-search-results a small { color: #76e3d2 !important; }
+:root[data-design-system="finance"] :is(.crm-main-search-results a span, .crm-main-search-empty) { color: #d9d2e5 !important; }
+
 :root[data-design-system="finance"] :is(.vertical-card, .vertical-list, .realty-kpi-card, .vertical-hero-stats article, .property-portal-card, .realty-stage-card, .realty-stage-column) {
   color: #24212b !important;
   border-color: #dbe3e1 !important;

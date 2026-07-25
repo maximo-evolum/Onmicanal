@@ -79,6 +79,12 @@ const MODULE_LABELS: Record<string, string> = {
   parts_inventory: "Repuestos",
   mechanic_assignments: "Asignación de mecánicos",
   ready_notifications: "Aviso de retiro",
+  finance_invoices: "Facturas por cobrar",
+  finance_bank_sync: "Cartolas y movimientos",
+  finance_reconciliation: "Conciliación IA",
+  finance_exceptions: "Excepciones financieras",
+  finance_collections: "Cobranza IA",
+  finance_analytics: "Dashboard financiero",
 };
 
 const MODULE_DESCRIPTIONS: Record<string, string> = {
@@ -105,6 +111,12 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
   parts_inventory: "Exclusivo automotriz: stock y compatibilidad de repuestos.",
   mechanic_assignments: "Exclusivo automotriz: órdenes y responsables mecánicos.",
   ready_notifications: "Exclusivo automotriz: avisos de retiro del vehículo.",
+  finance_invoices: "Exclusivo Finance OS: facturas emitidas, saldos y vencimientos.",
+  finance_bank_sync: "Exclusivo Finance OS: cartolas y movimientos bancarios normalizados.",
+  finance_reconciliation: "Exclusivo Finance OS: cruces explicables entre pagos y facturas.",
+  finance_exceptions: "Exclusivo Finance OS: pagos parciales, diferencias y casos a revisar.",
+  finance_collections: "Exclusivo Finance OS: gestión de cobranza y promesas de pago.",
+  finance_analytics: "Exclusivo Finance OS: cartera, flujo de caja y métricas financieras.",
 };
 
 // Claves que existieron como servicios internos del backend. En la consola se
@@ -160,6 +172,12 @@ const PROJECT_MODULE_CATALOG = [
   "parts_inventory",
   "mechanic_assignments",
   "ready_notifications",
+  "finance_invoices",
+  "finance_bank_sync",
+  "finance_reconciliation",
+  "finance_exceptions",
+  "finance_collections",
+  "finance_analytics",
 ];
 
 type ModuleGroup = {
@@ -194,6 +212,12 @@ const MODULE_GROUPS: ModuleGroup[] = [
     industries: ["GASTRONOMY"],
     modules: [],
     infoOnly: true,
+  },
+  {
+    title: "EVOLUM Finance OS",
+    description: "Vertical financiera independiente: cuentas por cobrar, cartolas, conciliación, excepciones, cobranza y analítica financiera.",
+    industries: ["FINANCE"],
+    modules: ["finance_invoices", "finance_bank_sync", "finance_reconciliation", "finance_exceptions", "finance_collections", "finance_analytics"],
   },
   {
     title: "Salud clínica",
@@ -235,6 +259,7 @@ function industryCodeForTenant(industry?: string | null) {
   if (value.includes("DENTAL") || value.includes("ODONTO")) return "DENTAL";
   if (value.includes("VETERIN")) return "VETERINARY";
   if (value.includes("AUTOMOT") || value.includes("TALLER")) return "AUTOMOTIVE";
+  if (value.includes("FINANCE") || value.includes("FINANZ") || value.includes("CONTABLE") || value.includes("COBRANZ")) return "FINANCE";
   if (value.includes("HEALTH") || value.includes("SALUD") || value.includes("CLINIC")) return "HEALTH";
   return "GENERAL";
 }
@@ -1606,7 +1631,7 @@ export default function AdminPage() {
                     <div>
                       <strong>Servicios / módulos habilitados</strong>
                       <div className="meta-line">
-                        Se muestran el Core EVOLUM y los módulos propios del rubro de esta cuenta. Cada cambio se guarda de inmediato.
+                        Se muestran el Core EVOLUM y los módulos propios del rubro de esta cuenta. Selecciona los cambios y confírmalos con “Guardar módulos”.
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -1640,7 +1665,7 @@ export default function AdminPage() {
                               <article className="module-toggle module-catalog-only" key={module}>
                                 <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
                                 {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
-                                <small>Catálogo de {group.title}</small>
+                                <small>Bloqueado por rubro · exclusivo de {group.title}</small>
                               </article>
                             ) : (
                               <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>
