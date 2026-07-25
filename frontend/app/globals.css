@@ -14358,3 +14358,97 @@ textarea:focus {
   background: #edf9f5 !important;
   color: #1d5a53 !important;
 }
+
+/* Dashboard ejecutivo: contraste cómodo para lectura diaria y gráficas claras. */
+:root[data-design-system="finance"] .executive-dashboard {
+  color: #24212b;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(8, 169, 155, .09), transparent 30%),
+    radial-gradient(circle at 8% 10%, rgba(139, 95, 181, .08), transparent 32%),
+    #f3f6f5;
+}
+
+:root[data-design-system="finance"] .executive-dashboard-header {
+  border-color: #d5dfdc !important;
+  background: rgba(255, 255, 255, .86) !important;
+  box-shadow: 0 8px 22px rgba(28, 48, 46, .05);
+}
+
+:root[data-design-system="finance"] .executive-dashboard-header :is(h1, h2, strong) { color: #17131f !important; }
+:root[data-design-system="finance"] .executive-dashboard-header p { color: #66717a !important; }
+
+:root[data-design-system="finance"] :is(.executive-kpi-card, .executive-panel) {
+  color: #24212b !important;
+  border-color: #d5dfdc !important;
+  background: rgba(255, 255, 255, .9) !important;
+  box-shadow: 0 8px 22px rgba(28, 48, 46, .055) !important;
+}
+
+:root[data-design-system="finance"] .executive-kpi-card {
+  overflow: hidden;
+}
+
+:root[data-design-system="finance"] .executive-kpi-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, #8b5fb5, #08a99b);
+  opacity: .68;
+}
+
+:root[data-design-system="finance"] .executive-kpi-card :is(strong, b) { color: #17131f !important; }
+:root[data-design-system="finance"] .executive-kpi-card span { color: #657286 !important; }
+:root[data-design-system="finance"] .executive-kpi-card small { color: #34776d !important; }
+
+:root[data-design-system="finance"] .executive-kpi-icon {
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #4b2d70, #08a99b) !important;
+  box-shadow: 0 8px 18px rgba(8, 169, 155, .18) !important;
+}
+
+:root[data-design-system="finance"] .executive-sparkline i,
+:root[data-design-system="finance"] .executive-line-chart i {
+  background: linear-gradient(180deg, #08a99b, #8b5fb5) !important;
+}
+
+:root[data-design-system="finance"] .executive-panel-head {
+  border-bottom: 1px solid #e0e8e6;
+  padding-bottom: 12px;
+}
+
+:root[data-design-system="finance"] .executive-panel-head h2 { color: #24212b !important; }
+:root[data-design-system="finance"] .executive-panel-head :is(span, a) { color: #087f78 !important; }
+
+:root[data-design-system="finance"] .executive-line-chart {
+  background-color: #fbfcfc !important;
+  background-image:
+    linear-gradient(rgba(87, 111, 108, .12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(87, 111, 108, .10) 1px, transparent 1px) !important;
+}
+
+:root[data-design-system="finance"] .executive-line-chart i b {
+  border-color: #e3d2f2 !important;
+  background: #6a3c91 !important;
+}
+
+:root[data-design-system="finance"] .executive-axis { color: #74807d !important; }
+
+:root[data-design-system="finance"] .executive-donut::after { background: #f8faf9 !important; }
+:root[data-design-system="finance"] .executive-donut strong { color: #24212b !important; }
+:root[data-design-system="finance"] .executive-donut span { color: #66717a !important; }
+
+:root[data-design-system="finance"] :is(.executive-source-list div, .executive-list div) {
+  color: #52616a !important;
+  background: #f8faf9 !important;
+}
+
+:root[data-design-system="finance"] .executive-source-list div strong { color: #24212b !important; }
+:root[data-design-system="finance"] .executive-list b { color: #4b2d70 !important; }
+:root[data-design-system="finance"] .executive-list small { color: #66717a !important; }
+
+:root[data-design-system="finance"] .executive-funnel div {
+  color: #ffffff !important;
+  background: linear-gradient(90deg, #643887, #08a99b) !important;
+  box-shadow: 0 8px 18px rgba(8, 169, 155, .12);
+}
