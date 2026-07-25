@@ -14101,3 +14101,121 @@ textarea:focus {
   outline: 3px solid rgba(248, 113, 113, .45) !important;
   outline-offset: 3px !important;
 }
+
+/* Inbox: tres columnas claras y separadas, sin restos nocturnos en modo claro. */
+:root[data-design-system="finance"] .inbox-app-header {
+  border-color: #d5dfdc !important;
+  background: #f9fbfa !important;
+}
+
+:root[data-design-system="finance"] .inbox-app-header :is(h1, h2, strong) { color: #17131f !important; }
+:root[data-design-system="finance"] .inbox-app-header p { color: #66717a !important; }
+
+:root[data-design-system="finance"] .inbox-account-box {
+  background: linear-gradient(135deg, #4b2d70, #08a99b) !important;
+  box-shadow: 0 12px 28px rgba(8, 169, 155, .2) !important;
+}
+
+:root[data-design-system="finance"] .inbox-account-box strong { color: #ffffff !important; }
+
+:root[data-design-system="finance"] .inbox-channel-tabs button {
+  color: #4b2d70 !important;
+  border-color: #cdbdde !important;
+  background: #f7f2fb !important;
+}
+
+:root[data-design-system="finance"] .inbox-channel-tabs button.active,
+:root[data-design-system="finance"] .inbox-channel-tabs button:hover {
+  color: #ffffff !important;
+  border-color: #8b5fb5 !important;
+  background: linear-gradient(135deg, #643887, #08a99b) !important;
+}
+
+:root[data-design-system="finance"] .inbox-channel-tabs button b { color: #4b2d70 !important; }
+:root[data-design-system="finance"] .inbox-channel-tabs button.active b,
+:root[data-design-system="finance"] .inbox-channel-tabs button:hover b { color: #ffffff !important; }
+
+:root[data-design-system="finance"] :is(.inbox-chat-feed-panel, .inbox-contact-panel, .inbox-chat-stage) {
+  color: #24212b !important;
+  border-color: #d5dfdc !important;
+  background: #f8faf9 !important;
+  box-shadow: 0 8px 20px rgba(28, 48, 46, .06) !important;
+}
+
+:root[data-design-system="finance"] .inbox-chat-feed-head { border-color: #dbe4e2 !important; background: #f8faf9 !important; }
+:root[data-design-system="finance"] .inbox-chat-feed-head :is(h2, strong) { color: #24212b !important; }
+:root[data-design-system="finance"] .inbox-chat-feed-head .meta-line { color: #66717a !important; }
+
+:root[data-design-system="finance"] .inbox-chat-feed-item {
+  color: #24212b !important;
+  border-color: #dde5e3 !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .inbox-chat-feed-item.active,
+:root[data-design-system="finance"] .inbox-chat-feed-item:hover {
+  border-color: #b995d5 !important;
+  background: #f4ecfb !important;
+}
+
+:root[data-design-system="finance"] .inbox-chat-feed-copy strong { color: #24212b !important; }
+:root[data-design-system="finance"] :is(.inbox-chat-feed-copy small, .inbox-chat-feed-copy em, .inbox-chat-feed-empty) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .inbox-chat-stage .chat-header,
+:root[data-design-system="finance"] .inbox-chat-stage .composer {
+  border-color: #dce5e3 !important;
+  background: #f8faf9 !important;
+}
+
+:root[data-design-system="finance"] .inbox-chat-stage .chat-body {
+  background: linear-gradient(180deg, #f4f7f6, #eef3f1) !important;
+}
+
+:root[data-design-system="finance"] .message-row.inbound .message-bubble {
+  color: #24212b !important;
+  border-color: #d7e0de !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .message-row.outbound .message-bubble {
+  color: #ffffff !important;
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #087f98, #08a99b) !important;
+  box-shadow: 0 8px 18px rgba(8, 169, 155, .18) !important;
+}
+
+:root[data-design-system="finance"] .message-meta { color: #74807d !important; }
+
+:root[data-design-system="finance"] .suggested-reply-card {
+  border-color: #cdbdde !important;
+  background: #f6f0fb !important;
+}
+
+:root[data-design-system="finance"] .suggested-reply-card :is(strong, p) { color: #4b2d70 !important; }
+
+:root[data-design-system="finance"] .inbox-contact-panel .active-conversation-panel { background: #f8faf9 !important; }
+:root[data-design-system="finance"] :is(.active-conversation-copy h2, .active-conversation-panel.empty h2, .active-conversation-signal strong) { color: #24212b !important; }
+:root[data-design-system="finance"] :is(.active-conversation-copy p, .active-conversation-panel.empty p, .active-conversation-signal span) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .active-conversation-signal {
+  border-color: #cdbdde !important;
+  background: #f5effa !important;
+}
+
+:root[data-design-system="finance"] .active-conversation-actions .secondary-btn {
+  color: #4b2d70 !important;
+  border-color: #cdbdde !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .active-conversation-actions .success-btn {
+  color: #0c765f !important;
+  border-color: #a9dccc !important;
+  background: #e9f8f1 !important;
+}
+
+:root[data-design-system="finance"] .active-conversation-actions .danger-btn {
+  color: #b42330 !important;
+  border-color: #efb8bd !important;
+  background: #fff1f2 !important;
+}
