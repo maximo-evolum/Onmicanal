@@ -13669,3 +13669,45 @@ textarea:focus {
 
 :root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) :is(a, button) { color: #f8f7fb !important; }
 :root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) :is(a:hover, a.active, a[aria-current="page"], button:hover) { background: linear-gradient(90deg, rgba(100, 56, 135, .82), rgba(8, 169, 155, .38)) !important; }
+
+/* Contraste explícito: evita texto oscuro sobre los elementos que permanecen
+   intencionalmente oscuros (navegación y métricas de lectura rápida). */
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) :is(.inbox-unified-nav-list a strong, .inbox-nav-action strong, .inbox-nav-footer strong) {
+  color: #f8f7fb !important;
+}
+
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) :is(.inbox-unified-nav-list a small, .inbox-nav-action small, .inbox-nav-footer small, .inbox-nav-footer p) {
+  color: #cfc7df !important;
+}
+
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) .inbox-nav-footer :is(button, a) {
+  color: #ffffff !important;
+  border-color: rgba(180, 146, 225, .58) !important;
+  background: rgba(255, 255, 255, .08) !important;
+}
+
+:root[data-design-system="finance"] :is(.vertical-card, .vertical-list, .realty-kpi-card, .vertical-hero-stats article, .property-portal-card, .realty-stage-card, .realty-stage-column) {
+  color: #24212b !important;
+  border-color: #dbe3e1 !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 26px rgba(28, 48, 46, .07) !important;
+}
+
+:root[data-design-system="finance"] :is(.vertical-card, .vertical-list, .realty-kpi-card, .vertical-hero-stats article, .property-portal-card, .realty-stage-card, .realty-stage-column) :is(h2, h3, strong, b) {
+  color: #15121c !important;
+}
+
+:root[data-design-system="finance"] :is(.vertical-card, .vertical-list, .realty-kpi-card, .vertical-hero-stats article, .property-portal-card, .realty-stage-card, .realty-stage-column) :is(p, small, label, span) {
+  color: #66717a !important;
+}
+
+:root[data-design-system="finance"] :is(.vertical-card, .vertical-list, .realty-kpi-card, .vertical-hero-stats article) > span,
+:root[data-design-system="finance"] :is(.vertical-card-head, .vertical-hero) > div > span {
+  color: #8b5fb5 !important;
+}
+
+:root[data-design-system="finance"] .realty-kpi-card {
+  border-top: 3px solid #08a99b !important;
+}
+
+:root[data-design-system="finance"] .realty-kpi-card small { color: #087f98 !important; }
