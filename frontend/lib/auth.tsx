@@ -113,8 +113,27 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-layout">
+        <section className="login-brand-panel" aria-label="Acerca de EVOLUM OS">
+          <div className="login-brand-head">
+            <img className="login-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
+            <div><strong>EVOLUM <em>OS</em></strong><span>El Sistema Operativo para Empresas</span></div>
+          </div>
+          <div className="login-brand-copy">
+            <p className="eyebrow">Operación en un solo lugar</p>
+            <h1>Haz crecer tu empresa. Nosotros nos encargamos del resto.</h1>
+            <p>Centraliza clientes, procesos, documentos, automatizaciones y decisiones para que tu equipo avance con claridad.</p>
+          </div>
+          <div className="login-benefit-list">
+            <div><b>✓</b><span><strong>Todo conectado</strong><small>CRM, agenda, conversaciones y datos operativos.</small></span></div>
+            <div><b>↗</b><span><strong>Decisiones con contexto</strong><small>Indicadores claros para priorizar cada día.</small></span></div>
+            <div><b>◈</b><span><strong>IA que trabaja contigo</strong><small>Automatiza seguimiento sin perder el control humano.</small></span></div>
+          </div>
+          <div className="login-brand-footer"><i /> Plataforma segura y preparada para crecer contigo.</div>
+        </section>
+
       <div className="login-card">
-        <div>
+        <div className="login-card-intro">
           <h1>Entrar a la plataforma</h1>
           <div className="meta-line">Ingresa tus credenciales para acceder a la plataforma.</div>
         </div>
@@ -137,6 +156,7 @@ export function LoginPage() {
           </button>
           
         </form>
+      </div>
       </div>
     </div>
   );
