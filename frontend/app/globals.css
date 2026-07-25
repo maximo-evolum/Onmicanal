@@ -14219,3 +14219,142 @@ textarea:focus {
   border-color: #efb8bd !important;
   background: #fff1f2 !important;
 }
+
+/* Configuración de Agente: el asistente de puesta en marcha conserva la misma
+   lectura clara del resto de EVOLUM, sin arrastrar las superficies nocturnas
+   con las que fue creado originalmente. */
+:root[data-design-system="finance"] .onboarding-pro-page {
+  color: #24212b;
+  background:
+    radial-gradient(circle at 84% 3%, rgba(8, 169, 155, .09), transparent 27%),
+    radial-gradient(circle at 8% 17%, rgba(139, 95, 181, .10), transparent 31%),
+    #f3f6f5;
+}
+
+:root[data-design-system="finance"] .onboarding-pro-hero {
+  border: 1px solid #d5dfdc;
+  border-radius: 24px;
+  padding: clamp(20px, 3vw, 32px);
+  background: rgba(255, 255, 255, .86);
+  box-shadow: 0 12px 30px rgba(28, 48, 46, .06);
+}
+
+:root[data-design-system="finance"] .onboarding-pro-hero :is(h1, h2, h3, strong) { color: #17131f !important; }
+:root[data-design-system="finance"] .onboarding-pro-hero p { color: #66717a !important; }
+
+:root[data-design-system="finance"] :is(.onboarding-status-panel article, .onboarding-core-panel, .onboarding-core-card, .onboarding-step, .onboarding-main-card, .onboarding-side-card) {
+  color: #24212b !important;
+  border-color: #d5dfdc !important;
+  box-shadow: 0 8px 22px rgba(28, 48, 46, .055) !important;
+}
+
+:root[data-design-system="finance"] .onboarding-status-panel article {
+  min-height: 96px;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .onboarding-status-panel article::before {
+  content: "";
+  display: block;
+  width: 34px;
+  height: 3px;
+  margin-bottom: 11px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #8b5fb5, #08a99b);
+}
+
+:root[data-design-system="finance"] .onboarding-status-panel :is(strong, b) { color: #24212b !important; }
+:root[data-design-system="finance"] .onboarding-status-panel span { color: #66717a !important; }
+
+:root[data-design-system="finance"] .onboarding-core-panel {
+  background: linear-gradient(135deg, #f5effa 0%, #f9fbfa 48%, #eaf7f4 100%) !important;
+}
+
+:root[data-design-system="finance"] .onboarding-core-card {
+  background: rgba(255, 255, 255, .9) !important;
+}
+
+:root[data-design-system="finance"] .onboarding-core-card :is(h2, h3, h4, strong, b) { color: #24212b !important; }
+:root[data-design-system="finance"] .onboarding-core-card .meta-line,
+:root[data-design-system="finance"] .onboarding-core-card :is(span, small) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .document-upload-box.compact,
+:root[data-design-system="finance"] .upload-zone {
+  border-color: #b995d5 !important;
+  background: linear-gradient(135deg, #f6effb, #edf8f6) !important;
+}
+
+:root[data-design-system="finance"] .document-upload-box.compact :is(strong, b) { color: #4b2d70 !important; }
+
+:root[data-design-system="finance"] :is(.onboarding-core-list a, .onboarding-core-list article, .integration-status-list article, .file-list-grid article, .review-summary-box, .apply-options-box, .review-section) {
+  color: #24212b !important;
+  border-color: #dbe4e2 !important;
+  background: #f8faf9 !important;
+}
+
+:root[data-design-system="finance"] :is(.onboarding-core-list a, .onboarding-core-list article, .integration-status-list article) :is(strong, b) { color: #24212b !important; }
+:root[data-design-system="finance"] :is(.onboarding-core-list span, .integration-status-list small, .file-list-grid span, .review-summary-box p) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .metadata-chip-grid span {
+  color: #4b2d70 !important;
+  border-color: #d1bee5 !important;
+  background: #f4ecfb !important;
+}
+
+:root[data-design-system="finance"] .onboarding-step {
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .onboarding-step :is(strong, b) { color: #24212b !important; }
+:root[data-design-system="finance"] .onboarding-step small { color: #66717a !important; }
+:root[data-design-system="finance"] .onboarding-step span {
+  color: #4b2d70 !important;
+  background: #f0e7f9 !important;
+}
+
+:root[data-design-system="finance"] .onboarding-step.active {
+  border-color: #8b5fb5 !important;
+  background: linear-gradient(135deg, #f4ecfb, #edf8f6) !important;
+  box-shadow: 0 0 0 3px rgba(139, 95, 181, .12), 0 10px 24px rgba(28, 48, 46, .08) !important;
+}
+
+:root[data-design-system="finance"] .onboarding-step.done { border-color: #9bd8ce !important; }
+
+:root[data-design-system="finance"] .onboarding-main-card {
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .onboarding-side-card {
+  background: linear-gradient(160deg, #f6effb, #eef8f5) !important;
+}
+
+:root[data-design-system="finance"] :is(.onboarding-main-card, .onboarding-side-card) :is(h1, h2, h3, h4, strong, b) { color: #24212b !important; }
+:root[data-design-system="finance"] :is(.onboarding-main-card, .onboarding-side-card) :is(p, small, li, .meta-line, .block-label) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .chip-button {
+  color: #4b2d70 !important;
+  border-color: #d1bee5 !important;
+  background: #f7f2fb !important;
+}
+
+:root[data-design-system="finance"] .chip-button:hover {
+  color: #ffffff !important;
+  border-color: #4b2d70 !important;
+  background: #4b2d70 !important;
+}
+
+:root[data-design-system="finance"] .onboarding-table-scroll {
+  border-color: #d5dfdc !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] .onboarding-table-scroll :is(th, td) {
+  color: #24212b !important;
+  border-color: #e1e8e6 !important;
+}
+
+:root[data-design-system="finance"] .onboarding-status-message {
+  border-color: #b6dfd5 !important;
+  background: #edf9f5 !important;
+  color: #1d5a53 !important;
+}
