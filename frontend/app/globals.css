@@ -14022,3 +14022,42 @@ textarea:focus {
 
 :root[data-design-system="finance"] :is(.campaign-loading-panel, .campaign-job-panel) :is(strong, small, span) { color: #59666d !important; }
 :root[data-design-system="finance"] .campaign-job-bar { background: #dfe9e7 !important; }
+
+/* Pipeline: etapas, resumen mensual y oportunidades en la misma lectura clara. */
+:root[data-design-system="finance"] .pipeline-month-summary {
+  color: #24212b !important;
+  border-color: #cdbdde !important;
+  background: linear-gradient(135deg, #f5f0fa, #eef7f5) !important;
+  box-shadow: 0 8px 20px rgba(28, 48, 46, .06) !important;
+}
+
+:root[data-design-system="finance"] .pipeline-month-summary div {
+  border: 1px solid #dde5e3;
+  background: rgba(255, 255, 255, .72) !important;
+}
+
+:root[data-design-system="finance"] .pipeline-month-summary :is(strong, b) { color: #17131f !important; }
+:root[data-design-system="finance"] .pipeline-month-summary :is(span, small) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .pipeline-board-pro .pipeline-column {
+  color: #24212b !important;
+  border-color: #d7e0de !important;
+  background: #f8faf9 !important;
+  box-shadow: 0 8px 20px rgba(28, 48, 46, .05) !important;
+}
+
+:root[data-design-system="finance"] .pipeline-board-pro .pipeline-column-header :is(strong, b) { color: #4b2d70 !important; }
+:root[data-design-system="finance"] .pipeline-board-pro .pipeline-column-header small { color: #66717a !important; }
+
+:root[data-design-system="finance"] .pipeline-board-pro .pipeline-card {
+  color: #24212b !important;
+  border-color: #d8e1df !important;
+  background: #ffffff !important;
+  box-shadow: 0 5px 14px rgba(28, 48, 46, .06) !important;
+}
+
+:root[data-design-system="finance"] .pipeline-board-pro .pipeline-card :is(strong, b) { color: #17131f !important; }
+:root[data-design-system="finance"] .pipeline-board-pro .pipeline-card :is(p, span, small, .meta-line) { color: #66717a !important; }
+
+:root[data-design-system="finance"] .pipeline-empty { color: #788480 !important; }
+:root[data-design-system="finance"] :is(.pipeline-next-action, .pipeline-next-action.critical) { color: #3f625f !important; border-color: #b8ded8 !important; background: #edf8f5 !important; }
