@@ -14,6 +14,9 @@ export function ThemeBootstrap() {
 
     document.documentElement.dataset.theme = THEMES.has(theme || "") ? theme || "purple" : "purple";
     document.documentElement.dataset.bgTheme = BACKGROUNDS.has(background || "") ? background || "nocturne" : "nocturne";
+    // EVOLUM OS usa una única base visual clara y operacional. Las paletas
+    // guardadas continúan definiendo los acentos, sin cambiar la legibilidad.
+    document.documentElement.dataset.designSystem = "finance";
   }, []);
 
   return null;

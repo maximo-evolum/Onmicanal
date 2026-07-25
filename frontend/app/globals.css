@@ -840,6 +840,165 @@ a {
   .metadata-settings-main { padding: 14px; }
 }
 
+/* --------------------------------------------------------------------------
+   Sistema visual EVOLUM OS
+   Base clara, sobria y orientada a operación. Se aplica transversalmente a
+   CRM, módulos core y verticales sin cambiar rutas, permisos ni flujos.
+   -------------------------------------------------------------------------- */
+:root[data-design-system="finance"] {
+  --bg: #f5f7f6;
+  --bg-deep: #edf2f0;
+  --bg-soft: #e5ece9;
+  --card: #ffffff;
+  --card-strong: #ffffff;
+  --text: #24212b;
+  --text-strong: #15121c;
+  --text-muted: #66717a;
+  --text-faint: #89939b;
+  --border: #dbe3e1;
+  --border-strong: #c8d3d0;
+  --primary: #643887;
+  --accent: #08a99b;
+  --theme-primary: #643887;
+  --theme-primary-2: #08a99b;
+  --theme-accent: #08a99b;
+  --theme-panel: #ffffff;
+  --theme-surface: #f5f7f6;
+  --theme-surface-strong: #ffffff;
+  --theme-surface-soft: #eef7f5;
+  --theme-card-bg: #ffffff;
+  --theme-border: #dbe3e1;
+  --theme-border-strong: #c8d3d0;
+  --theme-shadow: #18312f;
+  --theme-glow: rgba(8, 169, 155, .16);
+  --shadow-sm: 0 10px 26px rgba(28, 48, 46, .07);
+}
+
+:root[data-design-system="finance"] body {
+  color: var(--text);
+  background: #f5f7f6 !important;
+}
+
+:root[data-design-system="finance"] :is(.module-with-menu-shell, .vertical-shell, .executive-shell, .pipeline-pro-shell, .inbox-unified-shell, .workflow-shell) {
+  background: #f5f7f6 !important;
+  color: var(--text);
+}
+
+:root[data-design-system="finance"] :is(.vertical-main, .pipeline-pro-main, .inbox-unified-main, .executive-main, .workflow-page, .phase5-page, .module-page, .dashboard-page, .reports-page, .connections-page, .crm-main-page) {
+  color: var(--text);
+  background: #f5f7f6 !important;
+}
+
+/* Barra EV: conserva el contraste de navegación, pero adopta el acento teal. */
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav, .executive-sidebar) {
+  background: linear-gradient(180deg, #14111f 0%, #22173b 58%, #171322 100%) !important;
+  border-color: rgba(119, 73, 158, .48) !important;
+}
+
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) :is(a, button) {
+  color: #f8f7fb;
+}
+
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) :is(a:hover, a.active, a[aria-current="page"], button:hover) {
+  background: linear-gradient(90deg, rgba(100, 56, 135, .82), rgba(8, 169, 155, .38)) !important;
+}
+
+/* Encabezados de todos los módulos: una superficie de producto uniforme. */
+:root[data-design-system="finance"] :is(.module-app-header, .vertical-hero, .crm-main-topbar, .pipeline-pro-topbar, .executive-topbar, .inbox-unified-topbar, .workflow-hero, .reports-page > header, .connections-header) {
+  color: var(--text);
+  border-color: var(--border) !important;
+}
+
+:root[data-design-system="finance"] :is(.module-app-header, .vertical-hero, .crm-main-topbar, .pipeline-pro-topbar, .executive-topbar, .inbox-unified-topbar) {
+  background: #ffffff !important;
+  box-shadow: 0 1px 0 rgba(25, 45, 43, .05), 0 12px 28px rgba(31, 55, 52, .05);
+}
+
+:root[data-design-system="finance"] :is(h1, h2, h3, h4, strong, b) { color: var(--text-strong); }
+:root[data-design-system="finance"] :is(p, small, label, .muted, .text-muted) { color: var(--text-muted); }
+
+/* Tarjetas, tablas, paneles y zonas de operación compartidas. */
+:root[data-design-system="finance"] :is(
+  .card, .panel, .dashboard-card, .metric-card, .stat-card, .summary-card,
+  .workflow-card, .workflow-overview article, .reports-section, .reports-metric-card,
+  .connection-command-strip article, .connection-summary-grid article,
+  .pipeline-column, .pipeline-insights-panel article, .realty-property-match,
+  .realty-buyer-item, .realty-match-panel, .workshop-history-owner,
+  .workshop-history-list article, .property-buyer-matches, .profile-settings-panel,
+  .phase5-card, .module-help-card, .metadata-card
+) {
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+  background: #ffffff !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+:root[data-design-system="finance"] :is(.workflow-card, .reports-section, .connection-command-strip article, .profile-settings-panel, .phase5-card) {
+  border-radius: 16px;
+}
+
+:root[data-design-system="finance"] :is(.metric-card, .stat-card, .summary-card, .workflow-overview article, .reports-metric-card) {
+  border-top: 3px solid var(--theme-accent) !important;
+}
+
+:root[data-design-system="finance"] :is(table, .data-table, .finance-table) {
+  color: var(--text);
+  background: #fff;
+}
+
+:root[data-design-system="finance"] :is(th, .table-head) {
+  color: #52605f !important;
+  background: #edf4f2 !important;
+}
+
+:root[data-design-system="finance"] :is(td, th, .table-row, .list-row) {
+  border-color: #e2e9e7 !important;
+}
+
+/* Controles legibles y acciones de operación: turquesa para actuar, morado para estructura. */
+:root[data-design-system="finance"] :is(input, select, textarea) {
+  color: var(--text) !important;
+  border-color: var(--border-strong) !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+:root[data-design-system="finance"] :is(input, select, textarea)::placeholder { color: #93a09e; }
+
+:root[data-design-system="finance"] :is(.primary-btn, .btn-primary, .action-primary, .submit-btn, .finance-primary, button[type="submit"]) {
+  color: #fff !important;
+  border-color: #078f84 !important;
+  background: linear-gradient(135deg, #08a99b, #087f98) !important;
+  box-shadow: 0 8px 18px rgba(8, 169, 155, .19) !important;
+}
+
+:root[data-design-system="finance"] :is(.ghost-btn, .secondary-btn, .btn-secondary, .outline-btn) {
+  color: #4d2d70 !important;
+  border-color: #cdbdde !important;
+  background: #fff !important;
+}
+
+:root[data-design-system="finance"] :is(.tag, .badge, .pill, .workflow-tag, .run-pill) {
+  color: #14736b !important;
+  border-color: #bfe0dc !important;
+  background: #e8f7f4 !important;
+}
+
+:root[data-design-system="finance"] :is(.workflow-notice, .analytics-loading-strip) {
+  color: #315c58 !important;
+  border-color: #bfe0dc !important;
+  background: #edf9f7 !important;
+}
+
+/* La vertical financiera mantiene sus tarjetas específicas; las demás reciben la misma base. */
+:root[data-design-system="finance"] :is(.finance-shell, .finance-workspace) { background: #f5f7f6 !important; }
+
+@media (max-width: 700px) {
+  :root[data-design-system="finance"] :is(.vertical-main, .pipeline-pro-main, .inbox-unified-main, .executive-main, .workflow-page, .phase5-page, .module-page, .dashboard-page, .reports-page, .connections-page, .crm-main-page) {
+    background: #f5f7f6 !important;
+  }
+}
+
 /* EVOLUM Finance OS: a vertical for order-to-cash, deliberately separate from
    the generic payments module and from all other industry data. */
 .finance-shell {
@@ -944,6 +1103,26 @@ a {
 .finance-agent-safeguards { grid-column: 1 / -1; }.finance-agent-safeguards > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }.finance-agent-safeguards span { padding: 11px; border: 1px solid rgba(45, 212, 191, .2); border-radius: 10px; color: #c7d5e8; font-size: 12px; line-height: 1.45; }
 @media (max-width: 900px) { .finance-agent-layout { grid-template-columns: 1fr; }.finance-agent-safeguards > div { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .finance-agent-title-row { display: grid; }.finance-agent-title-row .primary-btn { width: 100%; } }
+
+/* Finance OS visual system. It intentionally follows the supplied mockup:
+   light financial workspace, dark navigation, teal actions and restrained
+   purple as a structural accent. It does not alter the shared EV navigation. */
+.finance-shell { background: #f5f7f6; }
+.finance-workspace { width: 100%; max-width: 1320px; padding: 0 32px 64px; color: #17131f; background: #f5f7f6; }
+.finance-header { position: sticky; top: 0; z-index: 8; width: calc(100% + 64px); margin: 0 -32px 0; padding: 17px 32px; border: 0; border-bottom: 1px solid #d2dbd7; border-radius: 0; background: rgba(255,255,255,.95); box-shadow: none; backdrop-filter: blur(12px); }
+.finance-title { min-width: 200px; }.finance-header > .finance-title > span { color: #0891b2; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; letter-spacing: .12em; }.finance-header h1 { margin: 4px 0 2px; color: #17131f; font-size: 23px; line-height: 1.12; }.finance-header p { color: #5b5768; font-size: 13px; }
+.finance-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }.finance-search { position: relative; display: block; width: min(350px, 34vw); }.finance-search > span { position: absolute; z-index: 1; left: 13px; top: 50%; color: #5b5768; font-size: 10px; font-weight: 800; transform: translateY(-50%); text-transform: uppercase; letter-spacing: .04em; }.finance-search input { width: 100%; padding: 10px 13px 10px 60px; border: 1px solid #d2dbd7; border-radius: 999px; outline: none; color: #17131f; background: #f5f7f6; font-size: 12px; }.finance-search input:focus { border-color: #0891b2; box-shadow: 0 0 0 3px rgba(8,145,178,.12); }
+.finance-notification-wrap { position: relative; }.finance-bell { display: grid; width: 35px; height: 35px; place-items: center; border: 1px solid #d2dbd7; border-radius: 50%; color: #4b3b8c; background: #fff; font-weight: 900; }.finance-bell:hover { border-color: #0891b2; color: #0891b2; }.finance-notification-panel { position: absolute; top: 43px; right: 0; display: grid; gap: 8px; width: 270px; padding: 14px; border: 1px solid #d2dbd7; border-radius: 14px; color: #17131f; background: #fff; box-shadow: 0 16px 40px rgba(21,14,38,.16); }.finance-notification-panel > strong { color: #5b5768; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }.finance-notification-panel > span { padding-top: 8px; border-top: 1px solid #eaeFec; font-size: 12px; }
+.finance-header .account-pill { color: #17131f; border-color: #d2dbd7; background: #fff; }
+.finance-tabs { gap: 0; margin: 0 0 26px; padding: 22px 0 0; overflow-x: auto; border-bottom: 1px solid #d2dbd7; }.finance-tabs a { margin-right: 24px; padding: 10px 3px 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: #5b5768; background: transparent; font-size: 13px; }.finance-tabs a.active { color: #17131f; border-color: #4b3b8c; background: transparent; }
+.finance-message, .finance-loading { margin: 18px 0; border-color: #b8e1da; color: #176a51; background: #e1f4ea; }.finance-loading { border-color: #d2dbd7; color: #5b5768; background: #fff; }
+.finance-kpis { gap: 14px; }.finance-kpis article, .finance-card { border-color: #d2dbd7; background: #fff; box-shadow: 0 1px 2px rgba(21,14,38,.06), 0 8px 24px rgba(21,14,38,.045); }.finance-kpis article { min-height: 126px; border-radius: 16px; }.finance-kpis small { color: #5b5768; }.finance-kpis strong { color: #17131f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 24px; }.finance-kpis span { color: #1f9d5a; }
+.finance-grid { gap: 20px; }.finance-card { border-radius: 16px; }.finance-card h2, .finance-card h3 { color: #17131f; }.finance-card p { color: #5b5768; }.finance-form input, .finance-form select, .finance-form textarea { border-color: #d2dbd7; color: #17131f; background: #fff; }.finance-form input:focus, .finance-form select:focus, .finance-form textarea:focus { outline: 2px solid rgba(8,145,178,.2); border-color: #0891b2; }.finance-form label { color: #5b5768; }.finance-form .primary-btn, .finance-card .primary-btn, .finance-agent-intro .primary-btn { border: 0; border-radius: 999px; color: #fff; background: #0891b2; box-shadow: none; }.finance-form .primary-btn:hover, .finance-card .primary-btn:hover, .finance-agent-intro .primary-btn:hover { background: #077d9a; transform: translateY(-1px); }
+.finance-upload { border-color: #6552a8; color: #4b3b8c; background: #faf9fd; }.finance-upload input { color: #5b5768; }.finance-note { border-left-color: #0891b2; color: #455063; background: #effafa; }.finance-table > div { border-color: #eaeFec; border-radius: 0; background: #fff; }.finance-table > div:hover { background: #f5f7f6; }.finance-table span { color: #5b5768; }.finance-table > div > b { color: #1f9d5a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }.finance-empty { color: #5b5768; }
+.finance-aging { color: #5b5768; }.finance-aging b { background: linear-gradient(90deg, #22d3ee, #0891b2); }.finance-readiness { border-color: #eaeFec; }.finance-readiness > b.ready { color: #1f9d5a; background: #e1f4ea; }.finance-readiness > b.manual { color: #4b3b8c; background: #eeebfa; }.finance-readiness > b.requires_configuration { color: #a8710a; background: #fbf0dc; }.finance-readiness span { color: #5b5768; }
+.finance-suggestions article { border-color: #d2dbd7; background: #fff; }.finance-suggestions span, .finance-suggestions small { color: #5b5768; }.finance-confidence.high { color: #1f9d5a; background: #e1f4ea; }.finance-confidence.medium { color: #a8710a; background: #fbf0dc; }.finance-confidence.low { color: #c23b3b; background: #fbe7e6; }
+.finance-agent-intro { background: linear-gradient(135deg, #f3fcfb, #faf9ff); }.finance-agent-priorities div { border-color: #0891b2; background: #fff; }.finance-agent-priorities span { color: #5b5768; }.finance-agent-policy { background: #fff; }.finance-toggle { color: #45405a; }.finance-agent-card { border-color: #d2dbd7; background: #fff; box-shadow: 0 1px 2px rgba(21,14,38,.05); }.finance-agent-card h3 { color: #17131f; }.finance-agent-card p { color: #5b5768; }.finance-agent-card-head > span { color: #0891b2; }.finance-agent-status { color: #1f9d5a; background: #e1f4ea; }.finance-agent-status.needs_review, .finance-agent-status.ready_for_review { color: #a8710a; background: #fbf0dc; }.finance-agent-status.waiting_for_data { color: #5b5768; background: #eaeFec; }.finance-agent-metrics div { border-color: #eaeFec; }.finance-agent-metrics small, .finance-agent-next small { color: #5b5768; }.finance-agent-metrics strong { color: #17131f; }.finance-agent-next { background: #f5f7f6; }.finance-agent-next span { color: #382a5c; }.finance-agent-control { color: #5b5768; }.finance-agent-safeguards span { border-color: #d2dbd7; color: #45405a; }
+@media (max-width: 700px) { .finance-workspace { padding: 72px 16px 40px calc(16px + var(--ev-rail-width)); }.finance-header { width: calc(100% + 32px); margin: 0 -16px; padding: 13px 16px; }.finance-header-actions { gap: 8px; }.finance-search { display: none; }.finance-header h1 { font-size: 19px; }.finance-header p { display: none; }.finance-tabs { padding-top: 12px; }.finance-tabs a { margin-right: 17px; } }
 
 .crm-main-module-count {
   min-width: 38px;
@@ -13397,3 +13576,96 @@ textarea:focus {
     margin: 18px 14px;
   }
 }
+
+/* Cierre del sistema visual: se declara al final para prevalecer sobre los
+   estilos históricos de cada vertical, sin tocar su comportamiento. */
+:root[data-design-system="finance"] {
+  --bg: #f5f7f6;
+  --bg-deep: #edf2f0;
+  --bg-soft: #e5ece9;
+  --card: #ffffff;
+  --card-strong: #ffffff;
+  --text: #24212b;
+  --text-strong: #15121c;
+  --text-muted: #66717a;
+  --text-faint: #89939b;
+  --border: #dbe3e1;
+  --border-strong: #c8d3d0;
+  --theme-primary: #643887;
+  --theme-primary-2: #08a99b;
+  --theme-accent: #08a99b;
+  --theme-panel: #ffffff;
+  --theme-surface: #f5f7f6;
+  --theme-surface-strong: #ffffff;
+  --theme-surface-soft: #eef7f5;
+  --theme-card-bg: #ffffff;
+  --theme-border: #dbe3e1;
+  --theme-border-strong: #c8d3d0;
+  --theme-shadow: #18312f;
+  --theme-glow: rgba(8, 169, 155, .16);
+}
+
+:root[data-design-system="finance"] :is(
+  .vertical-shell, .module-with-menu-shell, .executive-shell, .pipeline-pro-shell,
+  .inbox-unified-shell, .workflow-shell, .finance-shell, .finance-workspace,
+  .vertical-main, .pipeline-pro-main, .inbox-unified-main, .executive-main,
+  .workflow-page, .phase5-page, .module-page, .dashboard-page, .reports-page,
+  .connections-page, .crm-main-page
+) {
+  color: #24212b !important;
+  background: #f5f7f6 !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header, .vertical-hero, .crm-main-topbar, .pipeline-pro-topbar,
+  .executive-topbar, .inbox-unified-topbar, .finance-header
+) {
+  color: #24212b !important;
+  border-color: #dbe3e1 !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .card, .panel, .dashboard-card, .metric-card, .stat-card, .summary-card,
+  .workflow-card, .workflow-overview article, .reports-section, .reports-metric-card,
+  .connection-command-strip article, .connection-summary-grid article,
+  .pipeline-column, .pipeline-insights-panel article, .realty-property-match,
+  .realty-buyer-item, .realty-match-panel, .workshop-history-owner,
+  .workshop-history-list article, .property-buyer-matches, .profile-settings-panel,
+  .phase5-card, .module-help-card, .metadata-card, .finance-card, .finance-kpis article
+) {
+  color: #24212b !important;
+  border-color: #dbe3e1 !important;
+  background: #ffffff !important;
+  box-shadow: 0 10px 26px rgba(28, 48, 46, .07) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header h1, .vertical-hero h1, .crm-main-topbar h1,
+  .pipeline-pro-topbar h1, .executive-topbar h1, .inbox-unified-topbar h1,
+  .workflow-page h1, .reports-page h1, .connections-page h1
+) { color: #15121c !important; }
+
+:root[data-design-system="finance"] :is(.module-app-header p, .vertical-hero p, .crm-main-topbar p, .pipeline-pro-topbar p, .executive-topbar p, .inbox-unified-topbar p, .workflow-page p, .reports-page p, .connections-page p) {
+  color: #66717a !important;
+}
+
+:root[data-design-system="finance"] :is(input, select, textarea) {
+  color: #24212b !important;
+  border-color: #c8d3d0 !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] :is(.primary-btn, .btn-primary, .action-primary, .submit-btn, .finance-primary, button[type="submit"]) {
+  color: #ffffff !important;
+  border-color: #078f84 !important;
+  background: linear-gradient(135deg, #08a99b, #087f98) !important;
+}
+
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav, .executive-sidebar) {
+  color: #f8f7fb !important;
+  background: linear-gradient(180deg, #14111f 0%, #22173b 58%, #171322 100%) !important;
+}
+
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) :is(a, button) { color: #f8f7fb !important; }
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) :is(a:hover, a.active, a[aria-current="page"], button:hover) { background: linear-gradient(90deg, rgba(100, 56, 135, .82), rgba(8, 169, 155, .38)) !important; }
