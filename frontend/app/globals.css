@@ -13801,3 +13801,105 @@ textarea:focus {
 
   :root[data-design-system="finance"] .theme-palette-picker .dark-mode-toggle { width: 100%; }
 }
+
+/* Salir siempre es una acción destructiva: se distingue en cualquier modo. */
+.logout-button,
+:root[data-design-system="finance"] :is(.evolum-unified-nav, .inbox-unified-nav) .inbox-nav-footer .logout-button {
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
+  background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
+  box-shadow: 0 10px 22px rgba(220, 38, 38, .25) !important;
+}
+
+.logout-button:hover,
+.logout-button:focus-visible {
+  border-color: #991b1b !important;
+  background: linear-gradient(135deg, #dc2626, #991b1b) !important;
+}
+
+/* CRM principal en modo claro: los componentes heredados dejan de conservar
+   fondos nocturnos. Cada familia recibe una superficie suave y legible. */
+:root[data-design-system="finance"] :is(
+  .crm-main-panel, .crm-main-search, .crm-main-profile, .crm-main-ops,
+  .crm-main-kpi, .crm-main-agent-card, .crm-main-module, .crm-main-row,
+  .crm-main-integration-grid article, .crm-main-activity, .crm-main-node,
+  .crm-main-radar-core, .crm-main-radar-tile, .crm-main-mini-agent,
+  .crm-main-pro-chart, .crm-main-access-card, .crm-main-conversation-card,
+  .crm-main-dev-card, .crm-main-agent-primary-metrics article
+) {
+  color: #24212b !important;
+  border-color: #d5dfdc !important;
+  background: #f8faf9 !important;
+  box-shadow: 0 8px 20px rgba(28, 48, 46, .06) !important;
+}
+
+:root[data-design-system="finance"] .crm-main-agent-primary {
+  color: #24212b !important;
+  border-color: #d9cbe8 !important;
+  background: linear-gradient(135deg, #f7f3fb, #f1f8f7) !important;
+  box-shadow: 0 8px 20px rgba(28, 48, 46, .06) !important;
+}
+
+:root[data-design-system="finance"] .crm-main-connection-card {
+  color: #24212b !important;
+  border-color: #d8e1e4 !important;
+  background: #eef2f5 !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .crm-main-panel, .crm-main-search, .crm-main-profile, .crm-main-ops,
+  .crm-main-kpi, .crm-main-agent-card, .crm-main-module, .crm-main-row,
+  .crm-main-integration-grid article, .crm-main-activity, .crm-main-node,
+  .crm-main-radar-core, .crm-main-radar-tile, .crm-main-mini-agent,
+  .crm-main-pro-chart, .crm-main-access-card, .crm-main-conversation-card,
+  .crm-main-dev-card, .crm-main-agent-primary, .crm-main-connection-card
+) :is(h2, h3, strong, b) { color: #17131f !important; }
+
+:root[data-design-system="finance"] :is(
+  .crm-main-panel, .crm-main-search, .crm-main-profile, .crm-main-ops,
+  .crm-main-kpi, .crm-main-agent-card, .crm-main-module, .crm-main-row,
+  .crm-main-integration-grid article, .crm-main-activity, .crm-main-node,
+  .crm-main-radar-core, .crm-main-radar-tile, .crm-main-mini-agent,
+  .crm-main-pro-chart, .crm-main-access-card, .crm-main-conversation-card,
+  .crm-main-dev-card, .crm-main-agent-primary, .crm-main-connection-card
+) :is(p, span, small) { color: #66717a !important; }
+
+:root[data-design-system="finance"] :is(.crm-main-kicker, .crm-main-panel-head span, .crm-main-agent-primary-copy span, .crm-main-connection-card > div > span, .crm-main-dev-card > span) {
+  color: #079b90 !important;
+}
+
+:root[data-design-system="finance"] :is(.crm-main-panel-head button, .crm-main-action-link) {
+  color: #4b2d70 !important;
+  border-color: #cdbdde !important;
+  background: #f5effb !important;
+}
+
+:root[data-design-system="finance"] :is(.crm-main-panel-head button:hover, .crm-main-action-link:hover) {
+  color: #ffffff !important;
+  border-color: #078f84 !important;
+  background: linear-gradient(135deg, #08a99b, #087f98) !important;
+}
+
+:root[data-design-system="finance"] :is(.crm-main-radar-tile.green, .crm-main-radar-tile.cyan, .crm-main-radar-tile.pink, .crm-main-radar-tile.gold) strong { color: #087f98 !important; }
+:root[data-design-system="finance"] .crm-main-radar-tile b { color: #4b2d70 !important; background: #e8def5 !important; }
+:root[data-design-system="finance"] .crm-main-agent-primary-metrics article { background: #f0f2f1 !important; }
+:root[data-design-system="finance"] .crm-main-mini-progress { background: #dce8e5 !important; }
+:root[data-design-system="finance"] .crm-main-status { color: #59666d !important; background: #edf1f0 !important; }
+:root[data-design-system="finance"] .crm-main-status.active { color: #087f64 !important; background: #e6f5ed !important; }
+:root[data-design-system="finance"] .crm-main-status.pending { color: #9a6a0a !important; background: #fbf3df !important; }
+:root[data-design-system="finance"] .crm-main-dev-note { color: #66717a !important; border-color: #decff0 !important; background: #f7f1fc !important; }
+
+/* Guía rápida: clara por defecto, conservando su versión nocturna al activar modo oscuro. */
+:root[data-design-system="finance"] .context-help-card {
+  border-color: #cbb9df !important;
+  background: #f8faf9 !important;
+  box-shadow: 0 16px 36px rgba(28, 48, 46, .18) !important;
+}
+
+:root[data-design-system="finance"] .context-help-heading h2,
+:root[data-design-system="finance"] .context-help-card > p,
+:root[data-design-system="finance"] .context-help-card > p strong,
+:root[data-design-system="finance"] .context-help-card li { color: #24212b !important; }
+
+:root[data-design-system="finance"] .context-help-heading p { color: #8b5fb5 !important; }
+:root[data-design-system="finance"] .context-help-heading button { color: #4b2d70 !important; border-color: #cdbdde !important; background: #ffffff !important; }

@@ -151,5 +151,5 @@ export function LogoutButton() {
     router.refresh();
   }
 
-  return <button className="ghost-btn" onClick={handleLogout}>Cerrar sesión</button>;
+  return <button className="ghost-btn logout-button" onClick={handleLogout}>Cerrar sesión</button>;
 }
