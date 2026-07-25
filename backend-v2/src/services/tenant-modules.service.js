@@ -30,6 +30,12 @@ const MODULE_ALIASES = Object.freeze({
   [MODULES.PARTS_INVENTORY]: ["repuestos", "inventario_repuestos"],
   [MODULES.MECHANIC_ASSIGNMENTS]: ["asignacion_mecanicos"],
   [MODULES.READY_NOTIFICATIONS]: ["avisos_retiro"],
+  [MODULES.FINANCE_INVOICES]: ["facturas", "cuentas_por_cobrar"],
+  [MODULES.FINANCE_BANK_SYNC]: ["cartolas", "bank_sync", "movimientos_bancarios"],
+  [MODULES.FINANCE_RECONCILIATION]: ["conciliacion", "conciliacion_ia"],
+  [MODULES.FINANCE_EXCEPTIONS]: ["excepciones_financieras"],
+  [MODULES.FINANCE_COLLECTIONS]: ["cobranza", "cobranza_ia"],
+  [MODULES.FINANCE_ANALYTICS]: ["dashboard_financiero", "analitica_financiera"],
 });
 
 function normalizeModuleKey(value) {

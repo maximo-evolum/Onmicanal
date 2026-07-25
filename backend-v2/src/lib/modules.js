@@ -34,7 +34,16 @@ export const MODULES = Object.freeze({
   VEHICLE_OWNERS: "vehicle_owners",
   PARTS_INVENTORY: "parts_inventory",
   MECHANIC_ASSIGNMENTS: "mechanic_assignments",
-  READY_NOTIFICATIONS: "ready_notifications"
+  READY_NOTIFICATIONS: "ready_notifications",
+  // EVOLUM Finance OS: capacidades propias de cuentas por cobrar. Estas no
+  // reemplazan Pagos ni el Dashboard del Core; agregan el ciclo financiero
+  // posterior a la emision de una factura.
+  FINANCE_INVOICES: "finance_invoices",
+  FINANCE_BANK_SYNC: "finance_bank_sync",
+  FINANCE_RECONCILIATION: "finance_reconciliation",
+  FINANCE_EXCEPTIONS: "finance_exceptions",
+  FINANCE_COLLECTIONS: "finance_collections",
+  FINANCE_ANALYTICS: "finance_analytics"
 });
 
 export const PLAN_DEFINITIONS = Object.freeze({

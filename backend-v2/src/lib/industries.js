@@ -206,6 +206,28 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
     ],
     workflows: ["cotizar", "confirmar datos", "agendar", "crear pago", "recordar", "postventa"]
   },
+  FINANCE: {
+    code: "FINANCE",
+    name: "EVOLUM Finance OS",
+    summary: "Cuentas por cobrar, conciliacion bancaria y cobranza inteligente sobre el ERP existente, sin reemplazarlo.",
+    modules: [
+      moduleItem(MODULES.FINANCE_INVOICES, "Facturas por cobrar", "Facturas emitidas, saldos, vencimientos y estado de cada cobro."),
+      moduleItem(MODULES.FINANCE_BANK_SYNC, "Cartolas y movimientos", "Carga manual segura de cartolas y movimientos bancarios para normalizarlos.", "STARTER"),
+      moduleItem(MODULES.FINANCE_RECONCILIATION, "Conciliacion IA", "Propone el cruce de pagos y facturas con un nivel de confianza explicable."),
+      moduleItem(MODULES.FINANCE_EXCEPTIONS, "Excepciones financieras", "Gestiona pagos parciales, duplicados, diferencias y movimientos sin factura."),
+      moduleItem(MODULES.FINANCE_COLLECTIONS, "Cobranza IA", "Segmenta facturas vencidas, organiza seguimientos y registra compromisos de pago.", "PRO"),
+      moduleItem(MODULES.FINANCE_ANALYTICS, "Dashboard financiero", "Caja, cartera, DSO, morosidad, conciliaciones y acciones prioritarias.")
+    ],
+    entities: [
+      { key: "finance_invoice", label: "Factura por cobrar", fields: { invoiceNumber: { type: "string", required: true }, customerName: { type: "string", required: true }, rut: "string", issueDate: "string", dueDate: { type: "string", required: true }, amount: { type: "number", required: true }, balance: "number", status: { type: "string", options: ["OPEN", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"] }, erpSource: "string" } },
+      { key: "bank_statement", label: "Cartola bancaria", fields: { bankName: "string", accountReference: "string", periodStart: "string", periodEnd: "string", source: { type: "string", options: ["manual", "pdf", "excel", "csv", "api"] }, documentId: "string" } },
+      { key: "bank_movement", label: "Movimiento bancario", fields: { statementId: "string", transactionDate: { type: "string", required: true }, amount: { type: "number", required: true }, reference: "string", payerName: "string", rut: "string", movementType: { type: "string", options: ["credit", "debit", "transfer", "charge", "commission", "interest"] }, status: { type: "string", options: ["UNRECONCILED", "MATCHED", "EXCEPTION"] } } },
+      { key: "finance_reconciliation", label: "Conciliacion", fields: { invoiceId: { type: "string", required: true }, movementId: { type: "string", required: true }, confidence: "number", matchReasons: "json", status: { type: "string", options: ["SUGGESTED", "APPROVED", "REJECTED"] }, approvedAt: "string" } },
+      { key: "finance_exception", label: "Excepcion financiera", fields: { type: { type: "string", options: ["PARTIAL_PAYMENT", "DUPLICATE_PAYMENT", "NO_INVOICE", "UNPAID_INVOICE", "AMOUNT_DIFFERENCE", "UNKNOWN_TRANSFER"] }, invoiceId: "string", movementId: "string", resolution: "string", status: { type: "string", options: ["OPEN", "IN_REVIEW", "RESOLVED"] } } },
+      { key: "finance_collection_case", label: "Caso de cobranza", fields: { invoiceId: { type: "string", required: true }, customerName: "string", agingBucket: "string", channel: { type: "string", options: ["whatsapp", "email", "sms", "manual"] }, nextActionAt: "string", promiseDueDate: "string", status: { type: "string", options: ["PENDING", "CONTACTED", "PROMISE", "PAID", "ESCALATED"] } } }
+    ],
+    workflows: ["registrar factura", "cargar cartola", "normalizar movimientos", "conciliar", "revisar excepcion", "gestionar cobranza", "actualizar ERP", "analizar cartera"]
+  },
   AUTOMOTIVE: {
     code: "AUTOMOTIVE",
     name: "Automotriz",
@@ -293,6 +315,11 @@ const INDUSTRY_ALIASES = Object.freeze({
   GASTRONOMIA: "GASTRONOMY",
   GASTRONOMY: "GASTRONOMY",
   FOOD: "GASTRONOMY",
+  FINANCE: "FINANCE",
+  FINANZAS: "FINANCE",
+  CONTABLE: "FINANCE",
+  CONTABILIDAD: "FINANCE",
+  CUENTAS_POR_COBRAR: "FINANCE",
   INMOBILIARIA: "REAL_ESTATE",
   INMOBILIARIO: "REAL_ESTATE",
   REALTY: "REAL_ESTATE",

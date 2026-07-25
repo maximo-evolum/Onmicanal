@@ -23,6 +23,7 @@ import { bookingsRouter } from "./routes/bookings.routes.js";
 import { paymentsRouter } from "./routes/payments.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { reportsRouter } from "./routes/reports.routes.js";
+import { financeRouter } from "./routes/finance.routes.js";
 import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { modulesRouter } from "./routes/modules.routes.js";
 import { industriesRouter } from "./routes/industries.routes.js";
@@ -243,7 +244,10 @@ app.use("/api", ...protectedApi, requireModule(MODULES.SALES), paymentsRouter);
 app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), dashboardRouter);
 // El PDF ejecutivo forma parte del Dashboard: usa la misma autorización y no
 // existe como módulo independiente.
-app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), reportsRouter);
+  app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), reportsRouter);
+  // Finance OS valida sus capacidades por operacion: no todas las cuentas de
+  // finanzas necesariamente contratan conciliacion, cobranza y analitica a la vez.
+  app.use("/api", ...protectedApi, financeRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });

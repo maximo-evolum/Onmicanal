@@ -39,7 +39,13 @@ const RECORD_MODULES = Object.freeze({
   ready_notification: MODULES.READY_NOTIFICATIONS,
   document: MODULES.DOCUMENTS,
   workflow_definition: MODULES.WORKFLOWS,
-  workflow_run: MODULES.WORKFLOWS
+  workflow_run: MODULES.WORKFLOWS,
+  finance_invoice: MODULES.FINANCE_INVOICES,
+  bank_statement: MODULES.FINANCE_BANK_SYNC,
+  bank_movement: MODULES.FINANCE_BANK_SYNC,
+  finance_reconciliation: MODULES.FINANCE_RECONCILIATION,
+  finance_exception: MODULES.FINANCE_EXCEPTIONS,
+  finance_collection_case: MODULES.FINANCE_COLLECTIONS
 });
 
 function cleanText(value, fallback = "") {

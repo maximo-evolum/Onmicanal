@@ -48,6 +48,17 @@ const baseItems: SidebarItem[] = [
   ["Dueños y vehículos", "/workshop", "Fichas, historial técnico, repuestos y presupuestos", "DV", "vehicle_owners"],
 ];
 
+// Finance OS is a vertical, not a replacement for the existing payment or CRM
+// modules. Each item is filtered by the tenant industry before rendering.
+baseItems.push(
+  ["Finance OS", "/finance", "Resumen financiero y cuentas por cobrar", "FI", "finance_analytics"],
+  ["Facturas por cobrar", "/finance?tab=facturas", "Facturas, vencimientos y cartera", "FF", "finance_invoices"],
+  ["Cartolas y movimientos", "/finance?tab=cartolas", "Importa y revisa movimientos bancarios", "FB", "finance_bank_sync"],
+  ["Conciliacion IA", "/finance?tab=conciliacion", "Propone coincidencias para aprobar", "FC", "finance_reconciliation"],
+  ["Excepciones financieras", "/finance?tab=excepciones", "Pagos que requieren revision", "FE", "finance_exceptions"],
+  ["Cobranza IA", "/finance?tab=cobranza", "Casos, promesas y seguimiento", "FO", "finance_collections"]
+);
+
 const developerItems: SidebarItem[] = [
   ["Desarrollador", "/admin", "Clientes, planes, modulos y permisos", "DE", "admin"],
   ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL", "bot_lab"],
@@ -61,6 +72,8 @@ const moduleSymbols: Record<string, string> = {
   CI: "⇧", PR: "⌂", AC: "◴", PC: "◉", CO: "♧", CL: "◎", EP: "▤",
   DV: "▱", DE: "▦", BL: "⚗"
 };
+
+Object.assign(moduleSymbols, { FI: "$", FF: "#", FB: "=", FC: "~", FE: "!", FO: "+" });
 
 function ModuleSymbol({ code, label }: { code: string; label: string }) {
   return <span className="evolum-module-symbol" aria-hidden="true" title={label}>{moduleSymbols[code] || "◇"}</span>;
@@ -79,6 +92,11 @@ function isCareIndustry(industry?: string | null) {
 function isAutomotiveIndustry(industry?: string | null) {
   const value = String(industry || "").toUpperCase();
   return value.includes("AUTO") || value.includes("TALLER") || value.includes("MECAN");
+}
+
+function isFinanceIndustry(industry?: string | null) {
+  const value = String(industry || "").toUpperCase();
+  return value.includes("FINANCE") || value.includes("FINANZ") || value.includes("CONTABLE") || value.includes("CONTABIL");
 }
 
 function contextualizeItem(item: SidebarItem, industry?: string | null): SidebarItem {
@@ -109,9 +127,14 @@ function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
   const automotiveModules = new Set<ModuleAccessKey>([
     "vehicle_owners", "vehicles", "parts_inventory", "mechanic_assignments", "ready_notifications"
   ]);
+  const financeModules = new Set<ModuleAccessKey>([
+    "finance_invoices", "finance_bank_sync", "finance_reconciliation",
+    "finance_exceptions", "finance_collections", "finance_analytics"
+  ]);
   if (realtyModules.has(moduleKey)) return isRealtyIndustry(industry);
   if (careModules.has(moduleKey)) return isCareIndustry(industry);
   if (automotiveModules.has(moduleKey)) return isAutomotiveIndustry(industry);
+  if (financeModules.has(moduleKey)) return isFinanceIndustry(industry);
   return true;
 }
 

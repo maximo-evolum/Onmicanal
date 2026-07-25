@@ -43,7 +43,13 @@ export type ModuleAccessKey =
   | "sharepoint"
   | "backup_provider"
   | "offline_sync"
-  | "security_replica";
+  | "security_replica"
+  | "finance_invoices"
+  | "finance_bank_sync"
+  | "finance_reconciliation"
+  | "finance_exceptions"
+  | "finance_collections"
+  | "finance_analytics";
 
 const moduleAliases: Record<ModuleAccessKey, string[]> = {
   crm: ["crm", "crm_principal"],
@@ -85,6 +91,12 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   backup_provider: ["backup_provider", "backups", "respaldo", "proveedor_respaldo"],
   offline_sync: ["offline_sync", "offline", "sync_offline", "modo_offline"],
   security_replica: ["security_replica", "replica", "replica_seguridad", "drp"],
+  finance_invoices: ["finance_invoices", "finance_invoice", "facturas_finance"],
+  finance_bank_sync: ["finance_bank_sync", "bank_sync", "cartolas", "movimientos_bancarios"],
+  finance_reconciliation: ["finance_reconciliation", "reconciliation", "conciliacion_financiera"],
+  finance_exceptions: ["finance_exceptions", "finance_exception", "excepciones_financieras"],
+  finance_collections: ["finance_collections", "collections", "cobranza_ia"],
+  finance_analytics: ["finance_analytics", "finance_dashboard", "analitica_financiera"],
 };
 
 // CRM y administración de cuenta son parte del Core EVOLUM.

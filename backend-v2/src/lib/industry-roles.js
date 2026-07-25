@@ -46,6 +46,13 @@ export const INDUSTRY_ROLE_OPTIONS = Object.freeze({
     { key: "GASTRONOMY_SELLER", label: "Vendedor/a", workspaceRole: "SELLER" },
     { key: "GASTRONOMY_OPERATIONS", label: "Encargado operativo", workspaceRole: "AGENT" },
   ],
+  FINANCE: [
+    { key: "FINANCE_ADMIN", label: "Administrador financiero", workspaceRole: "ADMIN" },
+    { key: "FINANCE_ACCOUNTANT", label: "Contador/a", workspaceRole: "AGENT" },
+    { key: "FINANCE_TREASURY", label: "Tesoreria", workspaceRole: "AGENT" },
+    { key: "FINANCE_COLLECTIONS", label: "Ejecutivo/a de cobranza", workspaceRole: "SELLER" },
+    { key: "FINANCE_AUDITOR", label: "Auditor/a", workspaceRole: "VIEWER" },
+  ],
 });
 
 export function getIndustryRoleOptions(industry) {

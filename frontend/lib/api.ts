@@ -794,6 +794,83 @@ export async function getIndustryRecords(type?: string): Promise<IndustryRecord[
   return request<IndustryRecord[]>(`/industry-records${query}`);
 }
 
+export type FinanceOverview = {
+  generatedAt: string;
+  invoices: { total: number; issued: number; paid: number; pending: number; overdue: number; pendingAmount: number; overdueAmount: number };
+  collection: { rate: number; dsoDays: number; expectedNext30Days: number };
+  reconciliation: { totalMovements: number; matchedMovements: number; pendingMovements: number; rate: number };
+  exceptions: { open: number; critical: number };
+  collections: { open: number; promises: number };
+  aging: Array<{ label: string; amount: number; invoices: number }>;
+  recent: { invoices: IndustryRecord[]; exceptions: IndustryRecord[]; collectionCases: IndustryRecord[] };
+  integrationReadiness: Array<{ key: string; label: string; status: "ready" | "requires_configuration" | "manual"; note: string }>;
+};
+
+export type FinanceReconciliationSuggestion = {
+  movement: IndustryRecord;
+  invoice: IndustryRecord;
+  confidence: number;
+  level: "HIGH" | "MEDIUM" | "LOW";
+  reasons: string[];
+  amountDifference: number;
+};
+
+export function getFinanceOverview(): Promise<FinanceOverview> {
+  return request<FinanceOverview>("/finance/overview");
+}
+
+export function getFinanceReconciliationSuggestions(): Promise<{ suggestions: FinanceReconciliationSuggestion[] }> {
+  return request<{ suggestions: FinanceReconciliationSuggestion[] }>("/finance/reconciliation-suggestions");
+}
+
+export function approveFinanceReconciliation(movementId: string, invoiceId: string): Promise<{ reconciliation: IndustryRecord; movement: IndustryRecord; invoice: IndustryRecord }> {
+  return request(`/finance/reconciliations/${encodeURIComponent(movementId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ invoiceId })
+  });
+}
+
+export function generateFinanceCollectionCases(): Promise<{ created: number; cases: IndustryRecord[] }> {
+  return request("/finance/collection-cases/generate", { method: "POST" });
+}
+
+export type FinanceAgentPolicy = {
+  minimumConfidenceForSuggestion: number;
+  autoCreateExceptions: boolean;
+  collectionsRequireApproval: boolean;
+  updateErpRequiresApproval: boolean;
+  enabledChannels: string[];
+};
+
+export type FinanceAgentWorkspace = {
+  generatedAt: string;
+  policy: FinanceAgentPolicy;
+  agents: Array<{
+    code: string;
+    name: string;
+    purpose: string;
+    humanControl: string;
+    status: string;
+    metrics: Array<{ label: string; value: string | number }>;
+    nextAction: string;
+  }>;
+  priority: Array<{ agent: string; action: string }>;
+  matchingPolicy: { high: string; medium: string; low: string };
+  safeguards: string[];
+};
+
+export function getFinanceAgentWorkspace(): Promise<FinanceAgentWorkspace> {
+  return request<FinanceAgentWorkspace>("/finance/agents");
+}
+
+export function updateFinanceAgentPolicy(patch: Partial<FinanceAgentPolicy>): Promise<{ policy: FinanceAgentPolicy }> {
+  return request("/finance/agents/policy", { method: "PATCH", body: JSON.stringify(patch) });
+}
+
+export function analyzeFinanceAgents(): Promise<{ workspace: FinanceAgentWorkspace; exceptionsPrepared: number; exceptionsSkipped: string | null }> {
+  return request("/finance/agents/analyze", { method: "POST" });
+}
+
 export async function getRealtyIntelligence(): Promise<RealtyIntelligence> {
   return request<RealtyIntelligence>("/realty/intelligence");
 }
