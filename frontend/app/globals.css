@@ -13711,3 +13711,93 @@ textarea:focus {
 }
 
 :root[data-design-system="finance"] .realty-kpi-card small { color: #087f98 !important; }
+
+/* Superficies de descanso visual: blanco suavizado para jornadas largas. */
+:root[data-design-system="finance"] {
+  --card: #f9fbfa;
+  --card-strong: #f9fbfa;
+  --theme-panel: #f9fbfa;
+  --theme-surface-strong: #f9fbfa;
+  --theme-card-bg: #f9fbfa;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header, .vertical-hero, .crm-main-topbar, .pipeline-pro-topbar,
+  .executive-topbar, .inbox-unified-topbar, .finance-header
+) { background: #f9fbfa !important; }
+
+:root[data-design-system="finance"] :is(
+  .card, .panel, .dashboard-card, .metric-card, .stat-card, .summary-card,
+  .workflow-card, .workflow-overview article, .reports-section, .reports-metric-card,
+  .connection-command-strip article, .connection-summary-grid article,
+  .pipeline-column, .pipeline-insights-panel article, .realty-property-match,
+  .realty-buyer-item, .realty-match-panel, .workshop-history-owner,
+  .workshop-history-list article, .property-buyer-matches, .profile-settings-panel,
+  .phase5-card, .module-help-card, .metadata-card, .finance-card, .finance-kpis article,
+  .vertical-card, .vertical-list, .realty-kpi-card, .vertical-hero-stats article,
+  .property-portal-card, .realty-stage-card, .realty-stage-column
+) { background: #f8faf9 !important; }
+
+:root[data-design-system="finance"] :is(input, select, textarea) { background: #fcfdfc !important; }
+
+/* Preferencia visual simple: un solo interruptor, sin combinaciones técnicas. */
+:root[data-design-system="finance"] .theme-palette-picker {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 18px;
+  border-color: #dbe3e1;
+  background: #f8faf9;
+}
+
+:root[data-design-system="finance"] .theme-palette-picker > div {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3px;
+}
+
+:root[data-design-system="finance"] .theme-palette-picker > div strong { color: #24212b !important; }
+:root[data-design-system="finance"] .theme-palette-picker > div small { color: #66717a !important; }
+
+:root[data-design-system="finance"] .theme-palette-picker .dark-mode-toggle {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border: 1px solid #bca5d3;
+  border-radius: 12px;
+  color: #4b2d70;
+  background: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+:root[data-design-system="finance"] .theme-palette-picker .dark-mode-toggle:hover {
+  border-color: #643887;
+  background: #f4eef9;
+}
+
+:root[data-design-system="finance"] .dark-mode-toggle > span {
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: linear-gradient(135deg, #643887, #08a99b);
+  font-size: 16px;
+  line-height: 1;
+}
+
+@media (max-width: 620px) {
+  :root[data-design-system="finance"] .theme-palette-picker {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  :root[data-design-system="finance"] .theme-palette-picker .dark-mode-toggle { width: 100%; }
+}
