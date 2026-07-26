@@ -104,8 +104,16 @@ export async function registerAccount(input: {
   });
 }
 
-export async function getMe(): Promise<{ user: AgentSession; tenant: TenantSession }> {
-  return request<{ user: AgentSession; tenant: TenantSession }>("/auth/me");
+export type AuthMeResponse = {
+  user: AgentSession;
+  tenant: TenantSession;
+  // El backend entrega la misma lista autoritativa que /modules/me. Se usa
+  // como respaldo para que una respuesta parcial no esconda módulos válidos.
+  modules?: string[];
+};
+
+export async function getMe(): Promise<AuthMeResponse> {
+  return request<AuthMeResponse>("/auth/me");
 }
 
 export async function updateMyProfile(input: {

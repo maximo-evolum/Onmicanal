@@ -147,14 +147,18 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
     setIdentityLoading(true);
     getMe()
       .then((data) => {
-        if (active) setAuthoritativeRole(data.user.role || null);
+        if (!active) return;
+        setAuthoritativeRole(data.user.role || null);
+        // /auth/me ya entrega los módulos autorizados para esta sesión. Los
+        // conservamos como respaldo cuando el catálogo tarda en sincronizar.
+        if (data.modules?.length) setModules(data.modules);
       })
       .finally(() => { if (active) setIdentityLoading(false); });
 
     getMyModules()
       .then((data) => {
         if (!active) return;
-        setModules(data.modules || []);
+        setModules((current) => data.modules?.length ? data.modules : (current?.length ? current : (data.modules || [])));
         // Si /auth/me ya resolvió el rol actual, no volver a pisarlo con
         // información local antigua. El rol del catálogo solo es respaldo.
         if (data.role) setAuthoritativeRole(data.role);

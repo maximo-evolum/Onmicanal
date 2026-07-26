@@ -152,12 +152,18 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     setRole(session?.role || null);
     setJobTitle(session?.jobTitle || null);
     getMe()
-      .then((data) => { if (mounted) setIndustry(data.tenant?.industry || null); })
+      .then((data) => {
+        if (!mounted) return;
+        setIndustry(data.tenant?.industry || null);
+        setRole(data.user.role || session?.role || null);
+        setJobTitle(data.user.jobTitle || session?.jobTitle || null);
+        if (data.modules?.length) setEnabledModules(data.modules);
+      })
       .catch(() => { if (mounted) setIndustry(null); });
     getMyModules()
       .then((data) => {
         if (mounted) {
-          setEnabledModules(data.modules || []);
+          setEnabledModules((current) => data.modules?.length ? data.modules : (current?.length ? current : (data.modules || [])));
           setRole(data.role || session?.role || null);
         }
       })

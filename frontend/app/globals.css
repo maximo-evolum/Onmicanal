@@ -13721,6 +13721,33 @@ textarea:focus {
 :root[data-design-system="finance"] .crm-main-search-results a small { color: #76e3d2 !important; }
 :root[data-design-system="finance"] :is(.crm-main-search-results a span, .crm-main-search-empty) { color: #d9d2e5 !important; }
 
+/* Aviso de inicio: informa carga parcial sin perder legibilidad en modo claro. */
+:root[data-design-system="finance"] .crm-main-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #7a4b05 !important;
+  border-color: #edc86b !important;
+  background: #fff8e7 !important;
+  box-shadow: 0 6px 16px rgba(132, 91, 13, .06);
+  font-weight: 650;
+}
+
+:root[data-design-system="finance"] .crm-main-notice::before {
+  content: "i";
+  display: grid;
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #b7791f;
+  font-family: Georgia, serif;
+  font-style: italic;
+  font-weight: 800;
+}
+
 :root[data-design-system="finance"] :is(.vertical-card, .vertical-list, .realty-kpi-card, .vertical-hero-stats article, .property-portal-card, .realty-stage-card, .realty-stage-column) {
   color: #24212b !important;
   border-color: #dbe3e1 !important;

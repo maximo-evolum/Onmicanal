@@ -374,6 +374,12 @@ export default function CrmPrincipalPage() {
 
     const notifications = await getNotifications({ limit: 6 }).catch(() => ({ notifications: [] }));
     const resolvedSession = me.status === "fulfilled" ? me.value.user : session;
+    const catalogModules = modules.status === "fulfilled" ? modules.value.modules || [] : [];
+    const sessionModules = me.status === "fulfilled" ? me.value.modules || [] : [];
+    // Ambas rutas son autorizadas por el backend. Preferimos el catálogo
+    // cuando viene completo y usamos la sesión como respaldo ante una
+    // sincronización parcial para no ocultar módulos ya habilitados.
+    const resolvedModules = catalogModules.length ? catalogModules : sessionModules;
     if (me.status === "fulfilled") mergeStoredSession(me.value.user);
 
     setState({
@@ -382,10 +388,10 @@ export default function CrmPrincipalPage() {
       leadMetrics: leadMetrics.status === "fulfilled" ? leadMetrics.value : null,
       crm: crm.status === "fulfilled" ? crm.value : null,
       campaigns: campaigns.status === "fulfilled" ? campaigns.value : [],
-      modules: modules.status === "fulfilled" ? modules.value.modules || [] : [],
+      modules: resolvedModules,
       // Si esta consulta falla, conservamos una interfaz compatible en vez de
       // esconder modulos que el backend si puede autorizar.
-      modulesLoaded: modules.status === "fulfilled",
+      modulesLoaded: modules.status === "fulfilled" || me.status === "fulfilled",
       onboarding: onboarding.status === "fulfilled" ? onboarding.value : null,
       plan: modules.status === "fulfilled" ? accountLevelFromPlan(modules.value.plan) : accountLevelFromPlan(me.status === "fulfilled" ? me.value.tenant?.plan : null),
       tenant: me.status === "fulfilled" ? me.value.tenant : null,
