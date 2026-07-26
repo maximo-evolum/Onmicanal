@@ -14794,3 +14794,46 @@ textarea:focus {
   border-color: #ead4d7 !important;
   background: #f8eaec !important;
 }
+
+/* Buscador global de Inicio: el resultado es una paleta oscura deliberada.
+   Se declara al final para que no herede texto oscuro de las tarjetas claras. */
+:root[data-design-system="finance"] .crm-main-search .crm-main-search-results {
+  padding: 10px;
+  border-color: #69418f !important;
+  background: linear-gradient(150deg, #181126, #2b1d46) !important;
+  box-shadow: 0 18px 38px rgba(28, 13, 49, .3) !important;
+}
+
+:root[data-design-system="finance"] .crm-main-search .crm-main-search-results a,
+:root[data-design-system="finance"] .crm-main-search .crm-main-search-empty {
+  gap: 4px;
+  padding: 12px 13px;
+  border-color: rgba(225, 211, 246, .2) !important;
+  background: rgba(255, 255, 255, .065) !important;
+}
+
+:root[data-design-system="finance"] .crm-main-search .crm-main-search-results a:hover {
+  border-color: rgba(82, 224, 204, .72) !important;
+  background: linear-gradient(90deg, rgba(116, 69, 158, .92), rgba(8, 169, 155, .36)) !important;
+}
+
+:root[data-design-system="finance"] .crm-main-search .crm-main-search-results a small {
+  color: #78e8d4 !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .09em;
+}
+
+:root[data-design-system="finance"] .crm-main-search .crm-main-search-results a strong {
+  color: #ffffff !important;
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+:root[data-design-system="finance"] .crm-main-search .crm-main-search-results a span,
+:root[data-design-system="finance"] .crm-main-search .crm-main-search-empty {
+  color: #ddd6e9 !important;
+  font-size: 12px;
+  line-height: 1.4;
+}
