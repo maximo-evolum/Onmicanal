@@ -656,13 +656,14 @@ export default function CrmPrincipalPage() {
             <h1>Hola, {currentSession?.name || "Usuario"}</h1>
           </div>
           <form className="crm-main-search" onSubmit={submitSearch}>
+            <span className="crm-main-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.2" /><path d="m16 16 4.2 4.2" /></svg></span>
             <input
               aria-label="Buscar en EVOLUM"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Buscar en EVOLUM..."
             />
-            <button type="submit" aria-label="Buscar">Buscar</button>
+            <button type="submit" aria-label="Buscar"><span>Buscar</span></button>
             {normalizedSearch ? (
               <div className="crm-main-search-results">
                 {searchResults.map((result) => (
