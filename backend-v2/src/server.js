@@ -58,6 +58,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
 const tenantDocumentsDir = path.resolve(__dirname, "../public/tenant-documents");
 
+// Los routers se montan bajo /api y cada uno declara sus rutas completas
+// (por ejemplo, /finance/overview). Aplicar requireModule directamente en un
+// app.use("/api", ...) lo ejecutaba para *todas* las rutas posteriores: una
+// solicitud a Finance OS quedaba bloqueada por el control inmobiliario
+// `properties`. Este adaptador conserva la proteccion, pero solo cuando la
+// solicitud realmente pertenece al prefijo del modulo correspondiente.
+function requireModuleForPaths(module, paths) {
+  const guard = requireModule(module);
+  const prefixes = Array.isArray(paths) ? paths : [paths];
+  return (req, res, next) => {
+    const pathname = String(req.path || "");
+    const applies = prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+    return applies ? guard(req, res, next) : next();
+  };
+}
+
 app.use(express.json({
   limit: "5mb",
   verify: (req, _res, buffer) => {
@@ -231,20 +247,20 @@ app.use("/api", ...protectedApi, onboardingRouter);
 app.use("/api", ...protectedApi, conversationsRouter); // Inbox: auth + tenant, sin bloqueo por módulo para evitar 403 en tenants configurados
 app.use("/api", ...protectedApi, messagesRouter); // Mensajes manuales del inbox: auth + tenant
 app.use("/api", ...protectedApi, leadsRouter); // Lead panel universal usado desde Inbox
-app.use("/api", ...protectedApi, requireModule(MODULES.PROPERTIES), realtyIntelligenceRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.SALES), productRoutes);
-app.use("/api", ...protectedApi, requireModule(MODULES.DOCUMENTS), documentsRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.WORKFLOWS), workflowsRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.INTEGRATIONS), integrationsRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.INTEGRATIONS), connectionsRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.MARKETING), campaignsRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), servicesRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.BOOKINGS), bookingsRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.SALES), paymentsRouter);
-app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), dashboardRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.PROPERTIES, "/realty"), realtyIntelligenceRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.SALES, "/products"), productRoutes);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.DOCUMENTS, "/documents"), documentsRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.WORKFLOWS, "/workflows"), workflowsRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.INTEGRATIONS, "/integrations"), integrationsRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.INTEGRATIONS, "/connections"), connectionsRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.MARKETING, "/campaigns"), campaignsRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.BOOKINGS, "/services"), servicesRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.BOOKINGS, "/bookings"), bookingsRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.SALES, "/payments"), paymentsRouter);
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.ANALYTICS, ["/dashboard", "/sales/queue"]), dashboardRouter);
 // El PDF ejecutivo forma parte del Dashboard: usa la misma autorización y no
 // existe como módulo independiente.
-  app.use("/api", ...protectedApi, requireModule(MODULES.ANALYTICS), reportsRouter);
+  app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.ANALYTICS, "/reports"), reportsRouter);
   // Finance OS valida sus capacidades por operacion: no todas las cuentas de
   // finanzas necesariamente contratan conciliacion, cobranza y analitica a la vez.
   app.use("/api", ...protectedApi, financeRouter);
