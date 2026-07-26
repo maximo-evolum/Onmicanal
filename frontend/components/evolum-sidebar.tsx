@@ -48,15 +48,12 @@ const baseItems: SidebarItem[] = [
   ["Dueños y vehículos", "/workshop", "Fichas, historial técnico, repuestos y presupuestos", "DV", "vehicle_owners"],
 ];
 
-// Finance OS is a vertical, not a replacement for the existing payment or CRM
-// modules. Each item is filtered by the tenant industry before rendering.
+// Finanzas es una vertical con su propio espacio de trabajo. El menú EV solo
+// expone esta puerta de entrada; sus secciones (facturas, cartolas,
+// conciliación, cobranza y equipo IA) se navegan dentro del módulo para evitar
+// duplicar accesos y confundir a los usuarios.
 baseItems.push(
-  ["Finance OS", "/finance", "Resumen financiero y cuentas por cobrar", "FI", "finance_analytics"],
-  ["Facturas por cobrar", "/finance?tab=facturas", "Facturas, vencimientos y cartera", "FF", "finance_invoices"],
-  ["Cartolas y movimientos", "/finance?tab=cartolas", "Importa y revisa movimientos bancarios", "FB", "finance_bank_sync"],
-  ["Conciliacion IA", "/finance?tab=conciliacion", "Propone coincidencias para aprobar", "FC", "finance_reconciliation"],
-  ["Excepciones financieras", "/finance?tab=excepciones", "Pagos que requieren revision", "FE", "finance_exceptions"],
-  ["Cobranza IA", "/finance?tab=cobranza", "Casos, promesas y seguimiento", "FO", "finance_collections"]
+  ["Finanzas", "/finance", "Facturas, cartolas, conciliación y cobranza IA", "FI", "finance_analytics"]
 );
 
 const developerItems: SidebarItem[] = [
@@ -73,7 +70,7 @@ const moduleSymbols: Record<string, string> = {
   DV: "▱", DE: "▦", BL: "⚗"
 };
 
-Object.assign(moduleSymbols, { FI: "$", FF: "#", FB: "=", FC: "~", FE: "!", FO: "+" });
+Object.assign(moduleSymbols, { FI: "$" });
 
 function ModuleSymbol({ code, label }: { code: string; label: string }) {
   return <span className="evolum-module-symbol" aria-hidden="true" title={label}>{moduleSymbols[code] || "◇"}</span>;
