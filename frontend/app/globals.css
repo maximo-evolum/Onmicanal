@@ -14901,3 +14901,39 @@ textarea:focus {
 
 :root[data-design-system="finance"] .crm-main-search button span { color: #ffffff !important; }
 :root[data-design-system="finance"] .crm-main-search button:hover { background: linear-gradient(135deg, #087f98, #096f8c) !important; }
+
+/* Modo oscuro original de EVOLUM: no adopta la paleta turquesa de Finanzas ni
+   una paleta guardada anteriormente. Recupera el negro profundo corporativo,
+   morado neón y azul eléctrico del sistema inicial. */
+:root[data-design-system="dark"] {
+  --bg: #0a0813;
+  --bg-deep: #05070d;
+  --bg-soft: #151026;
+  --card: #120d21;
+  --card-soft: #1b1231;
+  --card-hover: #251744;
+  --text: #f7f4ff;
+  --text-strong: #ffffff;
+  --text-muted: #c7ccd6;
+  --text-faint: #8f93a2;
+  --border: rgba(138, 46, 255, .25);
+  --border-strong: rgba(138, 46, 255, .55);
+  --primary: #8a2eff;
+  --primary-hover: #7521e5;
+  --accent: #2e8bff;
+  --highlight: #c176ff;
+  --success: #7e6cff;
+  --theme-primary: #8a2eff;
+  --theme-primary-2: #2e8bff;
+  --theme-accent: #b46dff;
+  --theme-glow: rgba(138, 46, 255, .28);
+  --theme-surface: rgba(18, 13, 33, .88);
+  --theme-surface-strong: rgba(25, 16, 47, .96);
+  --theme-surface-soft: rgba(138, 46, 255, .13);
+  --theme-page-bg: radial-gradient(circle at 14% 0%, rgba(138, 46, 255, .24), transparent 34%), radial-gradient(circle at 90% 2%, rgba(46, 139, 255, .15), transparent 30%), linear-gradient(180deg, #05070d 0%, #0a0813 52%, #0d0a18 100%);
+  --theme-card-bg: linear-gradient(145deg, rgba(27, 17, 49, .98), rgba(10, 8, 21, .98));
+  --theme-panel-bg: linear-gradient(135deg, rgba(21, 14, 40, .95), rgba(10, 11, 26, .92));
+  --theme-header-bg: linear-gradient(135deg, rgba(27, 17, 49, .94), rgba(7, 12, 28, .92));
+  --theme-input-bg: rgba(7, 8, 20, .88);
+  --theme-border-strong: rgba(138, 46, 255, .54);
+}
