@@ -123,6 +123,43 @@ function discoverySummary(provider: ConnectionProvider) {
 
 type ConnectionFormState = { label: string; phoneNumberId: string; businessAccountId: string; externalAccountId: string; accessToken: string; metadata: Record<string, string>; isActive: boolean };
 type ProviderField = { key: string; label: string; placeholder?: string; secret?: boolean; options?: string[] };
+type FinanceBankAccount = { bank: string; alias: string; accountType: string; accountLast4: string };
+
+// Catálogo basado en los bancos y sucursales vigentes publicados por la CMF.
+const CHILEAN_BANKS = [
+  "Banco de Chile", "Banco Internacional", "Scotiabank Chile", "Banco de Crédito e Inversiones (BCI)", "Banco BICE", "HSBC Bank (Chile)",
+  "Banco Santander-Chile", "Banco Itaú Chile", "Banco Falabella", "Banco Ripley", "Banco Consorcio", "Banco BTG Pactual Chile",
+  "Tanner Banco Digital", "Tenpo Bank Chile", "BancoEstado", "JP Morgan Chase Bank, N.A.", "China Construction Bank, Agencia en Chile", "Bank of China, Agencia en Chile", "Otro banco o institución"
+];
+
+function readFinanceBankAccounts(value: unknown): FinanceBankAccount[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const source = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return {
+      bank: typeof source.bank === "string" ? source.bank : "",
+      alias: typeof source.alias === "string" ? source.alias : "",
+      accountType: typeof source.accountType === "string" ? source.accountType : "Cuenta corriente",
+      accountLast4: typeof source.accountLast4 === "string" ? source.accountLast4.replace(/\D/g, "").slice(-4) : ""
+    };
+  }).filter((account) => Boolean(account.bank));
+}
+
+function FinanceBankAccountsEditor({ accounts, setAccounts }: { accounts: FinanceBankAccount[]; setAccounts: (accounts: FinanceBankAccount[]) => void }) {
+  const update = (index: number, field: keyof FinanceBankAccount, value: string) => {
+    setAccounts(accounts.map((account, position) => position === index ? { ...account, [field]: field === "accountLast4" ? value.replace(/\D/g, "").slice(-4) : value } : account));
+  };
+  return <section className="connection-bank-accounts" aria-label="Cuentas bancarias para cartolas">
+    <div className="connection-bank-heading"><div><strong>Bancos y cuentas para cartolas</strong><p>Agrega todos los bancos del cliente. Por seguridad, solo se guarda el alias y los últimos cuatro dígitos.</p></div><button type="button" onClick={() => setAccounts([...accounts, { bank: "", alias: "", accountType: "Cuenta corriente", accountLast4: "" }])}>+ Agregar banco</button></div>
+    {accounts.length ? <div className="connection-bank-list">{accounts.map((account, index) => <article key={`${account.bank}-${index}`}>
+      <label>Banco<select value={account.bank} onChange={(event) => update(index, "bank", event.target.value)}><option value="">Selecciona un banco</option>{CHILEAN_BANKS.map((bank) => <option key={bank} value={bank}>{bank}</option>)}</select></label>
+      <label>Nombre visible<input placeholder="Ej. Cuenta recaudación" value={account.alias} onChange={(event) => update(index, "alias", event.target.value)} /></label>
+      <label>Tipo de cuenta<select value={account.accountType} onChange={(event) => update(index, "accountType", event.target.value)}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label>
+      <label>Últimos 4 dígitos<input inputMode="numeric" maxLength={4} placeholder="1234" value={account.accountLast4} onChange={(event) => update(index, "accountLast4", event.target.value)} /></label>
+      <button className="danger" type="button" onClick={() => setAccounts(accounts.filter((_, position) => position !== index))}>Quitar</button>
+    </article>)}</div> : <p className="connection-form-help">Aún no hay bancos agregados. Puedes comenzar con BancoEstado u otro banco del cliente.</p>}
+  </section>;
+}
 
 function fieldsForProvider(provider: ConnectionProvider): ProviderField[] {
   const fields: Record<string, ProviderField[]> = {
@@ -175,6 +212,7 @@ export default function ConnectionsPage() {
     metadata: {} as Record<string, string>,
     isActive: true,
   });
+  const [bankAccounts, setBankAccounts] = useState<FinanceBankAccount[]>([]);
 
   async function load(silent = false) {
     try {
@@ -209,6 +247,7 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     if (!selected) return;
+    setBankAccounts(readFinanceBankAccounts(selected.config?.metadata?.bankAccounts));
     setForm({
       label: selected.config?.label || selected.label,
       phoneNumberId: selected.config?.phoneNumberId || "",
@@ -232,13 +271,14 @@ export default function ConnectionsPage() {
       setConnectionActivity({ key: selected.key, stage: "Guardando configuración segura...", progress: 28 });
       setNotice(null);
       setConnectionActivity({ key: selected.key, stage: "Validando información...", progress: 68 });
+      const metadata = Object.fromEntries(Object.entries(form.metadata).filter(([, value]) => String(value).trim()));
       await saveConnectionProvider(selected.key, {
         label: form.label,
         phoneNumberId: form.phoneNumberId,
         businessAccountId: form.businessAccountId,
         externalAccountId: form.externalAccountId,
         ...(form.accessToken ? { accessToken: form.accessToken } : {}),
-        metadata: Object.fromEntries(Object.entries(form.metadata).filter(([, value]) => String(value).trim())),
+        metadata: selected.key === "finance_bank_statements" ? { ...metadata, bankAccounts } : metadata,
         isActive: form.isActive,
       });
       setConnectionActivity({ key: selected.key, stage: "Configuración guardada", progress: 100 });
@@ -609,13 +649,17 @@ export default function ConnectionsPage() {
                         </>
                       ) : (
                         <>
-                          <div className="connection-form-grid">
-                            <label>
-                              Nombre visible
-                              <input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
-                            </label>
-                          </div>
-                          <ProviderFieldGrid provider={selected} form={form} setForm={setForm} />
+                          {selected.key === "finance_bank_statements" ? (
+                            <FinanceBankAccountsEditor accounts={bankAccounts} setAccounts={setBankAccounts} />
+                          ) : <>
+                            <div className="connection-form-grid">
+                              <label>
+                                Nombre visible
+                                <input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
+                              </label>
+                            </div>
+                            <ProviderFieldGrid provider={selected} form={form} setForm={setForm} />
+                          </>}
 
                           <div className="connection-actions">
                             <button className="primary" type="submit" disabled={saving || Boolean(connectionActivity)}>{saving ? "Guardando..." : "Guardar conexión"}</button>

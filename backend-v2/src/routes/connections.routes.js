@@ -188,7 +188,8 @@ const PROVIDERS = [
     type: "local",
     module: MODULES.FINANCE_BANK_SYNC,
     description: "Importa cartolas CSV y movimientos bancarios para el ciclo de conciliación financiera.",
-    requiredFields: []
+    requiredFields: [],
+    publicFields: ["bankAccounts"]
   },
   {
     key: "finance_nubox",
@@ -334,6 +335,23 @@ function configMetadata(config) {
   return normalizeMetadata(config?.metadata, {});
 }
 
+function normalizeBankAccounts(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).map((item) => {
+    const source = normalizeMetadata(item, {});
+    const bank = cleanText(source.bank).slice(0, 100);
+    if (!bank) return null;
+    const last4 = String(source.accountLast4 || "").replace(/\D/g, "").slice(-4);
+    return {
+      bank,
+      alias: cleanText(source.alias).slice(0, 100) || "Cuenta sin nombre",
+      accountType: cleanText(source.accountType).slice(0, 60) || "Cuenta corriente",
+      ...(last4 ? { accountLast4: last4 } : {}),
+      syncMode: "CSV"
+    };
+  }).filter(Boolean);
+}
+
 function hasField(config, field) {
   const metadata = configMetadata(config);
   if (field === "accessToken") return hasSecret(config?.accessToken);
@@ -389,8 +407,11 @@ function publicConfig(config, provider = null) {
   const safeMetadata = Object.fromEntries(
     safeFields
       .filter((field) => !["phoneNumberId", "businessAccountId", "externalAccountId"].includes(field))
-      .filter((field) => typeof metadata[field] === "string" || typeof metadata[field] === "number")
-      .map((field) => [field, String(metadata[field])])
+      .flatMap((field) => {
+        if (field === "bankAccounts") return [[field, normalizeBankAccounts(metadata[field])]];
+        if (typeof metadata[field] === "string" || typeof metadata[field] === "number") return [[field, String(metadata[field])]];
+        return [];
+      })
   );
   return {
     id: config.id,
@@ -1134,6 +1155,9 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
 
     const existing = await findTenantProviderConfig(req.tenantId, provider);
     const incomingMetadata = normalizeMetadata(req.body?.metadata, {});
+    if (provider.key === "finance_bank_statements" && Object.prototype.hasOwnProperty.call(incomingMetadata, "bankAccounts")) {
+      incomingMetadata.bankAccounts = normalizeBankAccounts(incomingMetadata.bankAccounts);
+    }
     const metadata = normalizeMetadata({
       ...configMetadata(existing),
       ...incomingMetadata,

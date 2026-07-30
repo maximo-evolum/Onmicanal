@@ -297,7 +297,7 @@ function FinanceWorkspace() {
           {loading ? <div className="finance-loading">Actualizando informacion financiera...</div> : null}
 
           {activeTab === "resumen" && overview ? <>
-            <section className="finance-kpis finance-kpis-v3">{headline?.map((item, index) => <article key={item.label}><span className="finance-kpi-index">0{index + 1}</span><small>{item.label}</small><strong>{item.value}</strong><span>{item.help}</span></article>)}</section>
+          <section className="finance-kpis finance-kpis-v3">{headline?.map((item) => <article key={item.label}><small>{item.label}</small><strong>{item.value}</strong><span>{item.help}</span></article>)}</section>
             <FinanceCycle overview={overview} onSelect={selectTab} />
             <section className="finance-overview-layout">
               <article className="finance-card finance-reconciliation-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliacion activa</span><h2>Movimientos que esperan revision</h2></div><button type="button" className="finance-link-button" onClick={() => selectTab("conciliacion")}>Ver sugerencias</button></div>

@@ -100,12 +100,15 @@ financeRouter.get("/finance/plan", async (req, res) => {
 financeRouter.get("/finance/integrations", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
-    const channels = await prisma.tenantChannelConfig.findMany({ where: { tenantId: req.tenantId }, select: { channel: true, label: true, isActive: true, updatedAt: true } });
+    const channels = await prisma.tenantChannelConfig.findMany({ where: { tenantId: req.tenantId }, select: { channel: true, label: true, metadata: true, isActive: true, updatedAt: true } });
     const byChannel = new Map(channels.map((item) => [String(item.channel).toLowerCase(), item]));
     const status = (keys) => keys.some((key) => byChannel.get(key)?.isActive) ? "connected" : "not_connected";
+    const bankConfig = byChannel.get("finance_bank_statements");
+    const bankAccounts = Array.isArray(bankConfig?.metadata?.bankAccounts) ? bankConfig.metadata.bankAccounts : [];
+    const bankCount = bankConfig?.isActive ? bankAccounts.length : 0;
     // Nunca se devuelven tokens, IDs externos ni secretos técnicos al navegador.
     res.json({ integrations: [
-      { key: "bank", label: "Cartolas bancarias", status: "manual_ready", detail: "Carga CSV disponible; los conectores bancarios se habilitan por contrato." },
+      { key: "bank", label: "Cartolas bancarias", status: "manual_ready", detail: bankCount ? `${bankCount} ${bankCount === 1 ? "banco configurado" : "bancos configurados"}; carga CSV disponible para conciliación.` : "Carga CSV disponible; agrega uno o más bancos desde Centro de Conexiones." },
       { key: "erp", label: "ERP / contabilidad", status: "not_connected", detail: "Conecta Nubox, Defontana, Softland u otro ERP autorizado." },
       { key: "email", label: "Correo", status: status(["email", "gmail", "smtp"]), detail: "Canal usado para recordatorios aprobados." },
       { key: "whatsapp", label: "WhatsApp Business", status: status(["whatsapp", "whatsapp_business"]), detail: "Canal usado solo con consentimiento y plantilla aprobada." }
