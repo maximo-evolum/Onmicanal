@@ -121,6 +121,40 @@ function discoverySummary(provider: ConnectionProvider) {
   return candidates[0] || null;
 }
 
+type ConnectionFormState = { label: string; phoneNumberId: string; businessAccountId: string; externalAccountId: string; accessToken: string; metadata: Record<string, string>; isActive: boolean };
+type ProviderField = { key: string; label: string; placeholder?: string; secret?: boolean; options?: string[] };
+
+function fieldsForProvider(provider: ConnectionProvider): ProviderField[] {
+  const fields: Record<string, ProviderField[]> = {
+    meta_whatsapp: [{ key: "businessAccountId", label: "ID de cuenta de WhatsApp Business" }, { key: "phoneNumberId", label: "Phone number ID" }],
+    meta_instagram: [{ key: "businessAccountId", label: "ID de cuenta de Instagram Business" }],
+    facebook_business: [{ key: "externalAccountId", label: "ID de página de Facebook" }],
+    meta_business: [{ key: "businessAccountId", label: "ID de cuenta de Meta Business" }],
+    email_imap: [{ key: "host", label: "Servidor IMAP / SMTP", placeholder: "mail.tuempresa.cl" }, { key: "port", label: "Puerto", placeholder: "993 o 587" }, { key: "username", label: "Correo de la cuenta", placeholder: "cobranza@tuempresa.cl" }, { key: "accessToken", label: "Contraseña de aplicación", secret: true }],
+    webpay: [{ key: "commerceCode", label: "Código de comercio" }, { key: "environment", label: "Ambiente", options: ["Integración", "Producción"] }, { key: "accessToken", label: "Clave API", secret: true }],
+    bank_links: [{ key: "bankName", label: "Banco" }, { key: "accountType", label: "Tipo de cuenta", options: ["Cuenta corriente", "Cuenta vista", "Cuenta ahorro"] }, { key: "accountNumber", label: "Número de cuenta" }, { key: "accountHolder", label: "Titular de la cuenta" }, { key: "accountRut", label: "RUT del titular" }],
+    backup_provider: [{ key: "provider", label: "Proveedor", options: ["Microsoft Azure", "AWS", "Google Cloud", "SONDA Cloud", "Otro"] }, { key: "bucket", label: "Contenedor o bucket" }, { key: "region", label: "Región de almacenamiento" }, { key: "accessToken", label: "Clave de acceso", secret: true }],
+    security_replica: [{ key: "provider", label: "Proveedor de réplica" }, { key: "target", label: "Destino de réplica" }, { key: "frequency", label: "Frecuencia", options: ["Cada hora", "Diaria", "Semanal"] }],
+    finance_nubox: [{ key: "companyRut", label: "RUT de la empresa" }, { key: "accessToken", label: "Token API de Nubox", secret: true }],
+    finance_defontana: [{ key: "companyCode", label: "Código de empresa" }, { key: "accessToken", label: "Clave API de Defontana", secret: true }],
+    finance_softland: [{ key: "companyCode", label: "Código de empresa / sociedad" }, { key: "accessToken", label: "Clave API de Softland", secret: true }],
+    finance_sii: [{ key: "taxpayerRut", label: "RUT del contribuyente" }, { key: "accessToken", label: "Credencial o token autorizado", secret: true }]
+  };
+  return fields[provider.key] || [];
+}
+
+function ProviderFieldGrid({ provider, form, setForm }: { provider: ConnectionProvider; form: ConnectionFormState; setForm: (updater: (current: ConnectionFormState) => ConnectionFormState) => void }) {
+  const fields = fieldsForProvider(provider);
+  if (!fields.length) return <p className="connection-form-help">Esta conexión se completa por OAuth, carga local o mediante la configuración del proveedor. No requiere IDs de Meta.</p>;
+  return <div className="connection-form-grid">{fields.map((field) => {
+    const direct = field.key === "businessAccountId" || field.key === "phoneNumberId" || field.key === "externalAccountId" || field.key === "accessToken";
+    const directValues: Record<string, string> = { businessAccountId: form.businessAccountId, phoneNumberId: form.phoneNumberId, externalAccountId: form.externalAccountId, accessToken: form.accessToken };
+    const value = direct ? (directValues[field.key] || "") : (form.metadata[field.key] || "");
+    const update = (next: string) => setForm((current) => direct ? ({ ...current, [field.key]: next } as ConnectionFormState) : { ...current, metadata: { ...current.metadata, [field.key]: next } });
+    return <label key={field.key}>{field.label}{field.options ? <select value={value} onChange={(event) => update(event.target.value)}><option value="">Selecciona una opción</option>{field.options.map((option) => <option key={option}>{option}</option>)}</select> : <input type={field.secret ? "password" : "text"} autoComplete={field.secret ? "new-password" : "off"} placeholder={field.placeholder} value={value} onChange={(event) => update(event.target.value)} />}{field.secret ? <small>Se guarda cifrada y no vuelve a mostrarse.</small> : null}</label>;
+  })}</div>;
+}
+
 export default function ConnectionsPage() {
   const agent = getStoredSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -137,6 +171,8 @@ export default function ConnectionsPage() {
     phoneNumberId: "",
     businessAccountId: "",
     externalAccountId: "",
+    accessToken: "",
+    metadata: {} as Record<string, string>,
     isActive: true,
   });
 
@@ -178,6 +214,12 @@ export default function ConnectionsPage() {
       phoneNumberId: selected.config?.phoneNumberId || "",
       businessAccountId: selected.config?.businessAccountId || "",
       externalAccountId: selected.config?.externalAccountId || "",
+      accessToken: "",
+      metadata: Object.fromEntries(
+        Object.entries(selected.config?.metadata || {})
+          .filter(([key, value]) => key !== "oauthDiscovery" && typeof value === "string")
+          .map(([key, value]) => [key, String(value)])
+      ),
       isActive: selected.config?.isActive ?? true,
     });
   }, [selected?.key]);
@@ -195,6 +237,8 @@ export default function ConnectionsPage() {
         phoneNumberId: form.phoneNumberId,
         businessAccountId: form.businessAccountId,
         externalAccountId: form.externalAccountId,
+        ...(form.accessToken ? { accessToken: form.accessToken } : {}),
+        metadata: Object.fromEntries(Object.entries(form.metadata).filter(([, value]) => String(value).trim())),
         isActive: form.isActive,
       });
       setConnectionActivity({ key: selected.key, stage: "Configuración guardada", progress: 100 });
@@ -553,19 +597,8 @@ export default function ConnectionsPage() {
                                 Nombre visible
                                 <input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
                               </label>
-                              <label>
-                                ID externo / cuenta
-                                <input value={form.externalAccountId} onChange={(event) => setForm((current) => ({ ...current, externalAccountId: event.target.value }))} />
-                              </label>
-                              <label>
-                                Business account ID
-                                <input value={form.businessAccountId} onChange={(event) => setForm((current) => ({ ...current, businessAccountId: event.target.value }))} />
-                              </label>
-                              <label>
-                                Phone number ID
-                                <input value={form.phoneNumberId} onChange={(event) => setForm((current) => ({ ...current, phoneNumberId: event.target.value }))} />
-                              </label>
                             </div>
+                            <ProviderFieldGrid provider={selected} form={form} setForm={setForm} />
                             <button type="submit" disabled={saving || Boolean(connectionActivity)}>{saving ? "Guardando..." : "Guardar datos complementarios"}</button>
                           </details>
 
@@ -581,19 +614,8 @@ export default function ConnectionsPage() {
                               Nombre visible
                               <input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
                             </label>
-                            <label>
-                              ID externo / cuenta
-                              <input value={form.externalAccountId} onChange={(event) => setForm((current) => ({ ...current, externalAccountId: event.target.value }))} />
-                            </label>
-                            <label>
-                              Business account ID
-                              <input value={form.businessAccountId} onChange={(event) => setForm((current) => ({ ...current, businessAccountId: event.target.value }))} />
-                            </label>
-                            <label>
-                              Phone number ID
-                              <input value={form.phoneNumberId} onChange={(event) => setForm((current) => ({ ...current, phoneNumberId: event.target.value }))} />
-                            </label>
                           </div>
+                          <ProviderFieldGrid provider={selected} form={form} setForm={setForm} />
 
                           <div className="connection-actions">
                             <button className="primary" type="submit" disabled={saving || Boolean(connectionActivity)}>{saving ? "Guardando..." : "Guardar conexión"}</button>

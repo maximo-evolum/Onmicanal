@@ -138,7 +138,8 @@ const PROVIDERS = [
     type: "credentials",
     module: MODULES.EMAIL_IMAP,
     description: "Conexion de correo tradicional para clientes que no usan OAuth.",
-    requiredFields: ["host", "port", "username", "accessToken"]
+    requiredFields: ["host", "port", "username", "accessToken"],
+    publicFields: ["host", "port", "username"]
   },
   {
     key: "webpay",
@@ -149,7 +150,8 @@ const PROVIDERS = [
     type: "credentials",
     module: MODULES.PAYMENTS,
     description: "Proveedor de pago con credenciales productivas o ambiente de integracion.",
-    requiredFields: ["commerceCode", "accessToken"]
+    requiredFields: ["commerceCode", "accessToken"],
+    publicFields: ["commerceCode", "environment"]
   },
   {
     key: "mercadopago",
@@ -174,7 +176,67 @@ const PROVIDERS = [
     type: "manual",
     module: MODULES.PAYMENTS,
     description: "Datos bancarios, plantillas de transferencia y links manuales por banco.",
-    requiredFields: ["bankName", "accountNumber"]
+    requiredFields: ["bankName", "accountNumber"],
+    publicFields: ["bankName", "accountType", "accountNumber", "accountHolder", "accountRut"]
+  },
+  {
+    key: "finance_bank_statements",
+    label: "Cartolas bancarias",
+    group: "Finanzas",
+    groupKey: "finance",
+    icon: "CB",
+    type: "local",
+    module: MODULES.FINANCE_BANK_SYNC,
+    description: "Importa cartolas CSV y movimientos bancarios para el ciclo de conciliación financiera.",
+    requiredFields: []
+  },
+  {
+    key: "finance_nubox",
+    label: "Nubox",
+    group: "Finanzas",
+    groupKey: "finance",
+    icon: "NB",
+    type: "credentials",
+    module: MODULES.FINANCE_INVOICES,
+    description: "Sincroniza documentos tributarios y cuentas por cobrar cuando la API del cliente esté autorizada.",
+    requiredFields: ["companyRut", "accessToken"],
+    publicFields: ["companyRut"]
+  },
+  {
+    key: "finance_defontana",
+    label: "Defontana",
+    group: "Finanzas",
+    groupKey: "finance",
+    icon: "DF",
+    type: "credentials",
+    module: MODULES.FINANCE_INVOICES,
+    description: "Conecta facturación y documentos contables desde la empresa autorizada en Defontana.",
+    requiredFields: ["companyCode", "accessToken"],
+    publicFields: ["companyCode"]
+  },
+  {
+    key: "finance_softland",
+    label: "Softland",
+    group: "Finanzas",
+    groupKey: "finance",
+    icon: "SL",
+    type: "credentials",
+    module: MODULES.FINANCE_INVOICES,
+    description: "Configura la sincronización de documentos y cuentas por cobrar desde Softland.",
+    requiredFields: ["companyCode", "accessToken"],
+    publicFields: ["companyCode"]
+  },
+  {
+    key: "finance_sii",
+    label: "SII / DTE",
+    group: "Finanzas",
+    groupKey: "finance",
+    icon: "SI",
+    type: "credentials",
+    module: MODULES.FINANCE_INVOICES,
+    description: "Prepara la consulta de documentos tributarios electrónicos del contribuyente autorizado.",
+    requiredFields: ["taxpayerRut", "accessToken"],
+    publicFields: ["taxpayerRut"]
   },
   {
     key: "backup_provider",
@@ -185,7 +247,8 @@ const PROVIDERS = [
     type: "credentials",
     module: MODULES.BACKUP_PROVIDER,
     description: "Azure Backup, AWS Backup, Backblaze, Wasabi u otro proveedor definido por cliente.",
-    requiredFields: ["provider", "bucket", "region", "accessToken"]
+    requiredFields: ["provider", "bucket", "region", "accessToken"],
+    publicFields: ["provider", "bucket", "region"]
   },
   {
     key: "security_replica",
@@ -196,7 +259,8 @@ const PROVIDERS = [
     type: "credentials",
     module: MODULES.SECURITY_REPLICA,
     description: "Configuracion de replica logica para recuperacion y alta disponibilidad.",
-    requiredFields: ["provider", "target", "frequency"]
+    requiredFields: ["provider", "target", "frequency"],
+    publicFields: ["provider", "target", "frequency"]
   },
   {
     key: "offline_sync",
@@ -299,7 +363,7 @@ function providerStatus(provider, config) {
   return "CONNECTED";
 }
 
-function publicConfig(config) {
+function publicConfig(config, provider = null) {
   if (!config) return null;
   const metadata = configMetadata(config);
   const discovery = metadata.oauthDiscovery && typeof metadata.oauthDiscovery === "object"
@@ -318,6 +382,16 @@ function publicConfig(config) {
         .map((key) => [key, account[key]])
     )
     : {};
+  // Los campos no secretos se devuelven solo cuando el proveedor los declaró
+  // necesarios. Tokens y metadatos técnicos nunca salen de este endpoint.
+  const safeFields = [...new Set([...(provider?.requiredFields || []), ...(provider?.publicFields || [])])]
+    .filter((field) => !["accessToken", "verifyToken"].includes(field));
+  const safeMetadata = Object.fromEntries(
+    safeFields
+      .filter((field) => !["phoneNumberId", "businessAccountId", "externalAccountId"].includes(field))
+      .filter((field) => typeof metadata[field] === "string" || typeof metadata[field] === "number")
+      .map((field) => [field, String(metadata[field])])
+  );
   return {
     id: config.id,
     channel: config.channel,
@@ -325,7 +399,10 @@ function publicConfig(config) {
     phoneNumberId: config.phoneNumberId,
     businessAccountId: config.businessAccountId,
     externalAccountId: config.externalAccountId,
-    metadata: Object.keys(publicAccount).length ? { oauthDiscovery: { account: publicAccount } } : {},
+    metadata: {
+      ...safeMetadata,
+      ...(Object.keys(publicAccount).length ? { oauthDiscovery: { account: publicAccount } } : {})
+    },
     isActive: config.isActive,
     hasAccessToken: hasSecret(config.accessToken),
     hasVerifyToken: hasSecret(config.verifyToken),
@@ -359,7 +436,7 @@ function publicProvider(provider, config) {
     missing: fieldMissing,
     missingOAuthEnvironment: [],
     status: providerStatus(provider, config),
-    config: publicConfig(config)
+    config: publicConfig(config, provider)
   };
 }
 
@@ -378,6 +455,8 @@ function groupProviders(providers) {
               ? "Correo, documentos, carpetas y almacenamiento del cliente."
               : provider.groupKey === "payments"
                 ? "Medios de pago, links, estados de cobro y bancos."
+                : provider.groupKey === "finance"
+                  ? "Cartolas, ERP, DTE y fuentes de cuentas por cobrar autorizadas."
                 : "Backups, replica, alta disponibilidad y trabajo offline.",
         providers: []
       };

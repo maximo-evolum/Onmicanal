@@ -12960,6 +12960,7 @@ textarea:focus {
 }
 
 .connection-form-grid input,
+.connection-form-grid select,
 .connection-metadata-field textarea {
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--theme-border) 70%, transparent);
@@ -12971,9 +12972,25 @@ textarea:focus {
 }
 
 .connection-form-grid input:focus,
+.connection-form-grid select:focus,
 .connection-metadata-field textarea:focus {
   border-color: var(--theme-primary-2);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary) 22%, transparent);
+}
+
+.connection-form-grid small,
+.connection-form-help {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.connection-form-help {
+  margin: 2px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 28%, var(--theme-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--theme-primary-2) 7%, transparent);
 }
 
 .connection-metadata-field {
