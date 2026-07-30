@@ -13570,6 +13570,27 @@ textarea:focus {
   padding-left: var(--ev-rail-width) !important;
 }
 
+/* Extiende visualmente la barra lateral hasta el final del contenido. El panel
+   de navegación permanece fijo, pero su columna no debe convertirse en una
+   franja blanca cuando la página es más alta que la ventana. */
+.vertical-shell:not(.nav-collapsed) {
+  position: relative;
+  isolation: isolate;
+}
+
+.vertical-shell:not(.nav-collapsed)::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--ev-nav-width);
+  pointer-events: none;
+  background: linear-gradient(180deg, #14111f 0%, #22173b 58%, #171322 100%);
+  border-right: 1px solid rgba(119, 73, 158, .48);
+}
+
 .vertical-shell .evolum-menu-bubble {
   position: fixed !important;
   top: var(--ev-bubble-top) !important;
