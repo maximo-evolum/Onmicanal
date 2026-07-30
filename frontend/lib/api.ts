@@ -842,6 +842,26 @@ export function generateFinanceCollectionCases(): Promise<{ created: number; cas
   return request("/finance/collection-cases/generate", { method: "POST" });
 }
 
+export type FinanceCustomer = { key: string; name: string; rut: string | null; invoices: number; openInvoices: number; totalAmount: number; outstandingAmount: number; overdueAmount: number; lastActivityAt: string };
+export type FinanceIntegration = { key: string; label: string; status: "connected" | "not_connected" | "manual_ready"; detail: string };
+export type FinancePlan = { plan: string; usage: { processedDocuments: number; limit: number | null; percentage: number | null } };
+
+export function getFinanceCustomers(): Promise<{ customers: FinanceCustomer[] }> {
+  return request("/finance/customers");
+}
+
+export function getFinanceIntegrations(): Promise<{ integrations: FinanceIntegration[] }> {
+  return request("/finance/integrations");
+}
+
+export function getFinancePlan(): Promise<FinancePlan> {
+  return request("/finance/plan");
+}
+
+export function rejectFinanceReconciliation(movementId: string, detail?: string): Promise<{ updatedMovement: IndustryRecord; exception: IndustryRecord }> {
+  return request(`/finance/reconciliations/${encodeURIComponent(movementId)}/reject`, { method: "POST", body: JSON.stringify({ detail }) });
+}
+
 export type FinanceAgentPolicy = {
   minimumConfidenceForSuggestion: number;
   autoCreateExceptions: boolean;

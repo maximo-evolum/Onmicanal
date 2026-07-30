@@ -23,6 +23,7 @@ git push -u origin main
 git remote add origin https://github.com/maximo-evolum/Onmicanal.git
 
 admin@platform.local / Admin123*
+Contadores@prueba.cl / Corredor1234
 tallermecanico@prueba.cl/tallermecanico1234
 Inmobiliaria@prueba.cl/Demo1234!
 eventosaltabrasa@prueba.cl/EventosAltaBrasa2026

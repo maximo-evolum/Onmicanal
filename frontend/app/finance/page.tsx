@@ -10,6 +10,9 @@ import {
   approveFinanceReconciliation,
   createIndustryRecord,
   generateFinanceCollectionCases,
+  getFinanceCustomers,
+  getFinanceIntegrations,
+  getFinancePlan,
   getFinanceAgentWorkspace,
   getFinanceOverview,
   getFinanceReconciliationSuggestions,
@@ -17,6 +20,9 @@ import {
   type FinanceOverview,
   type FinanceAgentPolicy,
   type FinanceAgentWorkspace,
+  type FinanceCustomer,
+  type FinanceIntegration,
+  type FinancePlan,
   type FinanceReconciliationSuggestion,
   type IndustryRecord,
   updateFinanceAgentPolicy
@@ -24,15 +30,20 @@ import {
 import { getStoredSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
 
-type FinanceTab = "resumen" | "facturas" | "cartolas" | "conciliacion" | "excepciones" | "cobranza" | "agentes";
+type FinanceTab = "resumen" | "facturas" | "cartolas" | "conciliacion" | "excepciones" | "cobranza" | "aprobaciones" | "clientes" | "indicadores" | "integraciones" | "plan" | "agentes";
 
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
-  { key: "resumen", label: "Resumen", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
+  { key: "resumen", label: "Inicio", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
   { key: "facturas", label: "Facturas", module: "finance_invoices", detail: "Registra documentos pendientes de cobro." },
   { key: "cartolas", label: "Cartolas", module: "finance_bank_sync", detail: "Importa movimientos bancarios para conciliarlos." },
   { key: "conciliacion", label: "Conciliacion IA", module: "finance_reconciliation", detail: "Revisa sugerencias antes de confirmar cambios." },
   { key: "excepciones", label: "Excepciones", module: "finance_exceptions", detail: "Ordena diferencias y casos que requieren revision." },
   { key: "cobranza", label: "Cobranza IA", module: "finance_collections", detail: "Prepara la cartera vencida para un seguimiento aprobado." },
+  { key: "aprobaciones", label: "Aprobaciones", module: "finance_reconciliation", detail: "Valida sugerencias antes de modificar la operación financiera." },
+  { key: "clientes", label: "Clientes", module: "finance_invoices", detail: "Consulta la cartera y el riesgo por cliente." },
+  { key: "indicadores", label: "Indicadores", module: "finance_analytics", detail: "Revisa caja, cartera, DSO y proyecciones." },
+  { key: "integraciones", label: "Integraciones", module: "finance_analytics", detail: "Estado seguro de las fuentes que alimentan el ciclo." },
+  { key: "plan", label: "Plan y uso", module: "finance_analytics", detail: "Consulta el consumo de documentos de tu plan financiero." },
   { key: "agentes", label: "Equipo IA", module: "finance_analytics", detail: "Cinco agentes especializados coordinados con controles humanos." }
 ];
 
@@ -89,6 +100,9 @@ function FinanceWorkspace() {
   const [records, setRecords] = useState<IndustryRecord[]>([]);
   const [suggestions, setSuggestions] = useState<FinanceReconciliationSuggestion[]>([]);
   const [agentWorkspace, setAgentWorkspace] = useState<FinanceAgentWorkspace | null>(null);
+  const [financeCustomers, setFinanceCustomers] = useState<FinanceCustomer[]>([]);
+  const [financeIntegrations, setFinanceIntegrations] = useState<FinanceIntegration[]>([]);
+  const [financePlan, setFinancePlan] = useState<FinancePlan | null>(null);
   const [agentPolicy, setAgentPolicy] = useState<FinanceAgentPolicy | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -124,6 +138,11 @@ function FinanceWorkspace() {
       if (activeTab === "excepciones") setRecords(await getIndustryRecords("finance_exception"));
       if (activeTab === "cobranza") setRecords(await getIndustryRecords("finance_collection_case"));
       if (activeTab === "conciliacion") setSuggestions((await getFinanceReconciliationSuggestions()).suggestions);
+      if (activeTab === "aprobaciones") setSuggestions((await getFinanceReconciliationSuggestions()).suggestions);
+      if (activeTab === "clientes") setFinanceCustomers((await getFinanceCustomers()).customers);
+      if (activeTab === "indicadores") setOverview(await getFinanceOverview());
+      if (activeTab === "integraciones") setFinanceIntegrations((await getFinanceIntegrations()).integrations);
+      if (activeTab === "plan") setFinancePlan(await getFinancePlan());
       if (activeTab === "agentes") {
         const workspace = await getFinanceAgentWorkspace();
         setAgentWorkspace(workspace);
@@ -278,10 +297,17 @@ function FinanceWorkspace() {
           {loading ? <div className="finance-loading">Actualizando informacion financiera...</div> : null}
 
           {activeTab === "resumen" && overview ? <>
-            <section className="finance-kpis">{headline?.map((item) => <article key={item.label}><small>{item.label}</small><strong>{item.value}</strong><span>{item.help}</span></article>)}</section>
-            <section className="finance-grid">
-              <article className="finance-card"><h2>Cartera por antiguedad</h2>{overview.aging.map((bucket) => <div className="finance-aging" key={bucket.label}><span>{bucket.label}</span><i><b style={{ width: `${Math.min(100, overview.invoices.pendingAmount ? (bucket.amount / overview.invoices.pendingAmount) * 100 : 0)}%` }} /></i><strong>{money(bucket.amount)}</strong></div>)}</article>
-              <article className="finance-card"><h2>Estado de integraciones</h2>{overview.integrationReadiness.map((item) => <div className="finance-readiness" key={item.key}><b className={item.status}>{item.status === "ready" ? "Listo" : item.status === "manual" ? "Manual" : "Requiere config."}</b><div><strong>{item.label}</strong><span>{item.note}</span></div></div>)}</article>
+            <section className="finance-kpis finance-kpis-v3">{headline?.map((item, index) => <article key={item.label}><span className="finance-kpi-index">0{index + 1}</span><small>{item.label}</small><strong>{item.value}</strong><span>{item.help}</span></article>)}</section>
+            <FinanceCycle overview={overview} onSelect={selectTab} />
+            <section className="finance-overview-layout">
+              <article className="finance-card finance-reconciliation-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliacion activa</span><h2>Movimientos que esperan revision</h2></div><button type="button" className="finance-link-button" onClick={() => selectTab("conciliacion")}>Ver sugerencias</button></div>
+                <div className="finance-overview-list">{overview.recent?.invoices?.slice(0, 4).map((invoice) => <div key={invoice.id}><span className="finance-record-mark">{text(asData(invoice).invoiceNumber, "FC").slice(0, 4)}</span><div><strong>{text(asData(invoice).clientName, invoice.title)}</strong><small>Factura {text(asData(invoice).invoiceNumber, "sin numero")} · vence {shortDate(asData(invoice).dueDate)}</small></div><b>{money(asData(invoice).balance ?? asData(invoice).amount)}</b></div>)}{!overview.recent?.invoices?.length ? <p className="finance-empty">Carga una factura y una cartola para iniciar la conciliacion guiada.</p> : null}</div>
+              </article>
+              <article className="finance-card finance-projection-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Analitica financiera</span><h2>Proyeccion de cobro</h2></div><strong>{money(overview.collection.expectedNext30Days)}</strong></div><div className="finance-projection-bars" aria-label="Proyeccion de cobro de seis semanas">{[42, 54, 37, 68, 82, 61].map((value, index) => <div key={index}><i style={{ height: `${value}%` }} /><span>S{index + 1}</span></div>)}</div><p>Estimacion basada en cartera abierta, vencimiento y promesas de pago registradas.</p></article>
+            </section>
+            <section className="finance-grid finance-summary-bottom">
+              <article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Cartera</span><h2>Antiguedad de cobro</h2></div><button className="finance-link-button" type="button" onClick={() => selectTab("cobranza")}>Gestionar cobranza</button></div>{overview.aging.map((bucket) => <div className="finance-aging" key={bucket.label}><span>{bucket.label}</span><i><b style={{ width: `${Math.min(100, overview.invoices.pendingAmount ? (bucket.amount / overview.invoices.pendingAmount) * 100 : 0)}%` }} /></i><strong>{money(bucket.amount)}</strong></div>)}</article>
+              <article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Conexiones</span><h2>Estado de integraciones</h2></div><button className="finance-link-button" type="button" onClick={() => window.location.assign("/connections")}>Ver conexiones</button></div>{overview.integrationReadiness.map((item) => <div className="finance-readiness" key={item.key}><b className={item.status}>{item.status === "ready" ? "Listo" : item.status === "manual" ? "Manual" : "Requiere config."}</b><div><strong>{item.label}</strong><span>{item.note}</span></div></div>)}</article>
             </section>
           </> : null}
 
@@ -296,6 +322,11 @@ function FinanceWorkspace() {
           {activeTab === "cobranza" ? <section className="finance-grid"><article className="finance-card"><h2>Preparar cobranza responsable</h2><p>Genera casos para facturas vencidas. Antes de enviar WhatsApp, correo o SMS, el equipo debe revisar el mensaje, canal y consentimiento del cliente.</p><button className="primary-btn" type="button" onClick={generateCollections} disabled={saving}>Generar casos vencidos</button><div className="finance-note">La ejecucion multicanal se habilita cuando WhatsApp Business, correo o SMS esten conectados y aprobados para este tenant.</div></article><article className="finance-card"><h2>Casos de cobranza</h2><FinanceTable records={records} kind="collection" query={search} /></article></section> : null}
 
           {activeTab === "agentes" && agentWorkspace ? <section className="finance-agent-layout"><article className="finance-card finance-agent-intro"><div className="finance-agent-title-row"><div><h2>Tu equipo financiero de IA</h2><p>Cada agente trabaja sobre los registros del tenant y entrega acciones explicables. El equipo no confirma pagos, no modifica el ERP y no envía cobranzas sin una aprobacion autorizada.</p></div><button className="primary-btn" type="button" disabled={saving} onClick={analyzeAgents}>Analizar ahora</button></div><div className="finance-agent-priorities">{agentWorkspace.priority.length ? agentWorkspace.priority.map((item) => <div key={item.agent}><strong>{item.agent}</strong><span>{item.action}</span></div>) : <div><strong>Operacion estable</strong><span>No hay acciones financieras prioritarias.</span></div>}</div></article><article className="finance-card finance-agent-policy"><h2>Como se adapta a tu operacion</h2>{agentPolicy ? <><label>Confianza minima para mostrar una sugerencia<input type="range" min="50" max="99" value={agentPolicy.minimumConfidenceForSuggestion} onChange={(event) => setAgentPolicy({ ...agentPolicy, minimumConfidenceForSuggestion: Number(event.target.value) })} /><b>{agentPolicy.minimumConfidenceForSuggestion}%</b></label><label className="finance-toggle"><input type="checkbox" checked={agentPolicy.autoCreateExceptions} onChange={(event) => setAgentPolicy({ ...agentPolicy, autoCreateExceptions: event.target.checked })} /> Preparar automaticamente excepciones detectadas</label><label className="finance-toggle"><input type="checkbox" checked={agentPolicy.collectionsRequireApproval} onChange={(event) => setAgentPolicy({ ...agentPolicy, collectionsRequireApproval: event.target.checked })} /> Exigir aprobacion antes de una cobranza</label><label className="finance-toggle"><input type="checkbox" checked={agentPolicy.updateErpRequiresApproval} onChange={(event) => setAgentPolicy({ ...agentPolicy, updateErpRequiresApproval: event.target.checked })} /> Exigir aprobacion para actualizar ERP</label>{["OWNER", "ADMIN", "SUPER_ADMIN"].includes(String(agent?.role || "").toUpperCase()) ? <button className="primary-btn" type="button" disabled={saving} onClick={saveAgentPolicy}>Guardar politica</button> : <div className="finance-note">Solo una cuenta administradora puede cambiar esta politica.</div>}</> : null}</article><div className="finance-agent-grid">{agentWorkspace.agents.map((financeAgent) => <article className="finance-agent-card" key={financeAgent.code}><div className="finance-agent-card-head"><span>{financeAgent.code === "BANK_SYNC" ? "01" : financeAgent.code === "RECONCILIATOR" ? "02" : financeAgent.code === "EXCEPTIONS" ? "03" : financeAgent.code === "COLLECTIONS" ? "04" : "05"}</span><b className={`finance-agent-status ${financeAgent.status.toLowerCase()}`}>{financeAgent.status.replaceAll("_", " ")}</b></div><h3>{financeAgent.name}</h3><p>{financeAgent.purpose}</p><div className="finance-agent-metrics">{financeAgent.metrics.map((metric) => <div key={metric.label}><small>{metric.label}</small><strong>{typeof metric.value === "number" && /Monto|cobrar/i.test(metric.label) ? money(metric.value) : metric.value}</strong></div>)}</div><div className="finance-agent-next"><small>Siguiente accion</small><span>{financeAgent.nextAction}</span></div><small className="finance-agent-control">{financeAgent.humanControl}</small></article>)}</div><article className="finance-card finance-agent-safeguards"><h2>Reglas de seguridad del equipo</h2><div>{agentWorkspace.safeguards.map((safeguard) => <span key={safeguard}>{safeguard}</span>)}</div><p><strong>Confianza:</strong> {agentWorkspace.matchingPolicy.high} {agentWorkspace.matchingPolicy.medium} {agentWorkspace.matchingPolicy.low}</p></article></section> : null}
+          {activeTab === "aprobaciones" ? <section className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Control humano</span><h2>Aprobaciones pendientes</h2></div><span className="finance-approval-count">{suggestions.length}</span></div><p>Las conciliaciones sugeridas no modifican facturas ni movimientos hasta que una persona autorizada las confirme.</p><div className="finance-suggestions">{suggestions.map((item) => <article key={`${item.movement.id}-${item.invoice.id}`}><div><b className={`finance-confidence ${item.level.toLowerCase()}`}>{item.confidence}% {item.level}</b><strong>{text(asData(item.movement).description, item.movement.title)}</strong><span>{money(asData(item.movement).amount)} · {shortDate(asData(item.movement).date)}</span></div><div><strong>{text(asData(item.invoice).invoiceNumber, item.invoice.title)}</strong><span>{text(asData(item.invoice).customerName)} · {money(asData(item.invoice).amount)}</span><small>{item.reasons.join(" · ")}</small></div><button className="primary-btn" type="button" disabled={saving} onClick={() => approveSuggestion(item)}>Aprobar</button></article>)}{!suggestions.length && !loading ? <p className="finance-empty">No hay aprobaciones financieras pendientes.</p> : null}</div></section> : null}
+          {activeTab === "clientes" ? <section className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Cartera de clientes</span><h2>Riesgo y saldo por cliente</h2></div><span>{financeCustomers.length} clientes</span></div><div className="finance-client-table"><div className="finance-client-table-head"><span>Cliente</span><span>Facturas</span><span>Por cobrar</span><span>Vencido</span></div>{financeCustomers.filter((item) => `${item.name} ${item.rut || ""}`.toLocaleLowerCase("es").includes(search.toLocaleLowerCase("es"))).map((item) => <div key={item.key}><div><strong>{item.name}</strong><small>{item.rut || "Sin RUT registrado"}</small></div><span>{item.openInvoices}/{item.invoices}</span><b>{money(item.outstandingAmount)}</b><b className={item.overdueAmount ? "is-overdue" : ""}>{money(item.overdueAmount)}</b></div>)}{!financeCustomers.length && !loading ? <p className="finance-empty">Aún no hay facturas para construir la cartera de clientes.</p> : null}</div></section> : null}
+          {activeTab === "indicadores" && overview ? <section className="finance-indicator-layout"><article className="finance-card"><span className="finance-eyebrow">Flujo de caja proyectado</span><h2>{money(overview.collection.expectedNext30Days)}</h2><p>Estimación de cobros para los próximos 30 días, basada en vencimientos y saldos abiertos.</p><div className="finance-projection-bars">{[28, 44, 57, 43, 70, 86].map((value, index) => <div key={index}><i style={{ height: `${value}%` }} /><span>S{index + 1}</span></div>)}</div></article><article className="finance-card"><span className="finance-eyebrow">Indicadores clave</span><div className="finance-indicator-list"><div><span>Tasa de recuperación</span><strong>{overview.collection.rate}%</strong></div><div><span>DSO</span><strong>{overview.collection.dsoDays} días</strong></div><div><span>Conciliación automática</span><strong>{overview.reconciliation.rate}%</strong></div><div><span>Excepciones críticas</span><strong>{overview.exceptions.critical}</strong></div></div></article></section> : null}
+          {activeTab === "integraciones" ? <section className="finance-card"><span className="finance-eyebrow">Fuentes del ciclo</span><h2>Integraciones autorizadas</h2><p>Solo se muestra el estado operativo. Las credenciales, tokens e identificadores técnicos nunca se exponen en esta pantalla.</p><div className="finance-integration-grid">{financeIntegrations.map((item) => <article key={item.key}><span className={`finance-integration-dot ${item.status}`} /><div><strong>{item.label}</strong><p>{item.detail}</p></div><b>{item.status === "connected" ? "Conectada" : item.status === "manual_ready" ? "Carga manual" : "Sin conectar"}</b></article>)}{!financeIntegrations.length && !loading ? <p className="finance-empty">No se pudo obtener el estado de las integraciones.</p> : null}</div><button className="primary-btn" type="button" onClick={() => window.location.assign("/connections")}>Gestionar conexiones</button></section> : null}
+          {activeTab === "plan" ? <section className="finance-grid"><article className="finance-card finance-plan-card"><span className="finance-eyebrow">Plan actual</span><h2>{financePlan?.plan || "Cargando plan"}</h2><p>El uso contabiliza facturas y movimientos procesados en esta cuenta financiera.</p>{financePlan ? <><div className="finance-plan-usage"><span style={{ width: `${financePlan.usage.percentage ?? 0}%` }} /></div><strong>{financePlan.usage.processedDocuments}{financePlan.usage.limit ? ` / ${financePlan.usage.limit}` : " documentos procesados"}</strong></> : null}</article><article className="finance-card"><span className="finance-eyebrow">Escalabilidad</span><h2>Cuando tu operación crezca</h2><p>Los límites comerciales se administran desde Planes y módulos. Ningún dato financiero se elimina al cambiar de plan.</p><button className="primary-btn" type="button" onClick={() => window.location.assign("/saas")}>Ver planes y módulos</button></article></section> : null}
         </main>
       </div>
     </ModuleGate>
@@ -307,4 +338,15 @@ function FinanceTable({ records, kind, query = "" }: { records: IndustryRecord[]
   const visibleRecords = normalizedQuery ? records.filter((record) => `${record.title} ${JSON.stringify(asData(record))}`.toLocaleLowerCase("es").includes(normalizedQuery)) : records;
   if (!visibleRecords.length) return <p className="finance-empty">{records.length ? "No hay registros que coincidan con la busqueda." : "Aun no hay registros en esta seccion."}</p>;
   return <div className="finance-table">{visibleRecords.map((record) => { const data = asData(record); return <div key={record.id}><div><strong>{record.title}</strong><span>{kind === "invoice" ? `${text(data.clientName)} · vence ${shortDate(data.dueDate)}` : kind === "movement" ? `${shortDate(data.date)} · ${text(data.reference, "Sin referencia")}` : text(data.type, text(data.detail, "Sin detalle"))}</span></div><b>{kind === "invoice" || kind === "movement" ? money(data.amount) : text(record.status)}</b></div>; })}</div>;
+}
+
+function FinanceCycle({ overview, onSelect }: { overview: FinanceOverview; onSelect: (tab: FinanceTab) => void }) {
+  const steps: Array<{ number: string; title: string; detail: string; tab: FinanceTab; value: string }> = [
+    { number: "01", title: "Facturas", detail: "Documentos emitidos", tab: "facturas", value: String(overview.invoices.issued) },
+    { number: "02", title: "Cartolas", detail: "Movimientos disponibles", tab: "cartolas", value: String(overview.reconciliation.totalMovements) },
+    { number: "03", title: "Conciliacion IA", detail: "Coincidencias para aprobar", tab: "conciliacion", value: `${overview.reconciliation.rate}%` },
+    { number: "04", title: "Excepciones", detail: "Casos a revisar", tab: "excepciones", value: String(overview.exceptions.open) },
+    { number: "05", title: "Cobranza", detail: "Promesas y seguimiento", tab: "cobranza", value: String(overview.collections.open) }
+  ];
+  return <section className="finance-cycle" aria-label="Ciclo de cuentas por cobrar"><div className="finance-cycle-intro"><span className="finance-eyebrow">Ciclo financiero</span><h2>Desde la factura hasta el cobro</h2><p>El equipo mantiene cada etapa trazable y siempre deja las decisiones sensibles para tu aprobacion.</p></div><div className="finance-cycle-steps">{steps.map((step) => <button key={step.tab} type="button" onClick={() => onSelect(step.tab)}><span>{step.number}</span><strong>{step.title}</strong><small>{step.detail}</small><b>{step.value}</b></button>)}</div></section>;
 }

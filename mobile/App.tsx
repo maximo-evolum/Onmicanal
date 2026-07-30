@@ -49,6 +49,7 @@ import {
   getCampaigns,
   getConversations,
   getCrmOperationalDashboard,
+  getFinanceOverview,
   downloadExecutiveReportPdf,
   getRealtyIntelligence,
   getIndustryRecords,
@@ -80,6 +81,7 @@ import {
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
 import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, EvolumNotification, IndustryRecord, IndustryUser, Message, RealtyIntelligence, TenantSession } from "./src/types";
+import type { FinanceOverview } from "./src/api/client";
 
 const evolumAppIcon = require("./assets/evolum-app-icon.png");
 const PERMISSION_ONBOARDING_PREFIX = "evolum_permission_onboarding_v1:";
@@ -98,6 +100,7 @@ type ScreenKey =
   | "patients"
   | "vehicleOwners"
   | "campaigns"
+  | "finance"
   | "documents"
   | "notifications"
   | "settings"
@@ -175,12 +178,14 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "patients", label: "Pacientes", short: "PA", module: "patients" },
   { key: "vehicleOwners", label: "Dueños y vehículos", short: "DV", module: "vehicle_owners" },
   { key: "campaigns", label: "Campañas", short: "CA", module: "marketing" },
+  { key: "finance", label: "Finanzas", short: "FI", module: "finance_analytics" },
   { key: "documents", label: "Archivos", short: "AR", module: "documents" },
   { key: "settings", label: "Permisos", short: "PR" },
   { key: "admin", label: "Admin", short: "SA" }
 ];
 
 const mobileModuleSymbols: Partial<Record<ScreenKey, string>> = {
+  finance: "$",
   dashboard: "▥",
   inbox: "◌",
   agenda: "◷",
@@ -200,6 +205,7 @@ const mobileModuleSymbols: Partial<Record<ScreenKey, string>> = {
 };
 
 const moduleAliases: Record<string, string[]> = {
+  finance_analytics: ["finance_analytics", "finance", "finanzas", "finance_os"],
   analytics: ["analytics", "dashboard"],
   inbox: ["inbox"],
   bookings: ["bookings", "agenda"],
@@ -648,6 +654,7 @@ function EvolumApp() {
   const [booting, setBooting] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dashboard, setDashboard] = useState<CrmOperationalDashboard | null>(null);
+  const [financeOverview, setFinanceOverview] = useState<FinanceOverview | null>(null);
   const [realtyIntelligence, setRealtyIntelligence] = useState<RealtyIntelligence | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -1008,6 +1015,7 @@ function EvolumApp() {
     const activeModules = await loadModules();
     const jobs: Array<Promise<unknown>> = [loadNotifications()];
     if (hasMobileModule(activeModules, "analytics")) jobs.push(loadDashboard(false));
+    if (hasMobileModule(activeModules, "finance_analytics")) jobs.push(loadFinance(false));
     if (hasMobileModule(activeModules, "inbox")) jobs.push(loadConversations(false));
     if (hasMobileModule(activeModules, "bookings")) jobs.push(loadBookings(false));
     if (hasMobileModule(activeModules, "marketing")) jobs.push(loadCampaigns(false));
@@ -1042,6 +1050,13 @@ function EvolumApp() {
     if (showLoading) setRefreshing(true);
     const data = await getCrmOperationalDashboard().catch(() => null);
     if (data) setDashboard(data);
+    if (showLoading) setRefreshing(false);
+  }
+
+  async function loadFinance(showLoading = true) {
+    if (showLoading) setRefreshing(true);
+    const data = await getFinanceOverview().catch(() => null);
+    if (data) setFinanceOverview(data);
     if (showLoading) setRefreshing(false);
   }
 
@@ -1198,6 +1213,7 @@ function EvolumApp() {
       await Promise.all([loadDashboard(), loadRealtyIntelligence()]);
       return;
     }
+    if (screen === "finance") return loadFinance();
     if (screen === "inbox") {
       await loadConversations();
       if (selectedConversation?.id) await loadMessages(selectedConversation.id);
@@ -1392,6 +1408,7 @@ function EvolumApp() {
         {screen === "dashboard" && (
           <DashboardScreen dashboard={dashboard} realtyIntelligence={realtyIntelligence} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />
         )}
+        {screen === "finance" && <FinanceScreen overview={financeOverview} refreshing={refreshing} onRefresh={refreshCurrent} />}
         {screen === "inbox" && (
           <InboxScreen
             conversations={filteredConversations}
@@ -1548,6 +1565,44 @@ function SideNav({
         </View>
       )}
     </>
+  );
+}
+
+function FinanceScreen({ overview, refreshing, onRefresh }: { overview: FinanceOverview | null; refreshing: boolean; onRefresh: () => void }) {
+  const [tab, setTab] = useState<"Resumen" | "Facturas" | "Cartolas" | "Conciliacion" | "Excepciones" | "Cobranza">("Resumen");
+  const tabs = ["Resumen", "Facturas", "Cartolas", "Conciliacion", "Excepciones", "Cobranza"] as const;
+  const cards = [
+    { label: "Por cobrar", value: money(overview?.invoices.pendingAmount), detail: `${overview?.invoices.pending || 0} facturas abiertas` },
+    { label: "Vencido", value: money(overview?.invoices.overdueAmount), detail: `${overview?.invoices.overdue || 0} facturas vencidas` },
+    { label: "Conciliado", value: `${overview?.reconciliation.rate || 0}%`, detail: `${overview?.reconciliation.matchedMovements || 0} movimientos` },
+    { label: "DSO", value: `${overview?.collection.dsoDays || 0} días`, detail: "promedio de cobro" }
+  ];
+  const tabContent: Record<typeof tab, { title: string; detail: string; action: string }> = {
+    Resumen: { title: "Control financiero", detail: "Ve cartera, conciliaciones y prioridades del día en un solo lugar.", action: "Actualizar resumen" },
+    Facturas: { title: "Facturas por cobrar", detail: `${overview?.invoices.pending || 0} documentos están abiertos para seguimiento.`, action: "Gestionar en la web" },
+    Cartolas: { title: "Cartolas bancarias", detail: `${overview?.reconciliation.pendingMovements || 0} movimientos esperan revisión o conciliación.`, action: "Cargar cartola en la web" },
+    Conciliacion: { title: "Conciliación IA", detail: "La IA propone coincidencias y tú confirmas los cambios antes de aplicarlos.", action: "Revisar sugerencias" },
+    Excepciones: { title: "Excepciones", detail: `${overview?.exceptions.open || 0} casos requieren una decisión o antecedente adicional.`, action: "Abrir casos" },
+    Cobranza: { title: "Cobranza responsable", detail: `${overview?.collections.open || 0} casos y ${overview?.collections.promises || 0} promesas de pago activas.`, action: "Revisar cobranza" }
+  };
+  const content = tabContent[tab];
+  return (
+    <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0891B2" />} contentContainerStyle={[styles.screenContent, { backgroundColor: "#f5f7f6", paddingBottom: 40 }]}>
+      <View style={{ padding: 18, borderRadius: 22, backgroundColor: "#17131f", overflow: "hidden", gap: 7 }}>
+        <Text style={{ color: "#61d8ed", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>EVOLUM FINANZAS</Text>
+        <Text style={{ color: "#ffffff", fontSize: 27, fontWeight: "900" }}>Cuentas por cobrar</Text>
+        <Text style={{ color: "#c7c2d6", lineHeight: 20 }}>Automatiza el ciclo financiero sin perder el control de cada aprobación.</Text>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 14 }}>
+        {tabs.map((item) => <TouchableOpacity key={item} onPress={() => setTab(item)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: tab === item ? "#0891b2" : "#d2dbd7", backgroundColor: tab === item ? "#0891b2" : "#fff" }}><Text style={{ color: tab === item ? "#fff" : "#382a5c", fontWeight: "800", fontSize: 12 }}>{item}</Text></TouchableOpacity>)}
+      </ScrollView>
+      {tab === "Resumen" && <View style={{ gap: 12 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>{cards.map((item) => <View key={item.label} style={{ width: "47%", minHeight: 116, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff" }}><Text style={{ color: "#5b5768", fontSize: 12 }}>{item.label}</Text><Text style={{ color: "#17131f", fontSize: 22, fontWeight: "900", marginTop: 8 }}>{item.value}</Text><Text style={{ color: "#1f9d5a", fontSize: 11, marginTop: 6 }}>{item.detail}</Text></View>)}</View>
+        <View style={{ padding: 17, borderRadius: 18, backgroundColor: "#302654", gap: 12 }}><Text style={{ color: "#61d8ed", fontSize: 11, fontWeight: "900", letterSpacing: 1.3 }}>CICLO FINANCIERO</Text><Text style={{ color: "#fff", fontSize: 20, fontWeight: "900" }}>Desde la factura hasta el cobro</Text><View style={{ flexDirection: "row", justifyContent: "space-between", gap: 5 }}>{["Factura", "Cartola", "IA", "Caso", "Cobro"].map((step, index) => <View key={step} style={{ flex: 1, gap: 6 }}><View style={{ height: 5, borderRadius: 5, backgroundColor: index < 3 ? "#22d3ee" : "#6552a8" }} /><Text numberOfLines={1} style={{ color: "#d8d2ed", fontSize: 10, textAlign: "center" }}>{step}</Text></View>)}</View></View>
+      </View>}
+      {tab !== "Resumen" && <View style={{ padding: 18, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 10 }}><Text style={{ color: "#0891b2", fontSize: 11, fontWeight: "900", letterSpacing: 1.2 }}>FINANZAS / {tab.toUpperCase()}</Text><Text style={{ color: "#17131f", fontSize: 22, fontWeight: "900" }}>{content.title}</Text><Text style={{ color: "#5b5768", lineHeight: 21 }}>{content.detail}</Text><TouchableOpacity style={{ alignSelf: "flex-start", marginTop: 4, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 999, backgroundColor: "#0891b2" }} onPress={onRefresh}><Text style={{ color: "#fff", fontWeight: "900" }}>{content.action}</Text></TouchableOpacity></View>}
+      <View style={{ marginTop: 14, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff" }}><Text style={{ color: "#17131f", fontSize: 16, fontWeight: "900" }}>Trabajo sin conexión</Text><Text style={{ color: "#5b5768", marginTop: 6, lineHeight: 19, fontSize: 12 }}>Los últimos datos financieros se guardan en este teléfono. Al volver la señal, la app actualiza la información y te avisa si hay cambios pendientes.</Text></View>
+    </ScrollView>
   );
 }
 

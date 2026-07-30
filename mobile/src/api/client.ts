@@ -401,6 +401,20 @@ export async function getIndustryRecords(type?: string): Promise<IndustryRecord[
   return request<IndustryRecord[]>(`/industry-records${query}`);
 }
 
+export type FinanceOverview = {
+  invoices: { total: number; issued: number; paid: number; pending: number; overdue: number; pendingAmount: number; overdueAmount: number };
+  collection: { rate: number; dsoDays: number; expectedNext30Days: number };
+  reconciliation: { totalMovements: number; matchedMovements: number; pendingMovements: number; rate: number };
+  exceptions: { open: number; critical: number };
+  collections: { open: number; promises: number };
+  aging: Array<{ label: string; amount: number }>;
+};
+
+/** Datos del panel Finanzas. Al ser GET queda disponible desde la cache al trabajar sin señal. */
+export async function getFinanceOverview(): Promise<FinanceOverview> {
+  return request<FinanceOverview>("/finance/overview");
+}
+
 export async function createIndustryRecord(input: {
   recordType: string;
   title: string;

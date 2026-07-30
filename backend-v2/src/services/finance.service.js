@@ -159,7 +159,7 @@ export async function getFinanceOverview({ tenantId, now = new Date() }) {
     return !["RESOLVED", "CLOSED"].includes(String(record.status).toUpperCase()) && ["HIGH", "CRITICAL"].includes(priority);
   }).length;
   const openCollections = collectionCases.filter((record) => !["PAID", "CLOSED"].includes(String(record.status).toUpperCase())).length;
-  const promiseCollections = collectionCases.filter((record) => Boolean(dataOf(record).promiseDate || dataOf(record).promiseAmount)).length;
+  const promiseCollections = collectionCases.filter((record) => Boolean(dataOf(record).promiseDate || dataOf(record).promiseDueDate || dataOf(record).promiseAmount)).length;
   const expectedNext30 = invoices.reduce((total, invoice) => {
     const state = getInvoiceFinancialState(invoice, now);
     if (state.status === "PAID" || !state.dueDate) return total;
@@ -213,7 +213,9 @@ export async function getFinanceOverview({ tenantId, now = new Date() }) {
       openExceptions,
       openCollections
     },
-    aging: Object.entries(aging).map(([bucket, amount]) => ({ bucket, amount })),
+    // `label` es el contrato del frontend; `bucket` se mantiene por compatibilidad
+    // con integraciones ya construidas.
+    aging: Object.entries(aging).map(([bucket, amount]) => ({ label: bucket, bucket, amount })),
     recentInvoices: invoices.slice(0, 8).map((invoice) => ({ ...invoice, financial: getInvoiceFinancialState(invoice, now) })),
     recentMovements: movements.slice(0, 8),
     recentExceptions: exceptions.slice(0, 8),
