@@ -14973,3 +14973,33 @@ textarea:focus {
 .finance-indicator-layout { display: grid; grid-template-columns: 1.2fr .8fr; gap: 20px; }.finance-indicator-list { display: grid; gap: 0; }.finance-indicator-list > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0; border-top: 1px solid #e2e8e5; color: #5b5768; }.finance-indicator-list > div:first-child { margin-top: 12px; }.finance-indicator-list strong { color: #17131f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .finance-integration-grid { display: grid; gap: 0; margin: 18px 0; }.finance-integration-grid article { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 14px 0; border-top: 1px solid #e2e8e5; }.finance-integration-grid article:first-child { border-top: 0; }.finance-integration-grid strong { color: #17131f; }.finance-integration-grid p { margin: 3px 0 0; font-size: 12px; }.finance-integration-grid b { color: #4b3b8c; font-size: 12px; white-space: nowrap; }.finance-integration-dot { width: 9px; height: 9px; border-radius: 50%; background: #a8710a; }.finance-integration-dot.connected { background: #1f9d5a; }.finance-integration-dot.manual_ready { background: #0891b2; }.finance-plan-usage { height: 10px; margin: 18px 0 9px; overflow: hidden; border-radius: 999px; background: #eaeFec; }.finance-plan-usage span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6552a8, #0891b2); }
 @media (max-width: 760px) { .finance-client-table > div { grid-template-columns: minmax(150px,1fr) .8fr .9fr; }.finance-client-table > div > :last-child { display: none; }.finance-indicator-layout { grid-template-columns: 1fr; }.finance-integration-grid article { grid-template-columns: 10px minmax(0,1fr); }.finance-integration-grid article > b { grid-column: 2; } }
+
+/* El ciclo es una superficie oscura en ambos modos: no debe heredar tinta del tema claro. */
+.finance-cycle {
+  border-color: rgba(120, 96, 214, .6);
+  background: linear-gradient(128deg, #151125 0%, #292046 54%, #173e50 100%);
+}
+.finance-cycle h2,
+.finance-cycle .finance-cycle-intro h2 {
+  color: #ffffff !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, .18);
+}
+.finance-cycle p,
+.finance-cycle .finance-cycle-intro p {
+  color: #ded9ee !important;
+}
+.finance-cycle-steps button {
+  border-color: rgba(191, 178, 255, .38) !important;
+  background: linear-gradient(145deg, rgba(89, 70, 141, .45), rgba(22, 57, 77, .48)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+}
+.finance-cycle-steps button > span { color: #78efff !important; }
+.finance-cycle-steps button strong { color: #ffffff !important; }
+.finance-cycle-steps button small { color: #d7d2e9 !important; }
+.finance-cycle-steps button b { color: #ffffff !important; }
+.finance-cycle-steps button:hover,
+.finance-cycle-steps button:focus-visible {
+  border-color: #66e8f4 !important;
+  background: linear-gradient(145deg, rgba(114, 80, 204, .68), rgba(14, 134, 155, .62)) !important;
+  outline: none;
+}
