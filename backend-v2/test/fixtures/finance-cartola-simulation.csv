@@ -1,0 +1,7 @@
+fecha;monto;descripcion;referencia;rut;pagador
+2026-07-01;895000;Transferencia recibida de ABC Ltda;FAC-1520;761234567;ABC Ltda
+2026-07-03;450000;Abono por pago de servicio DEF SpA;FAC-1521;765555555;DEF SpA
+2026-07-05;120000;Transferencia cliente GHI SpA;FAC-1522;769999999;GHI SpA
+2026-07-08;300000;Pago parcial recibido de JKL Servicios;FAC-1523;768888888;JKL Servicios
+2026-07-10;75000;Deposito sin referencia de factura;DEP-20260710-01;;Deposito directo
+2026-07-12;180000;Transferencia recibida de MNO Comercial;FAC-1524;767777777;MNO Comercial
