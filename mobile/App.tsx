@@ -49,7 +49,12 @@ import {
   getCampaigns,
   getConversations,
   getCrmOperationalDashboard,
+  getFinanceAgentWorkspace,
+  getFinanceCustomers,
+  getFinanceIntegrations,
   getFinanceOverview,
+  getFinancePlan,
+  getFinanceReconciliationSuggestions,
   downloadExecutiveReportPdf,
   getRealtyIntelligence,
   getIndustryRecords,
@@ -64,6 +69,12 @@ import {
   loginWithEmail,
   markAllNotificationsRead,
   markNotificationRead,
+  analyzeFinanceAgents,
+  approveFinanceReconciliation,
+  rejectFinanceReconciliation,
+  generateFinanceCollectionCases,
+  updateFinanceCollectionCase,
+  updateFinanceException,
   publishCampaign,
   releaseConversation,
   resolveConversation,
@@ -81,7 +92,7 @@ import {
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
 import { colors, shadow } from "./src/theme";
 import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, EvolumNotification, IndustryRecord, IndustryUser, Message, RealtyIntelligence, TenantSession } from "./src/types";
-import type { FinanceOverview } from "./src/api/client";
+import type { FinanceAgentWorkspace, FinanceCustomer, FinanceIntegration, FinanceOverview, FinancePlan, FinanceReconciliationSuggestion } from "./src/api/client";
 
 const evolumAppIcon = require("./assets/evolum-app-icon.png");
 const PERMISSION_ONBOARDING_PREFIX = "evolum_permission_onboarding_v1:";
@@ -90,6 +101,8 @@ type ScreenKey =
   | "dashboard"
   | "inbox"
   | "agenda"
+  | "shifts"
+  | "operations"
   | "pipeline"
   | "realtyLoads"
   | "properties"
@@ -168,6 +181,8 @@ const navItems: Array<{ key: ScreenKey; label: string; short: string; module?: s
   { key: "dashboard", label: "Dashboard", short: "DA", module: "analytics" },
   { key: "inbox", label: "Inbox", short: "IO", module: "inbox" },
   { key: "agenda", label: "Agenda", short: "AG", module: "bookings" },
+  { key: "shifts", label: "Turnos", short: "TU", module: "shift_management" },
+  { key: "operations", label: "Operación", short: "OP" },
   { key: "pipeline", label: "Pipeline", short: "PI", module: "sales" },
   { key: "realtyLoads", label: "Cargas inmobiliarias", short: "CI", module: "realty_loads" },
   { key: "properties", label: "Propiedades", short: "PR", module: "properties" },
@@ -189,6 +204,7 @@ const mobileModuleSymbols: Partial<Record<ScreenKey, string>> = {
   dashboard: "▥",
   inbox: "◌",
   agenda: "◷",
+  shifts: "◷",
   pipeline: "↗",
   realtyLoads: "⇧",
   properties: "⌂",
@@ -206,6 +222,11 @@ const mobileModuleSymbols: Partial<Record<ScreenKey, string>> = {
 
 const moduleAliases: Record<string, string[]> = {
   finance_analytics: ["finance_analytics", "finance", "finanzas", "finance_os"],
+  shift_management: ["shift_management", "turnos", "turnos_clinicos", "turnos_veterinarios", "turnos_local"],
+  gastronomy_operations: ["gastronomy_operations", "operacion_gastronomica", "mesas_y_comandas"],
+  dental_care: ["dental_care", "atencion_dental", "odontograma"],
+  health_care: ["health_care", "atencion_clinica", "ficha_clinica"],
+  veterinary_care: ["veterinary_care", "atencion_veterinaria", "mascotas_y_tutores"],
   analytics: ["analytics", "dashboard"],
   inbox: ["inbox"],
   bookings: ["bookings", "agenda"],
@@ -700,6 +721,12 @@ function EvolumApp() {
       // salud no ve clientes inmobiliarios y una inmobiliaria no ve pacientes.
       if (item.key === "customers" && profile.code !== "real_estate" && !isSuperAdmin) return false;
       if (item.key === "patients" && !["health", "dental", "veterinary"].includes(profile.code) && !isSuperAdmin) return false;
+      if (item.key === "shifts" && !["gastronomy", "health", "dental", "veterinary"].includes(profile.code) && !isSuperAdmin) return false;
+      if (item.key === "operations" && !["gastronomy", "health", "dental", "veterinary"].includes(profile.code) && !isSuperAdmin) return false;
+      if (item.key === "operations" && !isSuperAdmin) {
+        const operationModule = profile.code === "gastronomy" ? "gastronomy_operations" : profile.code === "dental" ? "dental_care" : profile.code === "veterinary" ? "veterinary_care" : "health_care";
+        if (!hasMobileModule(modules, operationModule)) return false;
+      }
       if (item.key === "vehicleOwners" && profile.code !== "automotive" && !isSuperAdmin) return false;
       return mobileModuleAllowed(item, modules, session?.user?.role);
     });
@@ -1433,6 +1460,8 @@ function EvolumApp() {
           />
         )}
         {screen === "agenda" && <AgendaScreen bookings={bookings} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadBookings(false); await loadDashboard(false); }} />}
+        {screen === "shifts" && <ShiftsScreen profile={profile} />}
+        {screen === "operations" && <VerticalOperationsScreen profile={profile} />}
         {screen === "pipeline" && <PipelineScreen dashboard={dashboard} profile={profile} conversations={conversations} properties={properties} refreshing={refreshing} onRefresh={refreshCurrent} onPropertyUpdated={async () => { await loadProperties(false); await loadDashboard(false); }} onOpenConversation={(conversation) => { setSelectedConversationId(conversation.id); setScreen("inbox"); }} />}
         {screen === "realtyLoads" && <RealtyLoadsScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onRequestPhotoAccess={requestPhotoLibraryAccess} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
         {screen === "properties" && <PropertiesScreen records={properties} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadProperties(false); await loadDashboard(false); }} />}
@@ -1568,7 +1597,7 @@ function SideNav({
   );
 }
 
-function FinanceScreen({ overview, refreshing, onRefresh }: { overview: FinanceOverview | null; refreshing: boolean; onRefresh: () => void }) {
+function LegacyFinanceScreen({ overview, refreshing, onRefresh }: { overview: FinanceOverview | null; refreshing: boolean; onRefresh: () => void }) {
   const [tab, setTab] = useState<"Resumen" | "Facturas" | "Cartolas" | "Conciliacion" | "Excepciones" | "Cobranza">("Resumen");
   const tabs = ["Resumen", "Facturas", "Cartolas", "Conciliacion", "Excepciones", "Cobranza"] as const;
   const cards = [
@@ -1604,6 +1633,178 @@ function FinanceScreen({ overview, refreshing, onRefresh }: { overview: FinanceO
       <View style={{ marginTop: 14, padding: 16, borderRadius: 16, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff" }}><Text style={{ color: "#17131f", fontSize: 16, fontWeight: "900" }}>Trabajo sin conexión</Text><Text style={{ color: "#5b5768", marginTop: 6, lineHeight: 19, fontSize: 12 }}>Los últimos datos financieros se guardan en este teléfono. Al volver la señal, la app actualiza la información y te avisa si hay cambios pendientes.</Text></View>
     </ScrollView>
   );
+}
+
+type FinanceMobileTab = "Resumen" | "Facturas" | "Cartolas" | "Conciliacion" | "Excepciones" | "Cobranza" | "Aprobaciones" | "Clientes" | "Indicadores" | "Integraciones" | "Plan" | "Equipo IA";
+const FINANCE_MOBILE_TABS: FinanceMobileTab[] = ["Resumen", "Facturas", "Cartolas", "Conciliacion", "Excepciones", "Cobranza", "Aprobaciones", "Clientes", "Indicadores", "Integraciones", "Plan", "Equipo IA"];
+
+function FinanceScreen({ overview, refreshing, onRefresh }: { overview: FinanceOverview | null; refreshing: boolean; onRefresh: () => void }) {
+  const [tab, setTab] = useState<FinanceMobileTab>("Resumen");
+  const [invoices, setInvoices] = useState<IndustryRecord[]>([]);
+  const [movements, setMovements] = useState<IndustryRecord[]>([]);
+  const [exceptions, setExceptions] = useState<IndustryRecord[]>([]);
+  const [collectionCases, setCollectionCases] = useState<IndustryRecord[]>([]);
+  const [suggestions, setSuggestions] = useState<FinanceReconciliationSuggestion[]>([]);
+  const [customers, setCustomers] = useState<FinanceCustomer[]>([]);
+  const [integrations, setIntegrations] = useState<FinanceIntegration[]>([]);
+  const [plan, setPlan] = useState<FinancePlan | null>(null);
+  const [agents, setAgents] = useState<FinanceAgentWorkspace | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [invoiceForm, setInvoiceForm] = useState({ number: "", customer: "", rut: "", amount: "", dueDate: "" });
+
+  const reload = async () => {
+    const results = await Promise.allSettled([
+      getIndustryRecords("finance_invoice"), getIndustryRecords("bank_movement"), getIndustryRecords("finance_exception"), getIndustryRecords("finance_collection_case"),
+      getFinanceReconciliationSuggestions(), getFinanceCustomers(), getFinanceIntegrations(), getFinancePlan(), getFinanceAgentWorkspace()
+    ]);
+    const value = <T,>(index: number, fallback: T): T => results[index].status === "fulfilled" ? results[index].value as T : fallback;
+    setInvoices(value(0, [])); setMovements(value(1, [])); setExceptions(value(2, [])); setCollectionCases(value(3, []));
+    setSuggestions(value<{ suggestions: FinanceReconciliationSuggestion[] }>(4, { suggestions: [] }).suggestions);
+    setCustomers(value<{ customers: FinanceCustomer[] }>(5, { customers: [] }).customers);
+    setIntegrations(value<{ integrations: FinanceIntegration[] }>(6, { integrations: [] }).integrations);
+    setPlan(value<FinancePlan | null>(7, null)); setAgents(value<FinanceAgentWorkspace | null>(8, null));
+  };
+
+  useEffect(() => { reload().catch(() => undefined); }, []);
+  async function refreshAll() { setBusy(true); try { await Promise.all([onRefresh(), reload()]); } finally { setBusy(false); } }
+  async function saveInvoice() {
+    const amount = Number(invoiceForm.amount.replace(/[^\d.-]/g, ""));
+    if (!invoiceForm.number.trim() || !invoiceForm.customer.trim() || !amount || !invoiceForm.dueDate) return Alert.alert("Completa la factura", "Indica número, cliente, monto y fecha de vencimiento.");
+    setBusy(true);
+    try {
+      await createIndustryRecord({ recordType: "finance_invoice", title: `Factura ${invoiceForm.number.trim()}`, status: "ISSUED", data: { invoiceNumber: invoiceForm.number.trim(), customerName: invoiceForm.customer.trim(), rut: invoiceForm.rut.trim(), amount, balance: amount, dueDate: invoiceForm.dueDate, source: "mobile_finance" } });
+      setInvoiceForm({ number: "", customer: "", rut: "", amount: "", dueDate: "" }); Alert.alert("Factura registrada", "Quedó lista para seguimiento y conciliación."); await refreshAll();
+    } catch (error) { Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setBusy(false); }
+  }
+  async function importStatement() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "application/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"], multiple: false, copyToCacheDirectory: true });
+      if (result.canceled || !result.assets?.[0]) return;
+      const file = result.assets[0]; const isExcel = /\.(xlsx|xls)$/i.test(file.name || "");
+      const rows = isExcel ? parseXlsxRows(await FileSystem.readAsStringAsync(file.uri, { encoding: "base64" as any })) : parseCsvRows(await FileSystem.readAsStringAsync(file.uri, { encoding: "utf8" as any }));
+      if (!rows.length) return Alert.alert("Archivo sin datos", "Usa columnas fecha, monto, descripción y referencia.");
+      setBusy(true); let count = 0;
+      for (const row of rows.slice(0, 300)) {
+        const date = importText(row, ["fecha", "date", "fecha movimiento"]), amount = importNumber(row, ["monto", "amount", "cargo", "abono", "importe"]), description = importText(row, ["descripcion", "descripción", "detalle", "glosa"]), reference = importText(row, ["referencia", "reference", "folio", "documento"]);
+        if (!date || !amount) continue;
+        await createIndustryRecord({ recordType: "bank_movement", title: description || `Movimiento ${date}`, status: "PENDING", data: { date, amount, description, reference, sourceFile: file.name, source: "mobile_bank_statement" } }); count += 1;
+      }
+      Alert.alert("Cartola procesada", `${count} movimientos quedaron listos para conciliación.`); await refreshAll();
+    } catch (error) { Alert.alert("No se pudo importar", error instanceof Error ? error.message : "Revisa el formato del archivo."); } finally { setBusy(false); }
+  }
+  async function approve(suggestion: FinanceReconciliationSuggestion) { const candidate = suggestion.candidates[0]; if (!candidate) return; setBusy(true); try { await approveFinanceReconciliation(suggestion.movement.id, candidate.invoice.id); Alert.alert("Conciliación aprobada", "Se actualizó el movimiento y el saldo de la factura."); await refreshAll(); } catch (error) { Alert.alert("No se pudo aprobar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setBusy(false); } }
+  async function reject(suggestion: FinanceReconciliationSuggestion) { setBusy(true); try { await rejectFinanceReconciliation(suggestion.movement.id, "Revisión solicitada desde la app."); await refreshAll(); } catch (error) { Alert.alert("No se pudo enviar a revisión", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setBusy(false); } }
+  async function generateCollections() { setBusy(true); try { const result = await generateFinanceCollectionCases(); Alert.alert("Cobranza preparada", `${result.count} casos nuevos para revisión humana.`); await refreshAll(); } catch (error) { Alert.alert("No se pudo preparar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setBusy(false); } }
+  async function resolveException(record: IndustryRecord) { setBusy(true); try { await updateFinanceException(record.id, { status: "RESOLVED", resolution: "Resuelta desde la app móvil." }); await refreshAll(); } catch (error) { Alert.alert("No se pudo resolver", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setBusy(false); } }
+  async function contactCase(record: IndustryRecord) { setBusy(true); try { await updateFinanceCollectionCase(record.id, { status: "CONTACTED", channel: "manual", note: "Contacto registrado desde la app móvil." }); await refreshAll(); } catch (error) { Alert.alert("No se pudo actualizar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setBusy(false); } }
+  async function runAgents() { setBusy(true); try { const result = await analyzeFinanceAgents(); setAgents(result.workspace); Alert.alert("Análisis completado", `${result.exceptionsPrepared} excepciones preparadas para revisión.`); await refreshAll(); } catch (error) { Alert.alert("No se pudo analizar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setBusy(false); } }
+
+  const cards = [
+    { label: "Por cobrar", value: money(overview?.invoices.pendingAmount), detail: `${overview?.invoices.pending || 0} facturas abiertas` }, { label: "Vencido", value: money(overview?.invoices.overdueAmount), detail: `${overview?.invoices.overdue || 0} facturas vencidas` }, { label: "Conciliado", value: `${overview?.reconciliation.rate || 0}%`, detail: `${overview?.reconciliation.matchedMovements || 0} movimientos` }, { label: "DSO", value: `${overview?.collection.dsoDays || 0} días`, detail: "promedio de cobro" }
+  ];
+  const panel = { padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 10 } as const;
+  const input = { borderWidth: 1, borderColor: "#c9d6d1", borderRadius: 12, backgroundColor: "#fff", paddingHorizontal: 13, minHeight: 46, color: "#17131f" } as const;
+  const primary = { alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: "#0891b2" } as const;
+  const secondary = { alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: "#6552a8", backgroundColor: "#fff" } as const;
+  return <ScrollView refreshControl={<RefreshControl refreshing={refreshing || busy} onRefresh={refreshAll} tintColor="#0891B2" />} contentContainerStyle={[styles.screenContent, { backgroundColor: "#f5f7f6", paddingBottom: 42, gap: 14 }]}>
+    <View style={{ padding: 18, borderRadius: 22, backgroundColor: "#17131f", gap: 7 }}><Text style={{ color: "#61d8ed", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>EVOLUM FINANZAS</Text><Text style={{ color: "#ffffff", fontSize: 27, fontWeight: "900" }}>Cuentas por cobrar</Text><Text style={{ color: "#c7c2d6", lineHeight: 20 }}>Opera el ciclo completo desde la factura hasta el cobro, con control humano en las decisiones sensibles.</Text></View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{FINANCE_MOBILE_TABS.map((item) => <TouchableOpacity key={item} onPress={() => setTab(item)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: tab === item ? "#0891b2" : "#d2dbd7", backgroundColor: tab === item ? "#0891b2" : "#fff" }}><Text style={{ color: tab === item ? "#fff" : "#382a5c", fontWeight: "800", fontSize: 12 }}>{item}</Text></TouchableOpacity>)}</ScrollView>
+    {tab === "Resumen" && <View style={{ gap: 12 }}><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>{cards.map((item) => <View key={item.label} style={{ width: "47%", minHeight: 108, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff" }}><Text style={financeMobileDetail}>{item.label}</Text><Text style={{ color: "#17131f", fontSize: 22, fontWeight: "900", marginTop: 8 }}>{item.value}</Text><Text style={{ color: "#1f9d5a", fontSize: 11, marginTop: 6 }}>{item.detail}</Text></View>)}</View><View style={{ padding: 17, borderRadius: 18, backgroundColor: "#302654", gap: 12 }}><Text style={{ color: "#61d8ed", fontSize: 11, fontWeight: "900", letterSpacing: 1.3 }}>CICLO FINANCIERO</Text><Text style={{ color: "#fff", fontSize: 20, fontWeight: "900" }}>Desde la factura hasta el cobro</Text><View style={{ flexDirection: "row", gap: 5 }}>{["Factura", "Cartola", "Conciliación", "Caso", "Cobro"].map((step, index) => <View key={step} style={{ flex: 1, gap: 6 }}><View style={{ height: 5, borderRadius: 5, backgroundColor: index < 3 ? "#22d3ee" : "#6552a8" }} /><Text numberOfLines={1} style={{ color: "#d8d2ed", fontSize: 9, textAlign: "center" }}>{step}</Text></View>)}</View></View></View>}
+    {tab === "Facturas" && <View style={panel}><Text style={financeMobileTitle}>Nueva factura</Text><Text style={financeMobileDetail}>Registra documentos para seguimiento y conciliación.</Text><TextInput placeholder="Número de factura" value={invoiceForm.number} onChangeText={(number) => setInvoiceForm((current) => ({ ...current, number }))} style={input} /><TextInput placeholder="Cliente o razón social" value={invoiceForm.customer} onChangeText={(customer) => setInvoiceForm((current) => ({ ...current, customer }))} style={input} /><TextInput placeholder="RUT (opcional)" value={invoiceForm.rut} onChangeText={(rut) => setInvoiceForm((current) => ({ ...current, rut }))} style={input} /><TextInput placeholder="Monto CLP" keyboardType="numeric" value={invoiceForm.amount} onChangeText={(amount) => setInvoiceForm((current) => ({ ...current, amount }))} style={input} /><TextInput placeholder="Vence: AAAA-MM-DD" value={invoiceForm.dueDate} onChangeText={(dueDate) => setInvoiceForm((current) => ({ ...current, dueDate }))} style={input} /><TouchableOpacity disabled={busy} onPress={saveInvoice} style={primary}><Text style={financeMobileButton}>Guardar factura</Text></TouchableOpacity><FinanceRecordList records={invoices.slice(0, 12)} empty="Aún no hay facturas registradas." /></View>}
+    {tab === "Cartolas" && <View style={panel}><Text style={financeMobileTitle}>Cartolas bancarias</Text><Text style={financeMobileDetail}>Importa un CSV o Excel desde tu teléfono. Ningún pago se aplica hasta que lo apruebes.</Text><TouchableOpacity disabled={busy} onPress={importStatement} style={primary}><Text style={financeMobileButton}>Importar cartola</Text></TouchableOpacity><FinanceRecordList records={movements.slice(0, 12)} empty="Aún no hay movimientos cargados." movement /></View>}
+    {(tab === "Conciliacion" || tab === "Aprobaciones") && <View style={panel}><Text style={financeMobileTitle}>{tab === "Aprobaciones" ? "Aprobaciones pendientes" : "Conciliación IA"}</Text><Text style={financeMobileDetail}>La IA propone coincidencias; tú decides si se confirman.</Text>{suggestions.length ? suggestions.slice(0, 12).map((suggestion) => { const candidate = suggestion.candidates[0]; return <View key={suggestion.movement.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{suggestion.movement.title}</Text><Text style={financeMobileDetail}>{candidate ? `${candidate.invoice.title} · confianza ${candidate.confidence}%` : "Sin coincidencia confiable"}</Text>{candidate ? <View style={{ flexDirection: "row", gap: 8 }}><TouchableOpacity disabled={busy} onPress={() => approve(suggestion)} style={primary}><Text style={financeMobileButton}>Aprobar</Text></TouchableOpacity><TouchableOpacity disabled={busy} onPress={() => reject(suggestion)} style={secondary}><Text style={financeMobileSecondary}>Revisar</Text></TouchableOpacity></View> : null}</View>; }) : <Text style={financeMobileDetail}>Aún no hay sugerencias. Carga facturas y cartolas para calcular coincidencias.</Text>}</View>}
+    {tab === "Excepciones" && <View style={panel}><Text style={financeMobileTitle}>Excepciones</Text>{exceptions.length ? exceptions.slice(0, 20).map((record) => <View key={record.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{record.title}</Text><Text style={financeMobileDetail}>{recordText(record, "detail", recordText(record, "type", "Pendiente de revisión"))}</Text>{String(record.status).toUpperCase() !== "RESOLVED" && <TouchableOpacity disabled={busy} onPress={() => resolveException(record)} style={secondary}><Text style={financeMobileSecondary}>Marcar resuelta</Text></TouchableOpacity>}</View>) : <Text style={financeMobileDetail}>No hay excepciones pendientes.</Text>}</View>}
+    {tab === "Cobranza" && <View style={panel}><Text style={financeMobileTitle}>Cobranza responsable</Text><Text style={financeMobileDetail}>Prepara casos vencidos y registra la gestión. Los envíos externos requieren aprobación.</Text><TouchableOpacity disabled={busy} onPress={generateCollections} style={primary}><Text style={financeMobileButton}>Preparar casos</Text></TouchableOpacity>{collectionCases.length ? collectionCases.slice(0, 20).map((record) => <View key={record.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{record.title}</Text><Text style={financeMobileDetail}>{recordText(record, "customerName", "Cliente")} · {money(recordNumber(record, "balance"))} · {String(record.status || "PENDING")}</Text>{String(record.status).toUpperCase() === "PENDING" && <TouchableOpacity disabled={busy} onPress={() => contactCase(record)} style={secondary}><Text style={financeMobileSecondary}>Registrar contacto</Text></TouchableOpacity>}</View>) : <Text style={financeMobileDetail}>No hay casos abiertos. Puedes preparar casos para facturas vencidas.</Text>}</View>}
+    {tab === "Clientes" && <View style={panel}><Text style={financeMobileTitle}>Cartera por cliente</Text>{customers.length ? customers.map((customer) => <View key={customer.key} style={financeMobileRow}><Text style={financeMobileRowTitle}>{customer.name}</Text><Text style={financeMobileDetail}>{customer.rut || "Sin RUT"} · {customer.openInvoices} abiertas</Text><Text style={{ color: customer.overdueAmount ? "#c23b3b" : "#1f9d5a", fontWeight: "900" }}>{money(customer.outstandingAmount)} por cobrar</Text></View>) : <Text style={financeMobileDetail}>Aún no hay clientes con facturas registradas.</Text>}</View>}
+    {tab === "Indicadores" && <View style={panel}><Text style={financeMobileTitle}>Indicadores financieros</Text>{(overview?.aging || []).map((item) => <View key={item.label} style={financeMobileMetric}><Text style={financeMobileDetail}>{item.label}</Text><Text style={financeMobileRowTitle}>{money(item.amount)}</Text></View>)}<View style={financeMobileMetric}><Text style={financeMobileDetail}>Cobro esperado próximos 30 días</Text><Text style={financeMobileRowTitle}>{money(overview?.collection.expectedNext30Days)}</Text></View></View>}
+    {tab === "Integraciones" && <View style={panel}><Text style={financeMobileTitle}>Estado de integraciones</Text>{integrations.map((item) => <View key={item.key} style={financeMobileRow}><Text style={financeMobileRowTitle}>{item.label}</Text><Text style={{ color: item.status === "connected" ? "#1f9d5a" : item.status === "manual_ready" ? "#0891b2" : "#a8710a", fontWeight: "900", fontSize: 12 }}>{item.status === "connected" ? "Conectada" : item.status === "manual_ready" ? "Lista para carga manual" : "Requiere configuración"}</Text><Text style={financeMobileDetail}>{item.detail}</Text></View>)}</View>}
+    {tab === "Plan" && <View style={panel}><Text style={financeMobileTitle}>Plan y uso</Text><Text style={{ color: "#382a5c", fontWeight: "900", fontSize: 23 }}>{plan?.plan || "Sin plan informado"}</Text><Text style={financeMobileDetail}>{plan?.usage.processedDocuments || 0} documentos procesados{plan?.usage.limit ? ` de ${plan.usage.limit}` : ""}.</Text><View style={{ height: 10, overflow: "hidden", borderRadius: 999, backgroundColor: "#e4e9e6" }}><View style={{ height: "100%", width: `${plan?.usage.percentage || 0}%`, backgroundColor: "#0891b2" }} /></View></View>}
+    {tab === "Equipo IA" && <View style={panel}><Text style={financeMobileTitle}>Equipo IA financiero</Text><Text style={financeMobileDetail}>Los agentes analizan y proponen; no concilian ni envían cobros sin tus controles.</Text><TouchableOpacity disabled={busy} onPress={runAgents} style={primary}><Text style={financeMobileButton}>Actualizar análisis</Text></TouchableOpacity>{agents?.agents.map((agent) => <View key={agent.code} style={financeMobileRow}><Text style={financeMobileRowTitle}>{agent.name}</Text><Text style={financeMobileDetail}>{agent.purpose}</Text><Text style={{ color: "#382a5c", fontSize: 12, fontWeight: "800" }}>Siguiente: {agent.nextAction}</Text></View>)}</View>}
+    <View style={{ padding: 16, borderRadius: 16, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff" }}><Text style={financeMobileTitle}>Trabajo sin conexión</Text><Text style={[financeMobileDetail, { marginTop: 6 }]}>Las consultas vistas se guardan en este teléfono. Las facturas y movimientos ingresados sin señal quedan en cola y se sincronizan al recuperar conexión.</Text></View>
+  </ScrollView>;
+}
+
+const financeMobileTitle = { color: "#17131f", fontSize: 20, fontWeight: "900" } as const;
+const financeMobileDetail = { color: "#5b5768", lineHeight: 19, fontSize: 12 } as const;
+const financeMobileButton = { color: "#fff", fontWeight: "900" } as const;
+const financeMobileSecondary = { color: "#4b3b8c", fontWeight: "900" } as const;
+const financeMobileRow = { gap: 6, paddingTop: 13, borderTopWidth: 1, borderTopColor: "#e2e8e5" } as const;
+const financeMobileRowTitle = { color: "#17131f", fontWeight: "900", fontSize: 14 } as const;
+const financeMobileMetric = { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: "#e2e8e5" } as const;
+function FinanceRecordList({ records, empty, movement = false }: { records: IndustryRecord[]; empty: string; movement?: boolean }) {
+  if (!records.length) return <Text style={financeMobileDetail}>{empty}</Text>;
+  return <View style={{ gap: 0 }}>{records.map((record) => <View key={record.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{record.title}</Text><Text style={financeMobileDetail}>{movement ? `${recordText(record, "date", "Sin fecha")} · ${money(recordNumber(record, "amount"))}` : `${recordText(record, "customerName", "Cliente")} · ${money(recordNumber(record, "balance", recordNumber(record, "amount")))}`}</Text><Text style={{ color: "#382a5c", fontSize: 11, fontWeight: "800" }}>{String(record.status || "PENDING")}</Text></View>)}</View>;
+}
+
+type MobileOperationEntity = { type: string; label: string; fields: string[] };
+
+function mobileOperationProfile(code: string): { title: string; eyebrow: string; notice: string; entities: MobileOperationEntity[] } {
+  if (code === "gastronomy") return { title: "Operación gastronómica", eyebrow: "MESAS, COMANDAS Y CIERRE", notice: "El asistente organiza pendientes; los cobros y cambios sensibles siempre se confirman por una persona.", entities: [{ type: "restaurant_table", label: "Mesa", fields: ["numero", "sector", "capacidad", "estado"] }, { type: "restaurant_order", label: "Comanda", fields: ["mesa", "cliente", "items", "responsable", "total", "estado"] }, { type: "restaurant_guest", label: "Cliente frecuente", fields: ["nombre", "telefono", "preferencias", "observaciones"] }, { type: "restaurant_daily_close", label: "Cierre diario", fields: ["fecha", "ventas", "pagos", "diferencias", "responsable", "notas"] }] };
+  if (code === "dental") return { title: "Atención dental", eyebrow: "FICHA Y ODONTOGRAMA", notice: "El apoyo IA es administrativo. Diagnóstico, tratamiento y consentimiento requieren revisión de un profesional autorizado.", entities: [{ type: "dental_patient", label: "Ficha dental", fields: ["nombre", "telefono", "antecedentes", "alergias", "observaciones"] }, { type: "dental_odontogram", label: "Odontograma", fields: ["paciente", "pieza", "estado", "profesional", "observaciones"] }, { type: "dental_treatment", label: "Tratamiento", fields: ["paciente", "tipo", "presupuesto", "profesional", "estado", "notas"] }, { type: "dental_consent", label: "Consentimiento", fields: ["paciente", "tratamiento", "fecha", "estado", "archivo"] }] };
+  if (code === "veterinary") return { title: "Atención veterinaria", eyebrow: "MASCOTAS Y TUTORES", notice: "El apoyo IA organiza controles y pendientes. Recetas, hospitalización e indicaciones requieren revisión veterinaria.", entities: [{ type: "veterinary_pet", label: "Mascota y tutor", fields: ["nombre", "especie", "raza", "edad", "tutor", "telefono_tutor", "antecedentes"] }, { type: "veterinary_vaccine", label: "Vacuna o control", fields: ["mascota", "vacuna", "fecha", "proxima_fecha", "profesional", "estado"] }, { type: "veterinary_hospitalization", label: "Hospitalización", fields: ["mascota", "ingreso", "estado", "responsable", "observaciones"] }, { type: "veterinary_prescription", label: "Receta o presupuesto", fields: ["mascota", "tipo", "profesional", "monto", "estado", "notas"] }] };
+  return { title: "Atención clínica", eyebrow: "FICHAS Y SEGUIMIENTO", notice: "El apoyo IA organiza información y recordatorios. No diagnostica ni recomienda tratamientos; un profesional revisa cada decisión clínica.", entities: [{ type: "clinical_patient", label: "Ficha clínica", fields: ["nombre", "telefono", "antecedentes", "alergias", "contacto_emergencia"] }, { type: "clinical_attention", label: "Atención", fields: ["paciente", "profesional", "especialidad", "fecha", "motivo", "estado"] }, { type: "clinical_order", label: "Orden o presupuesto", fields: ["paciente", "tipo", "profesional", "monto", "estado", "notas"] }, { type: "clinical_followup", label: "Seguimiento", fields: ["paciente", "fecha", "canal", "estado", "notas"] }] };
+}
+
+function VerticalOperationsScreen({ profile }: { profile: IndustryProfile }) {
+  const config = useMemo(() => mobileOperationProfile(profile.code), [profile.code]);
+  const [selected, setSelected] = useState(config.entities[0].type);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [records, setRecords] = useState<Record<string, IndustryRecord[]>>({});
+  const [saving, setSaving] = useState(false);
+  const entity = config.entities.find((item) => item.type === selected) || config.entities[0];
+  const input = { borderWidth: 1, borderColor: "#c9d6d1", borderRadius: 12, backgroundColor: "#fff", paddingHorizontal: 13, minHeight: 46, color: "#17131f" } as const;
+  const load = async () => {
+    const response = await Promise.all(config.entities.map(async (item) => [item.type, await getIndustryRecords(item.type).catch(() => [])] as const));
+    setRecords(Object.fromEntries(response));
+  };
+  useEffect(() => { setSelected(config.entities[0].type); setValues({}); void load(); }, [config]);
+  async function save() {
+    const title = values.nombre || values.mascota || values.paciente || values.numero || values.mesa || values.fecha || entity.label;
+    if (!String(title).trim()) return Alert.alert("Completa el registro", "Indica al menos el dato principal antes de guardar.");
+    setSaving(true);
+    try {
+      await createIndustryRecord({ recordType: entity.type, title: String(title).trim(), status: values.estado || "PENDING", data: { ...values, vertical: profile.code, source: "mobile_vertical_operations" } });
+      setValues({});
+      Alert.alert("Registro guardado", "El equipo ya puede continuar este proceso. Si estabas sin señal se sincronizará al recuperar conexión.");
+      await load();
+    } catch (error) { Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setSaving(false); }
+  }
+  return <ScrollView contentContainerStyle={[styles.screenContent, { backgroundColor: "#f5f7f6", paddingBottom: 40, gap: 14 }]}>
+    <View style={{ padding: 18, borderRadius: 22, backgroundColor: "#17131f", gap: 7 }}><Text style={{ color: "#61d8ed", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>{config.eyebrow}</Text><Text style={{ color: "#fff", fontWeight: "900", fontSize: 26 }}>{config.title}</Text><Text style={{ color: "#c7c2d6", lineHeight: 20 }}>{config.notice}</Text></View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}><View style={{ flexDirection: "row", gap: 8 }}>{config.entities.map((item) => <TouchableOpacity key={item.type} onPress={() => { setSelected(item.type); setValues({}); }} style={{ paddingHorizontal: 13, paddingVertical: 10, borderRadius: 999, backgroundColor: entity.type === item.type ? "#4b3b8c" : "#fff", borderWidth: 1, borderColor: "#d2dbd7" }}><Text style={{ color: entity.type === item.type ? "#fff" : "#382a5c", fontWeight: "900", fontSize: 12 }}>{item.label}</Text></TouchableOpacity>)}</View></ScrollView>
+    <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 10 }}><Text style={financeMobileTitle}>Nuevo: {entity.label}</Text>{entity.fields.map((field) => <TextInput key={field} placeholder={field.replace(/_/g, " ")} value={values[field] || ""} onChangeText={(value) => setValues((current) => ({ ...current, [field]: value }))} style={input} />)}<TouchableOpacity disabled={saving} onPress={save} style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: "#0891b2" }}><Text style={financeMobileButton}>{saving ? "Guardando..." : `Guardar ${entity.label}`}</Text></TouchableOpacity></View>
+    <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 9 }}><Text style={financeMobileTitle}>Registros recientes</Text>{records[entity.type]?.length ? records[entity.type].slice(0, 15).map((record) => <View key={record.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{record.title}</Text><Text style={financeMobileDetail}>{String(record.status || "PENDING")}</Text></View>) : <Text style={financeMobileDetail}>Aún no hay registros de este proceso.</Text>}</View>
+  </ScrollView>;
+}
+
+function ShiftsScreen({ profile }: { profile: IndustryProfile }) {
+  const [shifts, setShifts] = useState<IndustryRecord[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ worker: "", role: "", date: new Date().toISOString().slice(0, 10), startsAt: "09:00", endsAt: "18:00", location: "" });
+  const copy = profile.code === "gastronomy"
+    ? { title: "Turnos de local", detail: "Garzones, cocina y responsables por jornada.", role: "Ej.: Garzón, cocina, jefe de turno" }
+    : profile.code === "dental"
+      ? { title: "Turnos odontológicos", detail: "Dentistas, asistentes, boxes y recepción.", role: "Ej.: Dentista, asistente dental" }
+      : profile.code === "veterinary"
+        ? { title: "Turnos veterinarios", detail: "Veterinarios, técnicos, hospitalización y recepción.", role: "Ej.: Veterinario, técnico veterinario" }
+        : { title: "Turnos clínicos", detail: "Médicos, profesionales, enfermería y recepción.", role: "Ej.: Médico, enfermería" };
+  const load = async () => setShifts(await getIndustryRecords("shift").catch(() => []));
+  useEffect(() => { load().catch(() => undefined); }, []);
+  async function save() {
+    if (!form.worker.trim() || !form.role.trim() || !form.date || !form.startsAt || !form.endsAt) return Alert.alert("Completa el turno", "Indica persona, rol, fecha y horario.");
+    setSaving(true);
+    try {
+      await createIndustryRecord({ recordType: "shift", title: `${form.worker.trim()} · ${form.date}`, status: "SCHEDULED", data: { worker: form.worker.trim(), role: form.role.trim(), date: form.date, startsAt: form.startsAt, endsAt: form.endsAt, location: form.location.trim(), industry: profile.code, source: "mobile_shift_management" } });
+      setForm((current) => ({ ...current, worker: "", role: "", location: "" }));
+      Alert.alert("Turno guardado", "La disponibilidad quedó registrada para la jornada."); await load();
+    } catch (error) { Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setSaving(false); }
+  }
+  const input = { borderWidth: 1, borderColor: "#c9d6d1", borderRadius: 12, backgroundColor: "#fff", paddingHorizontal: 13, minHeight: 46, color: "#17131f" } as const;
+  return <ScrollView contentContainerStyle={[styles.screenContent, { backgroundColor: "#f5f7f6", paddingBottom: 40, gap: 14 }]}>
+    <View style={{ padding: 18, borderRadius: 22, backgroundColor: "#17131f", gap: 7 }}><Text style={{ color: "#61d8ed", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>DOTACIÓN Y DISPONIBILIDAD</Text><Text style={{ color: "#fff", fontWeight: "900", fontSize: 26 }}>{copy.title}</Text><Text style={{ color: "#c7c2d6", lineHeight: 20 }}>{copy.detail} Este módulo organiza al equipo; la Agenda mantiene las citas y reservas de clientes.</Text></View>
+    <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 10 }}><Text style={financeMobileTitle}>Nuevo turno</Text><TextInput placeholder="Persona" value={form.worker} onChangeText={(worker) => setForm((current) => ({ ...current, worker }))} style={input} /><TextInput placeholder={copy.role} value={form.role} onChangeText={(role) => setForm((current) => ({ ...current, role }))} style={input} /><TextInput placeholder="Fecha: AAAA-MM-DD" value={form.date} onChangeText={(date) => setForm((current) => ({ ...current, date }))} style={input} /><View style={{ flexDirection: "row", gap: 8 }}><TextInput placeholder="Inicio" value={form.startsAt} onChangeText={(startsAt) => setForm((current) => ({ ...current, startsAt }))} style={[input, { flex: 1 }]} /><TextInput placeholder="Fin" value={form.endsAt} onChangeText={(endsAt) => setForm((current) => ({ ...current, endsAt }))} style={[input, { flex: 1 }]} /></View><TextInput placeholder="Sucursal, box o estación" value={form.location} onChangeText={(location) => setForm((current) => ({ ...current, location }))} style={input} /><TouchableOpacity disabled={saving} onPress={save} style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: "#0891b2" }}><Text style={financeMobileButton}>{saving ? "Guardando..." : "Guardar turno"}</Text></TouchableOpacity></View>
+    <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 9 }}><Text style={financeMobileTitle}>Turnos programados</Text>{shifts.length ? shifts.slice(0, 30).map((record) => <View key={record.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{recordText(record, "worker")}</Text><Text style={financeMobileDetail}>{recordText(record, "role")} · {recordText(record, "location", "Sin ubicación")}</Text><Text style={{ color: "#382a5c", fontWeight: "900", fontSize: 12 }}>{recordText(record, "date")} · {recordText(record, "startsAt")} — {recordText(record, "endsAt")}</Text></View>) : <Text style={financeMobileDetail}>Aún no hay turnos registrados.</Text>}</View>
+  </ScrollView>;
 }
 
 function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, onRefresh }: { dashboard: CrmOperationalDashboard | null; realtyIntelligence: RealtyIntelligence | null; profile: IndustryProfile; refreshing: boolean; onRefresh: () => void }) {

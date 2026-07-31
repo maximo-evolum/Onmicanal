@@ -415,6 +415,99 @@ export async function getFinanceOverview(): Promise<FinanceOverview> {
   return request<FinanceOverview>("/finance/overview");
 }
 
+export type FinanceReconciliationSuggestion = {
+  movement: IndustryRecord;
+  candidates: Array<{
+    invoice: IndustryRecord;
+    confidence: number;
+    level: "HIGH" | "MEDIUM" | "LOW";
+    reasons: string[];
+    difference: number;
+  }>;
+};
+
+export type FinanceCustomer = {
+  key: string;
+  name: string;
+  rut: string | null;
+  invoices: number;
+  openInvoices: number;
+  totalAmount: number;
+  outstandingAmount: number;
+  overdueAmount: number;
+  lastActivityAt: string;
+};
+
+export type FinanceIntegration = {
+  key: string;
+  label: string;
+  status: "connected" | "not_connected" | "manual_ready";
+  detail: string;
+};
+
+export type FinancePlan = {
+  plan: string;
+  usage: { processedDocuments: number; limit: number | null; percentage: number | null };
+};
+
+export type FinanceAgentWorkspace = {
+  generatedAt: string;
+  policy: { minimumConfidenceForSuggestion: number; autoCreateExceptions: boolean; collectionsRequireApproval: boolean; updateErpRequiresApproval: boolean; enabledChannels: string[] };
+  agents: Array<{ code: string; name: string; purpose: string; humanControl: string; status: string; metrics: Array<{ label: string; value: string | number }>; nextAction: string }>;
+  priority: Array<{ agent: string; action: string }>;
+  safeguards: string[];
+};
+
+export async function getFinanceReconciliationSuggestions(): Promise<{ suggestions: FinanceReconciliationSuggestion[] }> {
+  return request("/finance/reconciliation-suggestions");
+}
+
+export async function approveFinanceReconciliation(movementId: string, invoiceId: string) {
+  return request(`/finance/reconciliations/${encodeURIComponent(movementId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ invoiceId })
+  });
+}
+
+export async function rejectFinanceReconciliation(movementId: string, detail?: string) {
+  return request(`/finance/reconciliations/${encodeURIComponent(movementId)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ detail })
+  });
+}
+
+export async function getFinanceCustomers(): Promise<{ customers: FinanceCustomer[] }> {
+  return request("/finance/customers");
+}
+
+export async function getFinanceIntegrations(): Promise<{ integrations: FinanceIntegration[] }> {
+  return request("/finance/integrations");
+}
+
+export async function getFinancePlan(): Promise<FinancePlan> {
+  return request("/finance/plan");
+}
+
+export async function getFinanceAgentWorkspace(): Promise<FinanceAgentWorkspace> {
+  return request("/finance/agents");
+}
+
+export async function analyzeFinanceAgents(): Promise<{ workspace: FinanceAgentWorkspace; exceptionsPrepared: number; exceptionsSkipped: string | null }> {
+  return request("/finance/agents/analyze", { method: "POST" });
+}
+
+export async function generateFinanceCollectionCases(): Promise<{ created: IndustryRecord[]; count: number }> {
+  return request("/finance/collection-cases/generate", { method: "POST" });
+}
+
+export async function updateFinanceCollectionCase(id: string, input: { status?: string; channel?: string; nextActionAt?: string; promiseDueDate?: string; promiseAmount?: number | string; note?: string }) {
+  return request(`/finance/collection-cases/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export async function updateFinanceException(id: string, input: { status?: string; resolution?: string }) {
+  return request(`/finance/exceptions/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
 export async function createIndustryRecord(input: {
   recordType: string;
   title: string;
