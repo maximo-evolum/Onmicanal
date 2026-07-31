@@ -34,6 +34,11 @@ export type ModuleAccessKey =
   | "parts_inventory"
   | "mechanic_assignments"
   | "ready_notifications"
+  | "shift_management"
+  | "gastronomy_operations"
+  | "dental_care"
+  | "health_care"
+  | "veterinary_care"
   | "documents"
   | "workflows"
   | "integrations"
@@ -81,6 +86,11 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   parts_inventory: ["parts_inventory", "repuestos", "inventario_repuestos"],
   mechanic_assignments: ["mechanic_assignments", "asignacion_mecanicos"],
   ready_notifications: ["ready_notifications", "avisos_retiro"],
+  shift_management: ["shift_management", "turnos", "turnos_clinicos", "turnos_veterinarios", "turnos_local"],
+  gastronomy_operations: ["gastronomy_operations", "operacion_gastronomica", "mesas_y_comandas"],
+  dental_care: ["dental_care", "atencion_dental", "odontograma"],
+  health_care: ["health_care", "atencion_clinica", "ficha_clinica"],
+  veterinary_care: ["veterinary_care", "atencion_veterinaria", "mascotas_y_tutores"],
   documents: ["documents", "documentos", "archivos"],
   workflows: ["workflows", "workflow", "automatizaciones"],
   integrations: ["integrations", "integraciones", "conectores"],

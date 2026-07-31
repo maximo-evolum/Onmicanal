@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { MODULES } from "../lib/modules.js";
 import { buildBalancedAssignments } from "../lib/industries.js";
+import { isModuleAllowedForIndustry } from "../lib/industry-module-access.js";
 import { ensureTenantModuleEligibility } from "../services/tenant-modules.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { mergeMetadata, normalizeMetadata } from "../lib/metadata.js";
@@ -37,6 +38,23 @@ const RECORD_MODULES = Object.freeze({
   part: MODULES.PARTS_INVENTORY,
   work_order: MODULES.MECHANIC_ASSIGNMENTS,
   ready_notification: MODULES.READY_NOTIFICATIONS,
+  shift: MODULES.SHIFT_MANAGEMENT,
+  restaurant_table: MODULES.GASTRONOMY_OPERATIONS,
+  restaurant_order: MODULES.GASTRONOMY_OPERATIONS,
+  restaurant_daily_close: MODULES.GASTRONOMY_OPERATIONS,
+  restaurant_guest: MODULES.GASTRONOMY_OPERATIONS,
+  dental_patient: MODULES.DENTAL_CARE,
+  dental_odontogram: MODULES.DENTAL_CARE,
+  dental_treatment: MODULES.DENTAL_CARE,
+  dental_consent: MODULES.DENTAL_CARE,
+  clinical_patient: MODULES.HEALTH_CARE,
+  clinical_attention: MODULES.HEALTH_CARE,
+  clinical_order: MODULES.HEALTH_CARE,
+  clinical_followup: MODULES.HEALTH_CARE,
+  veterinary_pet: MODULES.VETERINARY_CARE,
+  veterinary_vaccine: MODULES.VETERINARY_CARE,
+  veterinary_hospitalization: MODULES.VETERINARY_CARE,
+  veterinary_prescription: MODULES.VETERINARY_CARE,
   document: MODULES.DOCUMENTS,
   workflow_definition: MODULES.WORKFLOWS,
   workflow_run: MODULES.WORKFLOWS,
@@ -58,10 +76,15 @@ function normalizeRecordType(value) {
 }
 
 async function assertRecordModule(req, recordType) {
-  const role = req.user?.role;
-  if (role === "SUPER_ADMIN") return true;
   const module = RECORD_MODULES[recordType];
   if (!module) return true;
+  // Un superadmin puede administrar toda la plataforma, pero no debe poder
+  // insertar por accidente una entidad veterinaria en un tenant de salud o
+  // una comanda en una clínica. El bypass de rol no anula el aislamiento de
+  // verticales.
+  if (req.tenant?.industry && !isModuleAllowedForIndustry(module, req.tenant.industry)) return false;
+  const role = req.user?.role;
+  if (role === "SUPER_ADMIN") return true;
   return ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant });
 }
 

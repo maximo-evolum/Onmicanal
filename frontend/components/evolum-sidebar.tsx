@@ -46,6 +46,11 @@ const baseItems: SidebarItem[] = [
   ["Pacientes", "/patients", "Fichas de atención, historial y seguimiento", "PA", "patients"],
   ["Exámenes y presupuestos", "/exams", "Órdenes, resultados y cotizaciones clínicas", "EP", "exams"],
   ["Dueños y vehículos", "/workshop", "Fichas, historial técnico, repuestos y presupuestos", "DV", "vehicle_owners"],
+  ["Operación gastronómica", "/operations/gastronomy", "Mesas, comandas, clientes frecuentes y cierre diario", "GO", "gastronomy_operations"],
+  ["Atención dental", "/operations/dental", "Fichas odontológicas, odontograma, tratamientos y consentimientos", "OD", "dental_care"],
+  ["Atención clínica", "/operations/health", "Fichas, atenciones, órdenes y seguimiento administrativo", "HC", "health_care"],
+  ["Atención veterinaria", "/operations/veterinary", "Mascotas, vacunas, hospitalización y recetas", "VE", "veterinary_care"],
+  ["Turnos", "/shifts", "Equipo, cobertura y disponibilidad de la jornada", "TU", "shift_management"],
 ];
 
 // Finanzas es una vertical con su propio espacio de trabajo. El menú EV solo
@@ -67,10 +72,10 @@ const moduleSymbols: Record<string, string> = {
   IN: "⌂", CH: "◌", AG: "◷", PI: "↗", CA: "✦", PA: "▣", CX: "⌁",
   CG: "⚙", FW: "⇄", MD: "▤", PM: "◫", DA: "▥", AI: "✧", GI: "◈",
   CI: "⇧", PR: "⌂", AC: "◴", PC: "◉", CO: "♧", CL: "◎", EP: "▤",
-  DV: "▱", DE: "▦", BL: "⚗"
+  DV: "▱", TU: "◷", DE: "▦", BL: "⚗"
 };
 
-Object.assign(moduleSymbols, { FI: "$" });
+Object.assign(moduleSymbols, { FI: "$", GO: "☕", OD: "✦", HC: "⚕", VE: "♥" });
 
 function ModuleSymbol({ code, label }: { code: string; label: string }) {
   return <span className="evolum-module-symbol" aria-hidden="true" title={label}>{moduleSymbols[code] || "◇"}</span>;
@@ -94,6 +99,15 @@ function isAutomotiveIndustry(industry?: string | null) {
 function isFinanceIndustry(industry?: string | null) {
   const value = String(industry || "").toUpperCase();
   return value.includes("FINANCE") || value.includes("FINANZ") || value.includes("CONTABLE") || value.includes("CONTABIL");
+}
+
+function isShiftIndustry(industry?: string | null) {
+  const value = String(industry || "").toUpperCase();
+  return value.includes("GASTRON") || value.includes("HEALTH") || value.includes("SALUD") || value.includes("CLINIC") || value.includes("DENT") || value.includes("VETER");
+}
+
+function isGastronomyIndustry(industry?: string | null) {
+  return String(industry || "").toUpperCase().includes("GASTRON");
 }
 
 function contextualizeItem(item: SidebarItem, industry?: string | null): SidebarItem {
@@ -128,10 +142,18 @@ function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
     "finance_invoices", "finance_bank_sync", "finance_reconciliation",
     "finance_exceptions", "finance_collections", "finance_analytics"
   ]);
+  if (moduleKey === "gastronomy_operations") return isGastronomyIndustry(industry);
+  if (moduleKey === "dental_care") return String(industry || "").toUpperCase().includes("DENT");
+  if (moduleKey === "health_care") return String(industry || "").toUpperCase().includes("HEALTH") || String(industry || "").toUpperCase().includes("SALUD") || String(industry || "").toUpperCase().includes("CLINIC");
+  if (moduleKey === "veterinary_care") return String(industry || "").toUpperCase().includes("VETER");
   if (realtyModules.has(moduleKey)) return isRealtyIndustry(industry);
-  if (careModules.has(moduleKey)) return isCareIndustry(industry);
+  // Pacientes y exámenes anteriores se conservan en backend para datos
+  // históricos, pero la navegación de cada clínica usa su espacio propio.
+  // Así no se invita a crear fichas genéricas paralelas al flujo especializado.
+  if (careModules.has(moduleKey)) return false;
   if (automotiveModules.has(moduleKey)) return isAutomotiveIndustry(industry);
   if (financeModules.has(moduleKey)) return isFinanceIndustry(industry);
+  if (moduleKey === "shift_management") return isShiftIndustry(industry);
   return true;
 }
 

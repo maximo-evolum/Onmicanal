@@ -17,3 +17,14 @@ test("módulos clínicos se comparten solo entre salud, dental y veterinaria", (
   assert.equal(isModuleAllowedForIndustry("exams", "VETERINARY"), true);
   assert.equal(isModuleAllowedForIndustry("patients", "AUTOMOTIVE"), false);
 });
+
+test("operaciones especializadas no se mezclan entre gastronomÃ­a y clÃ­nicas", () => {
+  assert.equal(isModuleAllowedForIndustry("gastronomy_operations", "GASTRONOMY"), true);
+  assert.equal(isModuleAllowedForIndustry("gastronomy_operations", "DENTAL"), false);
+  assert.equal(isModuleAllowedForIndustry("dental_care", "DENTAL"), true);
+  assert.equal(isModuleAllowedForIndustry("dental_care", "HEALTH"), false);
+  assert.equal(isModuleAllowedForIndustry("health_care", "HEALTH"), true);
+  assert.equal(isModuleAllowedForIndustry("health_care", "VETERINARY"), false);
+  assert.equal(isModuleAllowedForIndustry("veterinary_care", "VETERINARY"), true);
+  assert.equal(isModuleAllowedForIndustry("veterinary_care", "DENTAL"), false);
+});

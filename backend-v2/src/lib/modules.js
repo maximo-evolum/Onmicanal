@@ -35,6 +35,16 @@ export const MODULES = Object.freeze({
   PARTS_INVENTORY: "parts_inventory",
   MECHANIC_ASSIGNMENTS: "mechanic_assignments",
   READY_NOTIFICATIONS: "ready_notifications",
+  // Dotación por vertical: profesionales clínicos o equipo de local. No es la
+  // agenda de clientes; registra disponibilidad y cobertura de turnos.
+  SHIFT_MANAGEMENT: "shift_management",
+  // Operaciones exclusivas por vertical. Cada una persiste tipos de registro
+  // propios para evitar que datos de salud, veterinaria y gastronomía se
+  // interpreten como si fueran parte del mismo flujo.
+  GASTRONOMY_OPERATIONS: "gastronomy_operations",
+  DENTAL_CARE: "dental_care",
+  HEALTH_CARE: "health_care",
+  VETERINARY_CARE: "veterinary_care",
   // EVOLUM Finance OS: capacidades propias de cuentas por cobrar. Estas no
   // reemplazan Pagos ni el Dashboard del Core; agregan el ciclo financiero
   // posterior a la emision de una factura.
