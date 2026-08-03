@@ -183,7 +183,13 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
       .then((data) => {
         if (mounted) {
           setEnabledModules((current) => data.modules?.length ? data.modules : (current?.length ? current : (data.modules || [])));
-          setRole(data.role || session?.role || null);
+          // El catálogo puede devolver el rol de la membresía del tenant. Se
+          // conserva SUPER_ADMIN cuando la sesión o /auth/me ya lo confirmó.
+          setRole((current) => (
+            String(current || session?.role || "").toUpperCase() === "SUPER_ADMIN"
+              ? "SUPER_ADMIN"
+              : (data.role || session?.role || null)
+          ));
         }
       })
       .catch(() => {

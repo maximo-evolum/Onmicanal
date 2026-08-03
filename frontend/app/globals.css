@@ -13570,6 +13570,30 @@ textarea:focus {
   padding-left: var(--ev-rail-width) !important;
 }
 
+/* Algunos módulos verticales usan `vertical-page` directamente en lugar de
+   `vertical-main`. Ambos deben respetar la columna del menú EV abierto. */
+.vertical-shell > main.vertical-page {
+  grid-column: 2;
+  min-width: 0;
+  padding: 28px 28px 56px;
+}
+
+.vertical-shell.nav-collapsed > main.vertical-page {
+  grid-column: 1;
+  padding-left: var(--ev-rail-width) !important;
+}
+
+.module-with-menu-shell > main.exams-page {
+  grid-column: 2;
+  min-width: 0;
+  padding: 28px 28px 56px;
+}
+
+.module-with-menu-shell.nav-collapsed > main.exams-page {
+  grid-column: 1;
+  padding-left: var(--ev-rail-width) !important;
+}
+
 /* Extiende visualmente la barra lateral hasta el final del contenido. El panel
    de navegación permanece fijo, pero su columna no debe convertirse en una
    franja blanca cuando la página es más alta que la ventana. */
@@ -13658,6 +13682,18 @@ textarea:focus {
 
 @media (max-width: 700px) {
   .vertical-shell.nav-collapsed .vertical-main {
+    padding-left: var(--ev-rail-width) !important;
+  }
+
+  .vertical-shell > main.vertical-page,
+  .vertical-shell.nav-collapsed > main.vertical-page {
+    padding: 20px 14px 40px;
+    padding-left: var(--ev-rail-width) !important;
+  }
+
+  .module-with-menu-shell > main.exams-page,
+  .module-with-menu-shell.nav-collapsed > main.exams-page {
+    padding: 20px 14px 40px;
     padding-left: var(--ev-rail-width) !important;
   }
 
@@ -14808,6 +14844,34 @@ textarea:focus {
 .login-layout { width: min(1440px, 100%); min-height: calc(100dvh - clamp(28px, 4.8vw, 64px)); }
 .login-brand-panel { min-height: 100%; }
 .login-card { min-height: 100%; align-content: space-between; }
+
+/* En escritorio el acceso debe permanecer centrado y completo en la primera
+   vista. En móvil se conserva el desplazamiento natural para no recortar el
+   formulario ni la información de bienvenida. */
+@media (min-width: 821px) {
+  .login-page {
+    display: grid;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+    place-items: center;
+    padding: 14px;
+  }
+
+  .login-layout {
+    width: min(1440px, 100%);
+    height: calc(100dvh - 28px);
+    min-height: 0;
+    max-height: calc(100dvh - 28px);
+  }
+
+  .login-brand-panel,
+  .login-card {
+    min-height: 0;
+  }
+
+  .login-card { align-content: center; }
+}
 
 .login-brand-panel :is(h1, h2, h3, strong, b) { color: #ffffff !important; }
 .login-brand-panel :is(p, span, small) { color: #d5dbe3 !important; }

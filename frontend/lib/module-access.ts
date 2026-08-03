@@ -171,7 +171,13 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
         setModules((current) => data.modules?.length ? data.modules : (current?.length ? current : (data.modules || [])));
         // Si /auth/me ya resolvió el rol actual, no volver a pisarlo con
         // información local antigua. El rol del catálogo solo es respaldo.
-        if (data.role) setAuthoritativeRole(data.role);
+        if (data.role) {
+          // El catálogo representa el rol dentro del tenant y puede responder
+          // antes que /auth/me. Nunca debe rebajar visualmente a un Super Admin.
+          setAuthoritativeRole((current) => (
+            isDeveloperRole(current) || isDeveloperRole(session?.role) ? "SUPER_ADMIN" : (data.role || null)
+          ));
+        }
         setError(null);
       })
       .catch((err) => {

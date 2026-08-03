@@ -72,6 +72,11 @@ const MODULE_LABELS: Record<string, string> = {
   realty_clients: "Clientes inmobiliarios",
   patients: "Pacientes",
   exams: "Exámenes y presupuestos",
+  shift_management: "Turnos de trabajo",
+  gastronomy_operations: "Operación gastronómica",
+  dental_care: "Atención dental",
+  health_care: "Atención clínica",
+  veterinary_care: "Atención veterinaria",
   veterinary: "Veterinaria",
   vehicles: "Dueños y vehículos",
   vehicle_owners: "Dueños y vehículos",
@@ -107,6 +112,11 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
   property_assignments: "Exclusivo inmobiliaria: asignación de propiedades.",
   patients: "Exclusivo salud/dental/veterinaria: fichas de pacientes por tenant.",
   exams: "Exclusivo salud/dental/veterinaria: exámenes, órdenes y presupuestos por tenant.",
+  shift_management: "Exclusivo por vertical: turnos, responsables y cobertura operativa.",
+  gastronomy_operations: "Exclusivo gastronomía: mesas, comandas, cocina y cierre del local.",
+  dental_care: "Exclusivo dental: odontograma, tratamientos, consentimientos y atención clínica.",
+  health_care: "Exclusivo salud: atenciones, ficha clínica, órdenes y seguimiento de pacientes.",
+  veterinary_care: "Exclusivo veterinaria: mascotas, tutores, vacunas, hospitalización y recetas.",
   vehicle_owners: "Exclusivo automotriz: dueños, vehículos e historial técnico.",
   parts_inventory: "Exclusivo automotriz: stock y compatibilidad de repuestos.",
   mechanic_assignments: "Exclusivo automotriz: órdenes y responsables mecánicos.",
@@ -168,6 +178,11 @@ const PROJECT_MODULE_CATALOG = [
   "realty_clients",
   "patients",
   "exams",
+  "shift_management",
+  "gastronomy_operations",
+  "dental_care",
+  "health_care",
+  "veterinary_care",
   "vehicle_owners",
   "parts_inventory",
   "mechanic_assignments",
@@ -210,8 +225,7 @@ const MODULE_GROUPS: ModuleGroup[] = [
     title: "Gastronomía",
     description: "Vertical independiente: utiliza Chat's, Agenda, Pipeline, Campañas, Pagos y Dashboard del Core CRM sin duplicarlos.",
     industries: ["GASTRONOMY"],
-    modules: [],
-    infoOnly: true,
+    modules: ["gastronomy_operations", "shift_management"],
   },
   {
     title: "EVOLUM Finance OS",
@@ -223,21 +237,21 @@ const MODULE_GROUPS: ModuleGroup[] = [
     title: "Salud clínica",
     description: "Fichas y exámenes de atención humana. Sus datos nunca se mezclan con dental, veterinaria ni otros tenants.",
     industries: ["HEALTH"],
-    modules: ["patients", "exams"],
+    modules: ["health_care", "patients", "exams", "shift_management"],
     labels: { patients: "Pacientes clínicos", exams: "Exámenes y presupuestos clínicos" },
   },
   {
     title: "Clínica dental",
     description: "Fichas y presupuestos dentales independientes de salud general y veterinaria.",
     industries: ["DENTAL"],
-    modules: ["patients", "exams"],
+    modules: ["dental_care", "patients", "exams", "shift_management"],
     labels: { patients: "Pacientes dentales", exams: "Exámenes y presupuestos dentales" },
   },
   {
     title: "Clínica veterinaria",
     description: "Mascotas, tutores e historial veterinario. Nunca comparte pacientes con salud humana o dental.",
     industries: ["VETERINARY"],
-    modules: ["patients", "exams"],
+    modules: ["veterinary_care", "patients", "exams", "shift_management"],
     labels: { patients: "Mascotas y tutores", exams: "Exámenes y presupuestos veterinarios" },
   },
   {
@@ -1665,7 +1679,7 @@ export default function AdminPage() {
                               <article className="module-toggle module-catalog-only" key={module}>
                                 <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
                                 {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
-                                <small>Bloqueado por rubro · exclusivo de {group.title}</small>
+                                <small>{isSuperAdmin ? `Acceso Super Admin · exclusivo de ${group.title}` : `Disponible solo para ${group.title}`}</small>
                               </article>
                             ) : (
                               <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>

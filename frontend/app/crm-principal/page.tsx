@@ -80,6 +80,7 @@ const navItems: NavItem[] = [
   { label: "Planes y modulos", href: "/saas", description: "Plan, modulos, usuarios y limites", moduleKey: "saas" },
   { label: "Dashboard", href: "/dashboard", description: "Metricas operativas", moduleKey: "dashboard" },
   { label: "AI Ops / Cierres IA", href: "/ai-ops", description: "Razonamiento, cierres y alertas IA", moduleKey: "ai_ops" },
+  { label: "Finanzas", href: "/finance", description: "Facturas, cartolas, conciliacion y cobranza IA", moduleKey: "finance_analytics" },
   { label: "Propiedades", href: "/properties", description: "Ficha inmobiliaria, vendedores y pipeline por propiedad", moduleKey: "properties" },
   { label: "Clientes / Pacientes", href: "/customers", description: "Fichas por rubro, historial y proxima accion", moduleKey: "customers" },
   { label: "Taller", href: "/workshop", description: "Vehiculos, repuestos y asignacion de mecanicos", moduleKey: "vehicles" }
