@@ -554,7 +554,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!selectedTenant) return;
 
-    setPendingModules(modulesAllowedForIndustry(enabledModulesOf(selectedTenant), industryCodeForTenant(selectedTenant.industry)));
+    setPendingModules(Array.from(new Set(enabledModulesOf(selectedTenant))));
 
     const whatsapp = selectedTenant.channelConfigs?.find((item) => item.channel === "whatsapp");
     const instagram = selectedTenant.channelConfigs?.find((item) => item.channel === "instagram");
@@ -692,13 +692,12 @@ export default function AdminPage() {
       .map((group) => ({
       ...group,
       modules: group.modules.filter((module) => available.has(module)),
-      catalogOnly: Boolean(group.industries?.length && !group.industries.includes(selectedIndustryCode)),
       }))
       .filter((group) => group.modules.length > 0 || group.infoOnly);
     const used = new Set(grouped.flatMap((group) => group.modules));
     const otherModules = availableModules.filter((module) => !used.has(module) && !verticalModules.has(module));
     return otherModules.length
-      ? [...grouped, { title: "Otros módulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules, catalogOnly: false }]
+      ? [...grouped, { title: "Otros módulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules }]
       : grouped;
   }, [availableModules, isSuperAdmin, selectedIndustryCode]);
 
@@ -903,11 +902,10 @@ export default function AdminPage() {
 
   function handleModuleToggle(module: string) {
     if (!selectedTenant) return;
-    const industryCode = industryCodeForTenant(selectedTenant.industry);
-    const next = new Set(modulesAllowedForIndustry(pendingModules, industryCode));
+    const next = new Set(pendingModules);
     if (next.has(module)) next.delete(module);
     else next.add(module);
-    const nextModules = modulesAllowedForIndustry(Array.from(next), industryCode);
+    const nextModules = Array.from(next);
 
     // El selector es un borrador: el cambio se aplica solo al presionar
     // "Guardar módulos", permitiendo revisar varios cambios juntos.
@@ -970,14 +968,13 @@ export default function AdminPage() {
       setSavingId(`modules-${selectedTenant.id}`);
       setError(null);
       setSuccess(null);
-      const industryCode = industryCodeForTenant(selectedTenant.industry);
-      const cleanModules = modulesAllowedForIndustry(pendingModules, industryCode);
+      const cleanModules = Array.from(new Set(pendingModules));
       const result = await updateAdminTenantModules(selectedTenant.id, cleanModules);
       if (result.tenant) {
         updateTenantLocal(result.tenant);
-        setPendingModules(modulesAllowedForIndustry(enabledModulesOf(result.tenant as AdminTenant), industryCode));
+        setPendingModules(Array.from(new Set(enabledModulesOf(result.tenant as AdminTenant))));
       }
-      setSuccess("Módulos guardados según el rubro de esta cuenta. Los usuarios del cliente verán el cambio al recargar o volver a iniciar sesión.");
+      setSuccess("Módulos guardados. Los usuarios del cliente verán el cambio al recargar o volver a iniciar sesión.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron guardar los módulos");
     } finally {
@@ -1647,7 +1644,7 @@ export default function AdminPage() {
                     <div>
                       <strong>Servicios / módulos habilitados</strong>
                       <div className="meta-line">
-                        Cada caja del rubro de esta cuenta habilita o bloquea un módulo. Como Super Admin también ves el catálogo completo de todas las verticales, sin mezclar sus datos.
+                        Cada caja habilita o bloquea ese módulo para esta cuenta. Como Super Admin puedes configurar capacidades de cualquier vertical y confirmar los cambios con “Guardar módulos”.
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -1665,25 +1662,19 @@ export default function AdminPage() {
                   </div>
                   <div className="module-group-stack">
                     {groupedAvailableModules.map((group) => (
-                      <section className={`module-group-card ${group.catalogOnly ? "module-group-catalog" : ""}`} key={group.title}>
+                      <section className="module-group-card" key={group.title}>
                         <div className="module-group-head">
                           <div>
                             <strong>{group.title}</strong>
                             <p>{group.description}</p>
                           </div>
-                          <small>{group.modules.length} módulos{group.catalogOnly ? " · catálogo" : ""}</small>
+                          <small>{group.modules.length} módulos</small>
                         </div>
                         {group.modules.length ? <div className="module-toggle-grid compact">
                           {group.modules.map((module) => {
                             const active = pendingModules.includes(module);
                             const saved = enabledModulesOf(selectedTenant).includes(module);
-                            return group.catalogOnly ? (
-                              <article className="module-toggle module-toggle-catalog" key={module}>
-                                <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
-                                {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
-                                <small>Exclusivo de {group.title}</small>
-                              </article>
-                            ) : (
+                            return (
                               <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>
                                 <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
                                 {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}

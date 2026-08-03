@@ -1,7 +1,7 @@
 import { prisma } from "../lib/db.js";
 import { MODULES, PLAN_DEFINITIONS, getModulesForPlan, normalizePlanCode } from "../lib/modules.js";
 import { getAnyIndustryTemplate, getTemplateModules } from "./industry-templates.service.js";
-import { filterModulesForIndustry, isModuleAllowedForIndustry } from "../lib/industry-module-access.js";
+import { filterModulesForIndustry } from "../lib/industry-module-access.js";
 
 // Tenants creados durante las primeras versiones guardaron nombres visibles
 // (agenda, pipeline, campanas). Las rutas nuevas usan las claves canonicas.
@@ -148,25 +148,17 @@ export async function ensureTenantSubscriptionAndModules({ tenantId, planCode = 
 }
 
 export async function getTenantModules(tenantId) {
-  const [modules, tenant] = await Promise.all([
-    prisma.tenantModule.findMany({
-      where: { tenantId, enabled: true },
-      orderBy: { module: "asc" }
-    }),
-    prisma.tenant.findUnique({ where: { id: tenantId }, select: { industry: true } })
-  ]);
+  const modules = await prisma.tenantModule.findMany({
+    where: { tenantId, enabled: true },
+    orderBy: { module: "asc" }
+  });
   // También protegemos cuentas antiguas que conservaron módulos de otra
   // vertical en la base de datos antes de que existiera la regla de rubros.
-  return filterModulesForIndustry(modules.map((m) => m.module), tenant?.industry);
+  return modules.map((item) => item.module);
 }
 
 export async function hasTenantModule(tenantId, module) {
   if (!module) return true;
-  const tenant = await prisma.tenant.findUnique({
-    where: { id: tenantId },
-    select: { industry: true }
-  });
-  if (!tenant || !isModuleAllowedForIndustry(module, tenant.industry)) return false;
   const found = await prisma.tenantModule.findFirst({
     where: {
       tenantId,
@@ -230,9 +222,9 @@ export async function setTenantModules({ tenantId, modules = [], source = "MANUA
     throw error;
   }
 
-  // La UI oculta módulos de otros rubros; esta misma regla en servidor evita
-  // que una llamada manual a la API vuelva a mezclar verticales.
-  const normalized = filterModulesForIndustry(modules, tenant.industry);
+  // Super Admin puede configurar una cuenta con capacidades de más de una
+  // vertical. Los datos siguen aislados por tenant y tipo de registro.
+  const normalized = [...new Set(modules.map(normalizeModuleKey).filter(Boolean))];
   await prisma.tenantModule.updateMany({ where: { tenantId }, data: { enabled: false, source } });
   for (const module of normalized) {
     await prisma.tenantModule.upsert({
