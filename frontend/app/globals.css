@@ -6760,14 +6760,51 @@ body {
 }
 
 .module-access-state {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  color: rgba(248, 243, 255, 0.78);
-  background:
-    radial-gradient(circle at 20% 0%, rgba(124, 58, 237, 0.18), transparent 32%),
-    #080612;
+  margin: 24px auto;
+  width: min(100% - 32px, 560px);
+  padding: 18px 20px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 16px;
+  color: var(--text);
+  background: var(--theme-panel-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* La validación no debe reemplazar la pantalla por un bloqueo a pantalla completa.
+   Se muestra como un indicador breve, discreto y no invasivo. */
+.module-access-state.module-access-loading {
+  position: fixed;
+  z-index: 200;
+  top: 18px;
+  left: 50%;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 9px 13px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--theme-panel-bg) 92%, transparent);
+  box-shadow: 0 10px 30px rgba(15, 12, 30, .18);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.module-access-loading i {
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in srgb, var(--theme-primary) 28%, transparent);
+  border-top-color: var(--theme-primary);
+  border-radius: 50%;
+  animation: module-access-spin .7s linear infinite;
+}
+
+@keyframes module-access-spin {
+  to { transform: rotate(360deg); }
 }
 
 .module-app-actions {
@@ -13735,6 +13772,22 @@ textarea:focus {
 }
 
 .admin-page .module-toggle-grid.compact .module-toggle small { font-size: 10px; }
+
+/* El catálogo Super Admin conserva el mismo lenguaje visual de las cajas de
+   módulos, pero deja claro que esos módulos pertenecen a otra vertical. */
+.admin-page .module-group-catalog {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-primary) 5%, var(--theme-panel-bg)), var(--theme-panel-bg));
+}
+
+.admin-page .module-toggle-catalog {
+  cursor: default;
+  background: color-mix(in srgb, var(--theme-panel-bg) 92%, var(--theme-primary) 8%);
+}
+
+.admin-page .module-toggle-catalog small:last-child {
+  color: var(--theme-accent);
+  font-weight: 700;
+}
 
 /* El motor multirubro debe leerse como panel de gestión, no como una tabla
    comprimida. Las tarjetas se adaptan a la pantalla sin reducir la tipografía. */

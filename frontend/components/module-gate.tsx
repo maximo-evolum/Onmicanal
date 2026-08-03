@@ -7,7 +7,12 @@ export function ModuleGate({ moduleKey, children }: { moduleKey: ModuleAccessKey
   const { allowed, loading } = useModuleAccess(moduleKey);
 
   if (loading) {
-    return <div className="module-access-state">Validando acceso...</div>;
+    return (
+      <div className="module-access-state module-access-loading" role="status" aria-live="polite">
+        <i aria-hidden="true" />
+        <span>Validando acceso</span>
+      </div>
+    );
   }
 
   if (!allowed) {

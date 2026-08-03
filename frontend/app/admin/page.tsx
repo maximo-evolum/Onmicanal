@@ -686,21 +686,21 @@ export default function AdminPage() {
     const available = new Set(availableModules);
     const verticalModules = new Set(MODULE_GROUPS.flatMap((group) => group.industries ? group.modules : []));
     const grouped = MODULE_GROUPS
-      // La configuración de una cuenta nunca mezcla capacidades de otra vertical.
-      // Super Admin puede administrar cualquier cuenta, pero siempre dentro del
-      // rubro de la cuenta que tiene seleccionada.
-      .filter((group) => !group.industries || group.industries.includes(selectedIndustryCode))
+      // Super Admin ve el catálogo completo. Las capacidades que no pertenecen
+      // al rubro del cliente se muestran como referencia, sin mezclar datos.
+      .filter((group) => isSuperAdmin || !group.industries || group.industries.includes(selectedIndustryCode))
       .map((group) => ({
       ...group,
       modules: group.modules.filter((module) => available.has(module)),
+      catalogOnly: Boolean(group.industries?.length && !group.industries.includes(selectedIndustryCode)),
       }))
       .filter((group) => group.modules.length > 0 || group.infoOnly);
     const used = new Set(grouped.flatMap((group) => group.modules));
     const otherModules = availableModules.filter((module) => !used.has(module) && !verticalModules.has(module));
     return otherModules.length
-      ? [...grouped, { title: "Otros módulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules }]
+      ? [...grouped, { title: "Otros módulos", description: "Capacidades detectadas desde plantillas o backend.", modules: otherModules, catalogOnly: false }]
       : grouped;
-  }, [availableModules, selectedIndustryCode]);
+  }, [availableModules, isSuperAdmin, selectedIndustryCode]);
 
   const selectedPlanCode = normalizePlanLabel(billingForm.planCode || selectedTenant?.plan || "STARTER");
   const selectedIndustryModules = useMemo(
@@ -1647,7 +1647,7 @@ export default function AdminPage() {
                     <div>
                       <strong>Servicios / módulos habilitados</strong>
                       <div className="meta-line">
-                        Cada caja habilita o bloquea un módulo de esta cuenta. Se muestran el Core EVOLUM y los módulos de su rubro; confirma los cambios con “Guardar módulos”.
+                        Cada caja del rubro de esta cuenta habilita o bloquea un módulo. Como Super Admin también ves el catálogo completo de todas las verticales, sin mezclar sus datos.
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -1665,19 +1665,25 @@ export default function AdminPage() {
                   </div>
                   <div className="module-group-stack">
                     {groupedAvailableModules.map((group) => (
-                      <section className="module-group-card" key={group.title}>
+                      <section className={`module-group-card ${group.catalogOnly ? "module-group-catalog" : ""}`} key={group.title}>
                         <div className="module-group-head">
                           <div>
                             <strong>{group.title}</strong>
                             <p>{group.description}</p>
                           </div>
-                          <small>{group.modules.length} módulos</small>
+                          <small>{group.modules.length} módulos{group.catalogOnly ? " · catálogo" : ""}</small>
                         </div>
                         {group.modules.length ? <div className="module-toggle-grid compact">
                           {group.modules.map((module) => {
                             const active = pendingModules.includes(module);
                             const saved = enabledModulesOf(selectedTenant).includes(module);
-                            return (
+                            return group.catalogOnly ? (
+                              <article className="module-toggle module-toggle-catalog" key={module}>
+                                <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
+                                {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
+                                <small>Exclusivo de {group.title}</small>
+                              </article>
+                            ) : (
                               <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>
                                 <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
                                 {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}

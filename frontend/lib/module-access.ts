@@ -123,6 +123,20 @@ const brokerModuleAllowlist = new Set<ModuleAccessKey>([
   "broker_portal"
 ]);
 
+type ModuleAccessCacheEntry = {
+  modules: string[];
+  role: string | null;
+};
+
+// Evita volver a bloquear visualmente cada ruta mientras ya conocemos los
+// permisos de la misma sesión. La API se sigue consultando en segundo plano.
+const moduleAccessCache = new Map<string, ModuleAccessCacheEntry>();
+
+function moduleAccessCacheKey(session: ReturnType<typeof getStoredSession>) {
+  if (!session?.id) return null;
+  return `${session.id}:${session.tenantId || "default"}`;
+}
+
 function normalizeModule(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "_");
 }
@@ -143,32 +157,52 @@ export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], rol
 
 export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const session = getStoredSession();
-  const [modules, setModules] = useState<string[] | null>(null);
-  const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(session?.role || null);
-  const [loading, setLoading] = useState(Boolean(moduleKey));
-  const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey));
+  const cacheKey = moduleAccessCacheKey(session);
+  const cached = cacheKey ? moduleAccessCache.get(cacheKey) : null;
+  const [modules, setModules] = useState<string[] | null>(() => cached?.modules || null);
+  const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(() => cached?.role || session?.role || null);
+  const [loading, setLoading] = useState(Boolean(moduleKey) && !cached);
+  const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey) && !cached);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     if (!moduleKey) return;
 
-    setLoading(true);
-    setIdentityLoading(true);
+    const currentCache = cacheKey ? moduleAccessCache.get(cacheKey) : null;
+    if (currentCache) {
+      setModules(currentCache.modules);
+      setAuthoritativeRole(currentCache.role || session?.role || null);
+      setLoading(false);
+      setIdentityLoading(false);
+    } else {
+      setLoading(true);
+      setIdentityLoading(true);
+    }
     getMe()
       .then((data) => {
         if (!active) return;
         setAuthoritativeRole(data.user.role || null);
         // /auth/me ya entrega los módulos autorizados para esta sesión. Los
         // conservamos como respaldo cuando el catálogo tarda en sincronizar.
-        if (data.modules?.length) setModules(data.modules);
+        if (data.modules?.length) {
+          setModules(data.modules);
+          if (cacheKey) moduleAccessCache.set(cacheKey, { modules: data.modules, role: data.user.role || null });
+        }
       })
       .finally(() => { if (active) setIdentityLoading(false); });
 
     getMyModules()
       .then((data) => {
         if (!active) return;
-        setModules((current) => data.modules?.length ? data.modules : (current?.length ? current : (data.modules || [])));
+        setModules((current) => {
+          const nextModules = data.modules?.length ? data.modules : (current?.length ? current : (data.modules || []));
+          if (cacheKey) {
+            const preservedRole = isDeveloperRole(session?.role) ? "SUPER_ADMIN" : (data.role || session?.role || null);
+            moduleAccessCache.set(cacheKey, { modules: nextModules, role: preservedRole });
+          }
+          return nextModules;
+        });
         // Si /auth/me ya resolvió el rol actual, no volver a pisarlo con
         // información local antigua. El rol del catálogo solo es respaldo.
         if (data.role) {
@@ -194,7 +228,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
     return () => {
       active = false;
     };
-  }, [moduleKey]);
+  }, [cacheKey, moduleKey, session?.role]);
 
   const allowed = useMemo(() => {
     if (!moduleKey) return true;
