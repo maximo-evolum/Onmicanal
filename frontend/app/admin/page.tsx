@@ -1663,23 +1663,35 @@ export default function AdminPage() {
                   </div>
                   <div className="module-group-stack">
                     {groupedAvailableModules.map((group) => (
-                      <section className="module-group-card" key={group.title}>
+                      <section className={`module-group-card ${group.catalogOnly ? "is-catalog" : ""}`} key={group.title}>
                         <div className="module-group-head">
                           <div>
                             <strong>{group.title}</strong>
                             <p>{group.description}</p>
                           </div>
-                          <small>{group.modules.length} módulos{group.catalogOnly ? " · catálogo" : ""}</small>
+                          <div className="module-group-actions">
+                            <small>{group.modules.length} módulos{group.catalogOnly ? " · otra vertical" : ""}</small>
+                            {group.catalogOnly && isSuperAdmin ? (() => {
+                              const template = industryTemplates.find((item) => group.industries?.includes(industryCodeForTenant(item.code)));
+                              return template ? (
+                                <button className="ghost-btn compact" type="button" onClick={() => handleApplyIndustryTemplate(template)} disabled={savingId === `industry-${template.code}`}>
+                                  {savingId === `industry-${template.code}` ? "Aplicando..." : "Usar este rubro"}
+                                </button>
+                              ) : null;
+                            })() : null}
+                          </div>
                         </div>
                         {group.modules.length ? <div className="module-toggle-grid compact">
                           {group.modules.map((module) => {
                             const active = pendingModules.includes(module);
                             const saved = enabledModulesOf(selectedTenant).includes(module);
                             return group.catalogOnly ? (
-                              <article className="module-toggle module-catalog-only" key={module}>
-                                <span>{group.labels?.[module] || MODULE_LABELS[module] || module}</span>
-                                {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
-                                <small>{isSuperAdmin ? `Acceso Super Admin · exclusivo de ${group.title}` : `Disponible solo para ${group.title}`}</small>
+                              <article className="module-toggle module-catalog-only module-toggle-readonly" key={module}>
+                                <div>
+                                  <strong>{group.labels?.[module] || MODULE_LABELS[module] || module}</strong>
+                                  {MODULE_DESCRIPTIONS[module] ? <small>{MODULE_DESCRIPTIONS[module]}</small> : null}
+                                </div>
+                                <small>{isSuperAdmin ? "Cambia el rubro de este cliente para administrarlo." : `Disponible solo para ${group.title}`}</small>
                               </article>
                             ) : (
                               <button key={module} type="button" className={`module-toggle ${active ? "active" : ""}`} onClick={() => void handleModuleToggle(module)} disabled={savingId === `modules-${selectedTenant.id}`}>

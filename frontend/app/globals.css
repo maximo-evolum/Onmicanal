@@ -13672,6 +13672,129 @@ textarea:focus {
   color: var(--theme-accent) !important;
 }
 
+/* El menú EV debe acompañar toda la navegación, sin importar qué módulo use
+   la misma barra lateral. Antes solo la grilla `vertical-shell` la fijaba. */
+@media (min-width: 981px) {
+  :is(.module-with-menu-shell, .executive-shell, .pipeline-pro-shell, .finance-shell, .crm-main) > .evolum-unified-nav {
+    position: fixed !important;
+    inset: 0 auto 0 0 !important;
+    width: 304px !important;
+    min-width: 304px !important;
+    height: 100dvh !important;
+    min-height: 100dvh !important;
+    max-height: 100dvh !important;
+    z-index: 80 !important;
+    background: linear-gradient(180deg, #14111f 0%, #22173b 58%, #171322 100%) !important;
+  }
+}
+
+/* Consola de módulos: tarjetas legibles y administrables. Una cuenta conserva
+   un rubro operativo para no mezclar datos, pero Super Admin puede cambiarlo
+   desde el botón del grupo y luego habilitar o bloquear cada módulo propio. */
+.module-group-card.is-catalog {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-primary) 6%, var(--theme-panel-bg)), var(--theme-panel-bg));
+}
+
+.module-group-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ghost-btn.compact {
+  min-height: 34px;
+  padding: 7px 11px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.module-toggle-grid.compact {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  align-items: stretch;
+}
+
+.module-toggle-grid.compact .module-toggle {
+  min-height: 112px;
+  align-items: stretch;
+}
+
+.module-toggle-readonly {
+  display: flex !important;
+  flex-direction: column;
+  justify-content: space-between !important;
+  gap: 9px;
+  padding: 14px !important;
+  text-align: left;
+}
+
+.module-toggle-readonly > div {
+  display: grid;
+  gap: 5px;
+}
+
+.module-toggle-readonly strong {
+  color: var(--text) !important;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.module-toggle-readonly small {
+  display: block;
+  color: var(--text-muted) !important;
+  line-height: 1.4;
+}
+
+.module-toggle-readonly > small:last-child {
+  color: var(--theme-accent) !important;
+  font-weight: 700;
+}
+
+/* El motor multirubro debe leerse como panel de gestión, no como una tabla
+   comprimida. Las tarjetas se adaptan a la pantalla sin reducir la tipografía. */
+.admin-industry-section {
+  display: grid;
+  gap: 16px;
+}
+
+.industry-builder-panel {
+  grid-template-columns: minmax(300px, .72fr) minmax(0, 1.28fr);
+  gap: 16px;
+}
+
+.industry-plan-matrix {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.industry-plan-card {
+  min-height: 132px;
+  padding: 16px;
+}
+
+.industry-template-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.industry-template-card {
+  min-height: 290px;
+  padding: 18px;
+}
+
+.industry-template-card .industry-card-head strong { font-size: 17px; }
+.industry-template-card .industry-card-head p,
+.industry-template-card .industry-card-meta small { font-size: 13px; line-height: 1.45; }
+.industry-template-card .industry-module-chips span { font-size: 12px; }
+
+@media (max-width: 860px) {
+  .industry-builder-panel,
+  .industry-custom-builder { grid-template-columns: 1fr; }
+  .module-group-head { flex-direction: column; }
+  .module-group-actions { justify-content: flex-start; }
+}
+
 .exams-page .reports-summary-grid {
   margin: 26px 24px 22px;
 }
