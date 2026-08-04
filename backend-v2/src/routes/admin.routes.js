@@ -671,11 +671,19 @@ adminRouter.patch("/admin/tenants/:tenantId/plan", async (req, res) => {
     const { tenantId } = req.params;
     const planCode = normalizePlanCode(req.body.plan || "STARTER");
     await prisma.tenant.update({ where: { id: tenantId }, data: { plan: planCode } });
-    await ensureTenantSubscriptionAndModules({ tenantId, planCode, forcePlanSync: true });
+    const hasManualModuleConfiguration = Boolean(await prisma.tenantModule.count({
+      where: { tenantId, source: "MANUAL" }
+    }));
+    // Un cambio de plan no puede borrar una selección hecha caja por caja por
+    // Super Admin. Si no existe configuración manual, se mantiene el sync
+    // completo de la plantilla del plan.
+    await ensureTenantSubscriptionAndModules({ tenantId, planCode, forcePlanSync: !hasManualModuleConfiguration });
     const tenantForIndustry = await prisma.tenant.findUnique({ where: { id: tenantId } });
     const templateForIndustry = await getAnyIndustryTemplate(tenantForIndustry?.industry || "GENERAL");
     const industryModules = getTemplateModules(templateForIndustry, planCode);
-    await syncTenantIndustryModules({ tenantId, modules: industryModules, planCode });
+    if (!hasManualModuleConfiguration) {
+      await syncTenantIndustryModules({ tenantId, modules: industryModules, planCode });
+    }
     const modules = await getTenantModules(tenantId);
     const tenant = await getFullTenant(tenantId);
     res.json({ tenant, modules });

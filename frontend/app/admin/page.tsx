@@ -19,7 +19,6 @@ import {
   updateTenantPlan,
   uploadAdminTenantOnboardingFiles,
   applyAdminTenantOnboardingExtraction,
-  deleteAdminTenant,
   deleteAdminUser,
   type IndustryTemplate,
   type OnboardingExtraction,
@@ -731,6 +730,10 @@ export default function AdminPage() {
   }
 
   async function handlePlanChange(tenantId: string, plan: string) {
+    const currentPlan = normalizePlanLabel(selectedTenant?.plan || "STARTER");
+    const nextPlan = normalizePlanLabel(plan);
+    if (currentPlan === nextPlan) return;
+    if (!window.confirm(`¿Cambiar el plan a ${nextPlan}? Esta acción puede actualizar los módulos sugeridos del cliente. La configuración manual de módulos se mantiene hasta que confirmes un cambio en “Guardar módulos”.`)) return;
     try {
       setSavingId(tenantId);
       setError(null);
@@ -920,12 +923,6 @@ export default function AdminPage() {
     setError(null);
   }
 
-  function replacePendingWithModules(modules: string[]) {
-    setPendingModules(Array.from(new Set(modules)));
-    setSuccess("Selector reemplazado con los módulos del rubro. Presiona Guardar módulos para aplicarlos.");
-    setError(null);
-  }
-
   async function handleCreateIndustryTemplate() {
     if (!industryForm.name.trim()) {
       setError("Escribe un nombre para el nuevo rubro.");
@@ -985,7 +982,8 @@ export default function AdminPage() {
   async function handleApplyPlanPreset(plan: string) {
     if (!selectedTenant) return;
     const normalizedPlan = normalizePlanLabel(plan);
-    const modulesForPlan = templateModulesForPlan(selectedIndustryTemplate, normalizedPlan).map((module) => module.key);
+    if (normalizedPlan === selectedPlanCode) return;
+    if (!window.confirm(`¿Aplicar el plan ${normalizedPlan}? Se actualizará el plan comercial, pero se conservará la selección manual de módulos de este cliente.`)) return;
     try {
       setSavingId(`plan-preset-${normalizedPlan}`);
       setError(null);
@@ -995,20 +993,14 @@ export default function AdminPage() {
         planCode: normalizedPlan,
         planName: normalizedPlan,
       }));
-      setPendingModules(modulesForPlan);
-
-      const [planResult, moduleResult] = await Promise.all([
-        updateTenantPlan(selectedTenant.id, normalizedPlan),
-        updateAdminTenantModules(selectedTenant.id, modulesForPlan),
-      ]);
-
-      const updatedTenant = moduleResult.tenant || planResult.tenant;
+      const planResult = await updateTenantPlan(selectedTenant.id, normalizedPlan);
+      const updatedTenant = planResult.tenant;
       if (updatedTenant) {
         updateTenantLocal(updatedTenant as AdminTenant);
         setPendingModules(enabledModulesOf(updatedTenant as AdminTenant));
       }
       await load();
-      setSuccess(`${normalizedPlan} aplicado con ${modulesForPlan.length} módulos del rubro.`);
+      setSuccess(`${normalizedPlan} aplicado. La selección manual de módulos se conservó.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : `No se pudo aplicar ${normalizedPlan}`);
     } finally {
@@ -1018,6 +1010,7 @@ export default function AdminPage() {
 
   async function handleApplyIndustryTemplate(template: IndustryTemplate) {
     if (!selectedTenant) return;
+    if (!window.confirm(`¿Aplicar la plantilla ${template.name}? Puede actualizar el rubro, módulos, entidades y flujos base de este cliente.`)) return;
     try {
       setSavingId(`industry-${template.code}`);
       setError(null);
@@ -1077,30 +1070,6 @@ export default function AdminPage() {
       setSuccess("Nivel de usuario actualizado.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cambiar el nivel del usuario");
-    } finally {
-      setSavingId(null);
-    }
-  }
-
-  async function handleDeleteTenant(tenantId: string) {
-    const tenant = tenants.find((item) => item.id === tenantId);
-    const label = tenant?.name ? `"${tenant.name}"` : "este cliente";
-    if (!window.confirm(`¿Eliminar ${label}? Esta acción eliminará sus usuarios y datos asociados.`)) return;
-
-    try {
-      setSavingId(`delete-tenant-${tenantId}`);
-      setError(null);
-      setSuccess(null);
-      await deleteAdminTenant(tenantId);
-      setTenants((items) => items.filter((item) => item.id !== tenantId));
-      setSelectedId((current) => {
-        if (current !== tenantId) return current;
-        const next = tenants.find((item) => item.id !== tenantId);
-        return next?.id || null;
-      });
-      setSuccess("Cliente eliminado correctamente.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo eliminar el cliente");
     } finally {
       setSavingId(null);
     }
@@ -1304,14 +1273,6 @@ export default function AdminPage() {
                           disabled={!selectedIndustryModules.length}
                         >
                           Sumar sugeridos
-                        </button>
-                        <button
-                          className="ghost-btn"
-                          type="button"
-                          onClick={() => replacePendingWithModules(selectedIndustryModules.map((module) => module.key))}
-                          disabled={!selectedIndustryModules.length}
-                        >
-                          Usar solo rubro
                         </button>
                       </div>
                     </div>
@@ -1657,7 +1618,6 @@ export default function AdminPage() {
                       >
                         {savingId === `modules-${selectedTenant.id}` ? "Guardando..." : "Guardar módulos"}
                       </button>
-                      <button className="ghost-btn danger" type="button" onClick={() => handleDeleteTenant(selectedTenant.id)} disabled={savingId === `delete-tenant-${selectedTenant.id}`}>Eliminar</button>
                     </div>
                   </div>
                   <div className="module-group-stack">
