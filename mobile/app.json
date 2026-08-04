@@ -3,7 +3,7 @@
     "name": "EVOLUM",
     "slug": "evolum-mobile",
     "icon": "./assets/evolum-app-icon.png",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "evolum",
@@ -17,8 +17,20 @@
       "url": "https://u.expo.dev/8fd3d44e-a57f-4b60-b627-3dd9f72da108"
     },
     "plugins": [
-      ["expo-notifications", { "icon": "./assets/evolum-app-icon.png", "color": "#8A2EFF", "defaultChannel": "evolum-alerts" }],
-      ["expo-image-picker", { "photosPermission": "EVOLUM necesita acceso a tus fotos solo cuando elijas cargar imagenes." }]
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/evolum-app-icon.png",
+          "color": "#8A2EFF",
+          "defaultChannel": "evolum-alerts"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "EVOLUM necesita acceso a tus fotos solo cuando elijas cargar imágenes."
+        }
+      ]
     ],
     "assetBundlePatterns": [
       "**/*"
@@ -26,13 +38,17 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "cl.evolum.mobile",
+      "buildNumber": "7",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.evolum.mobile",
-      "permissions": ["POST_NOTIFICATIONS"],
+      "versionCode": 7,
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/evolum-app-icon.png",
