@@ -128,6 +128,8 @@ type LoginUpdate =
   | { kind: "ota" }
   | { kind: "native"; version: string; downloadUrl: string; required: boolean; notes?: string | null };
 
+type ChatFilter = "all" | "pending" | "whatsapp" | "instagram";
+
 type CampaignVariant = {
   id?: string;
   title?: string;
@@ -683,7 +685,7 @@ function EvolumApp() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
-  const [chatFilter, setChatFilter] = useState<"all" | "whatsapp" | "instagram">("all");
+  const [chatFilter, setChatFilter] = useState<ChatFilter>("all");
   const [menuOpen, setMenuOpen] = useState(false);
   const [reply, setReply] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -756,6 +758,9 @@ function EvolumApp() {
 
   const filteredConversations = useMemo(() => {
     if (chatFilter === "all") return conversations;
+    if (chatFilter === "pending") {
+      return conversations.filter((item) => ["OPEN", "PENDING"].includes(String(item.status).toUpperCase()));
+    }
     return conversations.filter((item) => item.contact.channel === chatFilter);
   }, [chatFilter, conversations]);
   const unreadNotifications = useMemo(
@@ -1492,7 +1497,6 @@ function EvolumApp() {
             onAction={handleConversationAction}
             refreshing={refreshing}
             onRefresh={refreshCurrent}
-            compactHeader={screen === "inbox"}
           />
         )}
         {screen === "agenda" && <AgendaScreen bookings={bookings} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onCreated={async () => { await loadBookings(false); await loadDashboard(false); }} />}
@@ -2079,8 +2083,8 @@ function InboxScreen(props: {
   allConversations: Conversation[];
   selectedConversation: Conversation | null;
   messages: Message[];
-  filter: "all" | "whatsapp" | "instagram";
-  setFilter: (filter: "all" | "whatsapp" | "instagram") => void;
+  filter: ChatFilter;
+  setFilter: (filter: ChatFilter) => void;
   drawerOpen: boolean;
   setDrawerOpen: (open: boolean) => void;
   reply: string;
@@ -2090,25 +2094,26 @@ function InboxScreen(props: {
   onAction: (action: "take" | "release" | "resolve") => void;
   refreshing: boolean;
   onRefresh: () => void;
-  compactHeader?: boolean;
 }) {
   const active = props.selectedConversation;
+  const pendingCount = props.allConversations.filter((item) => ["OPEN", "PENDING"].includes(String(item.status).toUpperCase())).length;
   return (
     <KeyboardAvoidingView
       style={styles.inboxRoot}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
     >
-      {!props.compactHeader && <View style={styles.chatHeader}>
+      <View style={styles.chatHeader}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{initials(active?.contact.name || active?.contact.externalId)}</Text></View>
         <View style={{ flex: 1 }}>
           <Text style={styles.chatName}>{active?.contact.name || active?.contact.externalId || "Inbox"}</Text>
           <Text style={styles.chatSub}>{active ? `${active.contact.channel} / ${active.status} / ${active.mode}` : "Selecciona una conversacion"}</Text>
         </View>
         <TouchableOpacity style={styles.chatsButton} onPress={() => props.setDrawerOpen(true)}>
-          <Text style={styles.chatsButtonText}>CHATS</Text>
+          <Text style={styles.chatsButtonText}>Ver chats</Text>
+          <Text style={styles.chatsButtonMeta}>{pendingCount} pendiente{pendingCount === 1 ? "" : "s"}</Text>
         </TouchableOpacity>
-      </View>}
+      </View>
 
       <FlatList
         data={props.messages}
@@ -2148,9 +2153,9 @@ function InboxScreen(props: {
               <TouchableOpacity style={styles.iconButton} onPress={() => props.setDrawerOpen(false)}><Text style={styles.iconButtonText}>x</Text></TouchableOpacity>
             </View>
             <View style={styles.filterRow}>
-              {(["all", "whatsapp", "instagram"] as const).map((filter) => (
+              {(["pending", "all", "whatsapp", "instagram"] as const).map((filter) => (
                 <TouchableOpacity key={filter} style={[styles.filterPill, props.filter === filter && styles.filterPillActive]} onPress={() => props.setFilter(filter)}>
-                  <Text style={[styles.filterText, props.filter === filter && styles.filterTextActive]}>{filter === "all" ? "Todos" : filter}</Text>
+                  <Text style={[styles.filterText, props.filter === filter && styles.filterTextActive]}>{filter === "all" ? "Todos" : filter === "pending" ? "Pendientes" : filter}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -4599,8 +4604,9 @@ function createStyles() {
   },
   chatName: { color: colors.text, fontSize: 18, fontWeight: "900" },
   chatSub: { color: colors.muted, fontSize: 11 },
-  chatsButton: { backgroundColor: colors.purple, borderRadius: 14, minHeight: 42, paddingHorizontal: 12, justifyContent: "center" },
+  chatsButton: { backgroundColor: colors.purple, borderRadius: 14, minHeight: 44, minWidth: 94, paddingHorizontal: 12, justifyContent: "center", alignItems: "center" },
   chatsButtonText: { color: colors.text, fontWeight: "900", fontSize: 12 },
+  chatsButtonMeta: { color: "rgba(255,255,255,0.82)", fontSize: 9, fontWeight: "800", marginTop: 1 },
   messageList: { flex: 1 },
   messageListContent: { paddingTop: 6, paddingBottom: 8, gap: 10 },
   bubble: {
