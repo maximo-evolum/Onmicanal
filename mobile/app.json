@@ -5,7 +5,7 @@
     "icon": "./assets/evolum-app-icon.png",
     "version": "0.1.6",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "scheme": "evolum",
     "runtimeVersion": {
       "policy": "appVersion"

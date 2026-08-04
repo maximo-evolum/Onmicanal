@@ -90,12 +90,13 @@ import {
   uploadTenantDocument
 } from "./src/api/client";
 import { getIndustryProfile, IndustryProfile } from "./src/config/industryProfiles";
-import { colors, shadow } from "./src/theme";
+import { applyEvolumTheme, colors, evolumThemes, getEvolumTheme, shadow, type EvolumThemeMode } from "./src/theme";
 import { AdminTenant, AgentSession, Booking, Campaign, Conversation, CrmOperationalDashboard, EvolumNotification, IndustryRecord, IndustryUser, Message, RealtyIntelligence, TenantSession } from "./src/types";
 import type { FinanceAgentWorkspace, FinanceCustomer, FinanceIntegration, FinanceOverview, FinancePlan, FinanceReconciliationSuggestion } from "./src/api/client";
 
 const evolumAppIcon = require("./assets/evolum-app-icon.png");
 const PERMISSION_ONBOARDING_PREFIX = "evolum_permission_onboarding_v1:";
+const EVOLUM_THEME_STORAGE_KEY = "evolum_mobile_theme_v1";
 
 type ScreenKey =
   | "dashboard"
@@ -669,6 +670,7 @@ export default function App() {
 }
 
 function EvolumApp() {
+  const [themeMode, setThemeMode] = useState<EvolumThemeMode>(getEvolumTheme());
   const [session, setSession] = useState<SessionState | null>(null);
   const [modules, setModules] = useState<string[]>([]);
   const [screen, setScreen] = useState<ScreenKey>("dashboard");
@@ -706,6 +708,26 @@ function EvolumApp() {
   const [tenantNotifications, setTenantNotifications] = useState<EvolumNotification[]>([]);
   const wasOfflineRef = useRef(false);
   const networkCheckInFlightRef = useRef(false);
+
+  useEffect(() => {
+    void (async () => {
+      const saved = await AsyncStorage.getItem(EVOLUM_THEME_STORAGE_KEY).catch(() => null);
+      const mode: EvolumThemeMode = saved === "nexo" ? "nexo" : "lumen";
+      applyEvolumTheme(mode);
+      refreshInlineThemeStyles();
+      styles = createStyles();
+      setThemeMode(mode);
+    })();
+  }, []);
+
+  async function changeTheme(mode: EvolumThemeMode) {
+    if (mode === themeMode) return;
+    applyEvolumTheme(mode);
+    refreshInlineThemeStyles();
+    styles = createStyles();
+    setThemeMode(mode);
+    await AsyncStorage.setItem(EVOLUM_THEME_STORAGE_KEY, mode).catch(() => undefined);
+  }
 
   const profile = useMemo(() => getIndustryProfile(session?.tenant?.industry), [session?.tenant?.industry]);
   const selectedConversation = useMemo(
@@ -1339,7 +1361,7 @@ function EvolumApp() {
   if (booting) {
     return (
       <SafeAreaView style={styles.centerScreen}>
-        <StatusBar style="light" />
+        <StatusBar style={themeMode === "nexo" ? "light" : "dark"} />
         <ActivityIndicator color={colors.purple2} />
         <Text style={styles.muted}>Cargando EVOLUM...</Text>
       </SafeAreaView>
@@ -1349,7 +1371,7 @@ function EvolumApp() {
   if (!session) {
     return (
       <SafeAreaView style={styles.loginScreen}>
-        <StatusBar style="light" />
+        <StatusBar style={themeMode === "nexo" ? "light" : "dark"} />
         <View style={styles.loginCard}>
           <View style={styles.logoLarge}><Image source={evolumAppIcon} style={styles.logoLargeImage} resizeMode="contain" /></View>
           <Text style={styles.loginTitle}>EVOLUM</Text>
@@ -1393,7 +1415,7 @@ function EvolumApp() {
 
   return (
     <SafeAreaView style={styles.appShell}>
-      <StatusBar style="light" />
+      <StatusBar style={themeMode === "nexo" ? "light" : "dark"} />
       <SideNav
         items={visibleNav}
         active={screen}
@@ -1474,7 +1496,7 @@ function EvolumApp() {
         {screen === "campaigns" && <CampaignsScreen profile={profile} conversations={conversations} campaigns={campaigns} onRefresh={loadCampaigns} />}
         {screen === "documents" && <DocumentsScreen profile={profile} />}
         {screen === "notifications" && <NotificationsScreen notifications={tenantNotifications} onRefresh={loadNotifications} onRead={handleReadNotification} onReadAll={handleReadAllNotifications} />}
-        {screen === "settings" && <PermissionsAndAlertsScreen notificationPermission={notificationPermission} photoPermission={photoPermission} onEnableNotifications={registerForPushNotifications} onEnablePhotos={requestPhotoLibraryAccess} onOpenImports={() => setScreen("realtyLoads")} onRefresh={refreshPermissionStatus} />}
+        {screen === "settings" && <PermissionsAndAlertsScreen notificationPermission={notificationPermission} photoPermission={photoPermission} themeMode={themeMode} onThemeChange={changeTheme} onEnableNotifications={registerForPushNotifications} onEnablePhotos={requestPhotoLibraryAccess} onOpenImports={() => setScreen("realtyLoads")} onRefresh={refreshPermissionStatus} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
       </View>
     </SafeAreaView>
@@ -1702,14 +1724,14 @@ function FinanceScreen({ overview, refreshing, onRefresh }: { overview: FinanceO
   const cards = [
     { label: "Por cobrar", value: money(overview?.invoices.pendingAmount), detail: `${overview?.invoices.pending || 0} facturas abiertas` }, { label: "Vencido", value: money(overview?.invoices.overdueAmount), detail: `${overview?.invoices.overdue || 0} facturas vencidas` }, { label: "Conciliado", value: `${overview?.reconciliation.rate || 0}%`, detail: `${overview?.reconciliation.matchedMovements || 0} movimientos` }, { label: "DSO", value: `${overview?.collection.dsoDays || 0} días`, detail: "promedio de cobro" }
   ];
-  const panel = { padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 10 } as const;
-  const input = { borderWidth: 1, borderColor: "#c9d6d1", borderRadius: 12, backgroundColor: "#fff", paddingHorizontal: 13, minHeight: 46, color: "#17131f" } as const;
-  const primary = { alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: "#0891b2" } as const;
-  const secondary = { alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: "#6552a8", backgroundColor: "#fff" } as const;
-  return <ScrollView refreshControl={<RefreshControl refreshing={refreshing || busy} onRefresh={refreshAll} tintColor="#0891B2" />} contentContainerStyle={[styles.screenContent, { backgroundColor: "#f5f7f6", paddingBottom: 42, gap: 14 }]}>
-    <View style={{ padding: 18, borderRadius: 22, backgroundColor: "#17131f", gap: 7 }}><Text style={{ color: "#61d8ed", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>EVOLUM FINANZAS</Text><Text style={{ color: "#ffffff", fontSize: 27, fontWeight: "900" }}>Cuentas por cobrar</Text><Text style={{ color: "#c7c2d6", lineHeight: 20 }}>Opera el ciclo completo desde la factura hasta el cobro, con control humano en las decisiones sensibles.</Text></View>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{FINANCE_MOBILE_TABS.map((item) => <TouchableOpacity key={item} onPress={() => setTab(item)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: tab === item ? "#0891b2" : "#d2dbd7", backgroundColor: tab === item ? "#0891b2" : "#fff" }}><Text style={{ color: tab === item ? "#fff" : "#382a5c", fontWeight: "800", fontSize: 12 }}>{item}</Text></TouchableOpacity>)}</ScrollView>
-    {tab === "Resumen" && <View style={{ gap: 12 }}><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>{cards.map((item) => <View key={item.label} style={{ width: "47%", minHeight: 108, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff" }}><Text style={financeMobileDetail}>{item.label}</Text><Text style={{ color: "#17131f", fontSize: 22, fontWeight: "900", marginTop: 8 }}>{item.value}</Text><Text style={{ color: "#1f9d5a", fontSize: 11, marginTop: 6 }}>{item.detail}</Text></View>)}</View><View style={{ padding: 17, borderRadius: 18, backgroundColor: "#302654", gap: 12 }}><Text style={{ color: "#61d8ed", fontSize: 11, fontWeight: "900", letterSpacing: 1.3 }}>CICLO FINANCIERO</Text><Text style={{ color: "#fff", fontSize: 20, fontWeight: "900" }}>Desde la factura hasta el cobro</Text><View style={{ flexDirection: "row", gap: 5 }}>{["Factura", "Cartola", "Conciliación", "Caso", "Cobro"].map((step, index) => <View key={step} style={{ flex: 1, gap: 6 }}><View style={{ height: 5, borderRadius: 5, backgroundColor: index < 3 ? "#22d3ee" : "#6552a8" }} /><Text numberOfLines={1} style={{ color: "#d8d2ed", fontSize: 9, textAlign: "center" }}>{step}</Text></View>)}</View></View></View>}
+  const panel = { padding: 16, borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel, gap: 10 } as const;
+  const input = { borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.panel2, paddingHorizontal: 13, minHeight: 46, color: colors.text } as const;
+  const primary = { alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.purple } as const;
+  const secondary = { alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.panel2 } as const;
+  return <ScrollView refreshControl={<RefreshControl refreshing={refreshing || busy} onRefresh={refreshAll} tintColor={colors.cyan} />} contentContainerStyle={[styles.screenContent, { backgroundColor: colors.bg, paddingBottom: 42, gap: 14 }]}>
+    <View style={{ padding: 18, borderRadius: 22, backgroundColor: colors.hero, gap: 7 }}><Text style={{ color: colors.cyan, fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>EVOLUM FINANZAS</Text><Text style={{ color: colors.heroText, fontSize: 27, fontWeight: "900" }}>Cuentas por cobrar</Text><Text style={{ color: colors.heroMuted, lineHeight: 20 }}>Opera el ciclo completo desde la factura hasta el cobro, con control humano en las decisiones sensibles.</Text></View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{FINANCE_MOBILE_TABS.map((item) => <TouchableOpacity key={item} onPress={() => setTab(item)} style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1, borderColor: tab === item ? colors.purple : colors.border, backgroundColor: tab === item ? colors.purple : colors.panel }}><Text style={{ color: tab === item ? colors.heroText : colors.text, fontWeight: "800", fontSize: 12 }}>{item}</Text></TouchableOpacity>)}</ScrollView>
+    {tab === "Resumen" && <View style={{ gap: 12 }}><View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>{cards.map((item) => <View key={item.label} style={{ width: "47%", minHeight: 108, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel }}><Text style={financeMobileDetail}>{item.label}</Text><Text style={{ color: colors.text, fontSize: 22, fontWeight: "900", marginTop: 8 }}>{item.value}</Text><Text style={{ color: colors.green, fontSize: 11, marginTop: 6 }}>{item.detail}</Text></View>)}</View><View style={{ padding: 17, borderRadius: 18, backgroundColor: colors.hero, gap: 12 }}><Text style={{ color: colors.cyan, fontSize: 11, fontWeight: "900", letterSpacing: 1.3 }}>CICLO FINANCIERO</Text><Text style={{ color: colors.heroText, fontSize: 20, fontWeight: "900" }}>Desde la factura hasta el cobro</Text><View style={{ flexDirection: "row", gap: 5 }}>{["Factura", "Cartola", "Conciliación", "Caso", "Cobro"].map((step, index) => <View key={step} style={{ flex: 1, gap: 6 }}><View style={{ height: 5, borderRadius: 5, backgroundColor: index < 3 ? colors.cyan : colors.purple2 }} /><Text numberOfLines={1} style={{ color: colors.heroMuted, fontSize: 9, textAlign: "center" }}>{step}</Text></View>)}</View></View></View>}
     {tab === "Facturas" && <View style={panel}><Text style={financeMobileTitle}>Nueva factura</Text><Text style={financeMobileDetail}>Registra documentos para seguimiento y conciliación.</Text><TextInput placeholder="Número de factura" value={invoiceForm.number} onChangeText={(number) => setInvoiceForm((current) => ({ ...current, number }))} style={input} /><TextInput placeholder="Cliente o razón social" value={invoiceForm.customer} onChangeText={(customer) => setInvoiceForm((current) => ({ ...current, customer }))} style={input} /><TextInput placeholder="RUT (opcional)" value={invoiceForm.rut} onChangeText={(rut) => setInvoiceForm((current) => ({ ...current, rut }))} style={input} /><TextInput placeholder="Monto CLP" keyboardType="numeric" value={invoiceForm.amount} onChangeText={(amount) => setInvoiceForm((current) => ({ ...current, amount }))} style={input} /><TextInput placeholder="Vence: AAAA-MM-DD" value={invoiceForm.dueDate} onChangeText={(dueDate) => setInvoiceForm((current) => ({ ...current, dueDate }))} style={input} /><TouchableOpacity disabled={busy} onPress={saveInvoice} style={primary}><Text style={financeMobileButton}>Guardar factura</Text></TouchableOpacity><FinanceRecordList records={invoices.slice(0, 12)} empty="Aún no hay facturas registradas." /></View>}
     {tab === "Cartolas" && <View style={panel}><Text style={financeMobileTitle}>Cartolas bancarias</Text><Text style={financeMobileDetail}>Importa un CSV o Excel desde tu teléfono. Ningún pago se aplica hasta que lo apruebes.</Text><TouchableOpacity disabled={busy} onPress={importStatement} style={primary}><Text style={financeMobileButton}>Importar cartola</Text></TouchableOpacity><FinanceRecordList records={movements.slice(0, 12)} empty="Aún no hay movimientos cargados." movement /></View>}
     {(tab === "Conciliacion" || tab === "Aprobaciones") && <View style={panel}><Text style={financeMobileTitle}>{tab === "Aprobaciones" ? "Aprobaciones pendientes" : "Conciliación IA"}</Text><Text style={financeMobileDetail}>La IA propone coincidencias; tú decides si se confirman.</Text>{suggestions.length ? suggestions.slice(0, 12).map((suggestion) => { const candidate = suggestion.candidates[0]; return <View key={suggestion.movement.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{suggestion.movement.title}</Text><Text style={financeMobileDetail}>{candidate ? `${candidate.invoice.title} · confianza ${candidate.confidence}%` : "Sin coincidencia confiable"}</Text>{candidate ? <View style={{ flexDirection: "row", gap: 8 }}><TouchableOpacity disabled={busy} onPress={() => approve(suggestion)} style={primary}><Text style={financeMobileButton}>Aprobar</Text></TouchableOpacity><TouchableOpacity disabled={busy} onPress={() => reject(suggestion)} style={secondary}><Text style={financeMobileSecondary}>Revisar</Text></TouchableOpacity></View> : null}</View>; }) : <Text style={financeMobileDetail}>Aún no hay sugerencias. Carga facturas y cartolas para calcular coincidencias.</Text>}</View>}
@@ -1724,13 +1746,23 @@ function FinanceScreen({ overview, refreshing, onRefresh }: { overview: FinanceO
   </ScrollView>;
 }
 
-const financeMobileTitle = { color: "#17131f", fontSize: 20, fontWeight: "900" } as const;
-const financeMobileDetail = { color: "#5b5768", lineHeight: 19, fontSize: 12 } as const;
-const financeMobileButton = { color: "#fff", fontWeight: "900" } as const;
-const financeMobileSecondary = { color: "#4b3b8c", fontWeight: "900" } as const;
-const financeMobileRow = { gap: 6, paddingTop: 13, borderTopWidth: 1, borderTopColor: "#e2e8e5" } as const;
-const financeMobileRowTitle = { color: "#17131f", fontWeight: "900", fontSize: 14 } as const;
-const financeMobileMetric = { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: "#e2e8e5" } as const;
+let financeMobileTitle = { color: colors.text, fontSize: 20, fontWeight: "900" } as const;
+let financeMobileDetail = { color: colors.muted, lineHeight: 19, fontSize: 12 } as const;
+let financeMobileButton = { color: colors.heroText, fontWeight: "900" } as const;
+let financeMobileSecondary = { color: colors.purple, fontWeight: "900" } as const;
+let financeMobileRow = { gap: 6, paddingTop: 13, borderTopWidth: 1, borderTopColor: colors.border } as const;
+let financeMobileRowTitle = { color: colors.text, fontWeight: "900", fontSize: 14 } as const;
+let financeMobileMetric = { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border } as const;
+
+function refreshInlineThemeStyles() {
+  financeMobileTitle = { color: colors.text, fontSize: 20, fontWeight: "900" } as const;
+  financeMobileDetail = { color: colors.muted, lineHeight: 19, fontSize: 12 } as const;
+  financeMobileButton = { color: colors.heroText, fontWeight: "900" } as const;
+  financeMobileSecondary = { color: colors.purple, fontWeight: "900" } as const;
+  financeMobileRow = { gap: 6, paddingTop: 13, borderTopWidth: 1, borderTopColor: colors.border } as const;
+  financeMobileRowTitle = { color: colors.text, fontWeight: "900", fontSize: 14 } as const;
+  financeMobileMetric = { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.border } as const;
+}
 function FinanceRecordList({ records, empty, movement = false }: { records: IndustryRecord[]; empty: string; movement?: boolean }) {
   if (!records.length) return <Text style={financeMobileDetail}>{empty}</Text>;
   return <View style={{ gap: 0 }}>{records.map((record) => <View key={record.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{record.title}</Text><Text style={financeMobileDetail}>{movement ? `${recordText(record, "date", "Sin fecha")} · ${money(recordNumber(record, "amount"))}` : `${recordText(record, "customerName", "Cliente")} · ${money(recordNumber(record, "balance", recordNumber(record, "amount")))}`}</Text><Text style={{ color: "#382a5c", fontSize: 11, fontWeight: "800" }}>{String(record.status || "PENDING")}</Text></View>)}</View>;
@@ -1769,7 +1801,7 @@ function VerticalOperationsScreen({ profile }: { profile: IndustryProfile }) {
       await load();
     } catch (error) { Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setSaving(false); }
   }
-  return <ScrollView contentContainerStyle={[styles.screenContent, { backgroundColor: "#f5f7f6", paddingBottom: 40, gap: 14 }]}>
+  return <ScrollView contentContainerStyle={[styles.screenContent, { backgroundColor: colors.bg, paddingBottom: 40, gap: 14 }]}>
     <View style={{ padding: 18, borderRadius: 22, backgroundColor: "#17131f", gap: 7 }}><Text style={{ color: "#61d8ed", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>{config.eyebrow}</Text><Text style={{ color: "#fff", fontWeight: "900", fontSize: 26 }}>{config.title}</Text><Text style={{ color: "#c7c2d6", lineHeight: 20 }}>{config.notice}</Text></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}><View style={{ flexDirection: "row", gap: 8 }}>{config.entities.map((item) => <TouchableOpacity key={item.type} onPress={() => { setSelected(item.type); setValues({}); }} style={{ paddingHorizontal: 13, paddingVertical: 10, borderRadius: 999, backgroundColor: entity.type === item.type ? "#4b3b8c" : "#fff", borderWidth: 1, borderColor: "#d2dbd7" }}><Text style={{ color: entity.type === item.type ? "#fff" : "#382a5c", fontWeight: "900", fontSize: 12 }}>{item.label}</Text></TouchableOpacity>)}</View></ScrollView>
     <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 10 }}><Text style={financeMobileTitle}>Nuevo: {entity.label}</Text>{entity.fields.map((field) => <TextInput key={field} placeholder={field.replace(/_/g, " ")} value={values[field] || ""} onChangeText={(value) => setValues((current) => ({ ...current, [field]: value }))} style={input} />)}<TouchableOpacity disabled={saving} onPress={save} style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: "#0891b2" }}><Text style={financeMobileButton}>{saving ? "Guardando..." : `Guardar ${entity.label}`}</Text></TouchableOpacity></View>
@@ -1800,7 +1832,7 @@ function ShiftsScreen({ profile }: { profile: IndustryProfile }) {
     } catch (error) { Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setSaving(false); }
   }
   const input = { borderWidth: 1, borderColor: "#c9d6d1", borderRadius: 12, backgroundColor: "#fff", paddingHorizontal: 13, minHeight: 46, color: "#17131f" } as const;
-  return <ScrollView contentContainerStyle={[styles.screenContent, { backgroundColor: "#f5f7f6", paddingBottom: 40, gap: 14 }]}>
+  return <ScrollView contentContainerStyle={[styles.screenContent, { backgroundColor: colors.bg, paddingBottom: 40, gap: 14 }]}>
     <View style={{ padding: 18, borderRadius: 22, backgroundColor: "#17131f", gap: 7 }}><Text style={{ color: "#61d8ed", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>DOTACIÓN Y DISPONIBILIDAD</Text><Text style={{ color: "#fff", fontWeight: "900", fontSize: 26 }}>{copy.title}</Text><Text style={{ color: "#c7c2d6", lineHeight: 20 }}>{copy.detail} Este módulo organiza al equipo; la Agenda mantiene las citas y reservas de clientes.</Text></View>
     <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 10 }}><Text style={financeMobileTitle}>Nuevo turno</Text><TextInput placeholder="Persona" value={form.worker} onChangeText={(worker) => setForm((current) => ({ ...current, worker }))} style={input} /><TextInput placeholder={copy.role} value={form.role} onChangeText={(role) => setForm((current) => ({ ...current, role }))} style={input} /><TextInput placeholder="Fecha: AAAA-MM-DD" value={form.date} onChangeText={(date) => setForm((current) => ({ ...current, date }))} style={input} /><View style={{ flexDirection: "row", gap: 8 }}><TextInput placeholder="Inicio" value={form.startsAt} onChangeText={(startsAt) => setForm((current) => ({ ...current, startsAt }))} style={[input, { flex: 1 }]} /><TextInput placeholder="Fin" value={form.endsAt} onChangeText={(endsAt) => setForm((current) => ({ ...current, endsAt }))} style={[input, { flex: 1 }]} /></View><TextInput placeholder="Sucursal, box o estación" value={form.location} onChangeText={(location) => setForm((current) => ({ ...current, location }))} style={input} /><TouchableOpacity disabled={saving} onPress={save} style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: "#0891b2" }}><Text style={financeMobileButton}>{saving ? "Guardando..." : "Guardar turno"}</Text></TouchableOpacity></View>
     <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 9 }}><Text style={financeMobileTitle}>Turnos programados</Text>{shifts.length ? shifts.slice(0, 30).map((record) => <View key={record.id} style={financeMobileRow}><Text style={financeMobileRowTitle}>{recordText(record, "worker")}</Text><Text style={financeMobileDetail}>{recordText(record, "role")} · {recordText(record, "location", "Sin ubicación")}</Text><Text style={{ color: "#382a5c", fontWeight: "900", fontSize: 12 }}>{recordText(record, "date")} · {recordText(record, "startsAt")} — {recordText(record, "endsAt")}</Text></View>) : <Text style={financeMobileDetail}>Aún no hay turnos registrados.</Text>}</View>
@@ -1875,6 +1907,8 @@ function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, o
 function PermissionsAndAlertsScreen({
   notificationPermission,
   photoPermission,
+  themeMode,
+  onThemeChange,
   onEnableNotifications,
   onEnablePhotos,
   onOpenImports,
@@ -1882,6 +1916,8 @@ function PermissionsAndAlertsScreen({
 }: {
   notificationPermission: string;
   photoPermission: string;
+  themeMode: EvolumThemeMode;
+  onThemeChange: (mode: EvolumThemeMode) => Promise<void>;
   onEnableNotifications: () => Promise<boolean>;
   onEnablePhotos: () => Promise<boolean>;
   onOpenImports: () => void;
@@ -1903,6 +1939,25 @@ function PermissionsAndAlertsScreen({
       <Text style={styles.eyebrow}>Configuracion</Text>
       <Text style={styles.screenTitle}>Permisos y alertas</Text>
       <Text style={styles.screenSubtitle}>Controla que puede usar EVOLUM en este telefono. Nada se habilita sin tu autorizacion.</Text>
+
+      <Panel title="Apariencia de la app">
+        <Text style={styles.detailText}>Lumen es el diseño claro principal. Nexo mantiene la versión oscura de EVOLUM, con morado neón y azul eléctrico. Se aplica a todas las verticales de esta app.</Text>
+        <View style={styles.themeChoiceRow}>
+          {(["lumen", "nexo"] as EvolumThemeMode[]).map((mode) => {
+            const active = themeMode === mode;
+            return (
+              <TouchableOpacity key={mode} style={[styles.themeChoice, active && styles.themeChoiceActive]} onPress={() => void onThemeChange(mode)} accessibilityRole="button" accessibilityState={{ selected: active }}>
+                <View style={[styles.themeChoiceSwatch, mode === "nexo" && styles.themeChoiceSwatchDark]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.themeChoiceTitle, active && styles.themeChoiceTitleActive]}>{evolumThemes[mode].name}</Text>
+                  <Text style={[styles.themeChoiceText, active && styles.themeChoiceTextActive]}>{evolumThemes[mode].description}</Text>
+                </View>
+                <Text style={[styles.themeChoiceCheck, active && styles.themeChoiceCheckActive]}>{active ? "✓" : ""}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Panel>
 
       <Panel title="Notificaciones">
         <Text style={styles.detailText}>Recibe alertas por nuevos chats, reservas, pagos y actividad relevante de tu cuenta.</Text>
@@ -3984,7 +4039,8 @@ function MiniButton({ label, onPress }: { label: string; onPress: () => void }) 
   );
 }
 
-const styles = StyleSheet.create({
+function createStyles() {
+  return StyleSheet.create({
   centerScreen: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -4130,7 +4186,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 22,
-    backgroundColor: "#07101f",
+    backgroundColor: colors.panel3,
     padding: 8,
     alignItems: "center",
     justifyContent: "space-between"
@@ -4172,7 +4228,7 @@ const styles = StyleSheet.create({
   fullMenu: {
     borderRightWidth: 1,
     borderRightColor: colors.borderStrong,
-    backgroundColor: "#07101f",
+    backgroundColor: colors.panel3,
     padding: 16,
     paddingTop: Platform.OS === "android" ? 28 : 20,
     paddingBottom: Platform.OS === "android" ? 28 : 22,
@@ -4268,7 +4324,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.panel,
     padding: 14
   },
-  notificationCardUnread: { borderColor: colors.borderStrong, backgroundColor: "#15102a" },
+  notificationCardUnread: { borderColor: colors.borderStrong, backgroundColor: colors.panel2 },
   notificationSeverity: { width: 4, alignSelf: "stretch", borderRadius: 4, backgroundColor: colors.purple2 },
   notificationSeverityCritical: { backgroundColor: "#ff6b8a" },
   notificationTitle: { color: colors.text, fontSize: 15, fontWeight: "900", marginBottom: 4 },
@@ -4426,7 +4482,7 @@ const styles = StyleSheet.create({
   drawerScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.28)" },
   chatDrawer: {
     width: "82%",
-    backgroundColor: "#080814",
+    backgroundColor: colors.panel3,
     borderLeftWidth: 1,
     borderLeftColor: colors.borderStrong,
     padding: 14,
@@ -4742,5 +4798,19 @@ const styles = StyleSheet.create({
   offlineBanner: { marginHorizontal: 14, marginTop: 12, paddingHorizontal: 14, minHeight: 44, borderRadius: 12, backgroundColor: "rgba(249, 115, 22, 0.16)", borderWidth: 1, borderColor: "rgba(249, 115, 22, 0.55)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   offlineBannerDisconnected: { backgroundColor: "rgba(239, 68, 68, 0.14)", borderColor: "rgba(248, 113, 113, 0.65)" },
   offlineBannerText: { color: colors.text, fontSize: 12, fontWeight: "700", flex: 1 },
-  offlineBannerAction: { color: "#fdba74", fontSize: 12, fontWeight: "900" }
-});
+  offlineBannerAction: { color: "#fdba74", fontSize: 12, fontWeight: "900" },
+  themeChoiceRow: { gap: 10, marginTop: 4 },
+  themeChoice: { minHeight: 70, flexDirection: "row", alignItems: "center", gap: 11, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 16, backgroundColor: colors.panel2 },
+  themeChoiceActive: { borderColor: colors.borderStrong, backgroundColor: colors.panel3 },
+  themeChoiceSwatch: { width: 32, height: 32, borderRadius: 11, backgroundColor: "#d8f6f1", borderWidth: 1, borderColor: "#0da7a4" },
+  themeChoiceSwatchDark: { backgroundColor: "#17122d", borderColor: "#9b46ff" },
+  themeChoiceTitle: { color: colors.text, fontWeight: "900", fontSize: 13 },
+  themeChoiceTitleActive: { color: colors.purple },
+  themeChoiceText: { color: colors.muted, fontSize: 11, lineHeight: 15, marginTop: 2 },
+  themeChoiceTextActive: { color: colors.muted },
+  themeChoiceCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: colors.borderStrong, color: colors.text, textAlign: "center", lineHeight: 20, fontWeight: "900" },
+  themeChoiceCheckActive: { backgroundColor: colors.purple, borderColor: colors.purple }
+  });
+}
+
+let styles = createStyles();

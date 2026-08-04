@@ -1,6 +1,7 @@
 .expo/
 .expo-export-check/
 .expo-export-check-2/
+.expo-theme-check/
 node_modules/
 .env
 .env.*
