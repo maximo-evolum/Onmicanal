@@ -22,8 +22,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  StatusBar as RNStatusBar,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -32,6 +30,7 @@ import {
   useWindowDimensions,
   View
 } from "react-native";
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   API_BASE_URL,
   checkApiHealth,
@@ -666,10 +665,11 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 }
 
 export default function App() {
-  return <AppErrorBoundary><EvolumApp /></AppErrorBoundary>;
+  return <SafeAreaProvider><AppErrorBoundary><EvolumApp /></AppErrorBoundary></SafeAreaProvider>;
 }
 
 function EvolumApp() {
+  const insets = useSafeAreaInsets();
   const [themeMode, setThemeMode] = useState<EvolumThemeMode>(getEvolumTheme());
   const [session, setSession] = useState<SessionState | null>(null);
   const [modules, setModules] = useState<string[]>([]);
@@ -1209,13 +1209,13 @@ function EvolumApp() {
   async function handleConnectionCheck() {
     try {
       setConnectionLoading(true);
-      setConnectionStatus("Probando conexion...");
+      setConnectionStatus("Comprobando servidor...");
       const data = await checkApiHealth();
       setNetworkState("online");
-      setConnectionStatus(data?.db ? "Conexion OK: API y base de datos en linea." : "Conexion OK: API en linea.");
-    } catch (error) {
+      setConnectionStatus(data?.db ? "Servidor conectado" : "Servidor conectado (servicios parciales)");
+    } catch {
       setNetworkState("offline");
-      setConnectionStatus(error instanceof Error ? error.message : "No se pudo probar la conexion.");
+      setConnectionStatus("Servidor desconectado. Revisa tu conexión e inténtalo nuevamente.");
     } finally {
       setConnectionLoading(false);
     }
@@ -1370,11 +1370,11 @@ function EvolumApp() {
 
   if (!session) {
     return (
-      <SafeAreaView style={styles.loginScreen}>
+      <SafeAreaView style={styles.loginScreen} edges={["top", "bottom", "left", "right"]}>
         <StatusBar style={themeMode === "nexo" ? "light" : "dark"} />
         <KeyboardAvoidingView style={styles.loginKeyboard} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={styles.loginLanding} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.loginBrandPanel}>
+        <ScrollView contentContainerStyle={styles.loginEssentialLanding} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={[styles.loginBrandPanel, styles.loginHidden]}>
             <View style={styles.loginBrandHeader}>
               <Image source={evolumAppIcon} style={styles.loginBrandLogo} resizeMode="contain" />
               <View><Text style={styles.loginBrandName}>EVOLUM OS</Text><Text style={styles.loginBrandSub}>El Sistema Operativo para Empresas</Text></View>
@@ -1387,11 +1387,11 @@ function EvolumApp() {
             </View>
             <Text style={styles.loginSecurity}>● Plataforma segura y preparada para crecer contigo.</Text>
           </View>
-        <View style={styles.loginCard}>
-          <View style={styles.logoLarge}><Image source={evolumAppIcon} style={styles.logoLargeImage} resizeMode="contain" /></View>
-          <Text style={styles.loginFormEyebrow}>ACCESO SEGURO</Text>
-          <Text style={styles.loginTitle}>Entrar a la plataforma</Text>
-          <Text style={styles.loginSubtitle}>Ingresa tus credenciales para continuar tu operacion.</Text>
+        <View style={styles.loginEssentialCard}>
+          <View style={[styles.logoLarge, styles.loginHidden]}><Image source={evolumAppIcon} style={styles.logoLargeImage} resizeMode="contain" /></View>
+          <Text style={styles.loginEssentialBrand}>EVOLUM <Text style={styles.loginEssentialBrandAccent}>OS</Text></Text>
+          <Text style={styles.loginEssentialTitle}>Entrar a la plataforma</Text>
+          <Text style={styles.loginEssentialSubtitle}>Ingresa tus credenciales para continuar.</Text>
           <View style={styles.loginVersionRow}>
             <Text style={styles.loginVersionLabel}>Versión instalada</Text>
             <Text style={styles.loginVersionValue}>v{currentAppVersion}</Text>
@@ -1414,16 +1414,18 @@ function EvolumApp() {
               </TouchableOpacity>
             </View>
           ) : null}
-          <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="Email" placeholderTextColor={colors.muted} autoCapitalize="none" />
-          <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Password" placeholderTextColor={colors.muted} secureTextEntry />
+          <Text style={styles.loginFieldLabel}>Correo electrónico</Text>
+          <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="nombre@empresa.cl" placeholderTextColor={colors.muted} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
+          <Text style={styles.loginFieldLabel}>Contraseña</Text>
+          <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="••••••••" placeholderTextColor={colors.muted} secureTextEntry autoComplete="password" />
           <TouchableOpacity style={styles.primaryButton} onPress={handleLogin} disabled={authLoading}>
             <Text style={styles.primaryButtonText}>{authLoading ? "Entrando..." : "Entrar"}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryButton} onPress={handleConnectionCheck} disabled={connectionLoading}>
-            <Text style={styles.secondaryButtonText}>{connectionLoading ? "Probando..." : "Probar conexion"}</Text>
+            <Text style={styles.secondaryButtonText}>{connectionLoading ? "Comprobando..." : "Probar conexión"}</Text>
           </TouchableOpacity>
-          <Text style={styles.apiHint}>{API_BASE_URL}</Text>
-          {!!connectionStatus && <Text style={styles.connectionStatus}>{connectionStatus}</Text>}
+          {!!connectionStatus && <Text style={[styles.connectionStatus, connectionStatus.startsWith("Servidor conectado") ? styles.connectionStatusOnline : styles.connectionStatusOffline]}>{connectionStatus}</Text>}
+          <Text style={styles.loginEssentialHelp}>¿Olvidaste tu contraseña?</Text>
         </View>
         </ScrollView>
         </KeyboardAvoidingView>
@@ -1432,7 +1434,7 @@ function EvolumApp() {
   }
 
   return (
-    <SafeAreaView style={styles.appShell}>
+    <SafeAreaView style={styles.appShell} edges={["top", "left", "right"]}>
       <StatusBar style={themeMode === "nexo" ? "light" : "dark"} />
       <MobileTopbar
         session={session}
@@ -1455,7 +1457,7 @@ function EvolumApp() {
         setMenuOpen(false);
         if (next === "admin") loadAdminTenants();
       }} />
-      <View style={styles.contentShell}>
+      <View style={[styles.contentShell, { paddingBottom: 82 + Math.max(insets.bottom, 8) }]}>
         {(networkState === "offline" || pendingOfflineSync > 0) && (
           <View style={[styles.offlineBanner, networkState === "offline" && styles.offlineBannerDisconnected]}>
             <Text style={styles.offlineBannerText}>
@@ -1514,6 +1516,7 @@ function EvolumApp() {
       <MobileBottomNavigation
         active={screen}
         hasFinance={hasMobileModule(modules, "finance_analytics") || session.user.role === "SUPER_ADMIN"}
+        bottomInset={insets.bottom}
         onChange={(next) => {
           if (next === "settings") setMenuOpen(true);
           else setScreen(next);
@@ -1556,7 +1559,7 @@ function MobileTopbar({
   );
 }
 
-function MobileBottomNavigation({ active, hasFinance, onChange }: { active: ScreenKey; hasFinance: boolean; onChange: (key: ScreenKey) => void }) {
+function MobileBottomNavigation({ active, hasFinance, bottomInset, onChange }: { active: ScreenKey; hasFinance: boolean; bottomInset: number; onChange: (key: ScreenKey) => void }) {
   const items: Array<{ key: ScreenKey; label: string; icon: string }> = [
     { key: "dashboard", label: "Inicio", icon: "⌂" },
     { key: "inbox", label: "Chat's", icon: "◌" },
@@ -1565,7 +1568,7 @@ function MobileBottomNavigation({ active, hasFinance, onChange }: { active: Scre
     { key: "settings", label: "Más", icon: "☷" }
   ];
   return (
-    <View style={styles.mobileBottomNav}>
+    <View style={[styles.mobileBottomNav, { paddingBottom: Math.max(bottomInset, 8), minHeight: 62 + Math.max(bottomInset, 8) }]}>
       {items.map((item) => {
         const isActive = active === item.key;
         return <TouchableOpacity key={item.key} style={styles.mobileBottomItem} onPress={() => onChange(item.key)} accessibilityRole="button" accessibilityState={{ selected: isActive }}>
@@ -1650,12 +1653,13 @@ function SideNav({
   onLogout: () => void;
 }) {
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const menuWidth = Math.min(width - 16, 360);
   return (
     <>
       {open && (
         <View style={styles.menuOverlay}>
-          <View style={[styles.fullMenu, { width: menuWidth }]}>
+          <View style={[styles.fullMenu, { width: menuWidth, paddingBottom: Math.max(insets.bottom, 16) }]}>
             <View style={styles.fullMenuTop}>
               <View style={styles.sideLogo}><Image source={evolumAppIcon} style={styles.sideLogoImage} resizeMode="contain" /></View>
               <TouchableOpacity style={styles.iconButton} onPress={() => setOpen(false)}><Text style={styles.iconButtonText}>x</Text></TouchableOpacity>
@@ -4128,6 +4132,26 @@ function createStyles() {
     backgroundColor: colors.bg
   },
   loginKeyboard: { flex: 1 },
+  loginEssentialLanding: { flexGrow: 1, justifyContent: "center", padding: 22 },
+  loginEssentialCard: {
+    width: "100%",
+    maxWidth: 440,
+    alignSelf: "center",
+    padding: 24,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 26,
+    backgroundColor: colors.panel,
+    ...shadow
+  },
+  loginHidden: { display: "none" },
+  loginEssentialBrand: { color: colors.text, fontSize: 23, fontWeight: "900", letterSpacing: 1.3, marginBottom: 20 },
+  loginEssentialBrandAccent: { color: colors.purple2 },
+  loginEssentialTitle: { color: colors.text, fontSize: 25, fontWeight: "900", letterSpacing: -0.4 },
+  loginEssentialSubtitle: { color: colors.muted, fontSize: 13, lineHeight: 19, marginBottom: 8 },
+  loginFieldLabel: { color: colors.muted, fontSize: 12, fontWeight: "800", marginTop: 3, marginBottom: -5 },
+  loginEssentialHelp: { color: colors.muted, fontSize: 12, textAlign: "center", marginTop: 3 },
   loginLanding: { flexGrow: 1, justifyContent: "center", padding: 14, gap: 0 },
   loginBrandPanel: {
     minHeight: 350,
@@ -4216,21 +4240,17 @@ function createStyles() {
   },
   secondaryButtonText: { color: colors.text, fontWeight: "800" },
   apiHint: { color: colors.muted, fontSize: 11, lineHeight: 15 },
-  connectionStatus: { color: colors.purple2, fontSize: 12, lineHeight: 17 },
+  connectionStatus: { fontSize: 12, lineHeight: 17, textAlign: "center", fontWeight: "800" },
+  connectionStatusOnline: { color: colors.green },
+  connectionStatusOffline: { color: "#ef4444" },
   appShell: {
     flex: 1,
-    backgroundColor: colors.bg,
-    paddingTop: Platform.OS === "android" ? RNStatusBar.currentHeight || 0 : 0
+    backgroundColor: colors.bg
   },
   mobileTopbar: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 30,
-    minHeight: 76,
+    minHeight: 70,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -4252,10 +4272,8 @@ function createStyles() {
     right: 0,
     bottom: 0,
     zIndex: 31,
-    minHeight: 70,
     paddingHorizontal: 8,
     paddingTop: 7,
-    paddingBottom: Platform.OS === "ios" ? 10 : 7,
     flexDirection: "row",
     justifyContent: "space-between",
     backgroundColor: colors.panel,
@@ -4439,7 +4457,7 @@ function createStyles() {
   topContactName: { color: colors.text, fontWeight: "900", fontSize: 15 },
   topContactSub: { color: colors.muted, fontSize: 10 },
   chatsButtonCompact: { backgroundColor: colors.purple, borderRadius: 13, minHeight: 38, paddingHorizontal: 10, justifyContent: "center" },
-  contentShell: { flex: 1, paddingHorizontal: 12, paddingTop: 86, paddingBottom: 76 },
+  contentShell: { flex: 1, paddingHorizontal: 12, paddingTop: 12 },
   header: {
     minHeight: 74,
     borderWidth: 1,
