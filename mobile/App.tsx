@@ -1372,10 +1372,26 @@ function EvolumApp() {
     return (
       <SafeAreaView style={styles.loginScreen}>
         <StatusBar style={themeMode === "nexo" ? "light" : "dark"} />
+        <KeyboardAvoidingView style={styles.loginKeyboard} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={styles.loginLanding} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          <View style={styles.loginBrandPanel}>
+            <View style={styles.loginBrandHeader}>
+              <Image source={evolumAppIcon} style={styles.loginBrandLogo} resizeMode="contain" />
+              <View><Text style={styles.loginBrandName}>EVOLUM OS</Text><Text style={styles.loginBrandSub}>El Sistema Operativo para Empresas</Text></View>
+            </View>
+            <Text style={styles.loginHeroEyebrow}>OPERACION EN UN SOLO LUGAR</Text>
+            <Text style={styles.loginHeroTitle}>Haz crecer tu empresa.{"\n"}Nosotros nos encargamos del resto.</Text>
+            <Text style={styles.loginHeroText}>Centraliza clientes, procesos, documentos, automatizaciones y decisiones para que tu equipo avance con claridad.</Text>
+            <View style={styles.loginBenefits}>
+              {["Todo conectado", "Decisiones con contexto", "IA que trabaja contigo"].map((benefit) => <View key={benefit} style={styles.loginBenefitRow}><View style={styles.loginBenefitIcon}><Text style={styles.loginBenefitIconText}>+</Text></View><Text style={styles.loginBenefitText}>{benefit}</Text></View>)}
+            </View>
+            <Text style={styles.loginSecurity}>● Plataforma segura y preparada para crecer contigo.</Text>
+          </View>
         <View style={styles.loginCard}>
           <View style={styles.logoLarge}><Image source={evolumAppIcon} style={styles.logoLargeImage} resizeMode="contain" /></View>
-          <Text style={styles.loginTitle}>EVOLUM</Text>
-          <Text style={styles.loginSubtitle}>App movil para operacion, inbox y super admin.</Text>
+          <Text style={styles.loginFormEyebrow}>ACCESO SEGURO</Text>
+          <Text style={styles.loginTitle}>Entrar a la plataforma</Text>
+          <Text style={styles.loginSubtitle}>Ingresa tus credenciales para continuar tu operacion.</Text>
           <View style={styles.loginVersionRow}>
             <Text style={styles.loginVersionLabel}>Versión instalada</Text>
             <Text style={styles.loginVersionValue}>v{currentAppVersion}</Text>
@@ -1409,6 +1425,8 @@ function EvolumApp() {
           <Text style={styles.apiHint}>{API_BASE_URL}</Text>
           {!!connectionStatus && <Text style={styles.connectionStatus}>{connectionStatus}</Text>}
         </View>
+        </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }
@@ -1416,6 +1434,14 @@ function EvolumApp() {
   return (
     <SafeAreaView style={styles.appShell}>
       <StatusBar style={themeMode === "nexo" ? "light" : "dark"} />
+      <MobileTopbar
+        session={session}
+        profile={profile}
+        screen={screen}
+        unreadNotifications={unreadNotifications}
+        onOpenMenu={() => setMenuOpen(true)}
+        onOpenNotifications={() => setScreen("notifications")}
+      />
       <SideNav
         items={visibleNav}
         active={screen}
@@ -1429,20 +1455,6 @@ function EvolumApp() {
         setMenuOpen(false);
         if (next === "admin") loadAdminTenants();
       }} />
-      {screen === "inbox" && (
-        <View style={styles.inboxTopContact}>
-          <View style={styles.avatarTiny}><Text style={styles.avatarText}>{initials(selectedConversation?.contact.name || selectedConversation?.contact.externalId)}</Text></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.topContactName}>{selectedConversation?.contact.name || selectedConversation?.contact.externalId || "Inbox"}</Text>
-            <Text style={styles.topContactSub}>{selectedConversation ? `${selectedConversation.contact.channel} / ${selectedConversation.status} / ${selectedConversation.mode}` : "Selecciona una conversacion"}</Text>
-          </View>
-          <NotificationBell count={unreadNotifications} compact onPress={() => setScreen("notifications")} />
-          <TouchableOpacity style={styles.chatsButtonCompact} onPress={() => setChatDrawerOpen(true)}>
-            <Text style={styles.chatsButtonText}>CHATS</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      {screen !== "inbox" && <NotificationBell count={unreadNotifications} onPress={() => setScreen("notifications")} />}
       <View style={styles.contentShell}>
         {(networkState === "offline" || pendingOfflineSync > 0) && (
           <View style={[styles.offlineBanner, networkState === "offline" && styles.offlineBannerDisconnected]}>
@@ -1455,7 +1467,7 @@ function EvolumApp() {
           </View>
         )}
         {screen === "dashboard" && (
-          <DashboardScreen dashboard={dashboard} realtyIntelligence={realtyIntelligence} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} />
+          <DashboardScreen dashboard={dashboard} realtyIntelligence={realtyIntelligence} profile={profile} refreshing={refreshing} onRefresh={refreshCurrent} onNavigate={setScreen} />
         )}
         {screen === "finance" && <FinanceScreen overview={financeOverview} refreshing={refreshing} onRefresh={refreshCurrent} />}
         {screen === "inbox" && (
@@ -1499,7 +1511,69 @@ function EvolumApp() {
         {screen === "settings" && <PermissionsAndAlertsScreen notificationPermission={notificationPermission} photoPermission={photoPermission} themeMode={themeMode} onThemeChange={changeTheme} onEnableNotifications={registerForPushNotifications} onEnablePhotos={requestPhotoLibraryAccess} onOpenImports={() => setScreen("realtyLoads")} onRefresh={refreshPermissionStatus} />}
         {screen === "admin" && <AdminScreen tenants={adminTenants} onToggleModule={toggleTenantModule} onRefresh={loadAdminTenants} />}
       </View>
+      <MobileBottomNavigation
+        active={screen}
+        hasFinance={hasMobileModule(modules, "finance_analytics") || session.user.role === "SUPER_ADMIN"}
+        onChange={(next) => {
+          if (next === "settings") setMenuOpen(true);
+          else setScreen(next);
+        }}
+      />
     </SafeAreaView>
+  );
+}
+
+function MobileTopbar({
+  session,
+  profile,
+  screen,
+  unreadNotifications,
+  onOpenMenu,
+  onOpenNotifications
+}: {
+  session: SessionState;
+  profile: IndustryProfile;
+  screen: ScreenKey;
+  unreadNotifications: number;
+  onOpenMenu: () => void;
+  onOpenNotifications: () => void;
+}) {
+  const label = screen === "inbox" ? "Chat's" : navItems.find((item) => item.key === screen)?.label || "EVOLUM";
+  return (
+    <View style={styles.mobileTopbar}>
+      <TouchableOpacity style={styles.mobileBrand} onPress={onOpenMenu} accessibilityRole="button" accessibilityLabel="Abrir menú EVOLUM">
+        <Image source={evolumAppIcon} style={styles.mobileBrandLogo} resizeMode="contain" />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.mobileBrandName}>EVOLUM OS</Text>
+          <Text style={styles.mobileBrandContext}>{profile.label} · {label}</Text>
+        </View>
+      </TouchableOpacity>
+      <View style={styles.mobileTopbarActions}>
+        <NotificationBell count={unreadNotifications} compact onPress={onOpenNotifications} />
+        <View style={styles.mobileUserBadge}><Text style={styles.mobileUserInitials}>{initials(session.user.name)}</Text></View>
+      </View>
+    </View>
+  );
+}
+
+function MobileBottomNavigation({ active, hasFinance, onChange }: { active: ScreenKey; hasFinance: boolean; onChange: (key: ScreenKey) => void }) {
+  const items: Array<{ key: ScreenKey; label: string; icon: string }> = [
+    { key: "dashboard", label: "Inicio", icon: "⌂" },
+    { key: "inbox", label: "Chat's", icon: "◌" },
+    hasFinance ? { key: "finance", label: "Finanzas", icon: "$" } : { key: "agenda", label: "Agenda", icon: "◷" },
+    { key: "notifications", label: "Alertas", icon: "♢" },
+    { key: "settings", label: "Más", icon: "☷" }
+  ];
+  return (
+    <View style={styles.mobileBottomNav}>
+      {items.map((item) => {
+        const isActive = active === item.key;
+        return <TouchableOpacity key={item.key} style={styles.mobileBottomItem} onPress={() => onChange(item.key)} accessibilityRole="button" accessibilityState={{ selected: isActive }}>
+          <View style={[styles.mobileBottomIcon, isActive && styles.mobileBottomIconActive]}><Text style={[styles.mobileBottomIconText, isActive && styles.mobileBottomIconTextActive]}>{item.icon}</Text></View>
+          <Text style={[styles.mobileBottomLabel, isActive && styles.mobileBottomLabelActive]}>{item.label}</Text>
+        </TouchableOpacity>;
+      })}
+    </View>
   );
 }
 
@@ -1579,12 +1653,6 @@ function SideNav({
   const menuWidth = Math.min(width - 16, 360);
   return (
     <>
-      {!open && (
-        <TouchableOpacity style={styles.floatingMenuButton} onPress={() => setOpen(true)}>
-          <Image source={evolumAppIcon} style={styles.sideLogoImage} resizeMode="contain" />
-        </TouchableOpacity>
-      )}
-
       {open && (
         <View style={styles.menuOverlay}>
           <View style={[styles.fullMenu, { width: menuWidth }]}>
@@ -1784,7 +1852,7 @@ function VerticalOperationsScreen({ profile }: { profile: IndustryProfile }) {
   const [records, setRecords] = useState<Record<string, IndustryRecord[]>>({});
   const [saving, setSaving] = useState(false);
   const entity = config.entities.find((item) => item.type === selected) || config.entities[0];
-  const input = { borderWidth: 1, borderColor: "#c9d6d1", borderRadius: 12, backgroundColor: "#fff", paddingHorizontal: 13, minHeight: 46, color: "#17131f" } as const;
+  const input = { borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.panel2, paddingHorizontal: 13, minHeight: 46, color: colors.text } as const;
   const load = async () => {
     const response = await Promise.all(config.entities.map(async (item) => [item.type, await getIndustryRecords(item.type).catch(() => [])] as const));
     setRecords(Object.fromEntries(response));
@@ -1831,7 +1899,7 @@ function ShiftsScreen({ profile }: { profile: IndustryProfile }) {
       Alert.alert("Turno guardado", "La disponibilidad quedó registrada para la jornada."); await load();
     } catch (error) { Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Inténtalo nuevamente."); } finally { setSaving(false); }
   }
-  const input = { borderWidth: 1, borderColor: "#c9d6d1", borderRadius: 12, backgroundColor: "#fff", paddingHorizontal: 13, minHeight: 46, color: "#17131f" } as const;
+  const input = { borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.panel2, paddingHorizontal: 13, minHeight: 46, color: colors.text } as const;
   return <ScrollView contentContainerStyle={[styles.screenContent, { backgroundColor: colors.bg, paddingBottom: 40, gap: 14 }]}>
     <View style={{ padding: 18, borderRadius: 22, backgroundColor: "#17131f", gap: 7 }}><Text style={{ color: "#61d8ed", fontWeight: "900", fontSize: 11, letterSpacing: 1.5 }}>DOTACIÓN Y DISPONIBILIDAD</Text><Text style={{ color: "#fff", fontWeight: "900", fontSize: 26 }}>{copy.title}</Text><Text style={{ color: "#c7c2d6", lineHeight: 20 }}>{copy.detail} Este módulo organiza al equipo; la Agenda mantiene las citas y reservas de clientes.</Text></View>
     <View style={{ padding: 16, borderRadius: 18, borderWidth: 1, borderColor: "#d2dbd7", backgroundColor: "#fff", gap: 10 }}><Text style={financeMobileTitle}>Nuevo turno</Text><TextInput placeholder="Persona" value={form.worker} onChangeText={(worker) => setForm((current) => ({ ...current, worker }))} style={input} /><TextInput placeholder={copy.role} value={form.role} onChangeText={(role) => setForm((current) => ({ ...current, role }))} style={input} /><TextInput placeholder="Fecha: AAAA-MM-DD" value={form.date} onChangeText={(date) => setForm((current) => ({ ...current, date }))} style={input} /><View style={{ flexDirection: "row", gap: 8 }}><TextInput placeholder="Inicio" value={form.startsAt} onChangeText={(startsAt) => setForm((current) => ({ ...current, startsAt }))} style={[input, { flex: 1 }]} /><TextInput placeholder="Fin" value={form.endsAt} onChangeText={(endsAt) => setForm((current) => ({ ...current, endsAt }))} style={[input, { flex: 1 }]} /></View><TextInput placeholder="Sucursal, box o estación" value={form.location} onChangeText={(location) => setForm((current) => ({ ...current, location }))} style={input} /><TouchableOpacity disabled={saving} onPress={save} style={{ alignSelf: "flex-start", paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: "#0891b2" }}><Text style={financeMobileButton}>{saving ? "Guardando..." : "Guardar turno"}</Text></TouchableOpacity></View>
@@ -1839,7 +1907,7 @@ function ShiftsScreen({ profile }: { profile: IndustryProfile }) {
   </ScrollView>;
 }
 
-function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, onRefresh }: { dashboard: CrmOperationalDashboard | null; realtyIntelligence: RealtyIntelligence | null; profile: IndustryProfile; refreshing: boolean; onRefresh: () => void }) {
+function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, onRefresh, onNavigate }: { dashboard: CrmOperationalDashboard | null; realtyIntelligence: RealtyIntelligence | null; profile: IndustryProfile; refreshing: boolean; onRefresh: () => void; onNavigate: (screen: ScreenKey) => void }) {
   const [downloadingReport, setDownloadingReport] = useState(false);
 
   async function downloadReport() {
@@ -1863,18 +1931,25 @@ function DashboardScreen({ dashboard, realtyIntelligence, profile, refreshing, o
 
   return (
     <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.purple2} />} contentContainerStyle={styles.screenContent}>
-      <Text style={styles.eyebrow}>Dashboard</Text>
-      <Text style={styles.screenTitle}>{profile.dashboardTitle}</Text>
-      <Text style={styles.screenSubtitle}>{profile.primaryEntity}, ventas, reservas y actividad en tiempo real.</Text>
+      <View style={styles.dashboardHero}>
+        <Text style={styles.dashboardHeroEyebrow}>OPERACION EN UN SOLO LUGAR</Text>
+        <Text style={styles.dashboardHeroTitle}>{profile.dashboardTitle}</Text>
+        <Text style={styles.dashboardHeroText}>{profile.primaryEntity}, ventas, reservas y actividad en tiempo real.</Text>
+        <View style={styles.dashboardHeroStatus}><View style={styles.dashboardHeroDot} /><Text style={styles.dashboardHeroStatusText}>Operacion conectada</Text></View>
+      </View>
+      <View style={styles.quickActionRow}>
+        <TouchableOpacity style={styles.quickAction} onPress={() => onNavigate("inbox")}><Text style={styles.quickActionIcon}>○</Text><Text style={styles.quickActionText}>Chat's</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.quickAction} onPress={() => onNavigate("agenda")}><Text style={styles.quickActionIcon}>+</Text><Text style={styles.quickActionText}>{profile.bookingLabel}</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.quickAction} onPress={() => onNavigate("finance")}><Text style={styles.quickActionIcon}>$</Text><Text style={styles.quickActionText}>Finanzas</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.quickAction} onPress={downloadReport} disabled={downloadingReport}><Text style={styles.quickActionIcon}>↓</Text><Text style={styles.quickActionText}>Reporte</Text></TouchableOpacity>
+      </View>
       <View style={styles.kpiGrid}>
         <Kpi label="Leads" value={dashboard?.kpis.leads ?? 0} detail={`${dashboard?.kpis.hotLeads ?? 0} calientes`} />
         <Kpi label="Chats" value={dashboard?.kpis.conversations ?? 0} detail="activos" />
         <Kpi label={profile.bookingLabel} value={dashboard?.kpis.bookingsConfirmed ?? 0} detail={`${dashboard?.kpis.bookingsPending ?? 0} pendientes`} />
         <Kpi label="Revenue" value={money(dashboard?.revenue.paid)} detail={`${money(dashboard?.revenue.pending)} pendiente`} />
       </View>
-      <TouchableOpacity style={styles.primaryButton} onPress={downloadReport} disabled={downloadingReport}>
-        <Text style={styles.primaryButtonText}>{downloadingReport ? "Preparando reporte..." : "Descargar reporte ejecutivo PDF"}</Text>
-      </TouchableOpacity>
+      <TouchableOpacity style={styles.primaryButton} onPress={downloadReport} disabled={downloadingReport}><Text style={styles.primaryButtonText}>{downloadingReport ? "Preparando reporte..." : "Descargar reporte ejecutivo PDF"}</Text></TouchableOpacity>
       <Panel title="Estado comercial">
         <View style={styles.compactMetrics}>
           <Kpi label="Listos cierre" value={dashboard?.kpis.readyToClose ?? 0} detail={`${dashboard?.kpis.averageCloseScore ?? 0}% score IA`} />
@@ -4050,14 +4125,37 @@ function createStyles() {
   },
   loginScreen: {
     flex: 1,
-    backgroundColor: colors.bg,
-    justifyContent: "center",
-    padding: 22
+    backgroundColor: colors.bg
   },
+  loginKeyboard: { flex: 1 },
+  loginLanding: { flexGrow: 1, justifyContent: "center", padding: 14, gap: 0 },
+  loginBrandPanel: {
+    minHeight: 350,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 26,
+    gap: 18,
+    backgroundColor: colors.hero,
+    overflow: "hidden"
+  },
+  loginBrandHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 22 },
+  loginBrandLogo: { width: 52, height: 52, borderRadius: 18 },
+  loginBrandName: { color: colors.heroText, fontSize: 17, fontWeight: "900", letterSpacing: 1.2 },
+  loginBrandSub: { color: colors.heroMuted, fontSize: 10, marginTop: 3 },
+  loginHeroEyebrow: { color: colors.cyan, fontSize: 11, fontWeight: "900", letterSpacing: 1.7 },
+  loginHeroTitle: { color: colors.heroText, fontSize: 33, fontWeight: "900", lineHeight: 39, letterSpacing: -0.5 },
+  loginHeroText: { color: colors.heroMuted, fontSize: 14, lineHeight: 21, maxWidth: 410 },
+  loginBenefits: { gap: 10, marginTop: 4 },
+  loginBenefitRow: { flexDirection: "row", alignItems: "center", gap: 9 },
+  loginBenefitIcon: { width: 21, height: 21, borderRadius: 11, backgroundColor: "rgba(16, 212, 202, 0.18)", borderWidth: 1, borderColor: colors.cyan, alignItems: "center", justifyContent: "center" },
+  loginBenefitIconText: { color: colors.cyan, fontSize: 14, lineHeight: 16, fontWeight: "900" },
+  loginBenefitText: { color: colors.heroText, fontSize: 13, fontWeight: "800" },
+  loginSecurity: { color: colors.heroMuted, fontSize: 11, marginTop: "auto" },
   loginCard: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 28,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
     backgroundColor: colors.panel,
     padding: 24,
     gap: 14,
@@ -4075,7 +4173,8 @@ function createStyles() {
     borderColor: colors.borderStrong
   },
   logoLargeImage: { width: "100%", height: "100%", borderRadius: 22 },
-  loginTitle: { color: colors.text, fontSize: 34, fontWeight: "900" },
+  loginTitle: { color: colors.text, fontSize: 28, fontWeight: "900" },
+  loginFormEyebrow: { color: colors.cyan, fontSize: 10, fontWeight: "900", letterSpacing: 1.6 },
   loginSubtitle: { color: colors.muted, lineHeight: 20 },
   loginVersionRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8, borderTopWidth: 1, borderBottomWidth: 1, borderColor: "rgba(168,85,247,0.2)" },
   loginVersionLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" },
@@ -4105,7 +4204,7 @@ function createStyles() {
     alignItems: "center",
     justifyContent: "center"
   },
-  primaryButtonText: { color: colors.text, fontWeight: "900" },
+  primaryButtonText: { color: colors.heroText, fontWeight: "900" },
   secondaryButton: {
     minHeight: 46,
     borderRadius: 16,
@@ -4123,6 +4222,54 @@ function createStyles() {
     backgroundColor: colors.bg,
     paddingTop: Platform.OS === "android" ? RNStatusBar.currentHeight || 0 : 0
   },
+  mobileTopbar: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    minHeight: 76,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    backgroundColor: colors.bg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border
+  },
+  mobileBrand: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 9 },
+  mobileBrandLogo: { width: 42, height: 42, borderRadius: 14 },
+  mobileBrandName: { color: colors.text, fontSize: 14, fontWeight: "900", letterSpacing: 0.9 },
+  mobileBrandContext: { color: colors.muted, fontSize: 10, marginTop: 2 } ,
+  mobileTopbarActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  mobileUserBadge: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.purple, alignItems: "center", justifyContent: "center" },
+  mobileUserInitials: { color: colors.heroText, fontSize: 12, fontWeight: "900" },
+  mobileBottomNav: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 31,
+    minHeight: 70,
+    paddingHorizontal: 8,
+    paddingTop: 7,
+    paddingBottom: Platform.OS === "ios" ? 10 : 7,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: colors.panel,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    ...shadow
+  },
+  mobileBottomItem: { flex: 1, minWidth: 0, alignItems: "center", gap: 3, paddingVertical: 2 },
+  mobileBottomIcon: { width: 31, height: 27, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  mobileBottomIconActive: { backgroundColor: colors.panel3 },
+  mobileBottomIconText: { color: colors.muted, fontSize: 17, fontWeight: "900" },
+  mobileBottomIconTextActive: { color: colors.cyan },
+  mobileBottomLabel: { color: colors.muted, fontSize: 9, fontWeight: "700" },
+  mobileBottomLabelActive: { color: colors.text, fontWeight: "900" },
   floatingMenuButton: {
     position: "absolute",
     top: Platform.OS === "android" ? 34 : 22,
@@ -4292,7 +4439,7 @@ function createStyles() {
   topContactName: { color: colors.text, fontWeight: "900", fontSize: 15 },
   topContactSub: { color: colors.muted, fontSize: 10 },
   chatsButtonCompact: { backgroundColor: colors.purple, borderRadius: 13, minHeight: 38, paddingHorizontal: 10, justifyContent: "center" },
-  contentShell: { flex: 1, paddingHorizontal: 10, paddingTop: Platform.OS === "android" ? 98 : 86, paddingBottom: 8 },
+  contentShell: { flex: 1, paddingHorizontal: 12, paddingTop: 86, paddingBottom: 76 },
   header: {
     minHeight: 74,
     borderWidth: 1,
@@ -4313,7 +4460,7 @@ function createStyles() {
   accountPillText: { color: colors.text, fontWeight: "900" },
   logoutMini: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: 12, minHeight: 40, justifyContent: "center" },
   logoutMiniText: { color: colors.text, fontWeight: "800" },
-  screenContent: { paddingTop: 6, paddingBottom: 42, gap: 14 },
+  screenContent: { paddingTop: 8, paddingBottom: 116, gap: 14 },
   notificationActions: { flexDirection: "row", gap: 10, alignItems: "center" },
   notificationCard: {
     flexDirection: "row",
@@ -4332,6 +4479,17 @@ function createStyles() {
   eyebrow: { color: colors.purple2, fontSize: 12, fontWeight: "900", letterSpacing: 1.8, textTransform: "uppercase" },
   screenTitle: { color: colors.text, fontSize: 30, fontWeight: "900" },
   screenSubtitle: { color: colors.muted, lineHeight: 20 },
+  dashboardHero: { borderRadius: 24, padding: 20, gap: 8, backgroundColor: colors.hero, overflow: "hidden" },
+  dashboardHeroEyebrow: { color: colors.cyan, fontSize: 10, fontWeight: "900", letterSpacing: 1.6 },
+  dashboardHeroTitle: { color: colors.heroText, fontSize: 28, lineHeight: 34, fontWeight: "900" },
+  dashboardHeroText: { color: colors.heroMuted, fontSize: 13, lineHeight: 19, maxWidth: "88%" },
+  dashboardHeroStatus: { marginTop: 8, flexDirection: "row", alignItems: "center", gap: 7 },
+  dashboardHeroDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.cyan },
+  dashboardHeroStatusText: { color: colors.heroMuted, fontSize: 11, fontWeight: "800" },
+  quickActionRow: { flexDirection: "row", gap: 8 },
+  quickAction: { flex: 1, minHeight: 66, borderRadius: 17, padding: 9, justifyContent: "space-between", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.panel },
+  quickActionIcon: { color: colors.cyan, fontSize: 18, lineHeight: 20, fontWeight: "900" },
+  quickActionText: { color: colors.text, fontSize: 10, fontWeight: "900" },
   kpiGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   kpiCard: {
     width: "47.8%",
