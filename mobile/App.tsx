@@ -1445,9 +1445,7 @@ function EvolumApp() {
         session={session}
         profile={profile}
         screen={screen}
-        unreadNotifications={unreadNotifications}
         onOpenMenu={() => setMenuOpen(true)}
-        onOpenNotifications={() => setScreen("notifications")}
       />
       <SideNav
         items={visibleNav}
@@ -1520,6 +1518,7 @@ function EvolumApp() {
       <MobileBottomNavigation
         active={screen}
         hasFinance={hasMobileModule(modules, "finance_analytics") || session.user.role === "SUPER_ADMIN"}
+        unreadNotifications={unreadNotifications}
         bottomInset={insets.bottom}
         onChange={(next) => {
           if (next === "settings") setMenuOpen(true);
@@ -1534,16 +1533,12 @@ function MobileTopbar({
   session,
   profile,
   screen,
-  unreadNotifications,
-  onOpenMenu,
-  onOpenNotifications
+  onOpenMenu
 }: {
   session: SessionState;
   profile: IndustryProfile;
   screen: ScreenKey;
-  unreadNotifications: number;
   onOpenMenu: () => void;
-  onOpenNotifications: () => void;
 }) {
   const label = screen === "inbox" ? "Chat's" : navItems.find((item) => item.key === screen)?.label || "EVOLUM";
   return (
@@ -1556,14 +1551,13 @@ function MobileTopbar({
         </View>
       </TouchableOpacity>
       <View style={styles.mobileTopbarActions}>
-        <NotificationBell count={unreadNotifications} compact onPress={onOpenNotifications} />
         <View style={styles.mobileUserBadge}><Text style={styles.mobileUserInitials}>{initials(session.user.name)}</Text></View>
       </View>
     </View>
   );
 }
 
-function MobileBottomNavigation({ active, hasFinance, bottomInset, onChange }: { active: ScreenKey; hasFinance: boolean; bottomInset: number; onChange: (key: ScreenKey) => void }) {
+function MobileBottomNavigation({ active, hasFinance, unreadNotifications, bottomInset, onChange }: { active: ScreenKey; hasFinance: boolean; unreadNotifications: number; bottomInset: number; onChange: (key: ScreenKey) => void }) {
   const items: Array<{ key: ScreenKey; label: string; icon: string }> = [
     { key: "dashboard", label: "Inicio", icon: "⌂" },
     { key: "inbox", label: "Chat's", icon: "◌" },
@@ -1575,8 +1569,13 @@ function MobileBottomNavigation({ active, hasFinance, bottomInset, onChange }: {
     <View style={[styles.mobileBottomNav, { paddingBottom: Math.max(bottomInset, 8), minHeight: 62 + Math.max(bottomInset, 8) }]}>
       {items.map((item) => {
         const isActive = active === item.key;
-        return <TouchableOpacity key={item.key} style={styles.mobileBottomItem} onPress={() => onChange(item.key)} accessibilityRole="button" accessibilityState={{ selected: isActive }}>
-          <View style={[styles.mobileBottomIcon, isActive && styles.mobileBottomIconActive]}><Text style={[styles.mobileBottomIconText, isActive && styles.mobileBottomIconTextActive]}>{item.icon}</Text></View>
+        const isNotifications = item.key === "notifications";
+        const icon = isNotifications ? "\u{1F514}\uFE0E" : item.icon;
+        return <TouchableOpacity key={item.key} style={styles.mobileBottomItem} onPress={() => onChange(item.key)} accessibilityRole="button" accessibilityLabel={isNotifications && unreadNotifications ? `${unreadNotifications} alertas sin leer` : item.label} accessibilityState={{ selected: isActive }}>
+          <View style={[styles.mobileBottomIcon, isActive && styles.mobileBottomIconActive]}>
+            <Text style={[styles.mobileBottomIconText, isActive && styles.mobileBottomIconTextActive]}>{icon}</Text>
+            {isNotifications && unreadNotifications > 0 && <View style={styles.mobileBottomBadge}><Text style={styles.mobileBottomBadgeText}>{unreadNotifications > 99 ? "99+" : unreadNotifications}</Text></View>}
+          </View>
           <Text style={[styles.mobileBottomLabel, isActive && styles.mobileBottomLabelActive]}>{item.label}</Text>
         </TouchableOpacity>;
       })}
@@ -4291,6 +4290,21 @@ function createStyles() {
   mobileBottomIconActive: { backgroundColor: colors.panel3 },
   mobileBottomIconText: { color: colors.muted, fontSize: 17, fontWeight: "900" },
   mobileBottomIconTextActive: { color: colors.cyan },
+  mobileBottomBadge: {
+    position: "absolute",
+    top: -5,
+    right: -7,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: colors.purple2,
+    borderWidth: 1,
+    borderColor: colors.panel,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  mobileBottomBadgeText: { color: colors.text, fontSize: 8, fontWeight: "900" },
   mobileBottomLabel: { color: colors.muted, fontSize: 9, fontWeight: "700" },
   mobileBottomLabelActive: { color: colors.text, fontWeight: "900" },
   floatingMenuButton: {
