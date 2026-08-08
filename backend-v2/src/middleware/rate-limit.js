@@ -1,5 +1,6 @@
 
 import { getRedisClient } from "../lib/redis.js";
+import { observeRateLimitedRequest } from "../lib/runtime-metrics.js";
 
 const buckets = new Map();
 const MAX_BUCKETS = 20_000;
@@ -39,7 +40,12 @@ export function basicRateLimit({ windowMs = 60_000, max = 240, keyPrefix = "api"
       res.setHeader("X-RateLimit-Limit", String(max));
       res.setHeader("X-RateLimit-Remaining", String(Math.max(0, max - current)));
       res.setHeader("X-RateLimit-Reset", String(Math.ceil((now + ttl) / 1000)));
-      if (current > max) return res.status(429).json({ error: "Demasiadas solicitudes. Intenta nuevamente en unos segundos.", retryAfterSeconds: Math.ceil(ttl / 1000) });
+      if (current > max) {
+        const retryAfterSeconds = Math.max(1, Math.ceil(ttl / 1000));
+        observeRateLimitedRequest();
+        res.setHeader("Retry-After", String(retryAfterSeconds));
+        return res.status(429).json({ error: "Demasiadas solicitudes. Intenta nuevamente en unos segundos.", retryAfterSeconds });
+      }
       return next();
     }
     if (buckets.size >= MAX_BUCKETS) {
@@ -63,9 +69,12 @@ export function basicRateLimit({ windowMs = 60_000, max = 240, keyPrefix = "api"
     res.setHeader("X-RateLimit-Reset", String(Math.ceil(current.resetAt / 1000)));
 
     if (current.count > max) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+      observeRateLimitedRequest();
+      res.setHeader("Retry-After", String(retryAfterSeconds));
       return res.status(429).json({
         error: "Demasiadas solicitudes. Intenta nuevamente en unos segundos.",
-        retryAfterSeconds: Math.ceil((current.resetAt - now) / 1000)
+        retryAfterSeconds
       });
     }
 

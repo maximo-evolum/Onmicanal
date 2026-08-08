@@ -5,6 +5,7 @@ import { runtimeAlertSnapshot, runtimeMetrics } from "../lib/runtime-metrics.js"
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { env } from "../lib/env.js";
 import { platformJobStatus } from "../services/platform-jobs.service.js";
+import { documentStorageStatus } from "../services/document-storage.service.js";
 
 export const operationsRouter = Router();
 operationsRouter.get("/operations/health", requireRole(ROLE_GROUPS.MANAGERS), async (_req, res) => {
@@ -50,6 +51,15 @@ operationsRouter.get("/operations/security-posture", requireRole(ROLE_GROUPS.MAN
     { key: "audit", status: auditEvents ? "active" : "review", label: "Trazabilidad de acciones administrativas", evidenceCount: auditEvents },
     { key: "backup", status: backupPolicy?.data?.encryptedAtRest ? "active" : "review", label: "Política de respaldo cifrado", configuredAt: backupPolicy?.updatedAt || null }
   ];
+  const storage = documentStorageStatus();
+  controls.push({
+    key: "document_storage",
+    status: storage.durable ? "active" : "review",
+    label: "Almacenamiento privado y durable de documentos",
+    driver: storage.driver,
+    durableRequired: storage.durableRequired,
+    detail: storage.label
+  });
   res.json({
     generatedAt: new Date().toISOString(),
     score: Math.round((controls.filter((control) => control.status === "active").length / controls.length) * 100),

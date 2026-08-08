@@ -232,10 +232,10 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
 
 export async function checkApiHealth() {
   try {
-    const response = await fetch(`${API_BASE_URL}/health`, {
+    const response = await fetchWithTimeout(`${API_BASE_URL}/health`, {
       method: "GET",
       headers: { Accept: "application/json" }
-    });
+    }, 7_000);
     if (!response.ok) throw new Error(`Health ${response.status}`);
     return response.json();
   } catch {

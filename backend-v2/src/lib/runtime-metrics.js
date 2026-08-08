@@ -2,6 +2,7 @@ const startedAt = Date.now();
 const requests = {
   total: 0,
   errors: 0,
+  rateLimited: 0,
   latencyMs: 0,
   statusClasses: { "2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0 }
 };
@@ -11,6 +12,10 @@ const MAX_RECENT_FAILURES = 50;
 function statusClass(statusCode) {
   const value = `${Math.floor(Number(statusCode || 0) / 100)}xx`;
   return Object.hasOwn(requests.statusClasses, value) ? value : null;
+}
+
+export function observeRateLimitedRequest() {
+  requests.rateLimited += 1;
 }
 
 function safePath(req) {
@@ -65,6 +70,7 @@ export function runtimeMetrics() {
     requests: {
       total: requests.total,
       errors: requests.errors,
+      rateLimited: requests.rateLimited,
       averageLatencyMs: requests.total ? Math.round(requests.latencyMs / requests.total) : 0,
       statusClasses: { ...requests.statusClasses }
     },
@@ -120,6 +126,9 @@ export function prometheusMetrics({ database = true, redis = "not_configured" } 
     "# HELP evolum_http_errors_total Respuestas HTTP 5xx desde el inicio del proceso.",
     "# TYPE evolum_http_errors_total counter",
     `evolum_http_errors_total ${metrics.requests.errors}`,
+    "# HELP evolum_http_rate_limited_total Solicitudes bloqueadas por rate limit.",
+    "# TYPE evolum_http_rate_limited_total counter",
+    `evolum_http_rate_limited_total ${metrics.requests.rateLimited}`,
     "# HELP evolum_http_average_latency_milliseconds Latencia promedio de solicitudes.",
     "# TYPE evolum_http_average_latency_milliseconds gauge",
     `evolum_http_average_latency_milliseconds ${metrics.requests.averageLatencyMs}`,

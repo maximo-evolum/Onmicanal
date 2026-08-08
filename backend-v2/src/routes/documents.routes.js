@@ -7,7 +7,13 @@ import { prisma } from "../lib/db.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { normalizeMetadata } from "../lib/metadata.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
-import { openDocumentFile, removeDocumentFile, storeDocumentFile } from "../services/document-storage.service.js";
+import {
+  assertDocumentStorageReady,
+  openDocumentFile,
+  removeDocumentFile,
+  storeDocumentFile,
+  validateUploadedDocumentFile
+} from "../services/document-storage.service.js";
 
 export const documentsRouter = Router();
 
@@ -26,6 +32,7 @@ const ALLOWED_DOCUMENT_TYPES = new Map([
   [".jpeg", ["image/jpeg"]],
   [".webp", ["image/webp"]]
 ]);
+const MAX_DOCUMENT_TITLE_LENGTH = 180;
 
 function safeFileName(value) {
   return String(value || "document")
@@ -65,6 +72,27 @@ const upload = multer({
   }
 });
 
+async function cleanupUploadedFiles(files) {
+  await Promise.all((files || []).map((file) => file?.path ? fs.promises.unlink(file.path).catch(() => undefined) : undefined));
+}
+
+function uploadDocuments(req, res, next) {
+  upload.array("files", 10)(req, res, async (error) => {
+    if (!error) return next();
+    await cleanupUploadedFiles(req.files);
+    if (error.code === "LIMIT_FILE_SIZE") {
+      error.statusCode = 413;
+      error.message = "El archivo supera el tamaño máximo permitido.";
+    } else if (error.code === "LIMIT_FILE_COUNT") {
+      error.statusCode = 413;
+      error.message = "Puedes subir como máximo diez archivos a la vez.";
+    } else if (!error.statusCode) {
+      error.statusCode = 400;
+    }
+    return next(error);
+  });
+}
+
 function privateFileUrl(req, documentId) {
   const host = process.env.PUBLIC_BASE_URL || process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
   return `${String(host).replace(/\/$/, "")}/api/documents/${encodeURIComponent(documentId)}/download`;
@@ -77,6 +105,7 @@ function documentForClient(req, document) {
 
 documentsRouter.get("/documents", async (req, res) => {
   try {
+    res.setHeader("Cache-Control", "private, no-store");
     const documents = await prisma.industryRecord.findMany({
       where: {
         tenantId: req.tenantId,
@@ -93,12 +122,15 @@ documentsRouter.get("/documents", async (req, res) => {
   }
 });
 
-documentsRouter.post("/documents", requireRole(ROLE_GROUPS.STAFF), upload.array("files", 10), async (req, res) => {
+documentsRouter.post("/documents", requireRole(ROLE_GROUPS.STAFF), uploadDocuments, async (req, res) => {
   try {
     const files = req.files || [];
     if (!files.length) return res.status(400).json({ error: "Debes subir al menos un archivo" });
 
-    const category = String(req.body?.category || "general").trim().toLowerCase();
+    assertDocumentStorageReady();
+    await Promise.all(files.map((file) => validateUploadedDocumentFile({ filePath: file.path, fileName: file.originalname })));
+
+    const category = String(req.body?.category || "general").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").slice(0, 60) || "general";
     const records = [];
 
     for (const file of files) {
@@ -114,7 +146,7 @@ documentsRouter.post("/documents", requireRole(ROLE_GROUPS.STAFF), upload.array(
           data: {
             tenantId: req.tenantId,
             recordType: "document",
-            title: String(req.body?.title || file.originalname || "Documento").trim(),
+            title: String(req.body?.title || file.originalname || "Documento").trim().slice(0, MAX_DOCUMENT_TITLE_LENGTH),
             status: "ACTIVE",
             data: normalizeMetadata({
               category,
@@ -140,8 +172,10 @@ documentsRouter.post("/documents", requireRole(ROLE_GROUPS.STAFF), upload.array(
 
     res.status(201).json({ documents: records });
   } catch (error) {
+    await cleanupUploadedFiles(req.files);
     console.error("Create document error:", error);
-    res.status(500).json({ error: "No se pudieron guardar documentos" });
+    const status = Number(error?.statusCode || error?.status || 500);
+    res.status(status >= 400 && status < 600 ? status : 500).json({ error: status === 500 ? "No se pudieron guardar documentos" : error.message });
   }
 });
 
@@ -174,6 +208,7 @@ documentsRouter.get("/documents/:id/download", async (req, res) => {
 
 documentsRouter.patch("/documents/:id", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
+    res.setHeader("Cache-Control", "private, no-store");
     const existing = await prisma.industryRecord.findFirst({
       where: { id: req.params.id, tenantId: req.tenantId, recordType: "document" }
     });

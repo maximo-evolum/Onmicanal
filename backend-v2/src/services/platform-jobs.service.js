@@ -3,6 +3,9 @@ import { env } from "../lib/env.js";
 import { anonymizeExpiredSensitiveFields } from "../lib/metadata-retention.js";
 import { listMetadataSchemas } from "./metadata-schemas.service.js";
 import { runScheduledWorkflows } from "../routes/workflows.routes.js";
+import { getRedisClient } from "../lib/redis.js";
+import { runtimeAlertSnapshot } from "../lib/runtime-metrics.js";
+import { publishObservabilityAlerts } from "./observability-alerts.service.js";
 
 function boundedNumber(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -66,11 +69,28 @@ export async function runMetadataRetentionSweep({ now = new Date() } = {}) {
 export async function runPlatformJobs({ now = new Date() } = {}) {
   const retentionIntervalMs = jobIntervalMs(process.env.METADATA_RETENTION_INTERVAL_MS, 86_400_000, 3_600_000);
   const workflowIntervalMs = jobIntervalMs(process.env.WORKFLOW_SCHEDULER_INTERVAL_MS, 300_000, 60_000);
-  const [retention, workflows] = await Promise.all([
+  const observabilityIntervalMs = jobIntervalMs(process.env.OBSERVABILITY_MONITOR_INTERVAL_MS, 60_000, 60_000);
+  const [retention, workflows, observability] = await Promise.all([
     executeRecordedJob({ jobKey: "metadata-retention", intervalMs: retentionIntervalMs, now, task: () => runMetadataRetentionSweep({ now }) }),
-    executeRecordedJob({ jobKey: "scheduled-workflows", intervalMs: workflowIntervalMs, now, task: () => runScheduledWorkflows({ now }) })
+    executeRecordedJob({ jobKey: "scheduled-workflows", intervalMs: workflowIntervalMs, now, task: () => runScheduledWorkflows({ now }) }),
+    executeRecordedJob({
+      jobKey: "observability-monitor",
+      intervalMs: observabilityIntervalMs,
+      now,
+      task: async () => {
+        let database = false;
+        let redis = process.env.REDIS_URL ? "unavailable" : "not_configured";
+        try { await prisma.$queryRaw`SELECT 1`; database = true; } catch {}
+        if (process.env.REDIS_URL) {
+          try { redis = (await getRedisClient()) ? "connected" : "unavailable"; } catch { redis = "unavailable"; }
+        }
+        const snapshot = runtimeAlertSnapshot({ database, redis });
+        const delivery = await publishObservabilityAlerts(snapshot);
+        return { ok: snapshot.ok, alerts: snapshot.alerts.map((alert) => alert.code), delivery };
+      }
+    })
   ]);
-  return { retention, workflows };
+  return { retention, workflows, observability };
 }
 
 export async function platformJobStatus(limit = 30) {

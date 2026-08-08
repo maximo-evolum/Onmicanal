@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test",
+    "test": "node --test test",
     "repair:admin": "node scripts/repair-admin-access.mjs",
     "audit:tenant-modules": "node scripts/normalize-tenant-modules.mjs",
     "normalize:tenant-modules": "node scripts/normalize-tenant-modules.mjs --apply",
@@ -15,7 +15,9 @@
     "prisma:studio": "prisma studio",
     "seed": "node seed.js",
     "seed:realty-demo": "node scripts/seed-realty-demo-properties.mjs",
-    "prisma:deploy": "prisma migrate deploy"
+    "prisma:deploy": "prisma migrate deploy",
+    "audit:production": "npm audit --omit=dev --json",
+    "load:test": "node scripts/load-test.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",
@@ -34,6 +36,7 @@
     "prisma": "^6.6.0"
   },
   "overrides": {
+    "uuid": "^11.1.1",
     "body-parser": "1.20.6",
     "socket.io-parser": "4.2.7",
     "minimatch": {
