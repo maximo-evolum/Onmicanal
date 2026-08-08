@@ -86,6 +86,8 @@ export const env = {
 
   publicBaseUrl,
   metricsToken: firstEnv("METRICS_TOKEN"),
+  documentStorageDriver: firstEnv("DOCUMENT_STORAGE_DRIVER") || "local",
+  azureBlobContainerUrl: firstEnv("AZURE_BLOB_CONTAINER_URL"),
 
   enableAutomation:
     firstEnv("ENABLE_AUTOMATION", "enableAutomation") === "true",

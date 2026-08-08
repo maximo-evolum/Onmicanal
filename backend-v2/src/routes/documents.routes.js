@@ -7,6 +7,7 @@ import { prisma } from "../lib/db.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { normalizeMetadata } from "../lib/metadata.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
+import { openDocumentFile, removeDocumentFile, storeDocumentFile } from "../services/document-storage.service.js";
 
 export const documentsRouter = Router();
 
@@ -101,24 +102,38 @@ documentsRouter.post("/documents", requireRole(ROLE_GROUPS.STAFF), upload.array(
     const records = [];
 
     for (const file of files) {
-      const record = await prisma.industryRecord.create({
-        data: {
-          tenantId: req.tenantId,
-          recordType: "document",
-          title: String(req.body?.title || file.originalname || "Documento").trim(),
-          status: "ACTIVE",
-          data: normalizeMetadata({
-            category,
-            description: req.body?.description || null,
-            originalName: file.originalname,
-            fileName: file.filename,
-            mimeType: file.mimetype,
-            size: file.size,
-            source: "upload",
-            uploadedByUserId: req.user?.id || null
-          }, {})
-        }
+      const stored = await storeDocumentFile({
+        tenantId: req.tenantId,
+        filePath: file.path,
+        fileName: file.filename,
+        mimeType: file.mimetype
       });
+      let record;
+      try {
+        record = await prisma.industryRecord.create({
+          data: {
+            tenantId: req.tenantId,
+            recordType: "document",
+            title: String(req.body?.title || file.originalname || "Documento").trim(),
+            status: "ACTIVE",
+            data: normalizeMetadata({
+              category,
+              description: req.body?.description || null,
+              originalName: file.originalname,
+              fileName: file.filename,
+              storageKey: stored.storageKey,
+              storageDriver: stored.driver,
+              mimeType: file.mimetype,
+              size: file.size,
+              source: "upload",
+              uploadedByUserId: req.user?.id || null
+            }, {})
+          }
+        });
+      } catch (error) {
+        await removeDocumentFile({ tenantId: req.tenantId, localRoot: documentsRoot, metadata: { storageKey: stored.storageKey, storageDriver: stored.driver } }).catch(() => undefined);
+        throw error;
+      }
       records.push(documentForClient(req, record));
       await recordAuditLog(req, "DOCUMENT_UPLOADED", "document", record.id, { category, fileName: file.filename });
     }
@@ -140,16 +155,17 @@ documentsRouter.get("/documents/:id/download", async (req, res) => {
     if (!document) return res.status(404).json({ error: "Documento no encontrado" });
 
     const metadata = document.data && typeof document.data === "object" && !Array.isArray(document.data) ? document.data : {};
-    const fileName = path.basename(String(metadata.fileName || ""));
-    const tenantDirectory = path.resolve(documentsRoot, req.tenantId);
-    const filePath = path.resolve(tenantDirectory, fileName);
-    if (!fileName || !filePath.startsWith(`${tenantDirectory}${path.sep}`) || !fs.existsSync(filePath)) {
+    const stored = await openDocumentFile({ tenantId: req.tenantId, localRoot: documentsRoot, metadata });
+    if (!stored) {
       return res.status(404).json({ error: "Archivo no disponible" });
     }
 
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
-    return res.download(filePath, safeFileName(metadata.originalName || document.title));
+    res.setHeader("Content-Type", String(metadata.mimeType || "application/octet-stream"));
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFileName(metadata.originalName || document.title)}"`);
+    if (stored.size) res.setHeader("Content-Length", String(stored.size));
+    return stored.stream.pipe(res);
   } catch (error) {
     console.error("Download document error:", error);
     return res.status(500).json({ error: "No se pudo descargar el documento" });
@@ -191,16 +207,9 @@ documentsRouter.delete("/documents/:id", requireRole(ROLE_GROUPS.STAFF), async (
     if (!existing) return res.status(404).json({ error: "Documento no encontrado" });
 
     const metadata = existing.data && typeof existing.data === "object" ? existing.data : {};
-    const fileName = path.basename(String(metadata.fileName || ""));
-    const tenantDirectory = path.resolve(documentsRoot, req.tenantId);
-    const filePath = fileName ? path.resolve(tenantDirectory, fileName) : null;
-
-    // path.basename evita que metadata manipulada pueda apuntar fuera de la
-    // carpeta del tenant. Si el archivo ya no existe, igualmente eliminamos el
-    // registro para que el usuario pueda limpiar referencias antiguas.
-    if (filePath && filePath.startsWith(`${tenantDirectory}${path.sep}`) && fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
+    // El adaptador resuelve el driver y nunca acepta rutas suministradas por
+    // el usuario. Si el archivo ya no existe, eliminamos el registro igual.
+    await removeDocumentFile({ tenantId: req.tenantId, localRoot: documentsRoot, metadata });
 
     await prisma.industryRecord.delete({ where: { id: existing.id } });
     await recordAuditLog(req, "DOCUMENT_DELETED", "document", existing.id, {

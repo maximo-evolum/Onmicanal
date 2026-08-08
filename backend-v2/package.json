@@ -8,6 +8,8 @@
     "start": "node src/server.js",
     "test": "node --test",
     "repair:admin": "node scripts/repair-admin-access.mjs",
+    "audit:tenant-modules": "node scripts/normalize-tenant-modules.mjs",
+    "normalize:tenant-modules": "node scripts/normalize-tenant-modules.mjs --apply",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
