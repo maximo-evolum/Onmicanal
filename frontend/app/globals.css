@@ -15507,6 +15507,167 @@ textarea:focus {
   .data-entry-actions .primary-btn { width: 100%; }
 }
 
+/* Patrón A+ para administrar datos: formulario breve, lista legible y ficha. */
+.operations-data-table {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-card-bg) 92%, var(--theme-surface-soft));
+}
+
+.operations-data-table-head,
+.operations-data-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.35fr) minmax(125px, .78fr) minmax(190px, 1.2fr) minmax(110px, .7fr) minmax(112px, .7fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 760px;
+}
+
+.operations-data-table-head {
+  padding: 12px 16px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--theme-surface-soft) 68%, var(--theme-card-bg));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.operations-data-row {
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  transition: background .16s ease, box-shadow .16s ease;
+}
+
+.operations-data-row:last-child { border-bottom: 0; }
+.operations-data-row:hover,
+.operations-data-row.selected { background: color-mix(in srgb, var(--theme-primary) 9%, var(--theme-card-bg)); box-shadow: inset 3px 0 0 var(--theme-primary); }
+.operations-record-name { display: grid; min-width: 0; gap: 3px; }
+.operations-record-name b { overflow: hidden; color: var(--text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.operations-record-name small { color: var(--text-muted); font-size: 11px; }
+.operations-record-type { color: var(--theme-primary); font-size: 12px; font-weight: 800; }
+.operations-record-summary { overflow: hidden; color: var(--text-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.operations-data-row time { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.operations-status { display: inline-flex; align-items: center; width: fit-content; padding: 5px 8px; border-radius: 999px; color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 11%, transparent); font-size: 10px; font-style: normal; font-weight: 900; letter-spacing: .06em; }
+.operations-status.status-open,
+.operations-status.status-active,
+.operations-status.status-applied,
+.operations-status.status-scheduled { color: #087f72; background: rgba(8,169,155,.11); }
+.operations-status.status-draft,
+.operations-status.status-pending { color: #96600a; background: rgba(245,158,11,.12); }
+.operations-table-empty { padding: 28px 16px; margin: 0; color: var(--text-muted); }
+
+.operations-data-workspace .data-records-panel { padding: 0; overflow-x: auto; }
+.operations-data-workspace .data-records-head { padding: 20px 20px 0; }
+.operations-data-workspace .data-records-body { margin-top: 16px; }
+.operations-data-workspace .data-record-detail { border-top: 3px solid color-mix(in srgb, var(--theme-primary) 55%, transparent); }
+.operations-data-workspace .data-workspace-support { padding: 16px 20px; }
+
+/* Tablas reutilizables para fichas y turnos: lectura primero, edición solo cuando corresponde. */
+.data-record-table {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--theme-card-bg) 94%, var(--theme-surface-soft));
+}
+
+.data-record-table-head,
+.data-record-table-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.08fr) minmax(230px, 1.35fr) minmax(150px, .82fr) minmax(130px, .62fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 720px;
+}
+
+.data-record-table-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--theme-surface-soft) 68%, var(--theme-card-bg));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.data-record-table-row {
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .16s ease, box-shadow .16s ease;
+}
+
+.data-record-table-row:last-child { border-bottom: 0; }
+.data-record-table-row:hover,
+.data-record-table-row.selected { background: color-mix(in srgb, var(--theme-primary) 8%, var(--theme-card-bg)); box-shadow: inset 3px 0 0 var(--theme-primary); }
+.data-record-table-row > span { color: var(--text-muted); font-size: 13px; line-height: 1.4; }
+.data-record-person { display: grid; grid-template-columns: 36px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; }
+.data-record-person b { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 11px; color: #fff; background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)); font-size: 12px; letter-spacing: .04em; }
+.data-record-person strong { overflow: hidden; color: var(--text); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.data-record-table-row select { width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; color: var(--text); background: var(--theme-card-bg); font: inherit; font-size: 12px; }
+.data-shifts-table .data-record-table-head,
+.data-shifts-table .data-record-table-row { grid-template-columns: minmax(190px, 1fr) minmax(220px, 1.25fr) minmax(130px, .7fr) minmax(130px, .7fr); }
+
+.data-management-workspace .data-records-panel:has(.data-record-table) { padding: 0; overflow: hidden; }
+.data-management-workspace .data-records-panel:has(.data-record-table) .data-records-head { padding: 20px 20px 0; }
+.data-management-workspace .data-records-panel:has(.data-record-table) .data-records-body { margin-top: 16px; }
+
+/* IA Ops usa el mismo lenguaje visual A+: tarjeta clara, información jerarquizada y acción evidente. */
+.ai-ops-page .ai-ops-section { padding: 0 24px 20px; }
+.ai-ops-page .ai-ops-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 390px)); gap: 16px; }
+.ai-ops-page .ai-ops-work-card,
+.ai-ops-page .ai-ops-panel {
+  border-color: var(--border) !important;
+  background: var(--theme-card-bg) !important;
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--theme-shadow, #18312f) 10%, transparent) !important;
+}
+.ai-ops-page .ai-ops-work-card { padding: 18px; gap: 14px; }
+.ai-ops-page .ai-ops-work-card strong,
+.ai-ops-page .ai-ops-work-card h3,
+.ai-ops-page .ai-ops-panel h2,
+.ai-ops-page .ai-ops-list-row span { color: var(--text) !important; }
+.ai-ops-page .ai-ops-work-card .meta-line,
+.ai-ops-page .ai-ops-work-card > p,
+.ai-ops-page .ai-ops-list-row small { color: var(--text-muted) !important; }
+.ai-ops-page .ai-ops-matrix span { border-color: var(--border); background: var(--theme-surface-soft); }
+.ai-ops-page .ai-ops-matrix small,
+.ai-ops-page .ai-ops-strategy small { color: var(--text-muted); }
+.ai-ops-page .ai-ops-matrix strong,
+.ai-ops-page .ai-ops-strategy span { color: var(--text) !important; }
+.ai-ops-page .ai-ops-strategy { border-color: color-mix(in srgb, var(--theme-primary) 28%, var(--border)); background: color-mix(in srgb, var(--theme-primary) 7%, var(--theme-card-bg)); }
+.ai-ops-page .ai-ops-strategy.next { border-color: color-mix(in srgb, var(--theme-primary-2) 28%, var(--border)); background: color-mix(in srgb, var(--theme-primary-2) 7%, var(--theme-card-bg)); }
+.ai-ops-page .ai-ops-list-row { border-color: var(--border); background: color-mix(in srgb, var(--theme-surface-soft) 58%, var(--theme-card-bg)); }
+.ai-ops-page .ai-ops-list-row:hover { border-color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 9%, var(--theme-card-bg)); }
+
+:root[data-design-system="finance"] .ai-ops-page .ai-ops-work-card,
+:root[data-design-system="finance"] .ai-ops-page .ai-ops-panel { color: #24212b !important; background: #ffffff !important; }
+
+@media (max-width: 850px) {
+  .operations-data-table { overflow-x: auto; }
+  .operations-data-table-head,
+  .operations-data-row { min-width: 700px; }
+  .data-record-table-head,
+  .data-record-table-row { min-width: 690px; }
+  .ai-ops-page .ai-ops-section { padding: 0 14px 16px; }
+}
+
 /* Migración visual para los formularios existentes de CRM, inmobiliaria y
    exámenes: mismos principios A+ sin cambiar sus endpoints ni validaciones. */
 .industry-service-page .service-grid:has(> .vertical-form) {

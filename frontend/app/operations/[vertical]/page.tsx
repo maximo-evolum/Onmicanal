@@ -66,6 +66,32 @@ function industryMatches(current: string | null, expected: string) {
 
 function displayValue(value: unknown) { return value === undefined || value === null || value === "" ? "Sin información" : String(value); }
 
+const recordFieldAliases: Record<string, string[]> = {
+  nombre: ["nombre", "name", "customerName", "client"], telefono: ["telefono", "phone"],
+  paciente: ["paciente", "patient", "patientName", "name"], mascota: ["mascota", "pet", "petName", "name"],
+  numero: ["numero", "number"], mesa: ["mesa", "table", "tableNumber"], fecha: ["fecha", "date", "scheduledAt", "admissionDate"],
+  profesional: ["profesional", "professional", "responsible"], responsable: ["responsable", "responsible", "professional"],
+  tipo: ["tipo", "type", "vaccine"], estado: ["estado", "status"], tratamiento: ["tratamiento", "treatment", "type"],
+  vacuna: ["vacuna", "vaccine"], ingreso: ["ingreso", "admissionDate", "date"], monto: ["monto", "amount", "budget", "total"],
+  ventas: ["ventas", "sales"], pagos: ["pagos", "payments"], preferencias: ["preferencias", "preferences"], items: ["items"],
+};
+
+const dataFieldLabels: Record<string, string> = {
+  name: "Nombre", phone: "Teléfono", patientId: "Paciente", petId: "Mascota", professional: "Profesional",
+  responsible: "Responsable", specialty: "Especialidad", reason: "Motivo", date: "Fecha", amount: "Monto",
+  budget: "Presupuesto", type: "Tipo", status: "Estado", nextDueDate: "Próxima fecha", admissionDate: "Fecha de ingreso",
+  startTime: "Hora de inicio", endTime: "Hora de término", coverage: "Cobertura",
+};
+
+function recordFieldValue(record: IndustryRecord, field: string) {
+  const data = record.data || {};
+  const key = (recordFieldAliases[field] || [field]).find((candidate) => data[candidate] !== undefined && data[candidate] !== null && data[candidate] !== "");
+  return key ? displayValue(data[key]) : "Sin información";
+}
+
+function displayFieldLabel(key: string) { return dataFieldLabels[key] || fieldLabels[key] || key.replace(/([A-Z])/g, " $1").replaceAll("_", " "); }
+function displayRecordTitle(value: string) { return value.replace(/^TRAINING-[^|]+\|\s*/i, ""); }
+
 export default function VerticalOperationsPage() {
   const params = useParams<{ vertical: string }>();
   const profile = profiles[String(params?.vertical || "").toLowerCase()];
@@ -81,6 +107,7 @@ export default function VerticalOperationsPage() {
 
   const entity = profile?.entities.find((item) => item.type === selectedType) || profile?.entities[0];
   const totalRecords = useMemo(() => Object.values(records).reduce((total, list) => total + list.length, 0), [records]);
+  const recordRows = useMemo(() => profile?.entities.flatMap((item) => (records[item.type] || []).map((record) => ({ item, record }))) || [], [profile, records]);
 
   async function load() {
     if (!profile) return;
@@ -132,8 +159,8 @@ export default function VerticalOperationsPage() {
           support={<><span>ASISTENTE OPERATIVO</span><h2>Ayuda para el equipo</h2><p>{profile.safeNotice}</p><div className="operations-agent-status"><strong>{totalRecords ? "Operación en curso" : "Preparado para comenzar"}</strong><small>{totalRecords ? `Hay ${totalRecords} registros disponibles para revisar y continuar.` : "Crea el primer registro para activar el flujo de trabajo."}</small></div><ul><li>Revisa datos faltantes antes de pasar a la siguiente etapa.</li><li>Organiza pendientes y seguimiento de la jornada.</li><li>Deja decisiones sensibles para aprobación humana.</li></ul></>}
           recordsTitle="Registros de la vertical"
           recordsDescription="Consulta los procesos creados y selecciona uno para revisar sus datos sin abrir otra pantalla."
-          records={<div className="operations-record-grid data-record-collections">{profile.entities.map((item) => <article key={item.type}><header><h3>{item.label}</h3><b>{records[item.type]?.length || 0}</b></header>{records[item.type]?.length ? records[item.type].slice(0, 5).map((record) => <button type="button" className={`operations-record ${selectedRecord?.id === record.id ? "selected" : ""}`} key={record.id} onClick={() => setSelectedRecord(record)}><strong>{record.title}</strong><span>{item.fields.slice(0, 2).map((field) => displayValue(record.data?.[field])).join(" · ")}</span><small>{record.status}</small></button>) : <p>Aún no hay registros.</p>}</article>)}</div>}
-          detail={selectedRecord ? <><div><span>REGISTRO SELECCIONADO</span><h2>{selectedRecord.title}</h2></div><dl className="data-detail-grid">{Object.entries(selectedRecord.data || {}).filter(([key]) => !["vertical", "createdFrom"].includes(key)).map(([key, value]) => <div key={key}><dt>{fieldLabels[key] || key.replaceAll("_", " ")}</dt><dd>{displayValue(value)}</dd></div>)}</dl></> : null}
+          records={<div className="operations-data-table" role="table" aria-label="Registros de la vertical"><div className="operations-data-table-head" role="row"><span>Registro</span><span>Tipo</span><span>Información principal</span><span>Estado</span><span>Actualizado</span></div>{recordRows.length ? recordRows.map(({ item, record }) => <button type="button" role="row" className={`operations-data-row ${selectedRecord?.id === record.id ? "selected" : ""}`} key={record.id} onClick={() => setSelectedRecord(record)}><span className="operations-record-name"><b>{displayRecordTitle(record.title)}</b><small>Seleccionar ficha</small></span><span className="operations-record-type">{item.label}</span><span className="operations-record-summary">{item.fields.slice(0, 2).map((field) => recordFieldValue(record, field)).join(" · ")}</span><span><em className={`operations-status status-${String(record.status || "pending").toLowerCase()}`}>{record.status || "PENDIENTE"}</em></span><time dateTime={record.updatedAt}>{new Intl.DateTimeFormat("es-CL", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(record.updatedAt))}</time></button>) : <p className="operations-table-empty">Aún no hay registros. Crea el primero desde el formulario superior.</p>}</div>}
+          detail={selectedRecord ? <><div><span>FICHA SELECCIONADA</span><h2>{displayRecordTitle(selectedRecord.title)}</h2></div><dl className="data-detail-grid">{Object.entries(selectedRecord.data || {}).filter(([key]) => !["vertical", "createdFrom", "trainingRun", "demoOnly"].includes(key)).map(([key, value]) => <div key={key}><dt>{displayFieldLabel(key)}</dt><dd>{displayValue(value)}</dd></div>)}</dl></> : null}
         />
       </ModuleGate>
     </main>

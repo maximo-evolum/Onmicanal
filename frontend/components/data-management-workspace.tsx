@@ -52,12 +52,12 @@ export function DataManagementWorkspace({
         {advancedOpen ? <div className="data-entry-advanced">{advancedFields}</div> : null}
         <div className="data-entry-actions">{actions}</div>
       </form>
-      {support ? <aside className="data-workspace-support">{support}</aside> : null}
       <section className="data-records-panel">
         <header className="data-records-head"><div><span>REGISTROS</span><h2>{recordsTitle}</h2>{recordsDescription ? <p>{recordsDescription}</p> : null}</div></header>
         <div className="data-records-body">{records}</div>
       </section>
       {detail ? <section className="data-record-detail">{detail}</section> : null}
+      {support ? <aside className="data-workspace-support">{support}</aside> : null}
     </section>
   );
 }

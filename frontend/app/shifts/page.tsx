@@ -17,7 +17,14 @@ function industryCopy(industry?: string | null) {
 }
 
 function shiftData(record: IndustryRecord, key: string, fallback = "-") {
-  const value = record.data?.[key];
+  const aliases: Record<string, string[]> = {
+    worker: ["worker", "responsible"],
+    startsAt: ["startsAt", "startTime"],
+    endsAt: ["endsAt", "endTime"],
+    location: ["location", "coverage"],
+  };
+  const data = record.data || {};
+  const value = (aliases[key] || [key]).map((candidate) => data[candidate]).find((candidate) => candidate !== undefined && candidate !== null && candidate !== "");
   return value === undefined || value === null || value === "" ? fallback : String(value);
 }
 
@@ -82,7 +89,7 @@ export default function ShiftsPage() {
           actions={<><button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar turno"}</button>{message && <p className="shifts-message">{message}</p>}</>}
           recordsTitle="Próximos turnos"
           recordsDescription="La jornada queda organizada por persona, función, fecha y horario."
-          records={<div className="shifts-list data-shifts-list">{records.length ? records.slice(0, 30).map((record) => <article key={record.id}><div><strong>{shiftData(record, "worker")}</strong><span>{shiftData(record, "role")}{shiftData(record, "location", "") ? ` · ${shiftData(record, "location", "")}` : ""}</span></div><div><b>{shiftData(record, "date")}</b><small>{shiftData(record, "startsAt")} — {shiftData(record, "endsAt")}</small></div></article>) : <p>Aún no hay turnos programados. Crea el primero para comenzar a organizar la jornada.</p>}</div>}
+          records={<div className="data-record-table data-shifts-table" role="table" aria-label="Turnos programados"><div className="data-record-table-head" role="row"><span>Persona</span><span>Rol y cobertura</span><span>Fecha</span><span>Horario</span></div>{records.length ? records.slice(0, 30).map((record) => <article key={record.id} role="row" className="data-record-table-row"><div className="data-record-person"><b>{shiftData(record, "worker", "?").slice(0, 2).toUpperCase()}</b><strong>{shiftData(record, "worker")}</strong></div><span>{shiftData(record, "role")}{shiftData(record, "location", "") ? ` · ${shiftData(record, "location", "")}` : ""}</span><span>{shiftData(record, "date")}</span><span>{shiftData(record, "startsAt")} — {shiftData(record, "endsAt")}</span></article>) : <p className="operations-table-empty">Aún no hay turnos programados. Crea el primero para comenzar a organizar la jornada.</p>}</div>}
         />
       </ModuleGate>
     </main>
