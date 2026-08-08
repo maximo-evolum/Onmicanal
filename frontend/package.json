@@ -8,10 +8,11 @@
     "start": "next start"
   },
   "dependencies": {
-    "next": "latest",
+    "next": "16.3.0",
     "react": "latest",
     "react-dom": "latest",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "socket.io-parser": "4.2.7"
   },
   "devDependencies": {
     "@types/node": "latest",

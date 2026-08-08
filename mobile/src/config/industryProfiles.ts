@@ -44,6 +44,17 @@ export const INDUSTRY_PROFILES: Record<string, IndustryProfile> = {
     accent: "#f97316",
     modules: ["dashboard", "inbox", "agenda", "pipeline", "campaigns"]
   },
+  finance: {
+    code: "finance",
+    label: "Finanzas",
+    dashboardTitle: "Cuentas por cobrar",
+    primaryEntity: "Factura",
+    pipelineStages: ["Factura emitida", "Cartola cargada", "Conciliación", "Cobranza", "Cobro"],
+    bookingLabel: "Seguimiento",
+    serviceLabel: "Factura por cobrar",
+    accent: "#0ea5a4",
+    modules: ["finance", "inbox", "documents", "dashboard"]
+  },
   health: {
     code: "health",
     label: "Salud clínica",
@@ -95,6 +106,7 @@ export function normalizeIndustry(industry?: string | null) {
   if (["realty", "inmobiliaria", "inmobiliario", "real_estate", "real estate"].includes(value)) return "real_estate";
   if (["automotriz", "automotive", "autos", "vehiculos"].includes(value)) return "automotive";
   if (["gastronomia", "gastronomía", "restaurant", "restaurante", "eventos", "food"].includes(value)) return "gastronomy";
+  if (["finance", "finanzas", "finance_os", "evolum finance os", "contabilidad", "contable", "cuentas_por_cobrar"].includes(value)) return "finance";
   if (["salud", "health", "clinica", "clínica", "medica", "médica", "medicina"].includes(value)) return "health";
   if (["dental", "dentista", "clinica dental", "odontologia"].includes(value)) return "dental";
   if (["veterinaria", "veterinary", "animales", "clinica animal"].includes(value)) return "veterinary";

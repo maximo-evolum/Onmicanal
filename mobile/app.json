@@ -3,7 +3,7 @@
     "name": "EVOLUM",
     "slug": "evolum-mobile",
     "icon": "./assets/evolum-app-icon.png",
-    "version": "0.1.7",
+    "version": "0.1.8",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "evolum",
@@ -31,7 +31,9 @@
           "photosPermission": "EVOLUM necesita acceso a tus fotos solo cuando elijas cargar imágenes."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "assetBundlePatterns": [
       "**/*"
@@ -39,14 +41,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "cl.evolum.mobile",
-      "buildNumber": "7",
+      "buildNumber": "8",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.evolum.mobile",
-      "versionCode": 7,
+      "versionCode": 8,
       "permissions": [
         "POST_NOTIFICATIONS"
       ],
