@@ -60,6 +60,24 @@ function text(value: unknown, fallback = "-") {
   return normalized || fallback;
 }
 
+function financeConfidenceClass(value: unknown) {
+  const normalized = String(value || "LOW").trim().toLowerCase();
+  return ["high", "medium", "low"].includes(normalized) ? normalized : "low";
+}
+
+function financeReasons(value: unknown) {
+  return Array.isArray(value) ? value.filter(Boolean).map(String).join(" · ") : "Sin detalle adicional";
+}
+
+function normalizeFinanceSuggestions(suggestions: FinanceReconciliationSuggestion[] | unknown) {
+  if (!Array.isArray(suggestions)) return [] as FinanceReconciliationSuggestion[];
+  return suggestions.map((suggestion) => ({
+    ...suggestion,
+    level: String(suggestion?.level || "LOW").toUpperCase(),
+    reasons: Array.isArray(suggestion?.reasons) ? suggestion.reasons.filter(Boolean).map(String) : []
+  }));
+}
+
 function amount(value: unknown) {
   const number = Number(value || 0);
   return Number.isFinite(number) ? number : 0;
@@ -137,8 +155,8 @@ function FinanceWorkspace() {
       if (activeTab === "cartolas") setRecords(await getIndustryRecords("bank_movement"));
       if (activeTab === "excepciones") setRecords(await getIndustryRecords("finance_exception"));
       if (activeTab === "cobranza") setRecords(await getIndustryRecords("finance_collection_case"));
-      if (activeTab === "conciliacion") setSuggestions((await getFinanceReconciliationSuggestions()).suggestions);
-      if (activeTab === "aprobaciones") setSuggestions((await getFinanceReconciliationSuggestions()).suggestions);
+      if (activeTab === "conciliacion") setSuggestions(normalizeFinanceSuggestions((await getFinanceReconciliationSuggestions()).suggestions));
+      if (activeTab === "aprobaciones") setSuggestions(normalizeFinanceSuggestions((await getFinanceReconciliationSuggestions()).suggestions));
       if (activeTab === "clientes") setFinanceCustomers((await getFinanceCustomers()).customers);
       if (activeTab === "indicadores") setOverview(await getFinanceOverview());
       if (activeTab === "integraciones") setFinanceIntegrations((await getFinanceIntegrations()).integrations);

@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { MODULES } from "../lib/modules.js";
 import { buildBalancedAssignments } from "../lib/industries.js";
+import { isModuleAllowedForIndustry } from "../lib/industry-module-access.js";
 import { ensureTenantModuleEligibility } from "../services/tenant-modules.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { mergeMetadata, normalizeMetadata } from "../lib/metadata.js";
@@ -79,6 +80,7 @@ async function assertRecordModule(req, recordType) {
   if (!module) return true;
   const role = req.user?.role;
   if (role === "SUPER_ADMIN") return true;
+  if (!isModuleAllowedForIndustry(module, req.tenant?.industry)) return false;
   return ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant });
 }
 

@@ -27,12 +27,14 @@ function cookieSafeSession(session: AgentSession) {
   });
 }
 
-function setStoredAuth(session: AgentSession, accessToken?: string) {
+function setStoredAuth(session: AgentSession) {
   const serializedSession = JSON.stringify(session);
   setCookie(SESSION_COOKIE, cookieSafeSession(session));
   if (typeof window !== "undefined") {
     window.localStorage.setItem(SESSION_STORAGE_KEY, serializedSession);
-    if (accessToken) window.sessionStorage.setItem("evolum_access_token", accessToken);
+    // La sesión autenticada vive en la cookie HTTP-only emitida por el API.
+    // El navegador no conserva JWT accesibles desde JavaScript.
+    window.sessionStorage.removeItem("evolum_access_token");
   }
 }
 
@@ -101,7 +103,7 @@ export function LoginPage() {
       setSubmitting(true);
       setError(null);
       const data = await loginWithEmail(email, password || undefined);
-      setStoredAuth(data.user, data.accessToken);
+      setStoredAuth(data.user);
       router.push("/crm-principal");
       router.refresh();
     } catch (err) {

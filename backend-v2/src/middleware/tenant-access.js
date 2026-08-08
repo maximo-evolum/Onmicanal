@@ -1,5 +1,6 @@
 import { prisma } from "../lib/db.js";
 import { hasTenantModule, ensureTenantModuleEligibility, getTenantModules } from "../services/tenant-modules.service.js";
+import { isModuleAllowedForIndustry } from "../lib/industry-module-access.js";
 
 export const ROLE_GROUPS = {
   STAFF: [
@@ -116,22 +117,41 @@ export function createRequireModule(module, dependencies = {}) {
         return next();
       }
 
-      // Reportes ejecutivos es parte del Core EVOLUM y no depende de que una
-      // cuenta antigua tenga sincronizada la fila tenant_module correspondiente.
-      if (module === "reports") {
-        return next();
-      }
-
       const tenantId = req.tenantId || req.user?.tenantId;
       if (!tenantId) return res.status(401).json({ error: "Tenant requerido" });
+
+      const tenant = req.tenant || await findTenant(tenantId);
+      if (!tenant) return res.status(404).json({ error: "Tenant no encontrado" });
+
+      // Una fila tenant_module habilitada nunca debe permitir que una cuenta
+      // opere un modulo exclusivo de otro rubro. Esta validacion protege la
+      // API incluso ante accesos directos por URL o datos historicos.
+      if (!isModuleAllowedForIndustry(module, tenant.industry)) {
+        const availableModules = await listModules(tenantId).catch(() => []);
+        console.warn("[AUTH_INDUSTRY_MODULE_FORBIDDEN]", {
+          userId: req.user?.id,
+          tenantId,
+          role,
+          industry: tenant.industry || "GENERAL",
+          module,
+          availableModules
+        });
+        return res.status(403).json({
+          error: `Modulo no disponible para el rubro: ${module}`,
+          module,
+          industry: tenant.industry || "GENERAL",
+          availableModules
+        });
+      }
+
+      // Reportes ejecutivos es parte del Core EVOLUM y no depende de que una
+      // cuenta antigua tenga sincronizada la fila tenant_module correspondiente.
+      if (module === "reports") return next();
 
       let ok = await hasModule(tenantId, module);
 
       if (!ok) {
-        const tenant = req.tenant || await findTenant(tenantId);
-        if (tenant) {
-          ok = await ensureEligibility({ tenantId, module, tenant });
-        }
+        ok = await ensureEligibility({ tenantId, module, tenant });
       }
 
       if (!ok) {

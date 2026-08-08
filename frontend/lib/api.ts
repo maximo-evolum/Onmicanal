@@ -1,13 +1,6 @@
 import { AgentSession, Booking, BookingSlot, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
 import { API_BASE_URL, SESSION_STORAGE_KEY } from "./constants";
 
-const BROWSER_ACCESS_TOKEN_KEY = "evolum_access_token";
-
-function getBrowserAccessToken() {
-  if (typeof window === "undefined") return null;
-  return window.sessionStorage.getItem(BROWSER_ACCESS_TOKEN_KEY);
-}
-
 export function getStoredApiSession() {
   if (typeof window === "undefined") return null;
   const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
@@ -20,21 +13,34 @@ export function getStoredApiSession() {
 }
 
 function buildHeaders(init?: RequestInit) {
-  const accessToken = getBrowserAccessToken();
   return {
     "Content-Type": "application/json",
-    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     ...(init?.headers || {})
   };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: buildHeaders(init),
-    cache: "no-store",
-    credentials: "include"
-  });
+  // Evita que una solicitud deje una pantalla esperando indefinidamente
+  // cuando hay una red inestable o un deploy activo.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      headers: buildHeaders(init),
+      cache: "no-store",
+      credentials: "include",
+      signal: init?.signal || controller.signal
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("La conexión tardó demasiado. Revisa tu red e inténtalo nuevamente.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     let message = "Request failed";
@@ -56,7 +62,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       // Evita que la UI quede atrapada mostrando "Token invalido" despues de
       // una rotacion de JWT o un deploy. La proxima pantalla exige sesion sana.
       if (typeof window !== "undefined" && !path.startsWith("/auth/")) {
-        window.sessionStorage.removeItem(BROWSER_ACCESS_TOKEN_KEY);
+        window.sessionStorage.removeItem("evolum_access_token");
         window.localStorage.removeItem(SESSION_STORAGE_KEY);
         window.location.assign("/login?session=expired");
       }
@@ -708,6 +714,7 @@ export async function previewAutonomousFollowUps(): Promise<{ count: number; act
 export type TenantModulesResponse = {
   tenantId: string;
   role?: string | null;
+  industry?: string | null;
   plan: string;
   modules: string[];
   subscription?: unknown;

@@ -1,6 +1,45 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { filterModulesForIndustry, isModuleAllowedForIndustry } from "../src/lib/industry-module-access.js";
+import { createRequireModule } from "../src/middleware/tenant-access.js";
+
+test("la API bloquea un módulo vertical aunque haya quedado habilitado por error en el plan", async () => {
+  const guard = createRequireModule("properties", {
+    hasTenantModule: async () => true,
+    ensureTenantModuleEligibility: async () => true,
+    getTenantModules: async () => ["properties", "inbox"],
+    findTenant: async () => ({ id: "tenant-gastro", industry: "GASTRONOMY" })
+  });
+  const req = { tenantId: "tenant-gastro", user: { id: "u-1", tenantId: "tenant-gastro", role: "ADMIN" } };
+  const result = { status: null, body: null };
+  const res = {
+    status(code) { result.status = code; return this; },
+    json(body) { result.body = body; return this; }
+  };
+  let calledNext = false;
+
+  await guard(req, res, () => { calledNext = true; });
+
+  assert.equal(calledNext, false);
+  assert.equal(result.status, 403);
+  assert.equal(result.body.module, "properties");
+  assert.equal(result.body.industry, "GASTRONOMY");
+});
+
+test("super administrador conserva el acceso global de plataforma", async () => {
+  const guard = createRequireModule("properties", {
+    hasTenantModule: async () => false,
+    ensureTenantModuleEligibility: async () => false,
+    getTenantModules: async () => [],
+    findTenant: async () => ({ id: "tenant-gastro", industry: "GASTRONOMY" })
+  });
+  const req = { tenantId: "tenant-gastro", user: { id: "u-1", tenantId: "tenant-gastro", role: "SUPER_ADMIN" } };
+  let calledNext = false;
+
+  await guard(req, {}, () => { calledNext = true; });
+
+  assert.equal(calledNext, true);
+});
 
 test("módulos de vertical: inmobiliaria no recibe capacidades de taller ni pacientes", () => {
   const modules = filterModulesForIndustry([

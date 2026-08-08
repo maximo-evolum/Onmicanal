@@ -17,11 +17,11 @@ modulesRouter.get("/modules/me", async (req, res) => {
     const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId } });
     if (!tenant) return res.status(404).json({ error: "Tenant no encontrado" });
     await ensureTenantSubscriptionAndModules({ tenantId: tenant.id, planCode: tenant.plan || "STARTER" });
-    const modules = await getTenantModules(tenant.id);
+    const modules = await getTenantModules(tenant.id, tenant.industry);
     const subscription = await prisma.subscription.findFirst({ where: { tenantId: tenant.id, status: "ACTIVE" }, orderBy: { createdAt: "desc" } });
     // El rol proviene de la sesión validada por el backend, no del estado
     // local del navegador. Así la interfaz no conserva permisos antiguos.
-    res.json({ tenantId: tenant.id, role: req.user?.role || null, plan: tenant.plan || subscription?.planCode || "STARTER", modules, subscription });
+    res.json({ tenantId: tenant.id, role: req.user?.role || null, industry: tenant.industry || "GENERAL", plan: tenant.plan || subscription?.planCode || "STARTER", modules, subscription });
   } catch (error) {
     console.error("Get modules error:", error);
     res.status(500).json({ error: "No se pudieron obtener módulos" });

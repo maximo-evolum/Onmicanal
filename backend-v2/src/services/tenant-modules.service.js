@@ -147,14 +147,18 @@ export async function ensureTenantSubscriptionAndModules({ tenantId, planCode = 
   return getTenantModules(tenantId);
 }
 
-export async function getTenantModules(tenantId) {
+export async function getTenantModules(tenantId, industry = null) {
   const modules = await prisma.tenantModule.findMany({
     where: { tenantId, enabled: true },
     orderBy: { module: "asc" }
   });
   // También protegemos cuentas antiguas que conservaron módulos de otra
   // vertical en la base de datos antes de que existiera la regla de rubros.
-  return modules.map((item) => item.module);
+  const tenantIndustry = industry || (await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { industry: true }
+  }))?.industry;
+  return filterModulesForIndustry(modules.map((item) => item.module), tenantIndustry);
 }
 
 export async function hasTenantModule(tenantId, module) {
@@ -224,7 +228,10 @@ export async function setTenantModules({ tenantId, modules = [], source = "MANUA
 
   // Super Admin puede configurar una cuenta con capacidades de más de una
   // vertical. Los datos siguen aislados por tenant y tipo de registro.
-  const normalized = [...new Set(modules.map(normalizeModuleKey).filter(Boolean))];
+  const normalized = filterModulesForIndustry(
+    [...new Set(modules.map(normalizeModuleKey).filter(Boolean))],
+    tenant.industry
+  );
   await prisma.tenantModule.updateMany({ where: { tenantId }, data: { enabled: false, source } });
   for (const module of normalized) {
     await prisma.tenantModule.upsert({

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
+import * as SecureStore from "expo-secure-store";
 import {
   AdminTenant,
   Booking,
@@ -138,7 +139,7 @@ async function clearOfflineData() {
 
 export async function saveMobileSession(data: unknown, token?: string) {
   await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(data));
-  if (token) await AsyncStorage.setItem(TOKEN_KEY, token);
+  if (token) await SecureStore.setItemAsync(TOKEN_KEY, token, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY });
 }
 
 export async function getMobileSession<T = any>() {
@@ -152,11 +153,21 @@ export async function getMobileSession<T = any>() {
 }
 
 export async function clearMobileSession() {
-  await Promise.all([AsyncStorage.removeItem(TOKEN_KEY), AsyncStorage.removeItem(SESSION_KEY), clearOfflineData()]);
+  await Promise.all([SecureStore.deleteItemAsync(TOKEN_KEY), AsyncStorage.removeItem(TOKEN_KEY), AsyncStorage.removeItem(SESSION_KEY), clearOfflineData()]);
 }
 
 async function getToken() {
-  return AsyncStorage.getItem(TOKEN_KEY);
+  const secureToken = await SecureStore.getItemAsync(TOKEN_KEY).catch(() => null);
+  if (secureToken) return secureToken;
+
+  // Migración transparente desde versiones anteriores: el token antiguo se
+  // mueve al almacén cifrado del sistema y deja de permanecer en AsyncStorage.
+  const legacyToken = await AsyncStorage.getItem(TOKEN_KEY).catch(() => null);
+  if (legacyToken) {
+    await SecureStore.setItemAsync(TOKEN_KEY, legacyToken, { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }).catch(() => undefined);
+    await AsyncStorage.removeItem(TOKEN_KEY).catch(() => undefined);
+  }
+  return legacyToken;
 }
 
 async function fetchWithTimeout(url: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS) {

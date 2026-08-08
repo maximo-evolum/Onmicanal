@@ -126,6 +126,7 @@ const brokerModuleAllowlist = new Set<ModuleAccessKey>([
 type ModuleAccessCacheEntry = {
   modules: string[];
   role: string | null;
+  industry: string | null;
 };
 
 // Evita volver a bloquear visualmente cada ruta mientras ya conocemos los
@@ -145,8 +146,36 @@ function isDeveloperRole(role?: string | null) {
   return String(role || "").toUpperCase() === "SUPER_ADMIN";
 }
 
-export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null, jobTitle?: string | null) {
+// Replica la frontera de verticales del backend para que una ruta abierta
+// manualmente no parezca disponible mientras la API la rechaza. El backend
+// continúa siendo la fuente de autorización definitiva.
+const verticalModuleIndustries: Partial<Record<ModuleAccessKey, string[]>> = {
+  properties: ["REAL_ESTATE"], property_assignments: ["REAL_ESTATE"], realty_loads: ["REAL_ESTATE"],
+  realty_activity: ["REAL_ESTATE"], broker_portal: ["REAL_ESTATE"], brokers: ["REAL_ESTATE"], realty_clients: ["REAL_ESTATE"],
+  vehicles: ["AUTOMOTIVE"], vehicle_owners: ["AUTOMOTIVE"], parts_inventory: ["AUTOMOTIVE"],
+  mechanic_assignments: ["AUTOMOTIVE"], ready_notifications: ["AUTOMOTIVE"],
+  gastronomy_operations: ["GASTRONOMY"], dental_care: ["DENTAL"], health_care: ["HEALTH"], veterinary_care: ["VETERINARY"],
+  finance_invoices: ["FINANCE"], finance_bank_sync: ["FINANCE"], finance_reconciliation: ["FINANCE"],
+  finance_exceptions: ["FINANCE"], finance_collections: ["FINANCE"], finance_analytics: ["FINANCE"]
+};
+
+function normalizeIndustry(value?: string | null) {
+  const normalized = String(value || "GENERAL").trim().toUpperCase();
+  if (normalized === "INMOBILIARIA") return "REAL_ESTATE";
+  if (normalized === "GASTRONOMÍA") return "GASTRONOMY";
+  if (normalized === "VETERINARIA") return "VETERINARY";
+  if (normalized === "SALUD") return "HEALTH";
+  return normalized;
+}
+
+function isModuleCompatibleWithIndustry(moduleKey: ModuleAccessKey, industry?: string | null) {
+  const allowedIndustries = verticalModuleIndustries[moduleKey];
+  return !allowedIndustries || allowedIndustries.includes(normalizeIndustry(industry));
+}
+
+export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null, jobTitle?: string | null, industry?: string | null) {
   if (isDeveloperRole(role)) return true;
+  if (!isModuleCompatibleWithIndustry(moduleKey, industry)) return false;
   if (moduleKey === "metadata") return ["OWNER", "ADMIN"].includes(String(role || "").toUpperCase());
   if (alwaysAllowed.has(moduleKey)) return true;
   const isBroker = String(role || "").toUpperCase() === "SELLER" && /corredor/i.test(String(jobTitle || ""));
@@ -161,6 +190,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const cached = cacheKey ? moduleAccessCache.get(cacheKey) : null;
   const [modules, setModules] = useState<string[] | null>(() => cached?.modules || null);
   const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(() => cached?.role || session?.role || null);
+  const [industry, setIndustry] = useState<string | null>(() => cached?.industry || null);
   const [loading, setLoading] = useState(Boolean(moduleKey) && !cached);
   const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey) && !cached);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +203,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
     if (currentCache) {
       setModules(currentCache.modules);
       setAuthoritativeRole(currentCache.role || session?.role || null);
+      setIndustry(currentCache.industry || null);
       setLoading(false);
       setIdentityLoading(false);
     } else {
@@ -187,7 +218,9 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
         // conservamos como respaldo cuando el catálogo tarda en sincronizar.
         if (data.modules?.length) {
           setModules(data.modules);
-          if (cacheKey) moduleAccessCache.set(cacheKey, { modules: data.modules, role: data.user.role || null });
+          const nextIndustry = data.tenant?.industry || null;
+          setIndustry(nextIndustry);
+          if (cacheKey) moduleAccessCache.set(cacheKey, { modules: data.modules, role: data.user.role || null, industry: nextIndustry });
         }
       })
       .finally(() => { if (active) setIdentityLoading(false); });
@@ -197,9 +230,11 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
         if (!active) return;
         setModules((current) => {
           const nextModules = data.modules?.length ? data.modules : (current?.length ? current : (data.modules || []));
+          const nextIndustry = data.industry || industry;
+          if (data.industry) setIndustry(data.industry);
           if (cacheKey) {
             const preservedRole = isDeveloperRole(session?.role) ? "SUPER_ADMIN" : (data.role || session?.role || null);
-            moduleAccessCache.set(cacheKey, { modules: nextModules, role: preservedRole });
+            moduleAccessCache.set(cacheKey, { modules: nextModules, role: preservedRole, industry: nextIndustry });
           }
           return nextModules;
         });
@@ -233,8 +268,8 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const allowed = useMemo(() => {
     if (!moduleKey) return true;
     if (loading || identityLoading || modules === null) return true;
-    return moduleAllowed(moduleKey, modules, authoritativeRole, session?.jobTitle);
-  }, [authoritativeRole, identityLoading, loading, moduleKey, modules, session?.jobTitle]);
+    return moduleAllowed(moduleKey, modules, authoritativeRole, session?.jobTitle, industry);
+  }, [authoritativeRole, identityLoading, industry, loading, moduleKey, modules, session?.jobTitle]);
 
-  return { allowed, loading, error, modules: modules || [], role: authoritativeRole };
+  return { allowed, loading, error, modules: modules || [], role: authoritativeRole, industry };
 }

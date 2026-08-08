@@ -85,6 +85,7 @@ export const env = {
   corsOrigins: [...new Set(corsOrigins)],
 
   publicBaseUrl,
+  metricsToken: firstEnv("METRICS_TOKEN"),
 
   enableAutomation:
     firstEnv("ENABLE_AUTOMATION", "enableAutomation") === "true",

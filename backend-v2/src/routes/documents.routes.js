@@ -12,6 +12,19 @@ export const documentsRouter = Router();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const documentsRoot = path.resolve(__dirname, "../../public/tenant-documents");
+const ALLOWED_DOCUMENT_TYPES = new Map([
+  [".pdf", ["application/pdf"]],
+  [".csv", ["text/csv", "application/csv", "application/vnd.ms-excel"]],
+  [".xls", ["application/vnd.ms-excel"]],
+  [".xlsx", ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]],
+  [".doc", ["application/msword"]],
+  [".docx", ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]],
+  [".txt", ["text/plain"]],
+  [".png", ["image/png"]],
+  [".jpg", ["image/jpeg"]],
+  [".jpeg", ["image/jpeg"]],
+  [".webp", ["image/webp"]]
+]);
 
 function safeFileName(value) {
   return String(value || "document")
@@ -39,12 +52,26 @@ const upload = multer({
   limits: {
     fileSize: Number(process.env.DOCUMENT_UPLOAD_MAX_BYTES || 25 * 1024 * 1024),
     files: 10
+  },
+  fileFilter(_req, file, cb) {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const allowedMimes = ALLOWED_DOCUMENT_TYPES.get(extension);
+    const validMime = !file.mimetype || file.mimetype === "application/octet-stream" || allowedMimes?.includes(file.mimetype);
+    if (!allowedMimes || !validMime) {
+      return cb(new Error("Tipo de archivo no permitido. Usa PDF, CSV, Excel, Word, texto o imágenes PNG/JPG/WEBP."));
+    }
+    return cb(null, true);
   }
 });
 
-function publicFileUrl(req, tenantId, filename) {
+function privateFileUrl(req, documentId) {
   const host = process.env.PUBLIC_BASE_URL || process.env.BACKEND_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
-  return `${String(host).replace(/\/$/, "")}/tenant-documents/${tenantId}/${encodeURIComponent(filename)}`;
+  return `${String(host).replace(/\/$/, "")}/api/documents/${encodeURIComponent(documentId)}/download`;
+}
+
+function documentForClient(req, document) {
+  const data = document?.data && typeof document.data === "object" && !Array.isArray(document.data) ? document.data : {};
+  return { ...document, data: { ...data, url: privateFileUrl(req, document.id) } };
 }
 
 documentsRouter.get("/documents", async (req, res) => {
@@ -58,7 +85,7 @@ documentsRouter.get("/documents", async (req, res) => {
       orderBy: { updatedAt: "desc" },
       take: Math.min(Number(req.query.limit || 100), 300)
     });
-    res.json({ documents });
+    res.json({ documents: documents.map((document) => documentForClient(req, document)) });
   } catch (error) {
     console.error("List documents error:", error);
     res.status(500).json({ error: "No se pudieron cargar documentos" });
@@ -87,13 +114,12 @@ documentsRouter.post("/documents", requireRole(ROLE_GROUPS.STAFF), upload.array(
             fileName: file.filename,
             mimeType: file.mimetype,
             size: file.size,
-            url: publicFileUrl(req, req.tenantId, file.filename),
             source: "upload",
             uploadedByUserId: req.user?.id || null
           }, {})
         }
       });
-      records.push(record);
+      records.push(documentForClient(req, record));
       await recordAuditLog(req, "DOCUMENT_UPLOADED", "document", record.id, { category, fileName: file.filename });
     }
 
@@ -101,6 +127,32 @@ documentsRouter.post("/documents", requireRole(ROLE_GROUPS.STAFF), upload.array(
   } catch (error) {
     console.error("Create document error:", error);
     res.status(500).json({ error: "No se pudieron guardar documentos" });
+  }
+});
+
+// Los adjuntos son privados por tenant. La ruta valida la sesión antes de
+// entregar el archivo y nunca revela el directorio real de almacenamiento.
+documentsRouter.get("/documents/:id/download", async (req, res) => {
+  try {
+    const document = await prisma.industryRecord.findFirst({
+      where: { id: req.params.id, tenantId: req.tenantId, recordType: "document" }
+    });
+    if (!document) return res.status(404).json({ error: "Documento no encontrado" });
+
+    const metadata = document.data && typeof document.data === "object" && !Array.isArray(document.data) ? document.data : {};
+    const fileName = path.basename(String(metadata.fileName || ""));
+    const tenantDirectory = path.resolve(documentsRoot, req.tenantId);
+    const filePath = path.resolve(tenantDirectory, fileName);
+    if (!fileName || !filePath.startsWith(`${tenantDirectory}${path.sep}`) || !fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "Archivo no disponible" });
+    }
+
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.download(filePath, safeFileName(metadata.originalName || document.title));
+  } catch (error) {
+    console.error("Download document error:", error);
+    return res.status(500).json({ error: "No se pudo descargar el documento" });
   }
 });
 
@@ -140,13 +192,13 @@ documentsRouter.delete("/documents/:id", requireRole(ROLE_GROUPS.STAFF), async (
 
     const metadata = existing.data && typeof existing.data === "object" ? existing.data : {};
     const fileName = path.basename(String(metadata.fileName || ""));
-    const tenantDirectory = path.join(documentsRoot, req.tenantId);
-    const filePath = fileName ? path.join(tenantDirectory, fileName) : null;
+    const tenantDirectory = path.resolve(documentsRoot, req.tenantId);
+    const filePath = fileName ? path.resolve(tenantDirectory, fileName) : null;
 
     // path.basename evita que metadata manipulada pueda apuntar fuera de la
     // carpeta del tenant. Si el archivo ya no existe, igualmente eliminamos el
     // registro para que el usuario pueda limpiar referencias antiguas.
-    if (filePath && filePath.startsWith(tenantDirectory) && fs.existsSync(filePath)) {
+    if (filePath && filePath.startsWith(`${tenantDirectory}${path.sep}`) && fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
 

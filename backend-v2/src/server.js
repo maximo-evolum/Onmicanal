@@ -1,6 +1,7 @@
 import express from "express";
 import http from "node:http";
 import path from "node:path";
+import { timingSafeEqual } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
@@ -56,7 +57,6 @@ const app = express();
 app.disable("x-powered-by");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
-const tenantDocumentsDir = path.resolve(__dirname, "../public/tenant-documents");
 
 // Los routers se montan bajo /api y cada uno declara sus rutas completas
 // (por ejemplo, /finance/overview). Aplicar requireModule directamente en un
@@ -72,6 +72,16 @@ function requireModuleForPaths(module, paths) {
     const applies = prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
     return applies ? guard(req, res, next) : next();
   };
+}
+
+function validMetricsToken(req) {
+  const expected = String(env.metricsToken || "");
+  if (!expected) return false;
+  const bearer = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const received = String(req.headers["x-metrics-token"] || bearer || "");
+  const expectedBuffer = Buffer.from(expected);
+  const receivedBuffer = Buffer.from(received);
+  return expectedBuffer.length === receivedBuffer.length && timingSafeEqual(expectedBuffer, receivedBuffer);
 }
 
 app.use(express.json({
@@ -119,7 +129,7 @@ app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Auth-Client");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   if (req.method === "OPTIONS") return res.sendStatus(204);
-  if (!req.path.startsWith("/campaign-assets/") && !req.path.startsWith("/tenant-documents/")) {
+  if (!req.path.startsWith("/campaign-assets/") && !/\/api\/documents\/[^/]+\/download$/.test(req.path)) {
     res.setHeader("Content-Type", "application/json; charset=utf-8");
   }
   next();
@@ -128,11 +138,6 @@ app.use((req, res, next) => {
 app.use("/campaign-assets", express.static(campaignAssetsDir, {
   immutable: true,
   maxAge: "30d"
-}));
-
-app.use("/tenant-documents", express.static(tenantDocumentsDir, {
-  immutable: false,
-  maxAge: "1h"
 }));
 
 async function readinessStatus() {
@@ -188,7 +193,9 @@ app.get("/api/health", async (_req, res) => {
 
 // Endpoint de scrape sin información de clientes. Debe protegerse mediante la
 // red privada o allowlist del proveedor de observabilidad si se publica.
-app.get("/metrics", async (_req, res) => {
+app.get("/metrics", async (req, res) => {
+  if (!env.metricsToken) return res.status(404).json({ error: "Ruta no encontrada" });
+  if (!validMetricsToken(req)) return res.status(401).json({ error: "No autorizado" });
   const status = await readinessStatus();
   res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
   res.status(status.database ? 200 : 503).send(prometheusMetrics({ database: status.database, redis: status.redis }));

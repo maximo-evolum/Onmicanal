@@ -30,7 +30,8 @@
         {
           "photosPermission": "EVOLUM necesita acceso a tus fotos solo cuando elijas cargar imágenes."
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "assetBundlePatterns": [
       "**/*"
