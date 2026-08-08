@@ -3,6 +3,13 @@ import test from "node:test";
 import { INDUSTRY_TEMPLATES } from "../src/lib/industries.js";
 import { filterModulesForIndustry, isModuleAllowedForIndustry } from "../src/lib/industry-module-access.js";
 
+test("los nombres visibles de las verticales se normalizan a su codigo operativo", () => {
+  assert.equal(isModuleAllowedForIndustry("dental_care", "Clinica dental"), true);
+  assert.equal(isModuleAllowedForIndustry("veterinary_care", "Clinica veterinaria"), true);
+  assert.equal(isModuleAllowedForIndustry("health_care", "Salud clinica"), true);
+  assert.equal(isModuleAllowedForIndustry("finance_invoices", "EVOLUM Finance OS"), true);
+});
+
 test("cada plantilla vertical solo publica capacidades compatibles con su rubro", () => {
   for (const template of Object.values(INDUSTRY_TEMPLATES)) {
     const declared = template.modules.map((item) => item.key);
