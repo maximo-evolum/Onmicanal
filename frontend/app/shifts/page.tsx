@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
+import { DataManagementWorkspace } from "@/components/data-management-workspace";
 import { createIndustryRecord, getIndustryRecords, getMe, type IndustryRecord } from "@/lib/api";
 
 type ShiftForm = { worker: string; role: string; date: string; startsAt: string; endsAt: string; location: string; notes: string };
@@ -66,19 +67,23 @@ export default function ShiftsPage() {
           <div><span>{copy.eyebrow}</span><h1>{copy.title}</h1><p>Organiza la cobertura de {copy.workers}. Los turnos se mantienen separados por rubro y complementan la Agenda de EVOLUM.</p></div>
           <div className="shifts-hero-metric"><b>{records.filter((item) => shiftData(item, "date") === form.date).length}</b><small>turnos para esta fecha</small></div>
         </section>
-        <section className="shifts-grid">
-          <form className="shifts-panel" onSubmit={submit}>
-            <span className="shifts-kicker">NUEVO TURNO</span><h2>Planifica la jornada</h2><p>Registra quién trabaja, qué función cubre y en qué horario.</p>
+        <DataManagementWorkspace
+          className="shifts-data-workspace"
+          eyebrow="NUEVO TURNO"
+          title="Planifica la jornada"
+          description="Registra lo esencial primero y completa la cobertura o indicaciones solo si las necesitas."
+          onSubmit={submit}
+          primaryFields={<>
             <label>Persona<input value={form.worker} onChange={(event) => setForm((current) => ({ ...current, worker: event.target.value }))} placeholder="Nombre de la persona" /></label>
             <label>Rol<input value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))} placeholder={copy.roles} /></label>
-            <div className="shifts-form-row"><label>Fecha<input type="date" value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label><label>Inicio<input type="time" value={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))} /></label><label>Fin<input type="time" value={form.endsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} /></label></div>
-            <label>Sucursal, box o estación<input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} placeholder="Ej.: Box 2, cocina principal, sucursal Centro" /></label>
-            <label>Notas (opcional)<textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Indicaciones, reemplazo o cobertura especial" /></label>
-            <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar turno"}</button>
-            {message && <p className="shifts-message">{message}</p>}
-          </form>
-          <section className="shifts-panel shifts-list"><span className="shifts-kicker">DOTACIÓN PROGRAMADA</span><h2>Próximos turnos</h2>{records.length ? records.slice(0, 30).map((record) => <article key={record.id}><div><strong>{shiftData(record, "worker")}</strong><span>{shiftData(record, "role")}{shiftData(record, "location", "") ? ` · ${shiftData(record, "location", "")}` : ""}</span></div><div><b>{shiftData(record, "date")}</b><small>{shiftData(record, "startsAt")} — {shiftData(record, "endsAt")}</small></div></article>) : <p>Aún no hay turnos programados. Crea el primero para comenzar a organizar la jornada.</p>}</section>
-        </section>
+            <label>Fecha<input type="date" value={form.date} onChange={(event) => setForm((current) => ({ ...current, date: event.target.value }))} /></label>
+          </>}
+          advancedFields={<><label>Inicio<input type="time" value={form.startsAt} onChange={(event) => setForm((current) => ({ ...current, startsAt: event.target.value }))} /></label><label>Fin<input type="time" value={form.endsAt} onChange={(event) => setForm((current) => ({ ...current, endsAt: event.target.value }))} /></label><label>Sucursal, box o estación<input value={form.location} onChange={(event) => setForm((current) => ({ ...current, location: event.target.value }))} placeholder="Ej.: Box 2, cocina principal, sucursal Centro" /></label><label className="data-field-wide">Notas (opcional)<textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Indicaciones, reemplazo o cobertura especial" /></label></>}
+          actions={<><button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar turno"}</button>{message && <p className="shifts-message">{message}</p>}</>}
+          recordsTitle="Próximos turnos"
+          recordsDescription="La jornada queda organizada por persona, función, fecha y horario."
+          records={<div className="shifts-list data-shifts-list">{records.length ? records.slice(0, 30).map((record) => <article key={record.id}><div><strong>{shiftData(record, "worker")}</strong><span>{shiftData(record, "role")}{shiftData(record, "location", "") ? ` · ${shiftData(record, "location", "")}` : ""}</span></div><div><b>{shiftData(record, "date")}</b><small>{shiftData(record, "startsAt")} — {shiftData(record, "endsAt")}</small></div></article>) : <p>Aún no hay turnos programados. Crea el primero para comenzar a organizar la jornada.</p>}</div>}
+        />
       </ModuleGate>
     </main>
   </div>;

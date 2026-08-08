@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
+import { DataManagementWorkspace } from "@/components/data-management-workspace";
 import { createIndustryRecord, getIndustryRecords, getMe, type IndustryRecord } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
@@ -76,6 +77,7 @@ export default function VerticalOperationsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<IndustryRecord | null>(null);
 
   const entity = profile?.entities.find((item) => item.type === selectedType) || profile?.entities[0];
   const totalRecords = useMemo(() => Object.values(records).reduce((total, list) => total + list.length, 0), [records]);
@@ -115,17 +117,24 @@ export default function VerticalOperationsPage() {
       <ModuleGate moduleKey={profile.module}>
         <header className="vertical-hero service-hero operations-hero"><div><span>{profile.eyebrow}</span><h1>{profile.title}</h1><p>{profile.summary}</p></div><div className="vertical-hero-stats"><article><strong>{totalRecords}</strong><span>registros operativos</span></article><article><strong>{profile.steps.length}</strong><span>etapas del flujo</span></article></div></header>
         <section className="operations-flow"><div><span>FLUJO OPERATIVO</span><h2>De principio a fin</h2></div><ol>{profile.steps.map((step, index) => <li key={step}><b>{index + 1}</b><span>{step}</span></li>)}</ol></section>
-        <section className="operations-grid">
-          <form className="vertical-card vertical-form operations-form" onSubmit={submit}>
-            <div><span>NUEVO REGISTRO</span><h2>{entity?.label}</h2><p>{entity?.description}</p></div>
-            <div className="operations-entity-tabs">{profile.entities.map((item) => <button type="button" className={entity?.type === item.type ? "active" : ""} key={item.type} onClick={() => { setSelectedType(item.type); setValues({}); }}>{item.label}</button>)}</div>
-            {entity?.fields.map((field) => <label key={field}>{fieldLabels[field] || field}<input value={values[field] || ""} onChange={(event) => setValues((current) => ({ ...current, [field]: event.target.value }))} placeholder={fieldLabels[field] || field} /></label>)}
-            <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : `Guardar ${entity?.label.toLowerCase()}`}</button>
-            {notice ? <p className="operations-notice">{notice}</p> : null}
-          </form>
-          <section className="vertical-card operations-agent"><span>ASISTENTE OPERATIVO</span><h2>Ayuda para el equipo</h2><p>{profile.safeNotice}</p><div className="operations-agent-status"><strong>{totalRecords ? "Operación en curso" : "Preparado para comenzar"}</strong><small>{totalRecords ? `Hay ${totalRecords} registros disponibles para revisar y continuar.` : "Crea el primer registro para activar el flujo de trabajo."}</small></div><ul><li>Revisa datos faltantes antes de pasar a la siguiente etapa.</li><li>Organiza pendientes y seguimiento de la jornada.</li><li>Deja decisiones sensibles para aprobación humana.</li></ul></section>
-        </section>
-        <section className="operations-records"><div><span>HISTORIAL POR PROCESO</span><h2>Registros de la vertical</h2></div><div className="operations-record-grid">{profile.entities.map((item) => <article key={item.type}><header><h3>{item.label}</h3><b>{records[item.type]?.length || 0}</b></header>{records[item.type]?.length ? records[item.type].slice(0, 5).map((record) => <div className="operations-record" key={record.id}><strong>{record.title}</strong><span>{item.fields.slice(0, 2).map((field) => displayValue(record.data?.[field])).join(" · ")}</span><small>{record.status}</small></div>) : <p>Aún no hay registros.</p>}</article>)}</div></section>
+        <DataManagementWorkspace
+          className="operations-data-workspace"
+          eyebrow="NUEVO REGISTRO"
+          title={entity?.label || "Registro"}
+          description={entity?.description || "Completa los datos esenciales para iniciar el proceso."}
+          onSubmit={submit}
+          primaryFields={<>
+            <div className="data-field-wide operations-entity-tabs">{profile.entities.map((item) => <button type="button" className={entity?.type === item.type ? "active" : ""} key={item.type} onClick={() => { setSelectedType(item.type); setValues({}); setSelectedRecord(null); }}>{item.label}</button>)}</div>
+            {entity?.fields.slice(0, 3).map((field) => <label key={field}>{fieldLabels[field] || field}<input value={values[field] || ""} onChange={(event) => setValues((current) => ({ ...current, [field]: event.target.value }))} placeholder={fieldLabels[field] || field} /></label>)}
+          </>}
+          advancedFields={<>{entity?.fields.slice(3).map((field) => <label key={field}>{fieldLabels[field] || field}<input value={values[field] || ""} onChange={(event) => setValues((current) => ({ ...current, [field]: event.target.value }))} placeholder={fieldLabels[field] || field} /></label>)}</>}
+          actions={<><button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : `Guardar ${entity?.label.toLowerCase()}`}</button>{notice ? <p className="operations-notice">{notice}</p> : null}</>}
+          support={<><span>ASISTENTE OPERATIVO</span><h2>Ayuda para el equipo</h2><p>{profile.safeNotice}</p><div className="operations-agent-status"><strong>{totalRecords ? "Operación en curso" : "Preparado para comenzar"}</strong><small>{totalRecords ? `Hay ${totalRecords} registros disponibles para revisar y continuar.` : "Crea el primer registro para activar el flujo de trabajo."}</small></div><ul><li>Revisa datos faltantes antes de pasar a la siguiente etapa.</li><li>Organiza pendientes y seguimiento de la jornada.</li><li>Deja decisiones sensibles para aprobación humana.</li></ul></>}
+          recordsTitle="Registros de la vertical"
+          recordsDescription="Consulta los procesos creados y selecciona uno para revisar sus datos sin abrir otra pantalla."
+          records={<div className="operations-record-grid data-record-collections">{profile.entities.map((item) => <article key={item.type}><header><h3>{item.label}</h3><b>{records[item.type]?.length || 0}</b></header>{records[item.type]?.length ? records[item.type].slice(0, 5).map((record) => <button type="button" className={`operations-record ${selectedRecord?.id === record.id ? "selected" : ""}`} key={record.id} onClick={() => setSelectedRecord(record)}><strong>{record.title}</strong><span>{item.fields.slice(0, 2).map((field) => displayValue(record.data?.[field])).join(" · ")}</span><small>{record.status}</small></button>) : <p>Aún no hay registros.</p>}</article>)}</div>}
+          detail={selectedRecord ? <><div><span>REGISTRO SELECCIONADO</span><h2>{selectedRecord.title}</h2></div><dl className="data-detail-grid">{Object.entries(selectedRecord.data || {}).filter(([key]) => !["vertical", "createdFrom"].includes(key)).map(([key, value]) => <div key={key}><dt>{fieldLabels[key] || key.replaceAll("_", " ")}</dt><dd>{displayValue(value)}</dd></div>)}</dl></> : null}
+        />
       </ModuleGate>
     </main>
   </div>;

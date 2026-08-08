@@ -15326,3 +15326,252 @@ textarea:focus {
 .operations-agent { display: grid; align-content: start; gap: 11px; }.operations-agent-status { display: grid; gap: 4px; padding: 15px; border: 1px solid var(--border); border-radius: 14px; background: var(--theme-surface-soft); }.operations-agent-status small { color: var(--text-muted); line-height: 1.4; }.operations-agent ul { display: grid; gap: 9px; margin: 3px 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: 13px; line-height: 1.45; }.operations-agent li { display: flex; gap: 8px; }.operations-agent li::before { content: "✓"; color: var(--theme-primary-2); font-weight: 900; }
 .operations-records { margin-top: 18px; padding: 22px; border: 1px solid var(--border); border-radius: 22px; background: var(--theme-card-bg); }.operations-records h2 { margin: 5px 0 16px; }.operations-record-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }.operations-record-grid > article { padding: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--theme-surface-soft); }.operations-record-grid header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }.operations-record-grid h3 { margin: 0; font-size: 16px; }.operations-record-grid header b { display: grid; min-width: 28px; height: 28px; place-items: center; border-radius: 999px; color: #fff; background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)); font-size: 12px; }.operations-record { display: grid; gap: 3px; padding: 10px 0; border-top: 1px solid var(--border); }.operations-record strong { overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }.operations-record span, .operations-record small, .operations-record-grid p { color: var(--text-muted); font-size: 12px; }.operations-record small { color: var(--theme-primary-2); font-weight: 800; }
 @media (max-width: 900px) { .operations-flow, .operations-grid { grid-template-columns: 1fr; }.operations-record-grid { grid-template-columns: 1fr; } }
+/* -------------------------------------------------------------------------- */
+/* Gestión de datos A+: ingreso breve arriba y lectura prioritaria abajo.      */
+/* -------------------------------------------------------------------------- */
+.data-management-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  min-width: 0;
+}
+
+.data-entry-panel,
+.data-records-panel,
+.data-record-detail,
+.data-workspace-support {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--theme-surface-strong) 96%, transparent), color-mix(in srgb, var(--theme-surface) 90%, var(--theme-primary) 4%));
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+}
+
+.data-entry-panel { padding: 20px; }
+.data-entry-panel-head,
+.data-records-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.data-entry-panel-head span,
+.data-records-head span,
+.data-record-detail > div > span,
+.data-workspace-support > span {
+  display: block;
+  color: var(--theme-primary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.data-entry-panel h2,
+.data-records-head h2,
+.data-record-detail h2,
+.data-workspace-support h2 {
+  margin: 5px 0 0;
+  color: var(--text);
+  font-size: clamp(20px, 2vw, 26px);
+  line-height: 1.12;
+}
+
+.data-entry-panel p,
+.data-records-head p,
+.data-workspace-support p { margin: 6px 0 0; color: var(--muted); line-height: 1.45; }
+
+.data-entry-expand {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 8px 13px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 48%, var(--border));
+  border-radius: 11px;
+  color: var(--theme-primary);
+  background: color-mix(in srgb, var(--theme-primary) 7%, transparent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.data-entry-expand:hover { background: color-mix(in srgb, var(--theme-primary) 14%, transparent); }
+
+.data-entry-primary,
+.data-entry-advanced {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.data-entry-advanced {
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+  animation: evolum-form-reveal .18s ease-out;
+}
+
+.data-entry-primary label,
+.data-entry-advanced label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.data-entry-primary input,
+.data-entry-primary select,
+.data-entry-primary textarea,
+.data-entry-advanced input,
+.data-entry-advanced select,
+.data-entry-advanced textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--theme-surface) 92%, var(--bg-deep));
+  font: inherit;
+}
+
+.data-entry-primary textarea,
+.data-entry-advanced textarea { min-height: 92px; resize: vertical; }
+.data-entry-primary input:focus,
+.data-entry-primary select:focus,
+.data-entry-primary textarea:focus,
+.data-entry-advanced input:focus,
+.data-entry-advanced select:focus,
+.data-entry-advanced textarea:focus { outline: 2px solid color-mix(in srgb, var(--theme-primary) 25%, transparent); border-color: var(--theme-primary); }
+.data-field-wide { grid-column: 1 / -1; }
+
+.data-entry-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.data-entry-actions .primary-btn { min-width: 154px; }
+
+.data-records-panel { padding: 20px; }
+.data-records-body { margin-top: 16px; min-width: 0; }
+.data-record-list { display: grid; gap: 9px; }
+.data-record-row { cursor: pointer; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+.data-record-row:hover,
+.data-record-row.selected,
+.operations-record.selected { border-color: color-mix(in srgb, var(--theme-primary) 62%, var(--border)); background: color-mix(in srgb, var(--theme-primary) 10%, var(--theme-surface)); transform: translateY(-1px); }
+
+.data-record-detail { padding: 20px; }
+.data-detail-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0 0; }
+.data-detail-grid > div { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--theme-surface) 86%, transparent); }
+.data-detail-grid dt { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: capitalize; }
+.data-detail-grid dd { margin: 6px 0 0; color: var(--text); overflow-wrap: anywhere; }
+.data-detail-wide { grid-column: 1 / -1; }
+
+.data-workspace-support { padding: 20px; }
+.data-workspace-support ul { display: grid; gap: 8px; margin: 16px 0 0; padding-left: 18px; color: var(--muted); }
+
+.operations-data-workspace .operations-entity-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.operations-data-workspace .operations-entity-tabs button { min-height: 36px; padding: 7px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: transparent; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.operations-data-workspace .operations-entity-tabs button.active { border-color: var(--theme-primary); color: var(--theme-primary); background: color-mix(in srgb, var(--theme-primary) 10%, transparent); }
+.data-record-collections { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.data-record-collections > article { min-width: 0; }
+.data-record-collections .operations-record { width: 100%; border: 1px solid transparent; text-align: left; cursor: pointer; font: inherit; }
+
+/* Las pestañas con formularios de Finanzas también siguen el patrón: entrada
+   arriba, historial amplio debajo, sin tocar su lógica financiera. */
+.finance-grid:has(.finance-form) { grid-template-columns: minmax(0, 1fr); }
+.finance-grid:has(.finance-form) .finance-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
+.finance-grid:has(.finance-form) .finance-form h2,
+.finance-grid:has(.finance-form) .finance-form > p,
+.finance-grid:has(.finance-form) .finance-form .finance-upload,
+.finance-grid:has(.finance-form) .finance-form textarea { grid-column: 1 / -1; }
+.finance-grid:has(.finance-form) .finance-form .primary-btn { width: max-content; min-width: 170px; }
+
+@keyframes evolum-form-reveal { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 900px) {
+  .data-entry-primary,
+  .data-entry-advanced { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .data-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .finance-grid:has(.finance-form) .finance-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .data-entry-panel,
+  .data-records-panel,
+  .data-record-detail,
+  .data-workspace-support { padding: 15px; border-radius: 16px; }
+  .data-entry-panel-head { align-items: stretch; flex-direction: column; }
+  .data-entry-expand { width: 100%; }
+  .data-entry-primary,
+  .data-entry-advanced,
+  .data-detail-grid,
+  .finance-grid:has(.finance-form) .finance-form { grid-template-columns: 1fr; }
+  .data-detail-wide { grid-column: auto; }
+  .data-entry-actions .primary-btn { width: 100%; }
+}
+
+/* Migración visual para los formularios existentes de CRM, inmobiliaria y
+   exámenes: mismos principios A+ sin cambiar sus endpoints ni validaciones. */
+.industry-service-page .service-grid:has(> .vertical-form) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.industry-service-page .service-grid:has(> .vertical-form) > .vertical-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+
+.industry-service-page .service-grid:has(> .vertical-form) > .vertical-form > :first-child,
+.industry-service-page .service-grid:has(> .vertical-form) > .vertical-form > textarea,
+.industry-service-page .service-grid:has(> .vertical-form) > .vertical-form > .document-upload-box,
+.industry-service-page .service-grid:has(> .vertical-form) > .vertical-form > .document-chip-list {
+  grid-column: 1 / -1;
+}
+
+.industry-service-page .service-grid:has(> .vertical-form) > .vertical-form > .vertical-two { grid-column: span 2; }
+.industry-service-page .service-grid:has(> .vertical-form) > .vertical-form > .primary-btn { width: max-content; min-width: 160px; }
+
+.industry-service-page .service-grid:has(> .vertical-form) > .vertical-card:not(.vertical-form) {
+  min-height: 350px;
+}
+
+.realty-ops-grid:has(.realty-property-form) { grid-template-columns: minmax(0, 1fr); }
+.realty-ops-grid:has(.realty-property-form) .realty-property-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.realty-ops-grid:has(.realty-property-form) .realty-property-form .vertical-card-head,
+.realty-ops-grid:has(.realty-property-form) .realty-property-form > textarea,
+.realty-ops-grid:has(.realty-property-form) .realty-property-form > .file-picker-row,
+.realty-ops-grid:has(.realty-property-form) .realty-property-form > .form-grid-2,
+.realty-ops-grid:has(.realty-property-form) .realty-property-form > .form-grid-3 { grid-column: 1 / -1; }
+.realty-ops-grid:has(.realty-property-form) .realty-property-form > .primary-btn { width: max-content; min-width: 175px; }
+.realty-ops-grid:has(.realty-property-form) .realty-assignment-panel { min-height: 280px; }
+
+@media (max-width: 900px) {
+  .industry-service-page .service-grid:has(> .vertical-form) > .vertical-form,
+  .realty-ops-grid:has(.realty-property-form) .realty-property-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .industry-service-page .service-grid:has(> .vertical-form) > .vertical-form,
+  .realty-ops-grid:has(.realty-property-form) .realty-property-form { grid-template-columns: 1fr; }
+  .industry-service-page .service-grid:has(> .vertical-form) > .vertical-form > .vertical-two { grid-column: auto; }
+}
+
+/* Taller automotriz conserva sus tres flujos independientes, pero cada alta
+   ocupa ahora una franja compacta y legible antes de los historiales. */
+.vertical-page .vertical-grid:has(> form.vertical-form) { grid-template-columns: minmax(0, 1fr); }
+.vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+.vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form > :first-child,
+.vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form > textarea,
+.vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form > .file-picker-row,
+.vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form > .workshop-part-preview { grid-column: 1 / -1; }
+.vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form > .vertical-two { grid-column: span 2; }
+.vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form > .primary-btn { width: max-content; min-width: 160px; }
+
+@media (max-width: 620px) {
+  .vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form { grid-template-columns: 1fr; }
+  .vertical-page .vertical-grid:has(> form.vertical-form) > form.vertical-form > .vertical-two { grid-column: auto; }
+}

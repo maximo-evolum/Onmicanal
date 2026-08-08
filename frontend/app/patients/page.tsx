@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
+import { DataManagementWorkspace } from "@/components/data-management-workspace";
 import { createIndustryRecord, getIndustryRecords, getMe, updateIndustryRecord, type IndustryRecord } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 
@@ -28,9 +29,11 @@ export default function PatientsPage() {
   const [form, setForm] = useState(emptyPatient);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
 
   const copy = patientCopy(industry);
   const active = useMemo(() => patients.filter((item) => item.status !== "ARCHIVED"), [patients]);
+  const selectedPatient = useMemo(() => active.find((item) => item.id === selectedPatientId) || null, [active, selectedPatientId]);
 
   async function load() {
     try {
@@ -68,18 +71,28 @@ export default function PatientsPage() {
       <main className="vertical-page industry-service-page">
         <header className="vertical-hero service-hero"><div><span>{copy.eyebrow}</span><h1>{copy.title}</h1><p>{copy.subtitle}</p></div><div className="vertical-hero-stats"><article><strong>{active.length}</strong><span>Pacientes activos</span></article><article><strong>{active.filter((item) => item.status === "PENDING").length}</strong><span>Pendientes</span></article></div></header>
         {error ? <div className="sales-queue-error">{error}</div> : null}
-        <section className="service-grid">
-          <form className="vertical-card vertical-form" onSubmit={createPatient}>
-            <div><span>Nueva ficha clínica</span><h2>{copy.name}</h2></div>
-            <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder={copy.name} required />
-            <div className="vertical-two"><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="Teléfono" /><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Correo" /></div>
-            <div className="vertical-two"><input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder={copy.reason} /><input value={form.professional} onChange={(event) => setForm({ ...form, professional: event.target.value })} placeholder="Profesional responsable" /></div>
-            <textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Notas y seguimiento" rows={4} />
-            <select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="ACTIVE">Activa</option><option value="PENDING">Pendiente</option><option value="FOLLOWUP">Seguimiento</option></select>
-            <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar paciente"}</button>
-          </form>
-          <section className="vertical-card"><div className="vertical-card-head"><div><span>Atención clínica</span><h2>Pacientes recientes</h2></div></div><div className="service-record-list">{active.length ? active.map((patient) => <article key={patient.id} className="service-record-card"><div className="service-record-avatar">{patient.title.slice(0, 2).toUpperCase()}</div><div><strong>{patient.title}</strong><span>{valueOf(patient, "phone") || "Sin teléfono"} · {valueOf(patient, "reason") || "Sin motivo"}</span><small>{valueOf(patient, "professional") || valueOf(patient, "notes") || "Sin seguimiento"}</small></div><select value={patient.status} onChange={(event) => changeStatus(patient, event.target.value)}><option value="ACTIVE">Activa</option><option value="PENDING">Pendiente</option><option value="FOLLOWUP">Seguimiento</option><option value="ARCHIVED">Archivada</option></select></article>) : <p className="meta-line">Aún no hay pacientes registrados.</p>}</div></section>
-        </section>
+        <DataManagementWorkspace
+          eyebrow="NUEVA FICHA"
+          title={copy.name}
+          description="Ingresa lo esencial primero. La ficha ampliada queda disponible solo cuando necesitas más antecedentes."
+          onSubmit={createPatient}
+          primaryFields={<>
+            <label>Nombre<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder={copy.name} required /></label>
+            <label>Teléfono<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="Teléfono" /></label>
+            <label>Motivo<input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder={copy.reason} /></label>
+          </>}
+          advancedFields={<>
+            <label>Correo<input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="correo@empresa.cl" /></label>
+            <label>Profesional responsable<input value={form.professional} onChange={(event) => setForm({ ...form, professional: event.target.value })} placeholder="Nombre del profesional" /></label>
+            <label>Estado<select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="ACTIVE">Activa</option><option value="PENDING">Pendiente</option><option value="FOLLOWUP">Seguimiento</option></select></label>
+            <label className="data-field-wide">Notas y seguimiento<textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Antecedentes administrativos, notas o seguimiento" rows={4} /></label>
+          </>}
+          actions={<button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar ficha"}</button>}
+          recordsTitle="Pacientes recientes"
+          recordsDescription="Selecciona una ficha para revisar sus antecedentes sin perder de vista el historial."
+          records={<div className="service-record-list data-record-list">{active.length ? active.map((patient) => <article key={patient.id} className={`service-record-card data-record-row ${selectedPatientId === patient.id ? "selected" : ""}`} onClick={() => setSelectedPatientId(patient.id)}><div className="service-record-avatar">{patient.title.slice(0, 2).toUpperCase()}</div><div><strong>{patient.title}</strong><span>{valueOf(patient, "phone") || "Sin teléfono"} · {valueOf(patient, "reason") || "Sin motivo"}</span><small>{valueOf(patient, "professional") || valueOf(patient, "notes") || "Sin seguimiento"}</small></div><select aria-label={`Estado de ${patient.title}`} value={patient.status} onClick={(event) => event.stopPropagation()} onChange={(event) => changeStatus(patient, event.target.value)}><option value="ACTIVE">Activa</option><option value="PENDING">Pendiente</option><option value="FOLLOWUP">Seguimiento</option><option value="ARCHIVED">Archivada</option></select></article>) : <p className="meta-line">Aún no hay pacientes registrados.</p>}</div>}
+          detail={selectedPatient ? <><div><span>FICHA SELECCIONADA</span><h2>{selectedPatient.title}</h2></div><dl className="data-detail-grid"><div><dt>Teléfono</dt><dd>{valueOf(selectedPatient, "phone") || "Sin teléfono"}</dd></div><div><dt>Correo</dt><dd>{valueOf(selectedPatient, "email") || "Sin correo"}</dd></div><div><dt>Motivo</dt><dd>{valueOf(selectedPatient, "reason") || "Sin motivo"}</dd></div><div><dt>Profesional</dt><dd>{valueOf(selectedPatient, "professional") || "Sin asignar"}</dd></div><div className="data-detail-wide"><dt>Notas</dt><dd>{valueOf(selectedPatient, "notes") || "Sin notas registradas"}</dd></div></dl></> : null}
+        />
       </main>
     </div>
   </ModuleGate>;
