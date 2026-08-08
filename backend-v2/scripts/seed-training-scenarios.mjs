@@ -8,6 +8,8 @@ import { scoreRealtyLeadMatch } from "../src/services/realty-intelligence.servic
 // poder encontrarlos o retirarlos posteriormente.
 const RUN = process.env.TRAINING_RUN_ID || "TRAINING-2026-08-08";
 const APPLY = process.argv.includes("--apply") && process.env.CONFIRM_TRAINING_SCENARIOS === "YES";
+const SUPER_ADMIN_SHOWCASE = process.argv.includes("--super-admin-showcase");
+const SUPER_ADMIN_EMAIL = "admin@platform.local";
 const TEST_ACCOUNTS = {
   finance: "contadores@prueba.cl",
   automotive: "tallermecanico@prueba.cl",
@@ -145,9 +147,42 @@ async function veterinaryScenario(ctx) {
   await record(tenant.id, "shift", "Turno veterinario demo", { date: "2026-09-15", startTime: "09:00", endTime: "18:00", role: "Veterinario", responsible: user.name, coverage: "Consulta 1" }, "SCHEDULED", user.id);
 }
 
+async function healthScenario(ctx) {
+  const { tenant, user } = ctx;
+  await coreScenario(ctx, "Salud clinica");
+  const patient = await record(tenant.id, "clinical_patient", "Paciente clinico demo", { name: "Javiera Demo", phone: "+56900000007", antecedentes: "Sin antecedentes relevantes", alergias: "Ninguna", emergencyContact: "Contacto demostrativo" }, "ACTIVE");
+  await record(tenant.id, "clinical_attention", "Atencion clinica demo", { patientId: patient.id, professional: user.name, specialty: "Medicina general", date: "2026-09-15", reason: "Control demostrativo", status: "PENDING" }, "SCHEDULED", user.id);
+  await record(tenant.id, "clinical_order", "Orden clinica demo", { patientId: patient.id, type: "Examen preventivo", professional: user.name, amount: 38000, status: "PENDING", notes: "Orden ficticia para prueba visual." }, "PENDING", user.id);
+  await record(tenant.id, "clinical_followup", "Seguimiento clinico demo", { patientId: patient.id, date: "2026-09-22", channel: "manual", status: "PENDING", notes: "Seguimiento de demostracion; no contactar." }, "PENDING", user.id);
+  await record(tenant.id, "shift", "Turno clinico demo", { date: "2026-09-15", startTime: "08:00", endTime: "17:00", role: "Profesional de salud", responsible: user.name, coverage: "Box clinico 1" }, "SCHEDULED", user.id);
+}
+
+async function runSuperAdminShowcase() {
+  const context = await testTenant(SUPER_ADMIN_EMAIL);
+  const checks = [
+    ["Inmobiliaria", () => realtyScenario(context)],
+    ["Finanzas", () => financeScenario(context)],
+    ["Automotriz", () => automotiveScenario(context)],
+    ["Gastronomia", () => gastronomyScenario(context)],
+    ["Dental", () => dentalScenario(context)],
+    ["Veterinaria", () => veterinaryScenario(context)],
+    ["Salud clinica", () => healthScenario(context)]
+  ];
+  const results = [];
+  for (const [vertical, run] of checks) {
+    await run();
+    results.push({ vertical, tenant: context.tenant.name, visibleAs: "SUPER_ADMIN" });
+  }
+  console.table(results);
+}
+
 async function main() {
   if (!APPLY) {
     console.log(`Vista previa: se prepararán escenarios ${RUN}. Ejecuta con CONFIRM_TRAINING_SCENARIOS=YES y --apply.`);
+    return;
+  }
+  if (SUPER_ADMIN_SHOWCASE) {
+    await runSuperAdminShowcase();
     return;
   }
   const contexts = Object.fromEntries(await Promise.all(Object.entries(TEST_ACCOUNTS).map(async ([key, email]) => [key, await testTenant(email)])));
