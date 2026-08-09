@@ -15,6 +15,7 @@ const REALTY_MODULES = [
   MODULES.AI_OPS,
   MODULES.REALTY_LOADS,
   MODULES.PROPERTIES,
+  MODULES.REALTY_CLIENTS,
   MODULES.REALTY_ACTIVITY,
   MODULES.BROKER_PORTAL,
   MODULES.BROKERS,
@@ -31,6 +32,16 @@ const BROKERS = [
   { name: "Carlos Mendoza Soto", email: "carlos.mendoza@demo-evolum.cl", phone: "+56961010002" },
   { name: "Laura Campos Vidal", email: "laura.campos@demo-evolum.cl", phone: "+56961010003" },
   { name: "Diego Alvarez Pena", email: "diego.alvarez@demo-evolum.cl", phone: "+56961010004" },
+];
+
+// Perfiles creados como leads reales del CRM: el motor de matching los usa
+// exactamente igual que a un comprador que llega desde Inbox o un formulario.
+const BUYERS = [
+  { name: "Carolina Fuentes", email: "carolina.fuentes@comprador.demo", phone: "+56971110001", budget: 245000000, commune: "Providencia", propertyType: "Departamento", interest: "Compra departamento en Providencia", bedrooms: 3, bathrooms: 2, parking: 1, probability: 88 },
+  { name: "Felipe Arancibia", email: "felipe.arancibia@comprador.demo", phone: "+56971110002", budget: 410000000, commune: "La Reina", propertyType: "Casa", interest: "Compra casa en La Reina", bedrooms: 4, bathrooms: 3, parking: 2, probability: 82 },
+  { name: "Camila Soto", email: "camila.soto@comprador.demo", phone: "+56971110003", budget: 135000000, commune: "Santiago", propertyType: "Departamento", interest: "Compra departamento de inversión en Santiago", bedrooms: 1, bathrooms: 1, parking: 0, probability: 76 },
+  { name: "Oficinas Cordillera SpA", email: "contacto@cordillera-demo.cl", phone: "+56971110004", budget: 340000000, commune: "Las Condes", propertyType: "Oficina", interest: "Compra oficina en Las Condes", bedrooms: 0, bathrooms: 2, parking: 2, probability: 74 },
+  { name: "Valentina Mella", email: "valentina.mella@comprador.demo", phone: "+56971110005", budget: 205000000, commune: "Nunoa", propertyType: "Departamento", interest: "Compra departamento nuevo en Nunoa", bedrooms: 2, bathrooms: 2, parking: 1, probability: 79 },
 ];
 
 const PROPERTIES = [
@@ -491,6 +502,86 @@ async function ensureBrokers(tenantId) {
   return users;
 }
 
+async function ensureBuyers(tenantId) {
+  const buyers = [];
+  for (const buyer of BUYERS) {
+    const externalId = `demo-buyer:${buyer.email}`;
+    const contact = await prisma.contact.upsert({
+      where: { tenantId_externalId_channel: { tenantId, externalId, channel: "manual" } },
+      update: { name: buyer.name },
+      create: { tenantId, externalId, channel: "manual", name: buyer.name },
+    });
+    let conversation = await prisma.conversation.findFirst({ where: { tenantId, contactId: contact.id } });
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: { tenantId, contactId: contact.id, status: "OPEN", mode: "HUMAN", priorityLabel: "medium", priorityScore: buyer.probability },
+      });
+    }
+    const leadData = {
+      tenantId,
+      conversationId: conversation.id,
+      name: buyer.name,
+      phone: buyer.phone,
+      interest: buyer.interest,
+      propertyType: buyer.propertyType,
+      commune: buyer.commune,
+      budget: buyer.budget,
+      status: "QUALIFIED",
+      closeProbability: buyer.probability,
+      notes: "Perfil comprador de demostración para recomendaciones inmobiliarias.",
+      customFields: {
+        source: "seed-realty-demo-buyer",
+        email: buyer.email,
+        bedrooms: buyer.bedrooms,
+        bathrooms: buyer.bathrooms,
+        parking: buyer.parking,
+      },
+    };
+    const existing = await prisma.lead.findUnique({ where: { conversationId: conversation.id } });
+    buyers.push(existing
+      ? await prisma.lead.update({ where: { id: existing.id }, data: leadData })
+      : await prisma.lead.create({ data: leadData }));
+  }
+  return buyers;
+}
+
+async function normalizeLegacyTrainingProperty(tenantId) {
+  const legacy = await prisma.industryRecord.findFirst({
+    where: { tenantId, recordType: "property", title: { startsWith: "TRAINING-" } },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (!legacy) return null;
+  return prisma.industryRecord.update({
+    where: { id: legacy.id },
+    data: {
+      title: "Departamento Providencia",
+      status: "ACTIVE",
+      data: {
+        ...(legacy.data && typeof legacy.data === "object" ? legacy.data : {}),
+        propertyType: "Departamento",
+        operation: "Venta",
+        price: 210000000,
+        address: "Av. Pedro de Valdivia 1234",
+        comuna: "Providencia",
+        region: "Metropolitana",
+        bedrooms: 2,
+        bathrooms: 2,
+        parking: 1,
+        meters: 74,
+        builtM2: 74,
+        material: "Hormigón armado",
+        photoUrl: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1400&q=80",
+        gallery: [
+          "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1400&q=80",
+          "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1200&q=80",
+        ],
+        observations: "Departamento de demostración con terraza, bodega, excelente conectividad y cercanía a servicios.",
+        source: "seed-realty-demo-normalized",
+      },
+    },
+  });
+}
+
 async function upsertProperty(tenantId, property, index, brokers) {
   const broker = index < 8 ? brokers[index % brokers.length] : null;
   const data = {
@@ -543,6 +634,8 @@ async function main() {
   await ensureOwner(realtyTenant.id);
   await ensureModules(realtyTenant.id);
   const brokers = await ensureBrokers(realtyTenant.id);
+  const buyers = await ensureBuyers(realtyTenant.id);
+  const normalizedLegacy = await normalizeLegacyTrainingProperty(realtyTenant.id);
   const properties = [];
 
   for (let index = 0; index < PROPERTIES.length; index += 1) {
@@ -556,7 +649,9 @@ async function main() {
     adminPassword: DEMO_PASSWORD,
     modulesEnabled: REALTY_MODULES.length,
     brokers: brokers.length,
+    buyers: buyers.length,
     properties: properties.length,
+    legacyPropertyNormalized: Boolean(normalizedLegacy),
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,
     brokerPassword: DEMO_PASSWORD,

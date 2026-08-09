@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   BrokerPortalPageContent,
+  BrokerTrainingPageContent,
   BrokersPageContent,
   RealtyActivityPageContent,
   RealtyBuyersPageContent,
@@ -27,12 +28,13 @@ const realtySections: ReadonlyArray<ModuleAccessKey> = [
 
 const views = {
   summary: { label: "Inmobiliaria", module: null, content: RealtyDashboardPageContent },
-  operations: { label: "Operación", module: "realty_loads", content: RealtyLoadsPageContent },
+  operations: { label: "Cargas inmobiliarias", module: "realty_loads", content: RealtyLoadsPageContent },
   properties: { label: "Propiedades", module: "properties", content: RealtyPropertiesPageContent },
   brokers: { label: "Corredores", module: "brokers", content: BrokersPageContent },
-  activity: { label: "Actividad", module: "realty_activity", content: RealtyActivityPageContent },
+  activity: { label: "Actividad inmobiliaria", module: "realty_activity", content: RealtyActivityPageContent },
   portal: { label: "Portal corredor", module: "broker_portal", content: BrokerPortalPageContent },
-  buyers: { label: "Clientes inmobiliarios", module: "realty_clients", content: RealtyBuyersPageContent }
+  buyers: { label: "Clientes inmobiliarios", module: "realty_clients", content: RealtyBuyersPageContent },
+  training: { label: "Capacitación de corredores", module: "brokers", content: BrokerTrainingPageContent }
 } as const;
 
 type RealtyView = keyof typeof views;

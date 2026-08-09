@@ -38,10 +38,17 @@ const baseItems: SidebarItem[] = [
   ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI", "ai_ops"],
   ["Control de IA", "/settings/ai", "Define qué puede hacer la IA y cuándo pedir ayuda", "GI", "ai_ops"],
-  // Una sola puerta de entrada para Inmobiliaria. Propiedades, cargas,
-  // corredores, visitas, portal y compradores se navegan como submódulos
-  // dentro de este espacio, para no repetirlos en el menú EV.
-  ["Inmobiliaria", "/realty", "Propiedades, cargas, corredores y visitas", "RE", "properties"],
+  // Inmobiliaria es un producto aislado, pero sus áreas se navegan desde el
+  // menú EV. Así no se duplican pestañas dentro del workspace ni se ocultan
+  // funciones importantes al corredor.
+  ["Inmobiliaria", "/realty", "Centro de control de la cartera", "RE", "properties"],
+  ["Cargas inmobiliarias", "/realty?view=operations", "Captación, carga manual e importación", "RC", "realty_loads"],
+  ["Propiedades", "/realty?view=properties", "Inventario, fichas y publicación", "RP", "properties"],
+  ["Corredores", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],
+  ["Actividad inmobiliaria", "/realty?view=activity", "Visitas, alertas y seguimientos", "RA", "realty_activity"],
+  ["Portal corredor", "/realty?view=portal", "Cartera asignada y publicación", "RO", "broker_portal"],
+  ["Clientes inmobiliarios", "/realty?view=buyers", "Perfiles compradores y matching", "RL", "realty_clients"],
+  ["Capacitación de corredores", "/realty?view=training", "Formación y progreso comercial", "RT", "brokers"],
   // Pacientes y exámenes son rutas de compatibilidad para datos antiguos.
   // Las nuevas fichas, órdenes y presupuestos se administran exclusivamente
   // dentro de Atención clínica, dental o veterinaria.
@@ -90,7 +97,7 @@ const realtyRoutes = [
 const moduleSymbols: Record<string, string> = {
   IN: "⌂", CH: "◌", AG: "◷", PI: "↗", CA: "✦", PA: "▣", CX: "⌁",
   CG: "⚙", FW: "⇄", MD: "▤", PM: "◫", DA: "▥", AI: "✧", GI: "◈",
-  RE: "⌂",
+  RE: "⌂", RC: "⇧", RP: "⌂", RB: "♙", RA: "◴", RO: "◈", RL: "◌", RT: "✦",
   DV: "▱", TU: "◷", DE: "▦", BL: "⚗"
 };
 
@@ -124,7 +131,7 @@ function verticalWorkspaceItem(item: SidebarItem, productCode: VerticalProductCo
   const [, href, , , moduleKey] = item;
   const product = getVerticalProduct(productCode);
   if (!product) return false;
-  return href === product.href || product.sharedModuleKeys.includes(moduleKey);
+  return href === product.href || product.gatewayModules.includes(moduleKey) || product.sharedModuleKeys.includes(moduleKey);
 }
 
 function isShiftIndustry(industry?: string | null) {

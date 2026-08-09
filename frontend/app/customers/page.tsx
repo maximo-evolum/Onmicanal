@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
-import { RealtyModuleNav } from "@/components/realty-workspace";
 import { ModuleGate } from "@/components/module-gate";
 import {
   createRealtyBuyer,
@@ -462,8 +461,6 @@ export default function CustomersPage() {
               </div>
             )}
           </header>
-
-          {mode === "REAL_ESTATE" ? <RealtyModuleNav active="Clientes inmobiliarios" /> : null}
 
           {error ? <div className="sales-queue-error">{error}</div> : null}
           {message ? <div className="admin-notice success">{message}</div> : null}

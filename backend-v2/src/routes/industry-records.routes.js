@@ -18,7 +18,10 @@ export const industryRecordsRouter = Router();
 const RECORD_MODULES = Object.freeze({
   property: MODULES.PROPERTIES,
   property_import: MODULES.REALTY_LOADS,
-  property_training: MODULES.REALTY_LOADS,
+  // La formación pertenece al equipo de corredores; no a la carga de
+  // propiedades. Esto permite llevar progreso de capacitación sin mezclarlo
+  // con inventario ni importaciones.
+  property_training: MODULES.BROKERS,
   owner: MODULES.PROPERTIES,
   broker_profile: MODULES.BROKERS,
   seller_assignment: MODULES.PROPERTY_ASSIGNMENTS,

@@ -24,7 +24,7 @@ import {
   type RealtyIntelligence
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
-import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
+import type { ModuleAccessKey } from "@/lib/module-access";
 import type { Lead } from "@/lib/types";
 
 export const REALTY_STAGES = [
@@ -54,6 +54,7 @@ type RealtyData = {
   alerts: IndustryRecord[];
   followups: IndustryRecord[];
   imports: IndustryRecord[];
+  training: IndustryRecord[];
   users: IndustryUser[];
   brokers: Broker[];
 };
@@ -66,65 +67,10 @@ const emptyData: RealtyData = {
   alerts: [],
   followups: [],
   imports: [],
+  training: [],
   users: [],
   brokers: []
 };
-
-const realtySubmodules: ReadonlyArray<{
-  label: string;
-  href: string;
-  moduleKey: ModuleAccessKey;
-}> = [
-  { label: "Operación", href: "/realty?view=operations", moduleKey: "realty_loads" },
-  { label: "Propiedades", href: "/realty?view=properties", moduleKey: "properties" },
-  { label: "Corredores", href: "/realty?view=brokers", moduleKey: "brokers" },
-  { label: "Actividad", href: "/realty?view=activity", moduleKey: "realty_activity" },
-  { label: "Portal corredor", href: "/realty?view=portal", moduleKey: "broker_portal" },
-  { label: "Clientes inmobiliarios", href: "/realty?view=buyers", moduleKey: "realty_clients" }
-];
-
-// Inmobiliaria se presenta como una sola capacidad en el menú EV. Esta
-// navegación secundaria conserva cada función disponible sin repetir seis
-// accesos principales para la misma vertical.
-export function RealtyModuleNav({ active }: { active: string }) {
-  const session = getStoredSession();
-  const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
-  const [role, setRole] = useState<string | null>(session?.role || null);
-
-  useEffect(() => {
-    let mounted = true;
-    getMyModules()
-      .then((data) => {
-        if (!mounted) return;
-        setEnabledModules(data.modules || []);
-        setRole((current) => (
-          String(current || session?.role || "").toUpperCase() === "SUPER_ADMIN"
-            ? "SUPER_ADMIN"
-            : (data.role || session?.role || null)
-        ));
-      })
-      // La ruta sigue validada por backend. Mientras el catálogo se recupera,
-      // no ocultamos la navegación para evitar que parezca que desaparecieron
-      // funciones por un corte momentáneo de red.
-      .catch(() => { if (mounted) setEnabledModules(null); });
-    return () => { mounted = false; };
-  }, []);
-
-  const visibleItems = enabledModules === null
-    ? realtySubmodules
-    : realtySubmodules.filter((item) => moduleAllowed(item.moduleKey, enabledModules, role, session?.jobTitle, "REAL_ESTATE"));
-
-  return (
-    <nav className="realty-module-nav" aria-label="Secciones de Inmobiliaria">
-      {visibleItems.length ? <Link href="/realty" className={active === "Inmobiliaria" ? "active" : ""}>Resumen</Link> : null}
-      {visibleItems.map((item) => (
-        <Link key={item.href} href={item.href} className={item.label === active ? "active" : ""}>
-          {item.label}
-        </Link>
-      ))}
-    </nav>
-  );
-}
 
 const emptyProperty = {
   title: "",
@@ -185,6 +131,17 @@ function parseCsvRows(source: string): Record<string, string>[] {
   return values.map((valuesRow) => Object.fromEntries(headers.map((header, index) => [header, valuesRow[index] || ""])));
 }
 
+function csvValue(row: Record<string, unknown>, ...aliases: string[]) {
+  const normalize = (value: string) => value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toLowerCase();
+  const wanted = new Set(aliases.map(normalize));
+  const found = Object.entries(row).find(([key]) => wanted.has(normalize(key)));
+  return found ? String(found[1] ?? "").trim() : "";
+}
+
 const emptyBroker = {
   name: "",
   email: "",
@@ -243,6 +200,28 @@ function money(value: unknown) {
   return amount
     ? new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(amount)
     : "Sin precio";
+}
+
+/** Evita exponer prefijos técnicos de datos demo/importados en la interfaz. */
+function propertyTitle(value: string) {
+  return value.replace(/^TRAINING-\d{4}-\d{2}-\d{2}\s*\|\s*/i, "").trim() || "Propiedad sin nombre";
+}
+
+function propertyOperation(value: unknown) {
+  const normalized = text(value).toLowerCase();
+  if (["sale", "sell", "venta"].includes(normalized)) return "Venta";
+  if (["rent", "rental", "lease", "arriendo"].includes(normalized)) return "Arriendo";
+  return text(value, "Disponible");
+}
+
+function propertyStageLabel(value: unknown) {
+  const normalized = text(value).toUpperCase();
+  const labels: Record<string, string> = {
+    LEAD: "Captación", CONTACT: "Contacto", QUALIFIED: "Calificada", VISIT_SCHEDULED: "Visita agendada",
+    OFFER: "Oferta", NEGOTIATION: "Negociación", CLOSING: "Cierre", POSTSALE: "Postventa",
+    ACTIVE: "Activa", DRAFT: "Borrador", PUBLISHED: "Publicada", AVAILABLE: "Disponible"
+  };
+  return labels[normalized] || text(value, "Disponible");
 }
 
 function initials(name = "") {
@@ -409,7 +388,7 @@ export function useRealtyWorkspace() {
     try {
       setLoading(true);
       setError(null);
-      const [properties, owners, visits, deals, alerts, followups, imports, users, brokerProfiles] = await Promise.all([
+      const [properties, owners, visits, deals, alerts, followups, imports, training, users, brokerProfiles] = await Promise.all([
         getIndustryRecords("property"),
         getIndustryRecords("owner"),
         getIndustryRecords("visit"),
@@ -417,6 +396,7 @@ export function useRealtyWorkspace() {
         getIndustryRecords("realty_alert"),
         getIndustryRecords("broker_followup"),
         getIndustryRecords("property_import"),
+        getIndustryRecords("property_training"),
         getIndustryUsers(),
         getIndustryRecords("broker_profile")
       ]);
@@ -444,7 +424,7 @@ export function useRealtyWorkspace() {
         })
         .filter((broker) => !userBrokerIds.has(broker.id) && !userBrokerEmails.has(String(broker.email || "").toLowerCase()));
 
-      setData({ properties, owners, visits, deals, alerts, followups, imports, users, brokers: [...userBrokers, ...profileBrokers] });
+      setData({ properties, owners, visits, deals, alerts, followups, imports, training, users, brokers: [...userBrokers, ...profileBrokers] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar la vertical inmobiliaria");
     } finally {
@@ -481,7 +461,6 @@ export function RealtyShell({
           onToggle={() => setSidebarOpen((value) => !value)}
         />
         <main className="vertical-main realty-page realty-workspace">
-          <RealtyModuleNav active={active} />
           {children}
         </main>
       </div>
@@ -551,7 +530,7 @@ export function RealtyDashboardPageContent() {
           <div className="realty-ws-card-head"><div><span>Cartera activa</span><h2>Propiedades que requieren atención</h2><p>Prioriza según etapa, visitas, interés y tiempo sin movimiento.</p></div><Link href="/realty?view=properties">Ver todas</Link></div>
           <div className="realty-ws-table">
             <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Etapa</span><span>Corredor</span><span>Estado</span></div>
-            {data.properties.slice(0, 5).map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{property.title}</strong><span>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Lead"}</span><span>{getBrokerName(property, data.brokers)}</span><b>{numberValue(asData(property).price) ? "Ficha completa" : "Completar ficha"}</b></button>)}
+            {data.properties.slice(0, 5).map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Captación"}</span><span>{getBrokerName(property, data.brokers)}</span><b>{numberValue(asData(property).price) ? "Ficha completa" : "Completar ficha"}</b></button>)}
             {!data.properties.length ? <p className="empty-state">Aún no hay propiedades para revisar.</p> : null}
           </div>
           <footer className="realty-ws-statbar"><span><b>{unassigned.length}</b> registros pendientes</span><span><b>{data.visits.length}</b> visitas registradas</span><span><b>{data.properties.length ? Math.round((data.properties.filter((item) => numberValue(asData(item).price)).length / data.properties.length) * 100) : 0}%</b> fichas con precio</span></footer>
@@ -640,22 +619,22 @@ export function PropertyPortalCards({
     <div className="property-portal-grid">
       {properties.map((property) => {
         const data = asData(property);
-        const photoUrl = text(data.photoUrl);
+        const photoUrl = propertyPhotos(data)[0] || "";
         const assignedBrokerId = text(data.assignedBrokerId || property.assignedToId);
         return (
           <article className="property-portal-card" key={property.id}>
             <div className="property-portal-media">
-              {photoUrl ? <img src={photoUrl} alt={property.title} /> : <span>{initials(property.title)}</span>}
+              {photoUrl ? <img src={photoUrl} alt={propertyTitle(property.title)} /> : <span>{initials(propertyTitle(property.title))}</span>}
             </div>
             <div className="property-portal-body">
               <div>
-                <strong>{property.title}</strong>
+                <strong>{propertyTitle(property.title)}</strong>
                 <p>{text(data.address, "Direccion por completar")}</p>
               </div>
               <div className="property-portal-price">{money(data.price)}</div>
               <div className="property-portal-specs">
                 <span>{text(data.bedrooms, "0")} dorm.</span>
-                <span>{text(data.bathrooms, "0")} banos</span>
+                <span>{text(data.bathrooms, "0")} baños</span>
                 <span>{text(data.parking, "0")} estac.</span>
                 <span>{text(data.meters, "0")} m2</span>
               </div>
@@ -677,7 +656,7 @@ export function PropertyPortalCards({
                     {REALTY_STAGES.map((stage) => <option key={stage.key} value={stage.key}>{stage.label}</option>)}
                   </select>
                 ) : (
-                  <span>{REALTY_STAGES.find((stage) => stage.key === text(data.stage))?.label || "Lead"}</span>
+                  <span>{propertyStageLabel(data.stage)}</span>
                 )}
               </div>
               {onOpen ? <button className="secondary-btn property-open-btn" type="button" onClick={() => onOpen(property)}>Ver ficha completa</button> : null}
@@ -797,7 +776,7 @@ export function RealtyBuyersPageContent() {
         <div className="vertical-card-head"><div><span>Compradores activos</span><h2>Clientes y preferencias</h2></div></div>
         <div className="realty-buyer-layout">
           <div className="realty-buyer-list">{loading ? <p>Cargando compradores...</p> : null}{!loading && !buyers.length ? <p>Aún no hay compradores registrados.</p> : null}{buyers.map((buyer) => <button type="button" key={buyer.id} className={`realty-buyer-item ${buyer.id === selectedBuyerId ? "is-selected" : ""}`} onClick={() => setSelectedBuyerId(buyer.id)}><strong>{buyer.name || "Comprador sin nombre"}</strong><span>{buyerMoney(buyer.budget)} · {buyer.commune || "Comuna por definir"}</span><small>{buyer.propertyType || "Tipo por definir"} · {buyer.interest || "Compra"}</small></button>)}</div>
-          <div className="realty-match-panel">{!selected ? <p>Selecciona un comprador para ver propiedades compatibles.</p> : <><div className="realty-match-heading"><div><span>Para {selected.name || "este comprador"}</span><h3>Propiedades recomendadas</h3></div><strong>{buyerMoney(selected.budget)}</strong></div>{!matches.length ? <p>Aún no hay una propiedad disponible que calce con los datos registrados.</p> : <div className="realty-property-match-list">{matches.map((match) => <article className="realty-property-match" key={match.property.id}><div><strong>{match.property.title}</strong><span>{buyerMoney(match.property.price)} · {match.property.commune || "Comuna por definir"}</span><small>{match.reasons.join(" · ")}</small></div><b>{match.score}% compatible</b></article>)}</div>}</>}</div>
+          <div className="realty-match-panel">{!selected ? <p>Selecciona un comprador para ver propiedades compatibles.</p> : <><div className="realty-match-heading"><div><span>Para {selected.name || "este comprador"}</span><h3>Propiedades recomendadas</h3></div><strong>{buyerMoney(selected.budget)}</strong></div>{!matches.length ? <p>Aún no hay una propiedad disponible que calce con los datos registrados.</p> : <div className="realty-property-match-list">{matches.map((match) => <article className="realty-property-match" key={match.property.id}><div><strong>{propertyTitle(match.property.title)}</strong><span>{buyerMoney(match.property.price)} · {match.property.commune || "Comuna por definir"}</span><small>{match.reasons.join(" · ")}</small></div><b>{match.score}% compatible</b></article>)}</div>}</>}</div>
         </div>
       </section>
     </section>
@@ -824,18 +803,18 @@ export function PropertyDetailModal({
   const selectedPhoto = photos[activePhoto] || "";
   const features = stringList(data.features);
   const details = [
-    ["Operacion", text(data.operation, "Venta")],
+    ["Operación", propertyOperation(data.operation)],
     ["Tipo", text(data.propertyType, "Propiedad")],
     ["Dormitorios", text(data.bedrooms, "0")],
-    ["Banos", text(data.bathrooms, "0")],
+    ["Baños", text(data.bathrooms, "0")],
     ["Estacionamientos", text(data.parking, "0")],
     ["Superficie", `${text(data.meters || data.builtM2, "0")} m2`],
     ["Terreno", `${text(data.landM2, "No informado")}${data.landM2 ? " m2" : ""}`],
     ["Material", text(data.material, "No informado")],
-    ["Ano construccion", text(data.yearBuilt, "No informado")],
-    ["Orientacion", text(data.orientation, "No informado")],
+    ["Año de construcción", text(data.yearBuilt, "No informado")],
+    ["Orientación", text(data.orientation, "No informado")],
     ["Gastos comunes", money(data.commonExpenses)],
-    ["Etapa comercial", REALTY_STAGES.find((stage) => stage.key === text(data.stage))?.label || "Lead"]
+    ["Etapa comercial", propertyStageLabel(data.stage)]
   ];
 
   return (
@@ -844,7 +823,7 @@ export function PropertyDetailModal({
         <header className="property-detail-header">
           <div>
             <span>Ficha inmobiliaria</span>
-            <h2 id={`property-detail-${property.id}`}>{property.title}</h2>
+            <h2 id={`property-detail-${property.id}`}>{propertyTitle(property.title)}</h2>
             <p>{text(data.address, "Direccion por completar")}{data.comuna ? `, ${text(data.comuna)}` : ""}{data.region ? `, ${text(data.region)}` : ""}</p>
           </div>
           <button type="button" className="property-detail-close" onClick={onClose} aria-label="Cerrar ficha">x</button>
@@ -853,13 +832,13 @@ export function PropertyDetailModal({
         <div className="property-detail-layout">
           <section className="property-detail-media">
             <div className="property-detail-primary-media">
-              {selectedPhoto ? <img src={selectedPhoto} alt={property.title} /> : <span>{initials(property.title)}</span>}
+              {selectedPhoto ? <img src={selectedPhoto} alt={propertyTitle(property.title)} /> : <span>{initials(propertyTitle(property.title))}</span>}
               <b>{money(data.price)}</b>
             </div>
             {photos.length > 1 ? (
               <div className="property-detail-thumbnails">
                 {photos.map((photo, index) => <div className="property-thumbnail-wrap" key={photo}>
-                  <button type="button" className={index === activePhoto ? "active" : ""} onClick={() => setActivePhoto(index)}><img src={photo} alt={`${property.title} foto ${index + 1}`} /></button>
+                  <button type="button" className={index === activePhoto ? "active" : ""} onClick={() => setActivePhoto(index)}><img src={photo} alt={`${propertyTitle(property.title)} foto ${index + 1}`} /></button>
                   {onRemovePhoto ? <button type="button" className="property-thumbnail-remove" onClick={() => onRemovePhoto(property, photo)}>Quitar</button> : null}
                 </div>)}
               </div>
@@ -974,7 +953,11 @@ export function RealtyLoadsPageContent() {
 
   async function importProperties() {
     for (const row of importRows) {
-      const title = text(row["Nombre"] || row["Titulo"] || row["Propiedad"], "Propiedad importada");
+      const title = csvValue(row, "Nombre", "Título", "Titulo", "Propiedad", "Nombre de propiedad") || "Propiedad importada";
+      const address = csvValue(row, "Dirección", "Direccion", "Dirección de la propiedad", "Direccion de la propiedad");
+      const commune = csvValue(row, "Comuna", "Comuna de la propiedad");
+      const photoUrl = csvValue(row, "Foto principal", "Foto", "Imagen", "Imagen principal", "URL foto");
+      const gallery = stringList(csvValue(row, "Galería", "Galeria", "Fotos", "Imágenes", "Imagenes", "URL galería", "URL galeria"));
       await createIndustryRecord({
         recordType: "property_import",
         title: `Importacion ${title}`,
@@ -986,16 +969,29 @@ export function RealtyLoadsPageContent() {
         title,
         status: "ACTIVE",
         data: {
-          propertyType: text(row["Tipo"], "departamento"),
-          operation: text(row["Operacion"], "venta"),
-          price: numberValue(row["Precio"]),
-          address: text(row["Direccion"] || row["Comuna"]),
-          bedrooms: numberValue(row["Piezas"] || row["Dormitorios"]),
-          bathrooms: numberValue(row["Banos"]),
-          parking: numberValue(row["Estacionamientos"]),
-          meters: numberValue(row["M2"]),
-          material: text(row["Material"]),
-          observations: text(row["Observaciones"]),
+          propertyType: csvValue(row, "Tipo", "Tipo de propiedad") || "Departamento",
+          operation: propertyOperation(csvValue(row, "Operación", "Operacion", "Tipo operación", "Tipo operacion") || "Venta"),
+          price: numberValue(csvValue(row, "Precio", "Precio CLP", "Valor")),
+          address: address || commune,
+          comuna: commune,
+          region: csvValue(row, "Región", "Region"),
+          bedrooms: numberValue(csvValue(row, "Piezas", "Dormitorios", "Habitaciones")),
+          bathrooms: numberValue(csvValue(row, "Baños", "Banos")),
+          parking: numberValue(csvValue(row, "Estacionamientos", "Estacionamiento")),
+          meters: numberValue(csvValue(row, "M2", "m2", "Superficie", "Metros cuadrados")),
+          builtM2: numberValue(csvValue(row, "M2", "m2", "Superficie", "Metros cuadrados")),
+          landM2: numberValue(csvValue(row, "Terreno m2", "Terreno", "M2 terreno")),
+          material: csvValue(row, "Material", "Construcción", "Construccion"),
+          yearBuilt: numberValue(csvValue(row, "Año construcción", "Ano construccion", "Año", "Ano")),
+          orientation: csvValue(row, "Orientación", "Orientacion"),
+          commonExpenses: numberValue(csvValue(row, "Gastos comunes", "Gastos Comunes")),
+          photoUrl,
+          gallery: Array.from(new Set([photoUrl, ...gallery].filter(Boolean))),
+          videoUrl: csvValue(row, "Video", "URL video", "Recorrido virtual"),
+          ownerName: csvValue(row, "Propietario", "Nombre propietario", "Dueño", "Dueno"),
+          ownerPhone: csvValue(row, "Teléfono propietario", "Telefono propietario", "Teléfono", "Telefono"),
+          ownerEmail: csvValue(row, "Correo propietario", "Email propietario", "Correo"),
+          observations: csvValue(row, "Observaciones", "Descripción", "Descripcion"),
           source: "excel_import",
           stage: "LEAD"
         }
@@ -1025,7 +1021,7 @@ export function RealtyLoadsPageContent() {
   }
 
   function downloadTemplate() {
-    const content = "Nombre,Tipo,Operacion,Precio,Direccion,Comuna,Piezas,Banos,Estacionamientos,M2,Material,Observaciones\nDepartamento ejemplo,Departamento,Venta,148000000,Av. Ejemplo 123,Nunoa,2,2,1,74,Hormigon,Ficha de ejemplo";
+    const content = "Nombre,Tipo de propiedad,Operación,Precio CLP,Dirección,Comuna,Región,Dormitorios,Baños,Estacionamientos,Superficie,Material,Foto principal,Propietario,Teléfono propietario,Correo propietario,Observaciones\nDepartamento ejemplo,Departamento,Venta,148000000,Av. Ejemplo 123,Ñuñoa,Metropolitana,2,2,1,74,Hormigón,https://ejemplo.cl/foto.jpg,María Pérez,+56912345678,maria@ejemplo.cl,Ficha de ejemplo";
     const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -1203,7 +1199,7 @@ export function RealtyPropertiesPageContent() {
         <PropertyPortalCards properties={visibleProperties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
         <div className="realty-ws-table realty-inventory-table">
           <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Operación</span><span>Precio</span><span>Estado</span></div>
-          {visibleProperties.slice(0, 12).map((property) => <button type="button" className="realty-ws-row" key={`${property.id}-row`} onClick={() => setSelectedProperty(property)}><strong>{property.title}</strong><span>{text(asData(property).operation, "Disponible")}</span><span>{money(asData(property).price)}</span><b>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Lead"}</b></button>)}
+          {visibleProperties.slice(0, 12).map((property) => <button type="button" className="realty-ws-row" key={`${property.id}-row`} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{propertyOperation(asData(property).operation)}</span><span>{money(asData(property).price)}</span><b>{propertyStageLabel(asData(property).stage)}</b></button>)}
         </div>
       </section>
       <RealtyPredictivePanel data={data} />
@@ -1291,7 +1287,7 @@ export function RealtyActivityPageContent() {
             <input value={visitTitle} onChange={(event) => setVisitTitle(event.target.value)} placeholder="Ej: Visita con comprador interesado" />
             <select value={visitPropertyId} onChange={(event) => setVisitPropertyId(event.target.value)}>
               <option value="">Selecciona una propiedad</option>
-              {data.properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}
+              {data.properties.map((property) => <option key={property.id} value={property.id}>{propertyTitle(property.title)}</option>)}
             </select>
             <input type="datetime-local" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} aria-label="Fecha y hora de visita" />
             <button type="submit" className="primary-btn">Agendar visita</button>
@@ -1299,7 +1295,7 @@ export function RealtyActivityPageContent() {
           <div className="realty-activity-list">
             {data.visits.length ? data.visits.slice(0, 8).map((visit) => {
               const visitData = asData(visit);
-              return <article key={visit.id}><b>Visita</b><div><strong>{visit.title}</strong><span>{text(visitData.propertyTitle, "Propiedad sin identificar")}</span><small>{text(visitData.scheduledAt, "Fecha por confirmar")} {visitData.address ? `· ${text(visitData.address)}` : ""}</small></div></article>;
+              return <article key={visit.id}><b>Visita</b><div><strong>{propertyTitle(visit.title)}</strong><span>{propertyTitle(text(visitData.propertyTitle, "Propiedad sin identificar"))}</span><small>{text(visitData.scheduledAt, "Fecha por confirmar")} {visitData.address ? `· ${text(visitData.address)}` : ""}</small></div></article>;
             }) : <p className="empty-state">No hay visitas programadas. Crea la primera desde esta misma vista.</p>}
           </div>
         </article>
@@ -1372,9 +1368,9 @@ export function BrokerPortalPageContent() {
       {error ? <div className="sales-queue-error">{error}</div> : null}
       <section className="realty-ws-portal-layout">
         <article className="realty-ws-card realty-portal-featured">
-          <div className="realty-ws-card-head"><div><span>Ficha seleccionada</span><h2>{featuredProperty?.title || "Selecciona una propiedad"}</h2><p>{featuredProperty ? `${text(featuredData.address, "Dirección por confirmar")} · ${money(featuredData.price)}` : "Tu cartera publicada aparecerá aquí."}</p></div></div>
+          <div className="realty-ws-card-head"><div><span>Ficha seleccionada</span><h2>{featuredProperty ? propertyTitle(featuredProperty.title) : "Selecciona una propiedad"}</h2><p>{featuredProperty ? `${text(featuredData.address, "Dirección por confirmar")} · ${money(featuredData.price)}` : "Tu cartera publicada aparecerá aquí."}</p></div></div>
           {featuredProperty ? <>
-            <div className="realty-portal-preview"><div className="realty-portal-preview-media">PORTAL<br />CORREDOR</div><div><span>{text(featuredData.operation, "Disponible")}</span><strong>{featuredProperty.title}</strong><p>{text(featuredData.address, "Dirección por confirmar")}</p><b>{money(featuredData.price)}</b></div></div>
+            <div className="realty-portal-preview"><div className="realty-portal-preview-media">{propertyPhotos(featuredData)[0] ? <img src={propertyPhotos(featuredData)[0]} alt={propertyTitle(featuredProperty.title)} /> : <span>Imagen<br />pendiente</span>}</div><div><span>{propertyOperation(featuredData.operation)}</span><strong>{propertyTitle(featuredProperty.title)}</strong><p>{text(featuredData.address, "Dirección por confirmar")}</p><b>{money(featuredData.price)}</b></div></div>
             <div className="realty-portal-controls"><button type="button" className="primary-btn" onClick={() => createFollowup(featuredProperty)}>Crear seguimiento</button><button type="button" className="secondary-btn" onClick={() => setSelectedProperty(featuredProperty)}>Abrir ficha completa</button></div>
           </> : <p className="empty-state">Aún no hay propiedades asignadas a este portal.</p>}
         </article>
@@ -1393,7 +1389,7 @@ export function BrokerPortalPageContent() {
       </section>
       <section className="realty-ws-card realty-portal-table">
         <div className="realty-ws-card-head"><div><span>Cartera asignada</span><h2>{visibleProperties.length} propiedades disponibles</h2><p>Selecciona una fila para trabajar la ficha en el panel superior.</p></div></div>
-        <div className="realty-ws-table"><div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Operación</span><span>Corredor</span><span>Estado</span></div>{visibleProperties.map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{property.title}</strong><span>{text(asData(property).operation, "Disponible")}</span><span>{getBrokerName(property, data.brokers)}</span><b>{text(asData(property).stage, "LEAD")}</b></button>)}{!visibleProperties.length ? <p className="empty-state">No hay propiedades para mostrar todavía.</p> : null}</div>
+        <div className="realty-ws-table"><div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Operación</span><span>Corredor</span><span>Estado</span></div>{visibleProperties.map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{propertyOperation(asData(property).operation)}</span><span>{getBrokerName(property, data.brokers)}</span><b>{propertyStageLabel(asData(property).stage)}</b></button>)}{!visibleProperties.length ? <p className="empty-state">No hay propiedades para mostrar todavía.</p> : null}</div>
       </section>
       {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} /> : null}
     </>
@@ -1513,7 +1509,7 @@ export function BrokersPageContent() {
           <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Etapa</span><span>Corredor</span><span>Acción</span></div>
           {data.properties.filter((property) => !text(asData(property).assignedBrokerId || property.assignedToId)).map((property) => (
             <div className="realty-ws-row" key={property.id}>
-              <strong>{property.title}</strong>
+              <strong>{propertyTitle(property.title)}</strong>
               <span>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Lead"}</span>
               <span>{getBrokerName(property, data.brokers)}</span>
               <select value={text(asData(property).assignedBrokerId || property.assignedToId)} onChange={(event) => assignProperty(property, event.target.value)}>
@@ -1531,6 +1527,53 @@ export function BrokersPageContent() {
         <button type="button" className="primary-btn" onClick={autoAssignUnassigned}>Aplicar reparto automático</button>
       </aside>
       </section>
+    </>
+  );
+}
+
+const brokerTrainingCourses = [
+  { id: "captacion", title: "Captación y ficha de propiedad", duration: "35 min", description: "Cómo levantar datos, fotos y antecedentes completos antes de publicar." },
+  { id: "visitas", title: "Visitas y atención de compradores", duration: "25 min", description: "Preparación de visitas, registro de interés y seguimiento oportuno." },
+  { id: "negociacion", title: "Negociación y cierre", duration: "40 min", description: "Oferta, contraoferta, documentación y trazabilidad de cada negociación." }
+];
+
+/** Portal práctico para incorporar y acompañar a nuevos corredores. */
+export function BrokerTrainingPageContent() {
+  const { data, error, reload } = useRealtyWorkspace();
+  const [message, setMessage] = useState("");
+  const completed = new Set(data.training.filter((item) => item.status === "COMPLETED").map((item) => text(asData(item).courseId)));
+
+  async function completeCourse(course: typeof brokerTrainingCourses[number]) {
+    try {
+      const existing = data.training.find((item) => text(asData(item).courseId) === course.id);
+      if (existing) {
+        await updateIndustryRecord(existing.id, { status: "COMPLETED", data: { ...asData(existing), completedAt: new Date().toISOString() } });
+      } else {
+        await createIndustryRecord({
+          recordType: "property_training",
+          title: course.title,
+          status: "COMPLETED",
+          data: { courseId: course.id, duration: course.duration, completedAt: new Date().toISOString(), audience: "corredores" }
+        });
+      }
+      setMessage(`Capacitación “${course.title}” marcada como completada.`);
+      await reload();
+    } catch (trainingError) {
+      setMessage(trainingError instanceof Error ? trainingError.message : "No se pudo guardar el avance de capacitación.");
+    }
+  }
+
+  const progress = brokerTrainingCourses.length ? Math.round((completed.size / brokerTrainingCourses.length) * 100) : 0;
+  return (
+    <>
+      <RealtyHeader eyebrow="Academia inmobiliaria" title="Capacitación de futuros corredores" description="Ruta guiada para que cada corredor aprenda el proceso comercial y deje evidencia de su avance." />
+      {error ? <div className="sales-queue-error">{error}</div> : null}
+      {message ? <div className="module-toast">{message}</div> : null}
+      <section className="realty-ws-two-columns realty-training-summary">
+        <article className="realty-ws-card"><div className="realty-ws-card-head"><div><span>Progreso del equipo</span><h2>{progress}% completado</h2><p>{completed.size} de {brokerTrainingCourses.length} módulos de formación aprobados.</p></div></div><div className="realty-training-progress"><i style={{ width: `${progress}%` }} /></div><small>El avance queda registrado en la cuenta para seguimiento del administrador.</small></article>
+        <article className="realty-ws-card"><div className="realty-ws-card-head"><div><span>Antes de asignar cartera</span><h2>Lista de preparación</h2><p>Un corredor debe conocer la ficha, la visita y el cierre antes de recibir propiedades.</p></div></div><ul className="realty-training-checklist"><li>Completa sus datos y canal de contacto.</li><li>Revisa la cartera y reglas de publicación.</li><li>Aprueba las tres cápsulas de formación.</li></ul></article>
+      </section>
+      <section className="realty-ws-card realty-training-catalog"><div className="realty-ws-card-head"><div><span>Ruta de aprendizaje</span><h2>Capacitación disponible</h2><p>Material breve, aplicado a las pantallas que usará el corredor.</p></div></div><div className="realty-training-grid">{brokerTrainingCourses.map((course, index) => <article key={course.id}><span>Módulo {index + 1}</span><h3>{course.title}</h3><p>{course.description}</p><small>{course.duration}</small><button type="button" className={completed.has(course.id) ? "secondary-btn" : "primary-btn"} onClick={() => completeCourse(course)}>{completed.has(course.id) ? "Completado" : "Marcar como completado"}</button></article>)}</div></section>
     </>
   );
 }
@@ -1556,7 +1599,7 @@ export function RealtyPipelineBoard({
               <div className="realty-stage-list">
                 {items.length ? items.map((property) => (
                   <article className="realty-stage-card" key={property.id}>
-                    <strong>{property.title}</strong>
+                    <strong>{propertyTitle(property.title)}</strong>
                     <small>{text(asData(property).address, "Sin direccion")}</small>
                     <span>{money(asData(property).price)}</span>
                     <small>{getBrokerName(property, brokers)}</small>
