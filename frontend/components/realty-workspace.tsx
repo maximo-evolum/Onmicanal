@@ -473,7 +473,7 @@ export function RealtyShell({
           isOpen={sidebarOpen}
           onToggle={() => setSidebarOpen((value) => !value)}
         />
-        <main className="vertical-main realty-page">
+        <main className="vertical-main realty-page realty-workspace">
           <RealtyModuleNav active={active} />
           {children}
         </main>
@@ -513,52 +513,58 @@ export function RealtyDashboardPageContent() {
     <>
       <RealtyHeader
         eyebrow="Centro de control inmobiliario"
-        title="Tu operación inmobiliaria, en un solo lugar"
-        description="Controla inventario, captación, corredores, visitas, clientes compradores y oportunidades de cierre sin salir de la vertical."
+        title="Portafolio, equipo y oportunidades en movimiento"
+        description="Controla inventario, captación, corredores, visitas, clientes compradores y oportunidades de cierre desde un solo workspace."
         actions={<Link className="primary-btn" href="/realty-loads">Nueva propiedad</Link>}
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
       {message ? <div className="module-toast">{message}</div> : null}
-      <RealtyKpis data={data} />
-
-      <section className="realty-command-grid">
-        <article className="vertical-card realty-command-queue">
-          <div className="vertical-card-head">
-            <div><span>Acciones que requieren atención</span><h2>Cola operativa</h2></div>
-            <Link href="/realty-activity">Ver actividad</Link>
-          </div>
-          <div className="realty-command-list">
-            <Link href="/brokers"><strong>{unassigned.length} propiedades sin corredor</strong><small>Asigna un responsable para iniciar seguimiento comercial.</small></Link>
-            <Link href="/realty-activity"><strong>{upcomingVisits.length} visitas abiertas</strong><small>Revisa agenda, confirmación y resultado de cada visita.</small></Link>
-            <Link href="/customers"><strong>Compradores y matching</strong><small>Recomienda propiedades según presupuesto, comuna y tipo buscado.</small></Link>
-          </div>
+      <section className="realty-ws-hero">
+        <article className="realty-ws-intro">
+          <span>Workspace operativo</span>
+          <h2>Tu cartera, tu equipo y las siguientes acciones en un solo lugar.</h2>
+          <p>Visualiza qué propiedad mover, qué cliente atender y qué corredor necesita apoyo sin salir de tu contexto operativo.</p>
+          <div className="realty-ws-actions"><Link className="primary-btn" href="/realty-loads">Nueva propiedad</Link><Link className="secondary-btn" href="/realty-activity">Ver agenda de visitas</Link></div>
         </article>
-        <article className="vertical-card realty-command-performance">
-          <div className="vertical-card-head"><div><span>Rendimiento comercial</span><h2>Inventario y conversión</h2></div><Link href="/properties">Ver propiedades</Link></div>
-          <div className="realty-progress-stack">
-            <div><span>Fichas con precio</span><b>{data.properties.filter((property) => numberValue(asData(property).price)).length}/{data.properties.length}</b><i style={{ width: `${data.properties.length ? Math.round((data.properties.filter((property) => numberValue(asData(property).price)).length / data.properties.length) * 100) : 0}%` }} /></div>
-            <div><span>Asignación comercial</span><b>{data.properties.filter((property) => text(asData(property).assignedBrokerId || property.assignedToId)).length}/{data.properties.length}</b><i style={{ width: `${data.properties.length ? Math.round((data.properties.filter((property) => text(asData(property).assignedBrokerId || property.assignedToId)).length / data.properties.length) * 100) : 0}%` }} /></div>
-            <div><span>Visitas agendadas</span><b>{upcomingVisits.length}</b><i style={{ width: `${Math.min(upcomingVisits.length * 20, 100)}%` }} /></div>
-          </div>
-        </article>
+        <aside className="realty-ws-kpis">
+          <article><span>Propiedades activas</span><strong>{data.properties.filter((item) => item.status !== "ARCHIVED").length}</strong><small>{unassigned.length} sin asignar</small></article>
+          <article><span>Valor de cartera</span><strong>{money(data.properties.reduce((sum, item) => sum + numberValue(asData(item).price), 0))}</strong><small>inventario cargado</small></article>
+          <article><span>Visitas esta semana</span><strong>{upcomingVisits.length}</strong><small>requieren seguimiento</small></article>
+          <article><span>Oportunidades IA</span><strong>{unassigned.length + data.alerts.length}</strong><small>alertas y asignaciones</small></article>
+        </aside>
       </section>
 
-      <section className="realty-dashboard-section">
-        <div className="realty-dashboard-heading">
-          <div><span>Inventario disponible</span><h2>Propiedades activas</h2><p>Consulta las fichas, cambia su etapa y abre el detalle completo desde aquí.</p></div>
-          <Link className="secondary-btn" href="/properties">Gestionar inventario</Link>
-        </div>
+      <section className="realty-ws-card">
+        <div className="realty-ws-card-head"><div><span>Propiedades activas</span><h2>Portafolio en movimiento</h2><p>Vista visual para reconocer rápidamente cada propiedad y entrar a su ficha.</p></div><Link href="/properties">Ver cartera completa</Link></div>
         {loading ? <p className="empty-state">Cargando propiedades...</p> : <PropertyPortalCards properties={activeProperties} brokers={data.brokers} onStageChange={updateStage} onOpen={setSelectedProperty} />}
       </section>
 
-      <section className="realty-dashboard-shortcuts">
-        <Link href="/realty-loads"><span>Carga y captación</span><strong>Registrar propiedad o importar CSV</strong></Link>
-        <Link href="/brokers"><span>Equipo comercial</span><strong>Gestionar corredores y reparto</strong></Link>
-        <Link href="/customers"><span>Compradores</span><strong>Crear perfil y encontrar coincidencias</strong></Link>
-        <Link href="/broker-portal"><span>Portal corredor</span><strong>Revisar cartera y seguimientos</strong></Link>
+      <section className="realty-ws-two-columns">
+        <article className="realty-ws-card">
+          <div className="realty-ws-card-head"><div><span>Cartera activa</span><h2>Propiedades que requieren atención</h2><p>Prioriza según etapa, visitas, interés y tiempo sin movimiento.</p></div><Link href="/properties">Ver todas</Link></div>
+          <div className="realty-ws-table">
+            <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Etapa</span><span>Corredor</span><span>Estado</span></div>
+            {data.properties.slice(0, 5).map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{property.title}</strong><span>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Lead"}</span><span>{getBrokerName(property, data.brokers)}</span><b>{numberValue(asData(property).price) ? "Ficha completa" : "Completar ficha"}</b></button>)}
+            {!data.properties.length ? <p className="empty-state">Aún no hay propiedades para revisar.</p> : null}
+          </div>
+          <footer className="realty-ws-statbar"><span><b>{unassigned.length}</b> registros pendientes</span><span><b>{data.visits.length}</b> visitas registradas</span><span><b>{data.properties.length ? Math.round((data.properties.filter((item) => numberValue(asData(item).price)).length / data.properties.length) * 100) : 0}%</b> fichas con precio</span></footer>
+        </article>
+        <aside className="realty-ws-card realty-ws-ia-card">
+          <div className="realty-ws-card-head"><div><span>Recomendado por IA</span><h2>Prioridades comerciales</h2></div><Link href="/customers">Abrir matching</Link></div>
+          <div className="realty-ws-suggestions">
+            <Link href="/brokers"><strong>{unassigned.length ? `${unassigned.length} propiedades sin corredor` : "Cartera asignada"}</strong><p>{unassigned.length ? "Distribuye las propiedades disponibles para no perder oportunidades comerciales." : "Todas las propiedades tienen un responsable comercial."}</p><small>Asignación de cartera →</small></Link>
+            <Link href="/customers"><strong>Compradores compatibles</strong><p>Usa presupuesto, comuna y tipo de propiedad para mostrar opciones relevantes.</p><small>Ver coincidencias →</small></Link>
+            <Link href="/realty-activity"><strong>{upcomingVisits.length} visitas en seguimiento</strong><p>Confirma agenda y registra el resultado de cada contacto comercial.</p><small>Revisar actividad →</small></Link>
+          </div>
+        </aside>
       </section>
 
-      <RealtyPredictivePanel data={data} />
+      <section className="realty-ws-shortcuts">
+        <Link href="/realty-loads"><span>Carga y captación</span><strong>Registrar propiedad o importar archivo</strong></Link>
+        <Link href="/brokers"><span>Equipo comercial</span><strong>Gestionar corredores y reparto</strong></Link>
+        <Link href="/customers"><span>Clientes compradores</span><strong>Crear perfil y encontrar coincidencias</strong></Link>
+        <Link href="/broker-portal"><span>Portal corredor</span><strong>Revisar cartera y seguimientos</strong></Link>
+      </section>
       {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} /> : null}
     </>
   );
@@ -1009,6 +1015,19 @@ export function RealtyPropertiesPageContent() {
   const { data, error, reload } = useRealtyWorkspace();
   const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
   const [message, setMessage] = useState("");
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"ALL" | "VENTA" | "ARRIENDO" | "UNASSIGNED">("ALL");
+
+  const visibleProperties = data.properties.filter((property) => {
+    const propertyData = asData(property);
+    const searchable = `${property.title} ${text(propertyData.address)} ${text(propertyData.comuna)} ${text(propertyData.operation)}`.toLowerCase();
+    const matchesQuery = !query.trim() || searchable.includes(query.trim().toLowerCase());
+    const operation = text(propertyData.operation).toUpperCase();
+    const matchesFilter = filter === "ALL"
+      || (filter === "UNASSIGNED" && !text(propertyData.assignedBrokerId || property.assignedToId))
+      || operation === filter;
+    return matchesQuery && matchesFilter;
+  });
 
   async function updateStage(property: IndustryRecord, stage: string) {
     await updateIndustryRecord(property.id, { data: { ...asData(property), stage } });
@@ -1058,18 +1077,23 @@ export function RealtyPropertiesPageContent() {
     <>
       <RealtyHeader
         eyebrow="Portal inmobiliario"
-        title="Propiedades cargadas"
-        description="Vista tipo portal para revisar inventario, precios, fotos, responsables y estado comercial."
+        title="Propiedades activas"
+        description="Consulta, filtra y entra a la ficha completa sin perder el contexto de la cartera."
+        actions={<Link className="primary-btn" href="/realty-loads">Nueva propiedad</Link>}
       />
-      <RealtyKpis data={data} />
       {error ? <div className="sales-queue-error">{error}</div> : null}
       {message ? <div className="module-toast">{message}</div> : null}
-      <RealtyPredictivePanel data={data} />
-      <RealtyIntelligencePanel />
-      <section className="vertical-card">
-        <div className="vertical-card-head"><div><span>Inventario</span><h2>Portal de propiedades</h2></div></div>
-        <PropertyPortalCards properties={data.properties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
+      <section className="realty-ws-card realty-inventory-panel">
+        <div className="realty-ws-card-head"><div><span>Inventario operativo</span><h2>Propiedades activas</h2><p>Revisa inventario, responsable, etapa comercial y ficha detallada.</p></div><Link className="secondary-btn" href="/realty-loads">Importar CSV</Link></div>
+        <div className="realty-inventory-filters">
+          <div className="realty-filter-chips">
+            {(["ALL", "VENTA", "ARRIENDO", "UNASSIGNED"] as const).map((value) => <button key={value} type="button" className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "ALL" ? `Todas · ${data.properties.length}` : value === "UNASSIGNED" ? `Sin corredor · ${data.properties.filter((property) => !text(asData(property).assignedBrokerId || property.assignedToId)).length}` : `${value[0]}${value.slice(1).toLowerCase()}`}</button>)}
+          </div>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por propiedad, comuna u operación" aria-label="Buscar propiedad" />
+        </div>
+        <PropertyPortalCards properties={visibleProperties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
       </section>
+      <RealtyPredictivePanel data={data} />
       {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} onCreateCampaign={createPropertyCampaign} onRemovePhoto={removePropertyPhoto} /> : null}
     </>
   );

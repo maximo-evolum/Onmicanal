@@ -441,7 +441,7 @@ export default function CustomersPage() {
     <ModuleGate moduleKey="realty_clients">
       <div className={`executive-shell vertical-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active="Clientes" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
-        <main className="vertical-page industry-service-page">
+        <main className={`vertical-page industry-service-page ${mode === "REAL_ESTATE" ? "realty-page realty-workspace" : ""}`}>
           <header className="vertical-hero service-hero">
             <div>
               <span>{config.eyebrow}</span>
