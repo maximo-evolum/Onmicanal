@@ -1,11 +1,5 @@
-"use client";
-
-import { BrokerPortalPageContent, RealtyShell } from "@/components/realty-workspace";
+import { redirect } from "next/navigation";
 
 export default function BrokerPortalPage() {
-  return (
-    <RealtyShell active="Portal corredor" moduleKey="broker_portal">
-      <BrokerPortalPageContent />
-    </RealtyShell>
-  );
+  redirect("/realty?view=portal");
 }

@@ -1,11 +1,5 @@
-"use client";
-
-import { RealtyLoadsPageContent, RealtyShell } from "@/components/realty-workspace";
+import { redirect } from "next/navigation";
 
 export default function RealtyLoadsPage() {
-  return (
-    <RealtyShell active="Cargas inmobiliarias" moduleKey="realty_loads">
-      <RealtyLoadsPageContent />
-    </RealtyShell>
-  );
+  redirect("/realty?view=operations");
 }

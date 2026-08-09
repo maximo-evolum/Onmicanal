@@ -1,7 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { RealtyDashboardPageContent, RealtyShell } from "@/components/realty-workspace";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  BrokerPortalPageContent,
+  BrokersPageContent,
+  RealtyActivityPageContent,
+  RealtyBuyersPageContent,
+  RealtyDashboardPageContent,
+  RealtyLoadsPageContent,
+  RealtyPropertiesPageContent,
+  RealtyShell
+} from "@/components/realty-workspace";
 import { getMyModules } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
@@ -15,9 +25,24 @@ const realtySections: ReadonlyArray<ModuleAccessKey> = [
   "realty_clients"
 ];
 
+const views = {
+  summary: { label: "Inmobiliaria", module: null, content: RealtyDashboardPageContent },
+  operations: { label: "Operación", module: "realty_loads", content: RealtyLoadsPageContent },
+  properties: { label: "Propiedades", module: "properties", content: RealtyPropertiesPageContent },
+  brokers: { label: "Corredores", module: "brokers", content: BrokersPageContent },
+  activity: { label: "Actividad", module: "realty_activity", content: RealtyActivityPageContent },
+  portal: { label: "Portal corredor", module: "broker_portal", content: BrokerPortalPageContent },
+  buyers: { label: "Clientes inmobiliarios", module: "realty_clients", content: RealtyBuyersPageContent }
+} as const;
+
+type RealtyView = keyof typeof views;
+
 /** Entrada única de Inmobiliaria desde el menú EV. */
-export default function RealtyDashboardPage() {
+function RealtyDashboardContent() {
+  const searchParams = useSearchParams();
   const [accessModule, setAccessModule] = useState<ModuleAccessKey | null>(null);
+  const [enabledModules, setEnabledModules] = useState<string[]>([]);
+  const [role, setRole] = useState<string | null>(null);
   const [status, setStatus] = useState("Validando tu acceso inmobiliario...");
 
   useEffect(() => {
@@ -32,6 +57,8 @@ export default function RealtyDashboardPage() {
         const allowed = realtySections.find((moduleKey) => moduleAllowed(moduleKey, result.modules || [], role, session?.jobTitle, "REAL_ESTATE"));
         if (allowed) {
           setAccessModule(allowed);
+          setEnabledModules(result.modules || []);
+          setRole(role);
           return;
         }
         setStatus("Esta cuenta no tiene capacidades inmobiliarias habilitadas.");
@@ -46,9 +73,20 @@ export default function RealtyDashboardPage() {
     return <main className="realty-access-status" aria-live="polite"><div><span>Inmobiliaria</span><h1>{status}</h1><p>El acceso se valida una vez al entrar a la vertical.</p></div></main>;
   }
 
+  const requestedView = String(searchParams.get("view") || "summary") as RealtyView;
+  const requested = views[requestedView] || views.summary;
+  const session = getStoredSession();
+  const mayOpenRequested = !requested.module || moduleAllowed(requested.module, enabledModules, role, session?.jobTitle, "REAL_ESTATE");
+  const current = mayOpenRequested ? requested : views.summary;
+  const CurrentView = current.content;
+
   return (
-    <RealtyShell active="Inmobiliaria" moduleKey={accessModule}>
-      <RealtyDashboardPageContent />
+    <RealtyShell active={current.label} moduleKey={accessModule}>
+      <CurrentView />
     </RealtyShell>
   );
+}
+
+export default function RealtyDashboardPage() {
+  return <Suspense fallback={<main className="realty-access-status" aria-live="polite"><div><span>Inmobiliaria</span><h1>Abriendo workspace inmobiliario...</h1><p>Preparando tu cartera y módulos disponibles.</p></div></main>}><RealtyDashboardContent /></Suspense>;
 }
