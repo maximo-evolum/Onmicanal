@@ -110,6 +110,7 @@ export function RealtyModuleNav({ active }: { active: string }) {
 
   return (
     <nav className="realty-module-nav" aria-label="Secciones de Inmobiliaria">
+      {visibleItems.length ? <Link href="/realty" className={active === "Inmobiliaria" ? "active" : ""}>Resumen</Link> : null}
       {visibleItems.map((item) => (
         <Link key={item.href} href={item.href} className={item.label === active ? "active" : ""}>
           {item.label}
@@ -478,6 +479,88 @@ export function RealtyShell({
         </main>
       </div>
     </ModuleGate>
+  );
+}
+
+/**
+ * Centro de control de la vertical. No duplica módulos del menú EV: desde
+ * aquí el usuario ve el estado completo y entra al área puntual que necesita.
+ */
+export function RealtyDashboardPageContent() {
+  const { data, error, loading, reload } = useRealtyWorkspace();
+  const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
+  const [message, setMessage] = useState("");
+
+  async function updateStage(property: IndustryRecord, stage: string) {
+    try {
+      await updateIndustryRecord(property.id, { data: { ...asData(property), stage } });
+      setMessage(`Etapa actualizada: ${property.title}`);
+      await reload();
+    } catch (updateError) {
+      setMessage(updateError instanceof Error ? updateError.message : "No se pudo actualizar la etapa.");
+    }
+  }
+
+  const activeProperties = data.properties
+    .filter((item) => item.status !== "ARCHIVED")
+    .slice(0, 6);
+  const upcomingVisits = data.visits
+    .filter((item) => item.status !== "DONE")
+    .slice(0, 4);
+  const unassigned = data.properties.filter((item) => !text(asData(item).assignedBrokerId || item.assignedToId));
+
+  return (
+    <>
+      <RealtyHeader
+        eyebrow="Centro de control inmobiliario"
+        title="Tu operación inmobiliaria, en un solo lugar"
+        description="Controla inventario, captación, corredores, visitas, clientes compradores y oportunidades de cierre sin salir de la vertical."
+        actions={<Link className="primary-btn" href="/realty-loads">Nueva propiedad</Link>}
+      />
+      {error ? <div className="sales-queue-error">{error}</div> : null}
+      {message ? <div className="module-toast">{message}</div> : null}
+      <RealtyKpis data={data} />
+
+      <section className="realty-command-grid">
+        <article className="vertical-card realty-command-queue">
+          <div className="vertical-card-head">
+            <div><span>Acciones que requieren atención</span><h2>Cola operativa</h2></div>
+            <Link href="/realty-activity">Ver actividad</Link>
+          </div>
+          <div className="realty-command-list">
+            <Link href="/brokers"><strong>{unassigned.length} propiedades sin corredor</strong><small>Asigna un responsable para iniciar seguimiento comercial.</small></Link>
+            <Link href="/realty-activity"><strong>{upcomingVisits.length} visitas abiertas</strong><small>Revisa agenda, confirmación y resultado de cada visita.</small></Link>
+            <Link href="/customers"><strong>Compradores y matching</strong><small>Recomienda propiedades según presupuesto, comuna y tipo buscado.</small></Link>
+          </div>
+        </article>
+        <article className="vertical-card realty-command-performance">
+          <div className="vertical-card-head"><div><span>Rendimiento comercial</span><h2>Inventario y conversión</h2></div><Link href="/properties">Ver propiedades</Link></div>
+          <div className="realty-progress-stack">
+            <div><span>Fichas con precio</span><b>{data.properties.filter((property) => numberValue(asData(property).price)).length}/{data.properties.length}</b><i style={{ width: `${data.properties.length ? Math.round((data.properties.filter((property) => numberValue(asData(property).price)).length / data.properties.length) * 100) : 0}%` }} /></div>
+            <div><span>Asignación comercial</span><b>{data.properties.filter((property) => text(asData(property).assignedBrokerId || property.assignedToId)).length}/{data.properties.length}</b><i style={{ width: `${data.properties.length ? Math.round((data.properties.filter((property) => text(asData(property).assignedBrokerId || property.assignedToId)).length / data.properties.length) * 100) : 0}%` }} /></div>
+            <div><span>Visitas agendadas</span><b>{upcomingVisits.length}</b><i style={{ width: `${Math.min(upcomingVisits.length * 20, 100)}%` }} /></div>
+          </div>
+        </article>
+      </section>
+
+      <section className="realty-dashboard-section">
+        <div className="realty-dashboard-heading">
+          <div><span>Inventario disponible</span><h2>Propiedades activas</h2><p>Consulta las fichas, cambia su etapa y abre el detalle completo desde aquí.</p></div>
+          <Link className="secondary-btn" href="/properties">Gestionar inventario</Link>
+        </div>
+        {loading ? <p className="empty-state">Cargando propiedades...</p> : <PropertyPortalCards properties={activeProperties} brokers={data.brokers} onStageChange={updateStage} onOpen={setSelectedProperty} />}
+      </section>
+
+      <section className="realty-dashboard-shortcuts">
+        <Link href="/realty-loads"><span>Carga y captación</span><strong>Registrar propiedad o importar CSV</strong></Link>
+        <Link href="/brokers"><span>Equipo comercial</span><strong>Gestionar corredores y reparto</strong></Link>
+        <Link href="/customers"><span>Compradores</span><strong>Crear perfil y encontrar coincidencias</strong></Link>
+        <Link href="/broker-portal"><span>Portal corredor</span><strong>Revisar cartera y seguimientos</strong></Link>
+      </section>
+
+      <RealtyPredictivePanel data={data} />
+      {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} /> : null}
+    </>
   );
 }
 
@@ -993,8 +1076,60 @@ export function RealtyPropertiesPageContent() {
 }
 
 export function RealtyActivityPageContent() {
-  const { data, error } = useRealtyWorkspace();
+  const { data, error, reload } = useRealtyWorkspace();
   const active = data.properties.filter((item) => item.status !== "ARCHIVED");
+  const [visitTitle, setVisitTitle] = useState("");
+  const [visitPropertyId, setVisitPropertyId] = useState("");
+  const [visitDate, setVisitDate] = useState("");
+  const [alertTitle, setAlertTitle] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function createVisit(event: FormEvent) {
+    event.preventDefault();
+    const property = data.properties.find((item) => item.id === visitPropertyId);
+    if (!visitTitle.trim() || !property) {
+      setMessage("Indica la propiedad y el nombre de la visita.");
+      return;
+    }
+    try {
+      await createIndustryRecord({
+        recordType: "visit",
+        title: visitTitle.trim(),
+        status: "SCHEDULED",
+        data: {
+          propertyId: property.id,
+          propertyTitle: property.title,
+          address: text(asData(property).address),
+          scheduledAt: visitDate || null
+        }
+      });
+      setVisitTitle("");
+      setVisitPropertyId("");
+      setVisitDate("");
+      setMessage("Visita agendada y disponible en la actividad comercial.");
+      await reload();
+    } catch (createError) {
+      setMessage(createError instanceof Error ? createError.message : "No se pudo guardar la visita.");
+    }
+  }
+
+  async function createAlert(event: FormEvent) {
+    event.preventDefault();
+    if (!alertTitle.trim()) return;
+    try {
+      await createIndustryRecord({
+        recordType: "realty_alert",
+        title: alertTitle.trim(),
+        status: "OPEN",
+        data: { source: "realty_activity", createdFrom: "alerta manual" }
+      });
+      setAlertTitle("");
+      setMessage("Alerta inmobiliaria creada.");
+      await reload();
+    } catch (createError) {
+      setMessage(createError instanceof Error ? createError.message : "No se pudo crear la alerta.");
+    }
+  }
 
   return (
     <>
@@ -1004,6 +1139,7 @@ export function RealtyActivityPageContent() {
         description="Visitas, propietarios, portal corredor, alertas y propiedades activas en una vista ejecutiva."
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
+      {message ? <div className="module-toast">{message}</div> : null}
       <RealtyIntelligencePanel />
       <section className="vertical-four">
         <article className="vertical-card"><span>Visitas</span><h2>{data.visits.length}</h2><p>Agenda comercial y resultados.</p></article>
@@ -1012,23 +1148,36 @@ export function RealtyActivityPageContent() {
         <article className="vertical-card"><span>Activas</span><h2>{active.length}</h2><p>Propiedades disponibles.</p></article>
       </section>
       <section className="realty-ops-grid">
-        <article className="vertical-card">
+        <form className="vertical-card" onSubmit={createAlert}>
           <span>Alertas</span>
           <h2>Prioridades comerciales</h2>
+          <div className="realty-inline-form">
+            <input value={alertTitle} onChange={(event) => setAlertTitle(event.target.value)} placeholder="Ej: confirmar visita, actualizar precio..." />
+            <button type="submit" className="secondary-btn">Crear alerta</button>
+          </div>
           <div className="tgi-record-list">
             {data.alerts.length ? data.alerts.map((alert) => <p key={alert.id}>{alert.title}</p>) : <p>Sin alertas criticas.</p>}
           </div>
-        </article>
-        <article className="vertical-card">
+        </form>
+        <form className="vertical-card" onSubmit={createVisit}>
           <span>Visitas</span>
           <h2>Agenda y resultado</h2>
+          <div className="realty-inline-form realty-visit-form">
+            <input value={visitTitle} onChange={(event) => setVisitTitle(event.target.value)} placeholder="Nombre o motivo de visita" />
+            <select value={visitPropertyId} onChange={(event) => setVisitPropertyId(event.target.value)}>
+              <option value="">Selecciona una propiedad</option>
+              {data.properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}
+            </select>
+            <input type="datetime-local" value={visitDate} onChange={(event) => setVisitDate(event.target.value)} />
+            <button type="submit" className="primary-btn">Agendar visita</button>
+          </div>
           <div className="tgi-record-list">
             {data.visits.length ? data.visits.map((visit) => {
               const visitData = asData(visit);
               return <p key={visit.id}><strong>{visit.title}</strong><small>{text(visitData.scheduledAt)} - {text(visitData.address)}</small></p>;
             }) : <p>Sin visitas programadas.</p>}
           </div>
-        </article>
+        </form>
       </section>
       <section className="vertical-card">
         <div className="vertical-card-head"><div><span>Activas</span><h2>Propiedades en gestion</h2></div></div>
