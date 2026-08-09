@@ -67,11 +67,19 @@ authRouter.post("/auth/login", basicRateLimit({
       return res.status(400).json({ error: "email y password son requeridos" });
     }
     const result = await loginUser({ email, password });
+    // La respuesta de login es el único punto de validación inicial del
+    // frontend. Entregamos el catálogo efectivo para no forzar una nueva
+    // comprobación visual al abrir cada módulo de la misma sesión.
+    await ensureTenantSubscriptionAndModules({
+      tenantId: result.user.tenantId,
+      planCode: result.tenant.plan || "STARTER"
+    });
+    const modules = await getTenantModules(result.user.tenantId);
     await recordAuditLog({ ...req, user: result.user, tenantId: result.user.tenantId }, "AUTH_LOGIN_SUCCESS", "workspace_user", result.user.id, {
       authMethod: "password",
       client: isMobileClient(req) ? "mobile" : "browser"
     });
-    return sendAuthenticatedSession(req, res, result);
+    return sendAuthenticatedSession(req, res, { ...result, modules });
   } catch {
     res.status(401).json({ error: "Credenciales inválidas" });
   }

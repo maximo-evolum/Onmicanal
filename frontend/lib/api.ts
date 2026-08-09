@@ -89,8 +89,8 @@ export async function getWorkspaceUsers(): Promise<AgentSession[]> {
   return request<AgentSession[]>("/workspace-users");
 }
 
-export async function loginWithEmail(email: string, password?: string): Promise<{ user: AgentSession; tenant?: TenantSession; accessToken?: string }> {
-  return request<{ user: AgentSession; tenant?: TenantSession; accessToken?: string }>("/auth/login", {
+export async function loginWithEmail(email: string, password?: string): Promise<{ user: AgentSession; tenant?: TenantSession; modules?: string[]; accessToken?: string }> {
+  return request<{ user: AgentSession; tenant?: TenantSession; modules?: string[]; accessToken?: string }>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password })
   });

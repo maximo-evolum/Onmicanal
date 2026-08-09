@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getMe, getMyModules } from "./api";
 import { getStoredSession } from "./auth";
+import { getStoredTenantAccess, storeTenantAccess } from "./session-access";
 
 export type ModuleAccessKey =
   | "crm"
@@ -192,12 +193,14 @@ export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], rol
 export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const session = getStoredSession();
   const cacheKey = moduleAccessCacheKey(session);
+  const stored = getStoredTenantAccess(session);
   const cached = cacheKey ? moduleAccessCache.get(cacheKey) : null;
-  const [modules, setModules] = useState<string[] | null>(() => cached?.modules || null);
-  const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(() => cached?.role || session?.role || null);
-  const [industry, setIndustry] = useState<string | null>(() => cached?.industry || null);
-  const [loading, setLoading] = useState(Boolean(moduleKey) && !cached);
-  const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey) && !cached);
+  const resolvedAccess = cached || stored;
+  const [modules, setModules] = useState<string[] | null>(() => resolvedAccess?.modules || null);
+  const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(() => resolvedAccess?.role || session?.role || null);
+  const [industry, setIndustry] = useState<string | null>(() => resolvedAccess?.industry || null);
+  const [loading, setLoading] = useState(Boolean(moduleKey) && !resolvedAccess);
+  const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey) && !resolvedAccess);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -205,16 +208,22 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
     if (!moduleKey) return;
 
     const currentCache = cacheKey ? moduleAccessCache.get(cacheKey) : null;
-    if (currentCache) {
-      setModules(currentCache.modules);
-      setAuthoritativeRole(currentCache.role || session?.role || null);
-      setIndustry(currentCache.industry || null);
+    const persistedAccess = getStoredTenantAccess(session);
+    const currentAccess = currentCache || persistedAccess;
+    if (currentAccess) {
+      setModules(currentAccess.modules);
+      setAuthoritativeRole(currentAccess.role || session?.role || null);
+      setIndustry(currentAccess.industry || null);
       setLoading(false);
       setIdentityLoading(false);
-    } else {
-      setLoading(true);
-      setIdentityLoading(true);
+      if (cacheKey && !currentCache) moduleAccessCache.set(cacheKey, currentAccess);
+      // El acceso ya fue validado al iniciar sesión: no repetir solicitudes ni
+      // volver a mostrar el estado de validación al navegar entre módulos.
+      return () => { active = false; };
     }
+
+    setLoading(true);
+    setIdentityLoading(true);
     getMe()
       .then((data) => {
         if (!active) return;
@@ -225,7 +234,16 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
           setModules(data.modules);
           const nextIndustry = data.tenant?.industry || null;
           setIndustry(nextIndustry);
-          if (cacheKey) moduleAccessCache.set(cacheKey, { modules: data.modules, role: data.user.role || null, industry: nextIndustry });
+          const nextAccess = { modules: data.modules, role: data.user.role || null, industry: nextIndustry };
+          if (cacheKey) moduleAccessCache.set(cacheKey, nextAccess);
+          storeTenantAccess({
+            userId: data.user.id,
+            tenantId: data.user.tenantId || null,
+            role: data.user.role || null,
+            jobTitle: data.user.jobTitle || null,
+            industry: nextIndustry,
+            modules: data.modules
+          });
         }
       })
       .finally(() => { if (active) setIdentityLoading(false); });
@@ -240,6 +258,14 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
           if (cacheKey) {
             const preservedRole = isDeveloperRole(session?.role) ? "SUPER_ADMIN" : (data.role || session?.role || null);
             moduleAccessCache.set(cacheKey, { modules: nextModules, role: preservedRole, industry: nextIndustry });
+            if (session?.id) storeTenantAccess({
+              userId: session.id,
+              tenantId: session.tenantId || null,
+              role: preservedRole,
+              jobTitle: session.jobTitle || null,
+              industry: nextIndustry,
+              modules: nextModules
+            });
           }
           return nextModules;
         });

@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { getMe, getMyModules } from "@/lib/api";
+import { getMe } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import { getVerticalProduct, type VerticalProductCode } from "@/lib/vertical-products";
+import { getStoredTenantAccess, storeTenantAccess } from "@/lib/session-access";
 
 type EvolumSidebarProps = {
   active: string;
@@ -41,7 +42,7 @@ const baseItems: SidebarItem[] = [
   // Inmobiliaria es un producto aislado, pero sus áreas se navegan desde el
   // menú EV. Así no se duplican pestañas dentro del workspace ni se ocultan
   // funciones importantes al corredor.
-  ["Inmobiliaria", "/realty", "Centro de control de la cartera", "RE", "properties"],
+  ["Inicio", "/realty", "Centro de control de la cartera", "RE", "properties"],
   ["Cargas inmobiliarias", "/realty?view=operations", "Captación, carga manual e importación", "RC", "realty_loads"],
   ["Propiedades", "/realty?view=properties", "Inventario, fichas y publicación", "RP", "properties"],
   ["Corredores", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],
@@ -85,11 +86,6 @@ const realtyGatewayModules: ModuleAccessKey[] = [
 const financeGatewayModules: ModuleAccessKey[] = [
   "finance_invoices", "finance_bank_sync", "finance_reconciliation",
   "finance_exceptions", "finance_collections", "finance_analytics"
-];
-
-const realtyRoutes = [
-  "/realty", "/realty-loads", "/properties", "/brokers",
-  "/realty-activity", "/broker-portal", "/customers"
 ];
 
 // Símbolos funcionales, no siglas: reducen el tiempo de reconocimiento del
@@ -191,45 +187,53 @@ function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
 }
 
 export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
-  const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
-  const [role, setRole] = useState<string | null>(null);
-  const [jobTitle, setJobTitle] = useState<string | null>(null);
-  const [industry, setIndustry] = useState<string | null>(null);
+  const initialSession = getStoredSession();
+  const initialAccess = getStoredTenantAccess(initialSession);
+  const [enabledModules, setEnabledModules] = useState<string[] | null>(() => initialAccess?.modules || null);
+  const [role, setRole] = useState<string | null>(() => initialAccess?.role || initialSession?.role || null);
+  const [jobTitle, setJobTitle] = useState<string | null>(() => initialAccess?.jobTitle || initialSession?.jobTitle || null);
+  const [industry, setIndustry] = useState<string | null>(() => initialAccess?.industry || null);
+  const [menuReady, setMenuReady] = useState(Boolean(initialAccess));
   const navRef = useRef<HTMLElement | null>(null);
   const pathname = usePathname();
+  // Se lee la query actual sin useSearchParams para que el menú pueda vivir
+  // en todas las páginas estáticas sin forzar un límite Suspense global.
+  const currentSearchParams = typeof window === "undefined"
+    ? new URLSearchParams()
+    : new URLSearchParams(window.location.search);
 
   useEffect(() => {
     let mounted = true;
     const session = getStoredSession();
+    const storedAccess = getStoredTenantAccess(session);
     setRole(session?.role || null);
     setJobTitle(session?.jobTitle || null);
+    if (storedAccess) {
+      setEnabledModules(storedAccess.modules);
+      setRole(storedAccess.role || session?.role || null);
+      setJobTitle(storedAccess.jobTitle || session?.jobTitle || null);
+      setIndustry(storedAccess.industry || null);
+      setMenuReady(true);
+      return () => { mounted = false; };
+    }
     getMe()
       .then((data) => {
         if (!mounted) return;
         setIndustry(data.tenant?.industry || null);
         setRole(data.user.role || session?.role || null);
         setJobTitle(data.user.jobTitle || session?.jobTitle || null);
-        if (data.modules?.length) setEnabledModules(data.modules);
+        setEnabledModules(data.modules || []);
+        storeTenantAccess({
+          userId: data.user.id,
+          tenantId: data.user.tenantId || null,
+          role: data.user.role || session?.role || null,
+          jobTitle: data.user.jobTitle || session?.jobTitle || null,
+          industry: data.tenant?.industry || null,
+          modules: data.modules || []
+        });
+        setMenuReady(true);
       })
-      .catch(() => { if (mounted) setIndustry(null); });
-    getMyModules()
-      .then((data) => {
-        if (mounted) {
-          setEnabledModules((current) => data.modules?.length ? data.modules : (current?.length ? current : (data.modules || [])));
-          // El catálogo puede devolver el rol de la membresía del tenant. Se
-          // conserva SUPER_ADMIN cuando la sesión o /auth/me ya lo confirmó.
-          setRole((current) => (
-            String(current || session?.role || "").toUpperCase() === "SUPER_ADMIN"
-              ? "SUPER_ADMIN"
-              : (data.role || session?.role || null)
-          ));
-        }
-      })
-      .catch(() => {
-        // No ocultar modulos por una falla momentanea de red; cada ruta sigue
-        // validada por el backend antes de entregar datos.
-        if (mounted) setEnabledModules(null);
-      });
+      .catch(() => { if (mounted) { setEnabledModules([]); setMenuReady(true); } });
 
     return () => {
       mounted = false;
@@ -267,8 +271,8 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     // El workspace del producto encabeza la navegación. Las opciones de
     // plataforma siguen ordenadas para que el menú sea predecible.
     return [...availableItems].sort(([leftLabel], [rightLabel]) => {
-      if (product && leftLabel === product.label) return -1;
-      if (product && rightLabel === product.label) return 1;
+      if (product && leftLabel === "Inicio") return -1;
+      if (product && rightLabel === "Inicio") return 1;
       if (leftLabel === "Inicio") return -1;
       if (rightLabel === "Inicio") return 1;
       return leftLabel.localeCompare(rightLabel, "es");
@@ -324,12 +328,18 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
         </button>
       </div>
 
-      <nav className="inbox-unified-nav-list" ref={navRef} onScroll={saveMenuPosition}>
-        {items.map(([label, href, description, icon]) => {
-          const selected = pathname === href
-            || pathname.startsWith(`${href}/`)
-            || label === active
-            || (label === "Inmobiliaria" && realtyRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)));
+      <nav className="inbox-unified-nav-list" ref={navRef} onScroll={saveMenuPosition} aria-busy={!menuReady}>
+        {!menuReady ? <div className="evolum-nav-loading">Cargando menú de esta cuenta…</div> : items.map(([label, href, description, icon]) => {
+          const [targetPath, targetQuery] = href.split("?");
+          const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
+            const [key, value = ""] = entry.split("=");
+            return currentSearchParams.get(key) === value;
+          });
+          const matchesRoute = pathname === targetPath && queryMatches;
+          // La etiqueta activa viene del workspace actual. La ruta se compara
+          // con su query exacta para que /realty?view=brokers no deje también
+          // seleccionado el Inicio inmobiliario.
+          const selected = label === active || matchesRoute;
           return (
           <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
             <ModuleSymbol code={icon} label={label} />

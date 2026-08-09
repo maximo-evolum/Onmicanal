@@ -13,9 +13,10 @@ import {
   RealtyPropertiesPageContent,
   RealtyShell
 } from "@/components/realty-workspace";
-import { getMyModules } from "@/lib/api";
+import { getMe } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
+import { getStoredTenantAccess, storeTenantAccess, type TenantAccessSnapshot } from "@/lib/session-access";
 
 const realtySections: ReadonlyArray<ModuleAccessKey> = [
   "realty_loads",
@@ -27,7 +28,7 @@ const realtySections: ReadonlyArray<ModuleAccessKey> = [
 ];
 
 const views = {
-  summary: { label: "Inmobiliaria", module: null, content: RealtyDashboardPageContent },
+  summary: { label: "Inicio", module: null, content: RealtyDashboardPageContent },
   operations: { label: "Cargas inmobiliarias", module: "realty_loads", content: RealtyLoadsPageContent },
   properties: { label: "Propiedades", module: "properties", content: RealtyPropertiesPageContent },
   brokers: { label: "Corredores", module: "brokers", content: BrokersPageContent },
@@ -50,20 +51,42 @@ function RealtyDashboardContent() {
   useEffect(() => {
     let mounted = true;
     const session = getStoredSession();
-    getMyModules()
+    const resolveAccess = (access: TenantAccessSnapshot) => {
+      const effectiveRole = String(session?.role || "").toUpperCase() === "SUPER_ADMIN"
+        ? "SUPER_ADMIN"
+        : (access.role || session?.role || null);
+      const allowed = realtySections.find((moduleKey) => moduleAllowed(moduleKey, access.modules || [], effectiveRole, access.jobTitle || session?.jobTitle, access.industry || "REAL_ESTATE"));
+      if (!allowed) {
+        setStatus("Esta cuenta no tiene capacidades inmobiliarias habilitadas.");
+        return;
+      }
+      setAccessModule(allowed);
+      setEnabledModules(access.modules || []);
+      setRole(effectiveRole);
+    };
+
+    const snapshot = getStoredTenantAccess(session);
+    if (snapshot) {
+      resolveAccess(snapshot);
+      return () => { mounted = false; };
+    }
+
+    // Respaldo para una sesión abierta antes de esta mejora. En sesiones
+    // nuevas el snapshot se crea en login y este bloque no vuelve a ejecutarse
+    // al cambiar entre áreas de Inmobiliaria.
+    getMe()
       .then((result) => {
         if (!mounted) return;
-        const role = String(session?.role || "").toUpperCase() === "SUPER_ADMIN"
-          ? "SUPER_ADMIN"
-          : (result.role || session?.role || null);
-        const allowed = realtySections.find((moduleKey) => moduleAllowed(moduleKey, result.modules || [], role, session?.jobTitle, "REAL_ESTATE"));
-        if (allowed) {
-          setAccessModule(allowed);
-          setEnabledModules(result.modules || []);
-          setRole(role);
-          return;
-        }
-        setStatus("Esta cuenta no tiene capacidades inmobiliarias habilitadas.");
+        const access = {
+          userId: result.user.id,
+          tenantId: result.user.tenantId || null,
+          role: result.user.role || session?.role || null,
+          jobTitle: result.user.jobTitle || session?.jobTitle || null,
+          industry: result.tenant?.industry || null,
+          modules: result.modules || []
+        };
+        storeTenantAccess(access);
+        resolveAccess(access);
       })
       .catch(() => {
         if (mounted) setStatus("No pudimos verificar los módulos inmobiliarios. Reintenta en unos segundos.");

@@ -6,6 +6,7 @@ import { loginWithEmail } from "./api";
 import { AgentSession } from "./types";
 import { API_BASE_URL, SESSION_COOKIE, SESSION_STORAGE_KEY } from "./constants";
 import { getVerticalProduct } from "./vertical-products";
+import { clearStoredTenantAccess, storeTenantAccess } from "./session-access";
 
 function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=604800; samesite=lax`;
@@ -55,6 +56,7 @@ export function mergeStoredSession(patch: Partial<AgentSession>) {
 }
 
 function clearStoredAuth() {
+  const currentSession = getStoredSession();
   clearCookie(SESSION_COOKIE);
 
   if (typeof window !== "undefined") {
@@ -66,6 +68,7 @@ function clearStoredAuth() {
     window.localStorage.removeItem("jwt");
     window.sessionStorage.removeItem("evolum_access_token");
   }
+  clearStoredTenantAccess(currentSession);
 }
 
 export function getStoredSession(): AgentSession | null {
@@ -105,6 +108,14 @@ export function LoginPage() {
       setError(null);
       const data = await loginWithEmail(email, password || undefined);
       setStoredAuth(data.user);
+      storeTenantAccess({
+        userId: data.user.id,
+        tenantId: data.user.tenantId || null,
+        role: data.user.role || null,
+        jobTitle: data.user.jobTitle || null,
+        industry: data.tenant?.industry || null,
+        modules: data.modules || []
+      });
       // Cada producto vertical comienza en su propio workspace. Esto evita
       // que una cuenta de Inmobiliaria o Finanzas entre primero al CRM general.
       const product = getVerticalProduct(data.tenant?.industry);
