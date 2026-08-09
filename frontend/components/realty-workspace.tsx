@@ -13,6 +13,7 @@ import {
   deleteIndustryBrokerUser,
   getRealtyIntelligence,
   getIndustryRecords,
+  getMyModules,
   getIndustryUsers,
   updateIndustryRecord,
   type IndustryRecord,
@@ -20,7 +21,7 @@ import {
   type RealtyIntelligence
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
-import type { ModuleAccessKey } from "@/lib/module-access";
+import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 
 export const REALTY_STAGES = [
   { key: "LEAD", label: "Lead" },
@@ -62,6 +63,61 @@ const emptyData: RealtyData = {
   users: [],
   brokers: []
 };
+
+const realtySubmodules: ReadonlyArray<{
+  label: string;
+  href: string;
+  moduleKey: ModuleAccessKey;
+}> = [
+  { label: "Operación", href: "/realty-loads", moduleKey: "realty_loads" },
+  { label: "Propiedades", href: "/properties", moduleKey: "properties" },
+  { label: "Corredores", href: "/brokers", moduleKey: "brokers" },
+  { label: "Actividad", href: "/realty-activity", moduleKey: "realty_activity" },
+  { label: "Portal corredor", href: "/broker-portal", moduleKey: "broker_portal" },
+  { label: "Clientes inmobiliarios", href: "/customers", moduleKey: "realty_clients" }
+];
+
+// Inmobiliaria se presenta como una sola capacidad en el menú EV. Esta
+// navegación secundaria conserva cada función disponible sin repetir seis
+// accesos principales para la misma vertical.
+export function RealtyModuleNav({ active }: { active: string }) {
+  const session = getStoredSession();
+  const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
+  const [role, setRole] = useState<string | null>(session?.role || null);
+
+  useEffect(() => {
+    let mounted = true;
+    getMyModules()
+      .then((data) => {
+        if (!mounted) return;
+        setEnabledModules(data.modules || []);
+        setRole((current) => (
+          String(current || session?.role || "").toUpperCase() === "SUPER_ADMIN"
+            ? "SUPER_ADMIN"
+            : (data.role || session?.role || null)
+        ));
+      })
+      // La ruta sigue validada por backend. Mientras el catálogo se recupera,
+      // no ocultamos la navegación para evitar que parezca que desaparecieron
+      // funciones por un corte momentáneo de red.
+      .catch(() => { if (mounted) setEnabledModules(null); });
+    return () => { mounted = false; };
+  }, []);
+
+  const visibleItems = enabledModules === null
+    ? realtySubmodules
+    : realtySubmodules.filter((item) => moduleAllowed(item.moduleKey, enabledModules, role, session?.jobTitle, "REAL_ESTATE"));
+
+  return (
+    <nav className="realty-module-nav" aria-label="Secciones de Inmobiliaria">
+      {visibleItems.map((item) => (
+        <Link key={item.href} href={item.href} className={item.label === active ? "active" : ""}>
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
 
 const emptyProperty = {
   title: "",
@@ -416,7 +472,10 @@ export function RealtyShell({
           isOpen={sidebarOpen}
           onToggle={() => setSidebarOpen((value) => !value)}
         />
-        <main className="vertical-main realty-page">{children}</main>
+        <main className="vertical-main realty-page">
+          <RealtyModuleNav active={active} />
+          {children}
+        </main>
       </div>
     </ModuleGate>
   );

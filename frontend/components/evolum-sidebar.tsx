@@ -37,14 +37,13 @@ const baseItems: SidebarItem[] = [
   ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI", "ai_ops"],
   ["Control de IA", "/settings/ai", "Define qué puede hacer la IA y cuándo pedir ayuda", "GI", "ai_ops"],
-  ["Cargas inmobiliarias", "/realty-loads", "Carga, importacion y comisiones", "CI", "realty_loads"],
-  ["Propiedades", "/properties", "Portal de propiedades cargadas", "PR", "properties"],
-  ["Actividad inmobiliaria", "/realty-activity", "Visitas, propietarios y alertas", "AC", "realty_activity"],
-  ["Portal corredor", "/broker-portal", "Propiedades asignadas y seguimiento", "PC", "broker_portal"],
-  ["Corredores", "/brokers", "Perfiles y reparto comercial", "CO", "brokers"],
-  ["Clientes", "/customers", "Compradores, preferencias e historial comercial", "CL", "realty_clients"],
-  ["Pacientes", "/patients", "Fichas de atención, historial y seguimiento", "PA", "patients"],
-  ["Exámenes y presupuestos", "/exams", "Órdenes, resultados y cotizaciones clínicas", "EP", "exams"],
+  // Una sola puerta de entrada para Inmobiliaria. Propiedades, cargas,
+  // corredores, visitas, portal y compradores se navegan como submódulos
+  // dentro de este espacio, para no repetirlos en el menú EV.
+  ["Inmobiliaria", "/realty", "Propiedades, cargas, corredores y visitas", "RE", "properties"],
+  // Pacientes y exámenes son rutas de compatibilidad para datos antiguos.
+  // Las nuevas fichas, órdenes y presupuestos se administran exclusivamente
+  // dentro de Atención clínica, dental o veterinaria.
   ["Dueños y vehículos", "/workshop", "Fichas, historial técnico, repuestos y presupuestos", "DV", "vehicle_owners"],
   ["Operación gastronómica", "/operations/gastronomy", "Mesas, comandas, clientes frecuentes y cierre diario", "GO", "gastronomy_operations"],
   ["Atención dental", "/operations/dental", "Fichas odontológicas, odontograma, tratamientos y consentimientos", "OD", "dental_care"],
@@ -66,12 +65,26 @@ const developerItems: SidebarItem[] = [
   ["Bot Lab", "/dev/bot-lab", "Pruebas de respuestas y reglas", "BL", "bot_lab"],
 ];
 
+// La entrada principal de Inmobiliaria debe estar visible si la cuenta tiene
+// al menos una de sus capacidades. El destino /realty deriva al primer
+// submódulo permitido, evitando que un plan parcial quede atrapado en
+// Propiedades cuando solo habilitó, por ejemplo, Corredores.
+const realtyGatewayModules: ModuleAccessKey[] = [
+  "realty_loads", "properties", "realty_activity", "broker_portal",
+  "brokers", "realty_clients", "property_assignments"
+];
+
+const realtyRoutes = [
+  "/realty", "/realty-loads", "/properties", "/brokers",
+  "/realty-activity", "/broker-portal", "/customers"
+];
+
 // Símbolos funcionales, no siglas: reducen el tiempo de reconocimiento del
 // módulo y mantienen un lenguaje visual coherente dentro del menú EV.
 const moduleSymbols: Record<string, string> = {
   IN: "⌂", CH: "◌", AG: "◷", PI: "↗", CA: "✦", PA: "▣", CX: "⌁",
   CG: "⚙", FW: "⇄", MD: "▤", PM: "◫", DA: "▥", AI: "✧", GI: "◈",
-  CI: "⇧", PR: "⌂", AC: "◴", PC: "◉", CO: "♧", CL: "◎", EP: "▤",
+  RE: "⌂",
   DV: "▱", TU: "◷", DE: "▦", BL: "⚗"
 };
 
@@ -214,9 +227,14 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
       : allItems.filter((item) => itemBelongsToIndustry(item, industry));
     const availableItems = enabledModules === null
       ? applicableItems
-      : applicableItems.filter(([, , , , moduleKey]) =>
-      moduleAllowed(moduleKey, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle),
-    );
+      : applicableItems.filter(([, href, , , moduleKey]) => {
+        if (href === "/realty") {
+          return realtyGatewayModules.some((key) =>
+            moduleAllowed(key, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle),
+          );
+        }
+        return moduleAllowed(moduleKey, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle);
+      });
 
     // Inicio siempre encabeza la navegacion; los modulos restantes se ordenan
     // alfabeticamente para que el menu sea predecible con cualquier vertical.
@@ -278,7 +296,10 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
       <nav className="inbox-unified-nav-list" ref={navRef} onScroll={saveMenuPosition}>
         {items.map(([label, href, description, icon]) => {
-          const selected = pathname === href || pathname.startsWith(`${href}/`) || label === active;
+          const selected = pathname === href
+            || pathname.startsWith(`${href}/`)
+            || label === active
+            || (label === "Inmobiliaria" && realtyRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`)));
           return (
           <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
             <ModuleSymbol code={icon} label={label} />

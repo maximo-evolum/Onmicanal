@@ -68,12 +68,17 @@ function displayValue(value: unknown) { return value === undefined || value === 
 
 const recordFieldAliases: Record<string, string[]> = {
   nombre: ["nombre", "name", "customerName", "client"], telefono: ["telefono", "phone"],
-  paciente: ["paciente", "patient", "patientName", "name"], mascota: ["mascota", "pet", "petName", "name"],
-  numero: ["numero", "number"], mesa: ["mesa", "table", "tableNumber"], fecha: ["fecha", "date", "scheduledAt", "admissionDate"],
+  paciente: ["paciente", "patient", "patientName", "patientId", "name"], mascota: ["mascota", "pet", "petName", "petId", "name"],
+  numero: ["numero", "number"], mesa: ["mesa", "table", "tableNumber", "tableId"], fecha: ["fecha", "date", "scheduledAt", "admissionDate", "nextDueDate"],
   profesional: ["profesional", "professional", "responsible"], responsable: ["responsable", "responsible", "professional"],
   tipo: ["tipo", "type", "vaccine"], estado: ["estado", "status"], tratamiento: ["tratamiento", "treatment", "type"],
   vacuna: ["vacuna", "vaccine"], ingreso: ["ingreso", "admissionDate", "date"], monto: ["monto", "amount", "budget", "total"],
   ventas: ["ventas", "sales"], pagos: ["pagos", "payments"], preferencias: ["preferencias", "preferences"], items: ["items"],
+  antecedentes: ["antecedentes", "history"], observaciones: ["observaciones", "observations"], contacto_emergencia: ["contacto_emergencia", "emergencyContact"],
+  alergias: ["alergias", "allergies"], pieza: ["pieza", "piece"], presupuesto: ["presupuesto", "budget", "amount"],
+  archivo: ["archivo", "file"], especialidad: ["especialidad", "specialty"], motivo: ["motivo", "reason"], canal: ["canal", "channel"],
+  especie: ["especie", "species"], raza: ["raza", "breed"], edad: ["edad", "age"], telefono_tutor: ["telefono_tutor", "phone"],
+  proxima_fecha: ["proxima_fecha", "nextDueDate"], capacidad: ["capacidad", "capacity"], diferencias: ["diferencias", "differences"],
 };
 
 const dataFieldLabels: Record<string, string> = {
@@ -91,6 +96,20 @@ function recordFieldValue(record: IndustryRecord, field: string) {
 
 function displayFieldLabel(key: string) { return dataFieldLabels[key] || fieldLabels[key] || key.replace(/([A-Z])/g, " $1").replaceAll("_", " "); }
 function displayRecordTitle(value: string) { return value.replace(/^TRAINING-[^|]+\|\s*/i, ""); }
+function recordStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = { ACTIVE: "Activo", PENDING: "Pendiente", SCHEDULED: "Agendado", OPEN: "Abierto", DRAFT: "Borrador", APPLIED: "Aplicado", READY: "Listo", CLOSED: "Cerrado", PROPOSED: "Propuesto", MONITORING: "En observación", PENDING_SIGNATURE: "Pendiente de firma" };
+  return labels[String(status || "").toUpperCase()] || String(status || "Pendiente").replaceAll("_", " ");
+}
+
+function recordFieldDisplay(record: IndustryRecord, field: string, references: Map<string, string>) {
+  const data = record.data || {};
+  const key = (recordFieldAliases[field] || [field]).find((candidate) => data[candidate] !== undefined && data[candidate] !== null && data[candidate] !== "");
+  if (!key && field === "estado") return displayValue(record.status);
+  const value = key ? data[key] : undefined;
+  if (typeof value === "string" && references.has(value)) return references.get(value) || "Sin información";
+  if (Array.isArray(value)) return value.join(", ");
+  return key ? displayValue(value) : "Sin información";
+}
 
 export default function VerticalOperationsPage() {
   const params = useParams<{ vertical: string }>();
@@ -107,7 +126,9 @@ export default function VerticalOperationsPage() {
 
   const entity = profile?.entities.find((item) => item.type === selectedType) || profile?.entities[0];
   const totalRecords = useMemo(() => Object.values(records).reduce((total, list) => total + list.length, 0), [records]);
-  const recordRows = useMemo(() => profile?.entities.flatMap((item) => (records[item.type] || []).map((record) => ({ item, record }))) || [], [profile, records]);
+  const selectedRecords = useMemo(() => entity ? records[entity.type] || [] : [], [entity, records]);
+  const referenceTitles = useMemo(() => new Map(Object.values(records).flat().map((record) => [record.id, displayRecordTitle(record.title)])), [records]);
+  const visibleFields = entity?.fields.slice(0, 3) || [];
 
   async function load() {
     if (!profile) return;
@@ -142,8 +163,7 @@ export default function VerticalOperationsPage() {
     <EvolumSidebar active={profile.title} isDeveloper={session?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
     <main className="vertical-page industry-service-page operations-page">
       <ModuleGate moduleKey={profile.module}>
-        <header className="vertical-hero service-hero operations-hero"><div><span>{profile.eyebrow}</span><h1>{profile.title}</h1><p>{profile.summary}</p></div><div className="vertical-hero-stats"><article><strong>{totalRecords}</strong><span>registros operativos</span></article><article><strong>{profile.steps.length}</strong><span>etapas del flujo</span></article></div></header>
-        <section className="operations-flow"><div><span>FLUJO OPERATIVO</span><h2>De principio a fin</h2></div><ol>{profile.steps.map((step, index) => <li key={step}><b>{index + 1}</b><span>{step}</span></li>)}</ol></section>
+        <header className="vertical-hero service-hero operations-hero"><div><span>{profile.eyebrow}</span><h1>{profile.title}</h1><p>{profile.summary}</p></div><div className="vertical-hero-stats"><article><strong>{totalRecords}</strong><span>registros operativos</span></article><article><strong>{entity?.fields.length || 0}</strong><span>datos por ficha</span></article></div></header>
         <DataManagementWorkspace
           className="operations-data-workspace"
           eyebrow="NUEVO REGISTRO"
@@ -157,10 +177,10 @@ export default function VerticalOperationsPage() {
           advancedFields={<>{entity?.fields.slice(3).map((field) => <label key={field}>{fieldLabels[field] || field}<input value={values[field] || ""} onChange={(event) => setValues((current) => ({ ...current, [field]: event.target.value }))} placeholder={fieldLabels[field] || field} /></label>)}</>}
           actions={<><button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : `Guardar ${entity?.label.toLowerCase()}`}</button>{notice ? <p className="operations-notice">{notice}</p> : null}</>}
           support={<><span>ASISTENTE OPERATIVO</span><h2>Ayuda para el equipo</h2><p>{profile.safeNotice}</p><div className="operations-agent-status"><strong>{totalRecords ? "Operación en curso" : "Preparado para comenzar"}</strong><small>{totalRecords ? `Hay ${totalRecords} registros disponibles para revisar y continuar.` : "Crea el primer registro para activar el flujo de trabajo."}</small></div><ul><li>Revisa datos faltantes antes de pasar a la siguiente etapa.</li><li>Organiza pendientes y seguimiento de la jornada.</li><li>Deja decisiones sensibles para aprobación humana.</li></ul></>}
-          recordsTitle="Registros de la vertical"
-          recordsDescription="Consulta los procesos creados y selecciona uno para revisar sus datos sin abrir otra pantalla."
-          records={<div className="operations-data-table" role="table" aria-label="Registros de la vertical"><div className="operations-data-table-head" role="row"><span>Registro</span><span>Tipo</span><span>Información principal</span><span>Estado</span><span>Actualizado</span></div>{recordRows.length ? recordRows.map(({ item, record }) => <button type="button" role="row" className={`operations-data-row ${selectedRecord?.id === record.id ? "selected" : ""}`} key={record.id} onClick={() => setSelectedRecord(record)}><span className="operations-record-name"><b>{displayRecordTitle(record.title)}</b><small>Seleccionar ficha</small></span><span className="operations-record-type">{item.label}</span><span className="operations-record-summary">{item.fields.slice(0, 2).map((field) => recordFieldValue(record, field)).join(" · ")}</span><span><em className={`operations-status status-${String(record.status || "pending").toLowerCase()}`}>{record.status || "PENDIENTE"}</em></span><time dateTime={record.updatedAt}>{new Intl.DateTimeFormat("es-CL", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(record.updatedAt))}</time></button>) : <p className="operations-table-empty">Aún no hay registros. Crea el primero desde el formulario superior.</p>}</div>}
-          detail={selectedRecord ? <><div><span>FICHA SELECCIONADA</span><h2>{displayRecordTitle(selectedRecord.title)}</h2></div><dl className="data-detail-grid">{Object.entries(selectedRecord.data || {}).filter(([key]) => !["vertical", "createdFrom", "trainingRun", "demoOnly"].includes(key)).map(([key, value]) => <div key={key}><dt>{displayFieldLabel(key)}</dt><dd>{displayValue(value)}</dd></div>)}</dl></> : null}
+          recordsTitle={entity ? `Registros de ${entity.label}` : "Registros de la vertical"}
+          recordsDescription="La tabla muestra exactamente los datos principales que se solicitan en el formulario de esta ficha."
+          records={<div className="operations-data-table operations-entity-table" role="table" aria-label={`Registros de ${entity?.label || "la vertical"}`}><div className="operations-data-table-head" role="row"><span>Registro</span>{visibleFields.map((field) => <span key={field}>{fieldLabels[field] || field}</span>)}<span>Estado</span><span>Actualizado</span></div>{selectedRecords.length ? selectedRecords.map((record) => <button type="button" role="row" className={`operations-data-row ${selectedRecord?.id === record.id ? "selected" : ""}`} key={record.id} onClick={() => setSelectedRecord(record)}><span className="operations-record-name"><b>{displayRecordTitle(record.title)}</b><small>Ver ficha completa</small></span>{visibleFields.map((field) => <span className="operations-record-summary" key={field}>{recordFieldDisplay(record, field, referenceTitles)}</span>)}<span><em className={`operations-status status-${String(record.status || "pending").toLowerCase()}`}>{recordStatusLabel(record.status)}</em></span><time dateTime={record.updatedAt}>{new Intl.DateTimeFormat("es-CL", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(record.updatedAt))}</time></button>) : <p className="operations-table-empty">Aún no hay {entity?.label.toLowerCase() || "registros"}. Crea el primero desde el formulario superior.</p>}</div>}
+          detail={selectedRecord && entity ? <><div><span>FICHA SELECCIONADA</span><h2>{displayRecordTitle(selectedRecord.title)}</h2></div><dl className="data-detail-grid">{entity.fields.map((field) => <div key={field}><dt>{fieldLabels[field] || displayFieldLabel(field)}</dt><dd>{recordFieldDisplay(selectedRecord, field, referenceTitles)}</dd></div>)}</dl></> : null}
         />
       </ModuleGate>
     </main>
