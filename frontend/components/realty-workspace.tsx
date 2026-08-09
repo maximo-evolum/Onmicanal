@@ -524,13 +524,13 @@ export function RealtyDashboardPageContent() {
       </section>
 
       <section className="realty-ws-card">
-        <div className="realty-ws-card-head"><div><span>Propiedades activas</span><h2>Portafolio en movimiento</h2><p>Vista visual para reconocer rápidamente cada propiedad y entrar a su ficha.</p></div><Link href="/realty?view=properties">Ver cartera completa</Link></div>
+          <div className="realty-ws-card-head"><div><span>Propiedades activas</span><h2>Portafolio en movimiento</h2><p>Vista visual para reconocer rápidamente cada propiedad y entrar a su ficha.</p></div><Link className="realty-card-link-button" href="/realty?view=properties">Ver cartera completa</Link></div>
         {loading ? <p className="empty-state">Cargando propiedades...</p> : <PropertyPortalCards properties={activeProperties} brokers={data.brokers} onStageChange={updateStage} onOpen={setSelectedProperty} />}
       </section>
 
       <section className="realty-ws-two-columns">
         <article className="realty-ws-card">
-          <div className="realty-ws-card-head"><div><span>Cartera activa</span><h2>Propiedades que requieren atención</h2><p>Prioriza según etapa, visitas, interés y tiempo sin movimiento.</p></div><Link href="/realty?view=properties">Ver todas</Link></div>
+          <div className="realty-ws-card-head"><div><span>Cartera activa</span><h2>Propiedades que requieren atención</h2><p>Prioriza según etapa, visitas, interés y tiempo sin movimiento.</p></div><Link className="realty-card-link-button" href="/realty?view=properties">Ver todas</Link></div>
           <div className="realty-ws-table">
             <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Etapa</span><span>Corredor</span><span>Estado</span></div>
             {data.properties.slice(0, 5).map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Captación"}</span><span>{getBrokerName(property, data.brokers)}</span><b>{numberValue(asData(property).price) ? "Ficha completa" : "Completar ficha"}</b></button>)}
@@ -539,7 +539,7 @@ export function RealtyDashboardPageContent() {
           <footer className="realty-ws-statbar"><span><b>{unassigned.length}</b> registros pendientes</span><span><b>{data.visits.length}</b> visitas registradas</span><span><b>{data.properties.length ? Math.round((data.properties.filter((item) => numberValue(asData(item).price)).length / data.properties.length) * 100) : 0}%</b> fichas con precio</span></footer>
         </article>
         <aside className="realty-ws-card realty-ws-ia-card">
-          <div className="realty-ws-card-head"><div><span>Recomendado por IA</span><h2>Prioridades comerciales</h2></div><Link href="/realty?view=buyers">Abrir matching</Link></div>
+          <div className="realty-ws-card-head"><div><span>Recomendado por IA</span><h2>Prioridades comerciales</h2></div><Link className="realty-card-link-button realty-card-link-button-dark" href="/realty?view=buyers">Abrir matching</Link></div>
           <div className="realty-ws-suggestions">
             <Link href="/realty?view=brokers"><strong>{unassigned.length ? `${unassigned.length} propiedades sin corredor` : "Cartera asignada"}</strong><p>{unassigned.length ? "Distribuye las propiedades disponibles para no perder oportunidades comerciales." : "Todas las propiedades tienen un responsable comercial."}</p><small>Asignación de cartera →</small></Link>
             <Link href="/realty?view=buyers"><strong>Compradores compatibles</strong><p>Usa presupuesto, comuna y tipo de propiedad para mostrar opciones relevantes.</p><small>Ver coincidencias →</small></Link>
@@ -692,7 +692,7 @@ function PropertyBuyerMatches({ propertyId }: { propertyId: string }) {
       <strong>{match.buyer.name}</strong><b>{match.score}% compatible</b>
       <span>{match.buyer.commune || "Comuna por confirmar"} · {match.buyer.propertyType || "Tipo por confirmar"}</span>
       <small>{match.reasons.slice(0, 3).join(" · ") || "Compatibilidad general"}</small>
-      <Link href={`/inbox?conversation=${encodeURIComponent(match.buyer.conversationId)}`}>Ver conversación</Link>
+      <Link className="property-buyer-match-action" href={`/inbox?conversation=${encodeURIComponent(match.buyer.conversationId)}`}>Ver conversación</Link>
     </article>)}</div>
   </section>;
 }
@@ -1084,7 +1084,7 @@ export function RealtyLoadsPageContent() {
           <label className="realty-dropzone"><b>↑</b><strong>Carga propiedades desde CSV</strong><small>Selecciona un archivo y EVOLUM detectará sus columnas.</small><input type="file" accept=".csv,text/csv" hidden onChange={onCsvFile} /></label>
           <div className="realty-import-steps"><div><b>1</b><span><strong>Selecciona tu archivo</strong><small>CSV de propiedades o base de captación.</small></span></div><div><b>2</b><span><strong>Revisa la vista previa</strong><small>{importRows.length ? `${importRows.length} filas detectadas` : "Aún no hay filas cargadas."}</small></span></div><div><b>3</b><span><strong>Confirma el destino</strong><small>Importa como inventario activo y trazable.</small></span></div></div>
           <div className="realty-import-actions"><button className="primary-btn" type="button" disabled={!importRows.length} onClick={importProperties}>Importar {importRows.length || ""} propiedades</button><button className="secondary-btn" type="button" onClick={autoAssign}>Asignar automáticamente</button></div>
-          <div className="realty-assignment-summary"><strong>{data.brokers.length} corredores activos</strong><span>{data.properties.filter((item) => !text(asData(item).assignedBrokerId || item.assignedToId)).length} propiedades sin responsable</span><Link href="/realty?view=brokers">Gestionar reparto →</Link></div>
+          <div className="realty-assignment-summary"><strong>{data.brokers.length} corredores activos</strong><span>{data.properties.filter((item) => !text(asData(item).assignedBrokerId || item.assignedToId)).length} propiedades sin responsable</span><Link className="realty-inline-action" href="/realty?view=brokers">Gestionar reparto</Link></div>
           <button className="secondary-btn realty-template-btn" type="button" onClick={downloadTemplate}>Descargar plantilla CSV</button>
         </aside>
       </section>
@@ -1183,12 +1183,12 @@ export function RealtyPropertiesPageContent() {
         eyebrow="Portal inmobiliario"
         title="Propiedades activas"
         description="Consulta, filtra y entra a la ficha completa sin perder el contexto de la cartera."
-        actions={<Link className="primary-btn" href="/realty?view=operations">Nueva propiedad</Link>}
+        actions={<Link className="primary-btn realty-header-primary-action" href="/realty?view=operations">Nueva propiedad</Link>}
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
       {message ? <div className="module-toast">{message}</div> : null}
       <section className="realty-ws-card realty-inventory-panel">
-        <div className="realty-ws-card-head"><div><span>Inventario operativo</span><h2>Propiedades activas</h2><p>Revisa inventario, responsable, etapa comercial y ficha detallada.</p></div><Link className="secondary-btn" href="/realty?view=operations">Importar CSV</Link></div>
+          <div className="realty-ws-card-head"><div><span>Inventario operativo</span><h2>Propiedades activas</h2><p>Revisa inventario, responsable, etapa comercial y ficha detallada.</p></div><Link className="secondary-btn realty-secondary-action" href="/realty?view=operations">Importar CSV</Link></div>
         <div className="realty-inventory-filters">
           <div className="realty-filter-chips">
             {(["ALL", "VENTA", "ARRIENDO", "UNASSIGNED"] as const).map((value) => <button key={value} type="button" className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value === "ALL" ? `Todas · ${data.properties.length}` : value === "UNASSIGNED" ? `Sin corredor · ${data.properties.filter((property) => !text(asData(property).assignedBrokerId || property.assignedToId)).length}` : `${value[0]}${value.slice(1).toLowerCase()}`}</button>)}
@@ -1313,12 +1313,12 @@ export function RealtyActivityPageContent() {
           <div className="realty-alert-list">
             {data.alerts.length ? data.alerts.slice(0, 6).map((alert) => <article key={alert.id}><span>Prioridad</span><strong>{alert.title}</strong><small>{alert.status === "OPEN" ? "Pendiente de gestión" : alert.status}</small></article>) : <p className="empty-state">La cartera no tiene alertas críticas por ahora.</p>}
           </div>
-          <Link className="secondary-btn" href="/realty?view=properties">Revisar propiedades activas</Link>
+          <Link className="secondary-btn realty-secondary-action" href="/realty?view=properties">Revisar propiedades activas</Link>
         </aside>
       </section>
 
       <section className="realty-ws-card realty-activity-property-strip">
-        <div className="realty-ws-card-head"><div><span>Movimiento de cartera</span><h2>Propiedades que requieren seguimiento</h2><p>La actividad se organiza por propiedad y responsable para que el equipo sepa qué sigue.</p></div><Link href="/realty?view=brokers">Gestionar reparto</Link></div>
+        <div className="realty-ws-card-head"><div><span>Movimiento de cartera</span><h2>Propiedades que requieren seguimiento</h2><p>La actividad se organiza por propiedad y responsable para que el equipo sepa qué sigue.</p></div><Link className="realty-card-link-button" href="/realty?view=brokers">Gestionar reparto</Link></div>
         <PropertyPortalCards properties={active.slice(0, 6)} brokers={data.brokers} />
       </section>
     </>
@@ -1387,7 +1387,7 @@ export function BrokerPortalPageContent() {
               ["approvalRequired", "Solicitar aprobación antes de publicar"]
             ].map(([option, label]) => <button type="button" key={option} className={`realty-portal-switch ${Boolean(featuredData[option]) ? "is-on" : ""}`} onClick={() => togglePortalOption(option as "portalVisible" | "allowWhatsAppShare" | "showPublicPrice" | "approvalRequired")}><span>{label}</span><i aria-hidden="true" /></button>)}
           </div>
-          <Link href="/realty?view=activity" className="secondary-btn">Abrir actividad</Link>
+          <Link href="/realty?view=activity" className="secondary-btn realty-secondary-action">Abrir actividad</Link>
         </aside>
       </section>
       <section className="realty-ws-card realty-portal-table">

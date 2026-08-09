@@ -16533,3 +16533,91 @@ textarea:focus {
 :root[data-theme="dark"] .product-workspace .realty-activity-map i,
 :root[data-design-system="neon"] .product-workspace .realty-activity-map i { color:#c8d5ff !important; }
 @media (max-width: 840px) { .product-workspace .realty-training-grid { grid-template-columns: 1fr; } }
+
+/* Acciones inmobiliarias: los enlaces de navegación conservan aspecto de botón. */
+.realty-workspace .realty-ws-card-head > .realty-card-link-button,
+.realty-workspace .realty-inline-action,
+.realty-page .property-buyer-match-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid #c8b8ec;
+  border-radius: 10px;
+  color: #50357a;
+  background: #fff;
+  font-size: .76rem;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.realty-workspace .realty-ws-card-head > .realty-card-link-button:hover,
+.realty-workspace .realty-inline-action:hover,
+.realty-page .property-buyer-match-action:hover {
+  transform: translateY(-1px);
+  border-color: #8a5bdd;
+  background: #faf7ff;
+  box-shadow: 0 8px 18px rgba(104, 70, 210, .12);
+}
+.realty-workspace .realty-ws-ia-card .realty-card-link-button {
+  border-color: rgba(195, 177, 255, .48);
+  color: #f4efff;
+  background: rgba(255, 255, 255, .1);
+}
+.realty-workspace .realty-ws-ia-card .realty-card-link-button:hover {
+  border-color: #bca2ff;
+  background: rgba(255, 255, 255, .18);
+}
+.realty-workspace .realty-inline-action { justify-self: start; width: fit-content; margin-top: 2px; }
+
+/* Ficha de propiedad: precio y coincidencias legibles sobre fotos y fondos claros. */
+.realty-page .property-detail-primary-media > b {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-color: rgba(138, 46, 255, .5);
+  color: #fff !important;
+  background: rgba(10, 13, 27, .9);
+  box-shadow: 0 10px 24px rgba(7, 9, 19, .38);
+  font-size: clamp(1rem, 1.8vw, 1.2rem);
+  letter-spacing: -.015em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .5);
+}
+.realty-page .property-buyer-matches {
+  gap: 15px;
+  border-color: #cfe5e3;
+  background: linear-gradient(135deg, #f9fffe, #f4f0ff);
+}
+.realty-page .property-buyer-matches > div:first-child span { color: #7b4db7; }
+.realty-page .property-buyer-matches h3 { color: #17212b; }
+.realty-page .property-buyer-matches > p { color: #566775; }
+.realty-page .property-buyer-match-list { gap: 12px; }
+.realty-page .property-buyer-match-list article {
+  gap: 8px;
+  min-height: 156px;
+  padding: 14px;
+  border-color: #d4e2e1;
+  background: #fff;
+  box-shadow: 0 7px 18px rgba(30, 58, 66, .055);
+}
+.realty-page .property-buyer-match-list strong { color: #17212b; font-size: .95rem; line-height: 1.25; }
+.realty-page .property-buyer-match-list b { width: fit-content; padding: 4px 8px; border-radius: 999px; color: #087d78; background: #e8f8f3; font-size: .7rem; }
+.realty-page .property-buyer-match-list :is(span, small) { color: #5f707c; font-size: .76rem; line-height: 1.42; }
+.realty-page .property-buyer-match-action { align-self: start; margin-top: auto; color: #087d78; border-color: #9fded8; background: #f3fffd; }
+
+:root[data-theme="dark"] .realty-page .property-buyer-matches,
+:root[data-design-system="neon"] .realty-page .property-buyer-matches { border-color: rgba(151,115,236,.34); background: linear-gradient(135deg, #19132c, #102331); }
+:root[data-theme="dark"] .realty-page .property-buyer-matches h3,
+:root[data-design-system="neon"] .realty-page .property-buyer-matches h3 { color: #fff; }
+:root[data-theme="dark"] .realty-page .property-buyer-match-list article,
+:root[data-design-system="neon"] .realty-page .property-buyer-match-list article { border-color: rgba(202,187,255,.18); background: rgba(255,255,255,.06); }
+:root[data-theme="dark"] .realty-page .property-buyer-match-list strong,
+:root[data-design-system="neon"] .realty-page .property-buyer-match-list strong { color: #fff; }
+:root[data-theme="dark"] .realty-page .property-buyer-match-list :is(span, small),
+:root[data-design-system="neon"] .realty-page .property-buyer-match-list :is(span, small) { color: #d1cadd; }
