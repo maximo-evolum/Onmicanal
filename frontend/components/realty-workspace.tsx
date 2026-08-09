@@ -501,7 +501,7 @@ export function RealtyDashboardPageContent() {
         eyebrow="Centro de control inmobiliario"
         title="Portafolio, equipo y oportunidades en movimiento"
         description="Controla inventario, captación, corredores, visitas, clientes compradores y oportunidades de cierre desde un solo workspace."
-        actions={<Link className="primary-btn" href="/realty?view=operations">Nueva propiedad</Link>}
+        actions={<Link className="primary-btn realty-header-primary-action" href="/realty?view=operations">Nueva propiedad</Link>}
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
       {message ? <div className="module-toast">{message}</div> : null}
@@ -510,7 +510,10 @@ export function RealtyDashboardPageContent() {
           <span>Workspace operativo</span>
           <h2>Tu cartera, tu equipo y las siguientes acciones en un solo lugar.</h2>
           <p>Visualiza qué propiedad mover, qué cliente atender y qué corredor necesita apoyo sin salir de tu contexto operativo.</p>
-          <div className="realty-ws-actions"><Link className="primary-btn" href="/realty?view=operations">Nueva propiedad</Link><Link className="secondary-btn" href="/realty?view=activity">Ver agenda de visitas</Link></div>
+          <div className="realty-ws-actions">
+            <Link className="primary-btn realty-primary-action" href="/realty?view=operations">Nueva propiedad</Link>
+            <Link className="secondary-btn realty-secondary-action" href="/realty?view=activity">Ver agenda de visitas</Link>
+          </div>
         </article>
         <aside className="realty-ws-kpis">
           <article><span>Propiedades activas</span><strong>{data.properties.filter((item) => item.status !== "ARCHIVED").length}</strong><small>{unassigned.length} sin asignar</small></article>
