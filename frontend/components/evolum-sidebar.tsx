@@ -42,7 +42,7 @@ const baseItems: SidebarItem[] = [
   // Inmobiliaria es un producto aislado, pero sus áreas se navegan desde el
   // menú EV. Así no se duplican pestañas dentro del workspace ni se ocultan
   // funciones importantes al corredor.
-  ["Inicio", "/realty", "Centro de control de la cartera", "RE", "properties"],
+  ["Resumen inmobiliario", "/realty", "Centro de control de la cartera", "RE", "properties"],
   ["Cargas inmobiliarias", "/realty?view=operations", "Captación, carga manual e importación", "RC", "realty_loads"],
   ["Propiedades", "/realty?view=properties", "Inventario, fichas y publicación", "RP", "properties"],
   ["Corredores", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],
@@ -276,9 +276,9 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
     // El workspace del producto encabeza la navegación. Las opciones de
     // plataforma siguen ordenadas para que el menú sea predecible.
-    return [...availableItems].sort(([leftLabel], [rightLabel]) => {
-      if (product && leftLabel === "Inicio") return -1;
-      if (product && rightLabel === "Inicio") return 1;
+    return [...availableItems].sort(([leftLabel, leftHref], [rightLabel, rightHref]) => {
+      if (product && leftHref === product.href) return -1;
+      if (product && rightHref === product.href) return 1;
       if (leftLabel === "Inicio") return -1;
       if (rightLabel === "Inicio") return 1;
       return leftLabel.localeCompare(rightLabel, "es");

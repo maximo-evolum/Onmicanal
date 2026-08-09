@@ -28,7 +28,7 @@ const realtySections: ReadonlyArray<ModuleAccessKey> = [
 ];
 
 const views = {
-  summary: { label: "Inicio", module: null, content: RealtyDashboardPageContent },
+  summary: { label: "Resumen inmobiliario", module: null, content: RealtyDashboardPageContent },
   operations: { label: "Cargas inmobiliarias", module: "realty_loads", content: RealtyLoadsPageContent },
   properties: { label: "Propiedades", module: "properties", content: RealtyPropertiesPageContent },
   brokers: { label: "Corredores", module: "brokers", content: BrokersPageContent },
