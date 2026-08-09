@@ -336,10 +336,12 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
             return currentSearchParams.get(key) === value;
           });
           const matchesRoute = pathname === targetPath && queryMatches;
-          // La etiqueta activa viene del workspace actual. La ruta se compara
-          // con su query exacta para que /realty?view=brokers no deje también
-          // seleccionado el Inicio inmobiliario.
-          const selected = label === active || matchesRoute;
+          const isRealtyArea = targetPath === "/realty";
+          // Las áreas inmobiliarias comparten la misma ruta y cambian solo
+          // `view`. Durante una navegación cliente la query previa puede
+          // seguir disponible un render; por eso dentro de esa vertical la
+          // única fuente de selección es la vista resuelta por RealtyPage.
+          const selected = isRealtyArea ? label === active : (label === active || matchesRoute);
           return (
           <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
             <ModuleSymbol code={icon} label={label} />
