@@ -16092,6 +16092,11 @@ textarea:focus {
 .realty-workspace .realty-filter-chips button { min-height: 31px; border: 1px solid #dbe6e7; border-radius: 999px; padding: 5px 10px; color: #61707c; background: #fff; font: inherit; font-size: .72rem; font-weight: 800; }
 .realty-workspace .realty-filter-chips button.active { border-color: #0b9e9b; color: #fff; background: linear-gradient(135deg, #0ba5a0, #3489ca); }
 .realty-workspace .realty-inventory-filters > input { width: min(100%, 290px); min-height: 37px; border-radius: 10px; padding: 8px 11px; font-size: .78rem; }
+.realty-workspace .realty-filter-extra { margin: -6px 0 14px; }
+.realty-workspace .realty-inventory-table { margin-top: 18px; }
+.realty-workspace .realty-inventory-table .realty-ws-row { grid-template-columns: minmax(180px, 1.35fr) .8fr .85fr .7fr; }
+.realty-workspace .property-portal-specs { display: flex; flex-wrap: wrap; gap: 5px; }
+.realty-workspace .property-portal-specs span { padding: 3px 6px; border-radius: 999px; color: #60717a; background: #f0f5f5; font-size: .64rem; }
 
 /* Vistas internas del workspace: cada función conserva su contexto y deja de
    reutilizar los paneles genéricos de la plataforma. */
@@ -16105,6 +16110,12 @@ textarea:focus {
 .realty-workspace .realty-broker-form :is(input, .primary-btn) { width: 100%; min-height: 39px; }
 .realty-workspace .realty-assignment-table .realty-ws-row { grid-template-columns: minmax(160px, 1.25fr) .75fr minmax(110px, .85fr) minmax(130px, .9fr); align-items: center; cursor: default; }
 .realty-workspace .realty-assignment-table select { min-height: 31px; padding: 5px 7px; font-size: .72rem; }
+.realty-workspace .realty-broker-distribution { align-items: start; }
+.realty-workspace .realty-broker-recommendation { display: grid; align-content: start; gap: 15px; background: linear-gradient(145deg, #19132e, #24304b); border-color: #3a2a67; }
+.realty-workspace .realty-broker-recommendation :is(h2, p, strong) { color: #fff; }
+.realty-workspace .realty-broker-recommendation .realty-ws-card-head > div > span, .realty-workspace .realty-broker-recommendation small { color: #79e8df; }
+.realty-workspace .realty-broker-recommendation-copy { display: grid; gap: 8px; padding: 14px; border: 1px solid rgba(255,255,255,.13); border-radius: 12px; background: rgba(255,255,255,.06); }
+.realty-workspace .realty-broker-recommendation-copy p { margin: 0; color: #d1cae6; font-size: .78rem; line-height: 1.45; }
 
 .realty-workspace .realty-ws-activity-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; }
 .realty-workspace .realty-ws-activity-summary article { display: grid; gap: 7px; min-height: 108px; padding: 15px; border: 1px solid #dbe6e7; border-radius: 15px; background: linear-gradient(145deg, #fff, #f1fbfa); }
@@ -16128,6 +16139,11 @@ textarea:focus {
 .realty-workspace .realty-alert-list span { color: #9c6513; font-size: .65rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .realty-workspace .realty-alert-list strong { color: #17212b; font-size: .78rem; }
 .realty-workspace .realty-alert-list small { color: #64737d; font-size: .7rem; }
+.realty-workspace .realty-activity-map { display: grid; gap: 6px; min-height: 116px; margin-bottom: 13px; padding: 15px; border-radius: 13px; color: #fff; background: radial-gradient(circle at 75% 25%, rgba(49, 202, 192, .58), transparent 20%), linear-gradient(135deg, #0d5b64, #233260 65%, #5a3186); }
+.realty-workspace .realty-activity-map span { color: #7ce7df; font-size: .64rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.realty-workspace .realty-activity-map strong { font-size: 1.1rem; }
+.realty-workspace .realty-activity-map small { color: #e1fbf8; font-size: .72rem; }
+.realty-workspace .realty-activity-map i { align-self: end; color: #d2e9ff; font-size: .67rem; font-style: normal; }
 .realty-workspace .realty-activity-property-strip .property-portal-grid { margin-top: 4px; }
 
 .realty-workspace .realty-ws-portal-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, .7fr); gap: 18px; }
@@ -16149,6 +16165,14 @@ textarea:focus {
 .realty-workspace .realty-portal-steps strong { color: #17212b; font-size: .8rem; }
 .realty-workspace .realty-portal-steps small { color: #64737d; font-size: .71rem; }
 .realty-workspace .realty-portal-table .realty-ws-row { grid-template-columns: minmax(180px, 1.3fr) .8fr .9fr .65fr; }
+.realty-workspace .realty-portal-switches { display: grid; gap: 8px; margin-bottom: 15px; }
+.realty-workspace .realty-portal-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 43px; padding: 9px 10px; border: 1px solid #dce7e7; border-radius: 11px; color: #34454f; background: #f9fcfc; text-align: left; font: inherit; font-size: .76rem; }
+.realty-workspace .realty-portal-switch i { position: relative; flex: 0 0 33px; width: 33px; height: 19px; border-radius: 999px; background: #cbd6d8; transition: background .16s ease; }
+.realty-workspace .realty-portal-switch i::after { position: absolute; top: 3px; left: 3px; width: 13px; height: 13px; border-radius: 50%; background: #fff; content: ""; transition: transform .16s ease; }
+.realty-workspace .realty-portal-switch.is-on { border-color: #75d2cb; background: #edfbf9; }
+.realty-workspace .realty-portal-switch.is-on i { background: #0ca5a0; }
+.realty-workspace .realty-portal-switch.is-on i::after { transform: translateX(14px); }
+.realty-workspace .realty-template-btn { width: 100%; min-height: 37px; }
 
 /* Operación, corredores, actividad y portal usan el mismo acabado: una capa
    de contexto arriba y datos legibles debajo. */

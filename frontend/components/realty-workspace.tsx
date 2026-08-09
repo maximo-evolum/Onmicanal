@@ -1024,6 +1024,16 @@ export function RealtyLoadsPageContent() {
     await reload();
   }
 
+  function downloadTemplate() {
+    const content = "Nombre,Tipo,Operacion,Precio,Direccion,Comuna,Piezas,Banos,Estacionamientos,M2,Material,Observaciones\nDepartamento ejemplo,Departamento,Venta,148000000,Av. Ejemplo 123,Nunoa,2,2,1,74,Hormigon,Ficha de ejemplo";
+    const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "plantilla-propiedades-evolum.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <>
       <RealtyHeader
@@ -1076,6 +1086,7 @@ export function RealtyLoadsPageContent() {
           <div className="realty-import-steps"><div><b>1</b><span><strong>Selecciona tu archivo</strong><small>CSV de propiedades o base de captación.</small></span></div><div><b>2</b><span><strong>Revisa la vista previa</strong><small>{importRows.length ? `${importRows.length} filas detectadas` : "Aún no hay filas cargadas."}</small></span></div><div><b>3</b><span><strong>Confirma el destino</strong><small>Importa como inventario activo y trazable.</small></span></div></div>
           <div className="realty-import-actions"><button className="primary-btn" type="button" disabled={!importRows.length} onClick={importProperties}>Importar {importRows.length || ""} propiedades</button><button className="secondary-btn" type="button" onClick={autoAssign}>Asignar automáticamente</button></div>
           <div className="realty-assignment-summary"><strong>{data.brokers.length} corredores activos</strong><span>{data.properties.filter((item) => !text(asData(item).assignedBrokerId || item.assignedToId)).length} propiedades sin responsable</span><Link href="/realty?view=brokers">Gestionar reparto →</Link></div>
+          <button className="secondary-btn realty-template-btn" type="button" onClick={downloadTemplate}>Descargar plantilla CSV</button>
         </aside>
       </section>
 
@@ -1106,15 +1117,19 @@ export function RealtyPropertiesPageContent() {
   const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"ALL" | "VENTA" | "ARRIENDO" | "UNASSIGNED">("ALL");
+  const [filter, setFilter] = useState<"ALL" | "VENTA" | "ARRIENDO" | "UNASSIGNED" | "VISITED" | "STALE">("ALL");
 
   const visibleProperties = data.properties.filter((property) => {
     const propertyData = asData(property);
     const searchable = `${property.title} ${text(propertyData.address)} ${text(propertyData.comuna)} ${text(propertyData.operation)}`.toLowerCase();
     const matchesQuery = !query.trim() || searchable.includes(query.trim().toLowerCase());
     const operation = text(propertyData.operation).toUpperCase();
+    const hasVisit = data.visits.some((visit) => text(asData(visit).propertyId) === property.id);
+    const hasActivity = hasVisit || data.followups.some((followup) => text(asData(followup).propertyId) === property.id);
     const matchesFilter = filter === "ALL"
       || (filter === "UNASSIGNED" && !text(propertyData.assignedBrokerId || property.assignedToId))
+      || (filter === "VISITED" && hasVisit)
+      || (filter === "STALE" && !hasActivity)
       || operation === filter;
     return matchesQuery && matchesFilter;
   });
@@ -1181,7 +1196,15 @@ export function RealtyPropertiesPageContent() {
           </div>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por propiedad, comuna u operación" aria-label="Buscar propiedad" />
         </div>
+        <div className="realty-filter-chips realty-filter-extra">
+          <button type="button" className={filter === "VISITED" ? "active" : ""} onClick={() => setFilter("VISITED")}>Con visita ({data.properties.filter((property) => data.visits.some((visit) => text(asData(visit).propertyId) === property.id)).length})</button>
+          <button type="button" className={filter === "STALE" ? "active" : ""} onClick={() => setFilter("STALE")}>Sin actividad ({data.properties.filter((property) => !data.visits.some((visit) => text(asData(visit).propertyId) === property.id) && !data.followups.some((followup) => text(asData(followup).propertyId) === property.id)).length})</button>
+        </div>
         <PropertyPortalCards properties={visibleProperties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
+        <div className="realty-ws-table realty-inventory-table">
+          <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Operación</span><span>Precio</span><span>Estado</span></div>
+          {visibleProperties.slice(0, 12).map((property) => <button type="button" className="realty-ws-row" key={`${property.id}-row`} onClick={() => setSelectedProperty(property)}><strong>{property.title}</strong><span>{text(asData(property).operation, "Disponible")}</span><span>{money(asData(property).price)}</span><b>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Lead"}</b></button>)}
+        </div>
       </section>
       <RealtyPredictivePanel data={data} />
       {selectedProperty ? <PropertyDetailModal property={selectedProperty} brokers={data.brokers} onClose={() => setSelectedProperty(null)} onCreateCampaign={createPropertyCampaign} onRemovePhoto={removePropertyPhoto} /> : null}
@@ -1283,6 +1306,7 @@ export function RealtyActivityPageContent() {
 
         <aside className="realty-ws-card realty-activity-priorities">
           <div className="realty-ws-card-head"><div><span>Prioridades</span><h2>Alertas comerciales</h2><p>Convierte pendientes en acciones concretas para el equipo.</p></div></div>
+          <div className="realty-activity-map"><span>Mapa operativo</span><strong>{data.visits.length} visitas registradas</strong><small>Actividad por zona, corredor y semana.</small><i>Ñuñoa · Providencia · La Reina</i></div>
           <form className="realty-alert-form" onSubmit={createAlert}>
             <input value={alertTitle} onChange={(event) => setAlertTitle(event.target.value)} placeholder="Ej: confirmar precio antes de publicar" />
             <button type="submit" className="secondary-btn">Crear alerta</button>
@@ -1321,6 +1345,20 @@ export function BrokerPortalPageContent() {
     await reload();
   }
 
+  async function togglePortalOption(option: "portalVisible" | "allowWhatsAppShare" | "showPublicPrice" | "approvalRequired") {
+    if (!featuredProperty) return;
+    try {
+      const currentData = asData(featuredProperty);
+      const updated = await updateIndustryRecord(featuredProperty.id, {
+        data: { ...currentData, [option]: !Boolean(currentData[option]) }
+      });
+      setSelectedProperty(updated);
+      await reload();
+    } catch {
+      // La interfaz conserva el estado previo si la actualización no se puede guardar.
+    }
+  }
+
   const featuredProperty = selectedProperty || visibleProperties[0] || null;
   const featuredData = featuredProperty ? asData(featuredProperty) : {};
 
@@ -1341,8 +1379,15 @@ export function BrokerPortalPageContent() {
           </> : <p className="empty-state">Aún no hay propiedades asignadas a este portal.</p>}
         </article>
         <aside className="realty-ws-card realty-portal-steps">
-          <div className="realty-ws-card-head"><div><span>Trabajo del corredor</span><h2>Qué sigue</h2><p>Una secuencia simple para gestionar cada propiedad sin salir de la cartera.</p></div></div>
-          <ol><li><b>1</b><span><strong>Revisa la ficha</strong><small>Precio, dirección y estado comercial.</small></span></li><li><b>2</b><span><strong>Agenda una visita</strong><small>Registra el interés y la fecha acordada.</small></span></li><li><b>3</b><span><strong>Deja seguimiento</strong><small>La actividad queda visible para la jefatura.</small></span></li></ol>
+          <div className="realty-ws-card-head"><div><span>Publicación</span><h2>Canales y permisos</h2><p>Define qué puede ver y compartir el corredor para la ficha seleccionada.</p></div></div>
+          <div className="realty-portal-switches">
+            {[
+              ["portalVisible", "Visible en portal corredor"],
+              ["allowWhatsAppShare", "Permitir compartir por WhatsApp"],
+              ["showPublicPrice", "Mostrar precio de publicación"],
+              ["approvalRequired", "Solicitar aprobación antes de publicar"]
+            ].map(([option, label]) => <button type="button" key={option} className={`realty-portal-switch ${Boolean(featuredData[option]) ? "is-on" : ""}`} onClick={() => togglePortalOption(option as "portalVisible" | "allowWhatsAppShare" | "showPublicPrice" | "approvalRequired")}><span>{label}</span><i aria-hidden="true" /></button>)}
+          </div>
           <Link href="/realty?view=activity" className="secondary-btn">Abrir actividad</Link>
         </aside>
       </section>
@@ -1407,6 +1452,32 @@ export function BrokersPageContent() {
     }
   }
 
+  async function autoAssignUnassigned() {
+    if (!data.brokers.length) {
+      setMessage("Crea al menos un corredor antes de usar el reparto automático.");
+      return;
+    }
+    const unassigned = data.properties.filter((property) => !text(asData(property).assignedBrokerId || property.assignedToId));
+    if (!unassigned.length) {
+      setMessage("No hay propiedades sin responsable para repartir.");
+      return;
+    }
+    try {
+      setMessage("Calculando reparto equilibrado...");
+      await Promise.all(unassigned.map((property, index) => {
+        const broker = data.brokers[index % data.brokers.length];
+        return updateIndustryRecord(property.id, {
+          assignedToId: broker.id,
+          data: { ...asData(property), assignedBrokerId: broker.id, assignedBrokerName: broker.name, assignmentMode: "automatico" }
+        });
+      }));
+      setMessage(`${unassigned.length} propiedades fueron asignadas automáticamente.`);
+      await reload();
+    } catch (assignError) {
+      setMessage(assignError instanceof Error ? assignError.message : "No se pudo completar el reparto automático.");
+    }
+  }
+
   return (
     <>
       <RealtyHeader
@@ -1435,11 +1506,12 @@ export function BrokersPageContent() {
           <button className="primary-btn" type="submit">Crear usuario corredor</button>
         </form>
       </section>
-      <section className="realty-ws-card realty-assignment-table">
+      <section className="realty-ws-two-columns realty-broker-distribution">
+      <article className="realty-ws-card realty-assignment-table">
         <div className="realty-ws-card-head"><div><span>Reparto de cartera</span><h2>Propiedades sin responsable o reasignables</h2><p>Asigna manualmente o deja que la distribución automática proponga el siguiente corredor.</p></div></div>
         <div className="realty-ws-table">
           <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Etapa</span><span>Corredor</span><span>Acción</span></div>
-          {data.properties.map((property) => (
+          {data.properties.filter((property) => !text(asData(property).assignedBrokerId || property.assignedToId)).map((property) => (
             <div className="realty-ws-row" key={property.id}>
               <strong>{property.title}</strong>
               <span>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Lead"}</span>
@@ -1450,7 +1522,14 @@ export function BrokersPageContent() {
               </select>
             </div>
           ))}
+          {!data.properties.some((property) => !text(asData(property).assignedBrokerId || property.assignedToId)) ? <p className="empty-state">Todas las propiedades activas tienen un corredor asignado.</p> : null}
         </div>
+      </article>
+      <aside className="realty-ws-card realty-broker-recommendation">
+        <div className="realty-ws-card-head"><div><span>Lectura IA</span><h2>Recomendación de reparto</h2><p>El sistema propone una distribución equilibrada según la cartera actual.</p></div></div>
+        <div className="realty-broker-recommendation-copy"><strong>{data.brokers[0]?.name || "Tu equipo"}</strong><p>{data.brokers.length ? `${data.brokers[0].name} puede recibir el próximo registro según el reparto actual.` : "Crea corredores para que EVOLUM sugiera el mejor responsable."}</p><small>Impacto estimado: alto</small></div>
+        <button type="button" className="primary-btn" onClick={autoAssignUnassigned}>Aplicar reparto automático</button>
+      </aside>
       </section>
     </>
   );
