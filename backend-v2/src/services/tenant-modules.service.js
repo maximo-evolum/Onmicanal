@@ -250,7 +250,20 @@ export async function enableTenantModules({ tenantId, modules = [], source = "IN
   });
   if (!tenant) return [];
   const normalized = filterModulesForIndustry(modules, tenant.industry);
+  // La configuracion de Desarrollador es la fuente de verdad por cuenta.
+  // Las sincronizaciones automaticas pueden sumar modulos nuevos, pero no
+  // pueden reactivar uno que fue bloqueado de forma explicita.
+  const existingModules = await prisma.tenantModule.findMany({
+    where: { tenantId, module: { in: normalized } },
+    select: { module: true, enabled: true, source: true }
+  });
+  const manuallyDisabled = new Set(
+    existingModules
+      .filter((item) => item.source === "MANUAL" && !item.enabled)
+      .map((item) => item.module)
+  );
   for (const module of normalized) {
+    if (source !== "MANUAL" && manuallyDisabled.has(module)) continue;
     await prisma.tenantModule.upsert({
       where: { tenantId_module: { tenantId, module } },
       update: { enabled: true, source },
@@ -260,26 +273,10 @@ export async function enableTenantModules({ tenantId, modules = [], source = "IN
   return getTenantModules(tenantId);
 }
 
-// Reemplaza solo capacidades propias de una vertical. Conserva módulos del
-// plan y no toca configuraciones MANUAL, evitando duplicados históricos al
-// actualizar una plantilla de rubro.
-export async function syncTenantIndustryModules({ tenantId, modules = [], planCode = "STARTER" }) {
+// Incorpora capacidades nuevas de una vertical sin quitar las ya entregadas
+// a una cuenta. Un módulo solo se deshabilita mediante setTenantModules,
+// es decir, por una decisión explícita desde Desarrollador.
+export async function syncTenantIndustryModules({ tenantId, modules = [] }) {
   const desired = new Set(modules.map((module) => String(module).trim()).filter(Boolean));
-  const planModules = new Set(getModulesForPlan(normalizePlanCode(planCode)));
-  const currentIndustryModules = await prisma.tenantModule.findMany({
-    where: { tenantId, source: "INDUSTRY" },
-    select: { id: true, module: true }
-  });
-
-  const obsolete = currentIndustryModules
-    .filter((item) => !desired.has(item.module) && !planModules.has(item.module))
-    .map((item) => item.id);
-  if (obsolete.length) {
-    await prisma.tenantModule.updateMany({
-      where: { id: { in: obsolete } },
-      data: { enabled: false }
-    });
-  }
-
   return enableTenantModules({ tenantId, modules: [...desired], source: "INDUSTRY" });
 }

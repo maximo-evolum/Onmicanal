@@ -141,6 +141,12 @@ function isGastronomyIndustry(industry?: string | null) {
 
 function contextualizeItem(item: SidebarItem, industry?: string | null): SidebarItem {
   const [, href, , icon, moduleKey] = item;
+  if (moduleKey === "inbox" && isRealtyIndustry(industry)) {
+    return ["Chat's", href, "Conversaciones, leads compradores y atención comercial", icon, moduleKey];
+  }
+  if (moduleKey === "dashboard" && isRealtyIndustry(industry)) {
+    return ["Dashboard y reportes", href, "Indicadores inmobiliarios y reporte ejecutivo PDF", icon, moduleKey];
+  }
   if (moduleKey === "customers" && isRealtyIndustry(industry)) {
     return ["Clientes", href, "Compradores, preferencias e historial comercial", icon, moduleKey];
   }

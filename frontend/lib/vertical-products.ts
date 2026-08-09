@@ -28,7 +28,14 @@ export const VERTICAL_PRODUCTS: Record<VerticalProductCode, VerticalProductDefin
       "brokers", "realty_clients", "property_assignments"
     ],
     description: "Propiedades, cargas, corredores, visitas y compradores",
-    sharedModuleKeys: ["integrations", "onboarding", "saas"]
+    // Core EVOLUM + CRM: cada inmobiliaria conserva estas capacidades junto
+    // con sus módulos propios. Los registros siguen aislados por tenant.
+    // El reporte ejecutivo se entrega desde Dashboard.
+    sharedModuleKeys: [
+      "crm", "inbox", "agenda", "pipeline", "campaigns", "payments",
+      "dashboard", "ai_ops", "integrations", "documents", "workflows",
+      "metadata", "onboarding", "saas"
+    ]
   },
   FINANCE: {
     code: "FINANCE",
