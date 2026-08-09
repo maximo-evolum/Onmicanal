@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { loginWithEmail } from "./api";
 import { AgentSession } from "./types";
 import { API_BASE_URL, SESSION_COOKIE, SESSION_STORAGE_KEY } from "./constants";
+import { getVerticalProduct } from "./vertical-products";
 
 function setCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=604800; samesite=lax`;
@@ -104,7 +105,10 @@ export function LoginPage() {
       setError(null);
       const data = await loginWithEmail(email, password || undefined);
       setStoredAuth(data.user);
-      router.push("/crm-principal");
+      // Cada producto vertical comienza en su propio workspace. Esto evita
+      // que una cuenta de Inmobiliaria o Finanzas entre primero al CRM general.
+      const product = getVerticalProduct(data.tenant?.industry);
+      router.push(product?.href || "/crm-principal");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión");

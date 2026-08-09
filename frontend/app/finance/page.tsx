@@ -303,7 +303,7 @@ function FinanceWorkspace() {
 
   return (
     <ModuleGate moduleKey="finance_analytics">
-      <div className={`module-with-menu-shell finance-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <div className={`module-with-menu-shell product-workspace finance-shell finance-product-workspace ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active={activeTab === "resumen" ? "Finanzas" : active.label} isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
         <main className="finance-workspace">
           <header className="finance-header">

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { getMe, getMyModules } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
+import { getVerticalProduct, type VerticalProductCode } from "@/lib/vertical-products";
 
 type EvolumSidebarProps = {
   active: string;
@@ -74,6 +75,11 @@ const realtyGatewayModules: ModuleAccessKey[] = [
   "brokers", "realty_clients", "property_assignments"
 ];
 
+const financeGatewayModules: ModuleAccessKey[] = [
+  "finance_invoices", "finance_bank_sync", "finance_reconciliation",
+  "finance_exceptions", "finance_collections", "finance_analytics"
+];
+
 const realtyRoutes = [
   "/realty", "/realty-loads", "/properties", "/brokers",
   "/realty-activity", "/broker-portal", "/customers"
@@ -112,6 +118,13 @@ function isAutomotiveIndustry(industry?: string | null) {
 function isFinanceIndustry(industry?: string | null) {
   const value = String(industry || "").toUpperCase();
   return value.includes("FINANCE") || value.includes("FINANZ") || value.includes("CONTABLE") || value.includes("CONTABIL");
+}
+
+function verticalWorkspaceItem(item: SidebarItem, productCode: VerticalProductCode) {
+  const [, href, , , moduleKey] = item;
+  const product = getVerticalProduct(productCode);
+  if (!product) return false;
+  return href === product.href || product.sharedModuleKeys.includes(moduleKey);
 }
 
 function isShiftIndustry(industry?: string | null) {
@@ -218,27 +231,37 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
   const items = useMemo(() => {
     const showDeveloperItems = isDeveloper || String(role || "").toUpperCase() === "SUPER_ADMIN";
+    const product = getVerticalProduct(industry);
     const allItems = (showDeveloperItems ? [...baseItems, ...developerItems] : baseItems)
       .map((item) => contextualizeItem(item, industry));
-    // Un superadmin administra toda la plataforma: ve el catálogo completo
-    // de EVOLUM OS, no solo las verticales del tenant con que inició sesión.
-    const applicableItems = showDeveloperItems
-      ? allItems
+    // La navegación de productos no vuelve a mezclar verticales: dentro de
+    // cada tenant de Inmobiliaria o Finanzas aparece su workspace y solo las
+    // capacidades de plataforma necesarias. Super Admin conserva el acceso
+    // global a través de Desarrollador, no como módulos operativos cruzados.
+    const applicableItems = product
+      ? allItems.filter((item) => verticalWorkspaceItem(item, product.code) || (showDeveloperItems && item[4] === "admin"))
       : allItems.filter((item) => itemBelongsToIndustry(item, industry));
     const availableItems = enabledModules === null
       ? applicableItems
       : applicableItems.filter(([, href, , , moduleKey]) => {
         if (href === "/realty") {
           return realtyGatewayModules.some((key) =>
-            moduleAllowed(key, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle),
+            moduleAllowed(key, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle, industry),
           );
         }
-        return moduleAllowed(moduleKey, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle);
+        if (href === "/finance") {
+          return financeGatewayModules.some((key) =>
+            moduleAllowed(key, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle, industry),
+          );
+        }
+        return moduleAllowed(moduleKey, enabledModules, showDeveloperItems ? "SUPER_ADMIN" : role, jobTitle, industry);
       });
 
-    // Inicio siempre encabeza la navegacion; los modulos restantes se ordenan
-    // alfabeticamente para que el menu sea predecible con cualquier vertical.
+    // El workspace del producto encabeza la navegación. Las opciones de
+    // plataforma siguen ordenadas para que el menú sea predecible.
     return [...availableItems].sort(([leftLabel], [rightLabel]) => {
+      if (product && leftLabel === product.label) return -1;
+      if (product && rightLabel === product.label) return 1;
       if (leftLabel === "Inicio") return -1;
       if (rightLabel === "Inicio") return 1;
       return leftLabel.localeCompare(rightLabel, "es");

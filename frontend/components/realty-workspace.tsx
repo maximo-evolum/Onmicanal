@@ -473,7 +473,7 @@ export function RealtyShell({
 
   return (
     <ModuleGate moduleKey={moduleKey}>
-      <div className={`vertical-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+      <div className={`vertical-shell product-workspace realty-product-workspace ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar
           active={active}
           isDeveloper={agent?.role === "SUPER_ADMIN"}

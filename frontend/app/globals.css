@@ -16252,3 +16252,213 @@ textarea:focus {
 @media (max-width: 840px) {
   .realty-workspace .realty-buyer-workspace, .realty-workspace .realty-buyer-layout { grid-template-columns: 1fr; }
 }
+
+/* EVOLUM Product OS -------------------------------------------------------
+   Aplicación del rediseño aprobado: mismo lenguaje visual de Inmobiliaria y
+   Finanzas, con procesos y datos propios. Conserva la paleta corporativa
+   #05070D, #8A2EFF y #2E8BFF; no hereda el blanco intenso del diseño anterior.
+*/
+.product-workspace {
+  --product-bg: #05070d;
+  --product-surface: #111225;
+  --product-surface-2: #181737;
+  --product-line: rgba(138, 46, 255, .30);
+  --product-text: #f8f7ff;
+  --product-muted: #b6b5cc;
+  --product-accent: #8a2eff;
+  --product-accent-2: #2e8bff;
+  --product-success: #2bd7b5;
+  background: radial-gradient(circle at 92% 0%, rgba(46, 139, 255, .15), transparent 25%), radial-gradient(circle at 56% -20%, rgba(138, 46, 255, .26), transparent 35%), var(--product-bg);
+  color: var(--product-text);
+}
+.product-workspace :is(h1, h2, h3, h4, strong, b) { color: var(--product-text); }
+.product-workspace :is(p, small, label, span) { color: var(--product-muted); }
+.product-workspace .primary-btn,
+.product-workspace .realty-hero-actions .primary-btn {
+  border: 0;
+  color: #fff;
+  background: linear-gradient(105deg, var(--product-accent), var(--product-accent-2));
+  box-shadow: 0 12px 28px rgba(138, 46, 255, .28);
+}
+.product-workspace .secondary-btn,
+.product-workspace .finance-link-button {
+  border-color: rgba(173, 133, 255, .55);
+  color: #eeeaff;
+  background: rgba(20, 20, 45, .74);
+}
+.product-workspace .secondary-btn:hover,
+.product-workspace .finance-link-button:hover { border-color: #2e8bff; background: rgba(46, 139, 255, .12); }
+
+/* Inmobiliaria: centro de control + workspace operativo. */
+.vertical-shell.product-workspace > main.realty-page.realty-workspace {
+  min-height: 100vh;
+  padding: 30px 34px 56px;
+  background: transparent;
+  color: var(--product-text);
+}
+.product-workspace .realty-module-nav {
+  position: sticky;
+  top: 12px;
+  z-index: 7;
+  margin: 0 0 22px;
+  padding: 8px;
+  border: 1px solid var(--product-line);
+  border-radius: 15px;
+  background: rgba(10, 10, 26, .88);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .22);
+  backdrop-filter: blur(14px);
+}
+.product-workspace .realty-module-nav a { border-color: transparent; color: #ccc9df; background: transparent; }
+.product-workspace .realty-module-nav a:hover { color: #fff; border-color: rgba(138, 46, 255, .4); background: rgba(138, 46, 255, .16); }
+.product-workspace .realty-module-nav a.active { color: #fff; background: linear-gradient(110deg, #842cff, #2e8bff); box-shadow: 0 8px 18px rgba(138, 46, 255, .3); }
+.product-workspace .realty-hero,
+.product-workspace .realty-ws-hero {
+  border: 1px solid var(--product-line);
+  border-radius: 22px;
+  background: radial-gradient(circle at 94% 15%, rgba(46, 139, 255, .27), transparent 29%), linear-gradient(118deg, #171331, #111c3a);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .24);
+}
+.product-workspace .realty-hero { margin: 0; padding: 26px; border-bottom: 1px solid var(--product-line); }
+.product-workspace .realty-hero > div > span,
+.product-workspace .realty-ws-intro > span,
+.product-workspace .realty-ws-card-head > div > span,
+.product-workspace .realty-dashboard-heading > div > span { color: #b985ff; }
+.product-workspace .realty-hero p,
+.product-workspace .realty-ws-intro p { color: var(--product-muted); }
+.product-workspace :is(.realty-ws-kpis article, .realty-ws-card, .realty-dashboard-section, .realty-workspace .vertical-card, .realty-workspace .property-portal-card, .realty-buyer-form, .realty-buyer-results, .realty-buyer-item, .realty-match-panel, .realty-property-match) {
+  border-color: var(--product-line) !important;
+  color: var(--product-text) !important;
+  background: linear-gradient(145deg, rgba(24, 21, 49, .98), rgba(12, 18, 39, .97)) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .18) !important;
+}
+.product-workspace :is(.realty-ws-kpis article, .realty-ws-card, .realty-dashboard-section, .realty-workspace .vertical-card, .realty-workspace .property-portal-card, .realty-buyer-form, .realty-buyer-results, .realty-buyer-item, .realty-match-panel, .realty-property-match) :is(p, small, span, label) { color: var(--product-muted) !important; }
+.product-workspace .realty-ws-kpis article small,
+.product-workspace .property-portal-price,
+.product-workspace .realty-match-heading > strong { color: var(--product-success) !important; }
+.product-workspace .realty-ws-row,
+.product-workspace .realty-workspace .realty-ws-row { border-color: rgba(178, 146, 255, .15); background: rgba(8, 10, 27, .5); }
+.product-workspace .realty-ws-row-head { background: rgba(138, 46, 255, .15) !important; }
+.product-workspace :is(input, select, textarea) { border-color: rgba(166, 128, 250, .36) !important; color: #fff !important; background: rgba(5, 7, 18, .72) !important; }
+.product-workspace :is(input, select, textarea)::placeholder { color: #9a99b0; }
+
+/* Finanzas: mismo shell, identidad financiera con azul corporativo como acento. */
+.finance-shell.product-workspace { background: var(--product-bg); }
+.finance-product-workspace .finance-workspace {
+  width: 100%; max-width: none; min-height: 100vh; padding: 0 34px 56px;
+  color: var(--product-text); background: transparent;
+}
+.finance-product-workspace .finance-header {
+  position: sticky; top: 0; z-index: 8; width: calc(100% + 68px); margin: 0 -34px; padding: 20px 34px;
+  border: 0; border-bottom: 1px solid var(--product-line); border-radius: 0;
+  background: rgba(5, 7, 13, .90); box-shadow: 0 10px 28px rgba(0, 0, 0, .22); backdrop-filter: blur(16px);
+}
+.finance-product-workspace .finance-header > .finance-title > span,
+.finance-product-workspace .finance-eyebrow { color: #69b0ff !important; }
+.finance-product-workspace .finance-header h1,
+.finance-product-workspace .finance-card :is(h2, h3, strong, b) { color: #f8f7ff; }
+.finance-product-workspace .finance-header p,
+.finance-product-workspace .finance-card :is(p, span, small, label) { color: var(--product-muted); }
+.finance-product-workspace .finance-search,
+.finance-product-workspace .finance-bell,
+.finance-product-workspace .finance-header .account-pill { border-color: rgba(167, 132, 250, .35); color: #eeeaff; background: rgba(22, 20, 47, .82); }
+.finance-product-workspace .finance-search-label { color: #c8a9ff !important; border-color: rgba(167, 132, 250, .25); }
+.finance-product-workspace .finance-search input { color: #fff; }
+.finance-product-workspace .finance-tabs { margin: 0 0 24px; padding: 17px 0 0; border-color: rgba(167, 132, 250, .22); }
+.finance-product-workspace .finance-tabs a { color: #b7b4ca; }.finance-product-workspace .finance-tabs a.active { color:#fff; border-color:#2e8bff; }
+.finance-product-workspace :is(.finance-kpis article, .finance-card) { border-color: var(--product-line); background: linear-gradient(145deg, rgba(24, 21, 49, .98), rgba(12, 18, 39, .97)); box-shadow: 0 12px 30px rgba(0, 0, 0, .18); }
+.finance-product-workspace .finance-kpis strong { color: #fff; }.finance-product-workspace .finance-kpis span { color: var(--product-success); }
+.finance-product-workspace .finance-card .primary-btn { background: linear-gradient(105deg, #8a2eff, #2e8bff); }
+.finance-product-workspace .finance-table > div,
+.finance-product-workspace .finance-suggestions article,
+.finance-product-workspace .finance-agent-card { border-color: rgba(169, 133, 248, .22); background: rgba(8, 10, 28, .6); }
+.finance-product-workspace .finance-table span,
+.finance-product-workspace .finance-suggestions :is(span, small),
+.finance-product-workspace .finance-readiness span { color: var(--product-muted); }
+.finance-product-workspace .finance-readiness { border-color: rgba(169, 133, 248, .16); }
+.finance-product-workspace .finance-readiness > b.ready { color: #8ff4dd; background: rgba(43, 215, 181, .13); }
+.finance-product-workspace .finance-readiness > b.manual { color: #bfc8ff; background: rgba(46, 139, 255, .13); }
+.finance-product-workspace .finance-readiness > b.requires_configuration { color: #ffdc8d; background: rgba(255, 190, 79, .12); }
+.finance-product-workspace .finance-cycle { border-color: var(--product-line); background: linear-gradient(115deg, #181333, #10274a); }
+.finance-product-workspace .finance-cycle :is(h2, strong, b) { color: #fff; }.finance-product-workspace .finance-cycle :is(p, small, span) { color: var(--product-muted); }
+.finance-product-workspace .finance-cycle-steps button { border-color: rgba(169, 133, 248, .27); background: rgba(20, 19, 47, .86); }
+.finance-product-workspace .finance-cycle-steps button:hover { border-color: #2e8bff; transform: translateY(-2px); }
+.finance-product-workspace .finance-agent-card { background: linear-gradient(150deg, rgba(31, 28, 68, .98), rgba(10, 24, 47, .98)); }
+.finance-product-workspace .finance-projection-bars i,
+.finance-product-workspace .finance-aging b { background: linear-gradient(180deg, #8a2eff, #2e8bff); }
+
+@media (max-width: 840px) {
+  .vertical-shell.product-workspace > main.realty-page.realty-workspace,
+  .finance-product-workspace .finance-workspace { padding: 18px 15px 36px; }
+  .finance-product-workspace .finance-header { width: calc(100% + 30px); margin: 0 -15px; padding: 16px 15px; }
+  .product-workspace .realty-module-nav { position: static; overflow-x: auto; flex-wrap: nowrap; }
+}
+
+/* Corrección de paleta: Lumen es la apariencia principal de los productos.
+   El oscuro queda reservado al selector global de tema, no se impone por la
+   vertical. Se usan blancos opacos y acentos EVOLUM, evitando el blanco puro. */
+.product-workspace {
+  --product-bg: #eef3f2;
+  --product-surface: #fbfdfc;
+  --product-surface-2: #f4f7f8;
+  --product-line: #d1dcdb;
+  --product-text: #1d1a29;
+  --product-muted: #65707e;
+  --product-accent: #8a2eff;
+  --product-accent-2: #2e8bff;
+  --product-success: #079d8f;
+  background: radial-gradient(circle at 92% -10%, rgba(46, 139, 255, .13), transparent 31%), radial-gradient(circle at 56% -30%, rgba(138, 46, 255, .11), transparent 39%), var(--product-bg);
+  color: var(--product-text);
+}
+.product-workspace :is(h1, h2, h3, h4, strong, b) { color: var(--product-text); }
+.product-workspace :is(p, small, label, span) { color: var(--product-muted); }
+.product-workspace .primary-btn,
+.product-workspace .realty-hero-actions .primary-btn { color: #fff; background: linear-gradient(105deg, #8a2eff, #2e8bff); box-shadow: 0 10px 20px rgba(104, 70, 210, .22); }
+.product-workspace .secondary-btn,
+.product-workspace .finance-link-button { border-color: #cbb3f5; color: #50357a; background: rgba(255,255,255,.78); }
+.product-workspace .secondary-btn:hover,
+.product-workspace .finance-link-button:hover { border-color: #2e8bff; background: #eef7ff; }
+
+.vertical-shell.product-workspace > main.realty-page.realty-workspace { background: transparent; color: var(--product-text); }
+.product-workspace .realty-module-nav { border-color: #d6e0df; background: rgba(251,253,252,.90); box-shadow: 0 10px 25px rgba(38,48,56,.07); }
+.product-workspace .realty-module-nav a { color: #596371; background: transparent; }.product-workspace .realty-module-nav a:hover { color:#38205d; border-color:#c6a5f5; background:#f2eaff; }
+.product-workspace .realty-module-nav a.active { color:#fff; background:linear-gradient(110deg,#8a2eff,#2e8bff); box-shadow:0 7px 16px rgba(113,68,220,.20); }
+.product-workspace .realty-hero,
+.product-workspace .realty-ws-hero { border-color:#d3dfdf; background:radial-gradient(circle at 94% 15%,rgba(46,139,255,.15),transparent 28%),linear-gradient(118deg,#fbfdfc,#f2effb); box-shadow:0 14px 32px rgba(37,48,63,.08); }
+.product-workspace .realty-hero > div > span,
+.product-workspace .realty-ws-intro > span,
+.product-workspace .realty-ws-card-head > div > span,
+.product-workspace .realty-dashboard-heading > div > span { color: #8a2eff; }
+.product-workspace .realty-hero p,
+.product-workspace .realty-ws-intro p { color: var(--product-muted); }
+.product-workspace :is(.realty-ws-kpis article, .realty-ws-card, .realty-dashboard-section, .realty-workspace .vertical-card, .realty-workspace .property-portal-card, .realty-buyer-form, .realty-buyer-results, .realty-buyer-item, .realty-match-panel, .realty-property-match) { border-color:#d6e0df !important; color:var(--product-text) !important; background:linear-gradient(145deg,#fcfefd,#f4f7f8) !important; box-shadow:0 10px 24px rgba(37,48,63,.055) !important; }
+.product-workspace :is(.realty-ws-kpis article, .realty-ws-card, .realty-dashboard-section, .realty-workspace .vertical-card, .realty-workspace .property-portal-card, .realty-buyer-form, .realty-buyer-results, .realty-buyer-item, .realty-match-panel, .realty-property-match) :is(p, small, span, label) { color:var(--product-muted) !important; }
+.product-workspace .realty-ws-kpis article small,
+.product-workspace .property-portal-price,
+.product-workspace .realty-match-heading > strong { color:var(--product-success) !important; }
+.product-workspace .realty-ws-row,
+.product-workspace .realty-workspace .realty-ws-row { border-color:#e1e9e8; background:#fff; }.product-workspace .realty-ws-row-head { background:#edf1f3 !important; }
+.product-workspace :is(input, select, textarea) { border-color:#c9d7d5 !important; color:#202330 !important; background:#fff !important; }.product-workspace :is(input, select, textarea)::placeholder { color:#8b959d; }
+
+.finance-shell.product-workspace { background:var(--product-bg); }.finance-product-workspace .finance-workspace { color:var(--product-text); background:transparent; }
+.finance-product-workspace .finance-header { border-bottom-color:#d1dcdb; background:rgba(251,253,252,.92); box-shadow:0 8px 22px rgba(37,48,63,.06); }
+.finance-product-workspace .finance-header > .finance-title > span,
+.finance-product-workspace .finance-eyebrow { color:#078fa8 !important; }.finance-product-workspace .finance-header h1,
+.finance-product-workspace .finance-card :is(h2,h3,strong,b) { color:var(--product-text); }.finance-product-workspace .finance-header p,
+.finance-product-workspace .finance-card :is(p,span,small,label) { color:var(--product-muted); }
+.finance-product-workspace .finance-search,
+.finance-product-workspace .finance-bell,
+.finance-product-workspace .finance-header .account-pill { border-color:#cbd8d5; color:#4b3570; background:#fff; }.finance-product-workspace .finance-search-label { color:#5a407d !important; border-color:#d9e2df; }.finance-product-workspace .finance-search input { color:#202330; }
+.finance-product-workspace .finance-tabs { border-color:#d1dcdb; }.finance-product-workspace .finance-tabs a { color:#5f5a6d; }.finance-product-workspace .finance-tabs a.active { color:#201b2b; border-color:#8a2eff; }
+.finance-product-workspace :is(.finance-kpis article,.finance-card) { border-color:#d1dcdb; background:linear-gradient(145deg,#fcfefd,#f4f6f8); box-shadow:0 10px 24px rgba(37,48,63,.055); }.finance-product-workspace .finance-kpis strong { color:var(--product-text); }.finance-product-workspace .finance-kpis span { color:var(--product-success); }
+.finance-product-workspace .finance-card .primary-btn { background:linear-gradient(105deg,#8a2eff,#2e8bff); }.finance-product-workspace .finance-table > div,
+.finance-product-workspace .finance-suggestions article,
+.finance-product-workspace .finance-agent-card { border-color:#e1e8e7; background:#fff; }.finance-product-workspace .finance-table span,
+.finance-product-workspace .finance-suggestions :is(span,small),
+.finance-product-workspace .finance-readiness span { color:var(--product-muted); }.finance-product-workspace .finance-readiness { border-color:#e1e8e7; }
+.finance-product-workspace .finance-cycle { border-color:#d1dcdb; background:linear-gradient(115deg,#f7f2ff,#ecf7ff); }.finance-product-workspace .finance-cycle :is(h2,strong,b) { color:var(--product-text); }.finance-product-workspace .finance-cycle :is(p,small,span) { color:var(--product-muted); }.finance-product-workspace .finance-cycle-steps button { border-color:#d9d0eb; background:rgba(255,255,255,.82); }.finance-product-workspace .finance-cycle-steps button:hover { border-color:#8a2eff; }
+.finance-product-workspace .finance-agent-card { background:linear-gradient(150deg,#fafcff,#edf7f7); }.finance-product-workspace .finance-projection-bars i,
+.finance-product-workspace .finance-aging b { background:linear-gradient(180deg,#8a2eff,#2e8bff); }
+
+/* El modo oscuro sigue disponible y vuelve a la lectura nocturna EVOLUM. */
+:root[data-theme="dark"] .product-workspace,
+:root[data-design-system="neon"] .product-workspace { --product-bg:#05070d; --product-surface:#111225; --product-surface-2:#181737; --product-line:rgba(138,46,255,.30); --product-text:#f8f7ff; --product-muted:#b6b5cc; --product-success:#2bd7b5; background:radial-gradient(circle at 92% 0%,rgba(46,139,255,.15),transparent 25%),radial-gradient(circle at 56% -20%,rgba(138,46,255,.26),transparent 35%),var(--product-bg); }

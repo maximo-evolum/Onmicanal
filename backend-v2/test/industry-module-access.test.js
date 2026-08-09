@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { filterModulesForIndustry, isModuleAllowedForIndustry } from "../src/lib/industry-module-access.js";
 import { createRequireModule } from "../src/middleware/tenant-access.js";
+import { getVerticalProductForIndustry } from "../src/lib/vertical-products.js";
 
 test("la API bloquea un módulo vertical aunque haya quedado habilitado por error en el plan", async () => {
   const guard = createRequireModule("properties", {
@@ -48,6 +49,19 @@ test("módulos de vertical: inmobiliaria no recibe capacidades de taller ni paci
 
   assert.deepEqual(modules, ["inbox", "properties", "realty_clients", "analytics"]);
   assert.equal(isModuleAllowedForIndustry("vehicle_owners", "REAL_ESTATE"), false);
+});
+
+test("Inmobiliaria y Finanzas exponen contratos de producto separados", () => {
+  const realty = getVerticalProductForIndustry("INMOBILIARIA");
+  const finance = getVerticalProductForIndustry("CONTABILIDAD");
+
+  assert.equal(realty?.workspace, "/realty");
+  assert.equal(realty?.modules.has("properties"), true);
+  assert.equal(realty?.modules.has("finance_invoices"), false);
+
+  assert.equal(finance?.workspace, "/finance");
+  assert.equal(finance?.modules.has("finance_invoices"), true);
+  assert.equal(finance?.modules.has("properties"), false);
 });
 
 test("módulos clínicos se comparten solo entre salud, dental y veterinaria", () => {
