@@ -161,10 +161,15 @@ const verticalModuleIndustries: Partial<Record<ModuleAccessKey, string[]>> = {
 
 function normalizeIndustry(value?: string | null) {
   const normalized = String(value || "GENERAL").trim().toUpperCase();
-  if (normalized === "INMOBILIARIA") return "REAL_ESTATE";
-  if (normalized === "GASTRONOMÍA") return "GASTRONOMY";
-  if (normalized === "VETERINARIA") return "VETERINARY";
-  if (normalized === "SALUD") return "HEALTH";
+  // Los tenants históricos y los creados desde el panel pueden guardar el
+  // mismo rubro con nombres distintos. La autorización visual debe usar las
+  // mismas claves canónicas que el backend; si no, un módulo habilitado puede
+  // parecer bloqueado para una cuenta válida.
+  if (normalized === "INMOBILIARIA" || normalized === "REALTY" || normalized === "CORRETAJE") return "REAL_ESTATE";
+  if (normalized === "GASTRONOMÍA" || normalized === "GASTRONOMIA") return "GASTRONOMY";
+  if (normalized === "VETERINARIA" || normalized === "CLINICA_VETERINARIA" || normalized === "CLÍNICA VETERINARIA") return "VETERINARY";
+  if (normalized === "SALUD" || normalized === "SALUD_CLINICA" || normalized === "SALUD CLÍNICA") return "HEALTH";
+  if (normalized === "FINANZAS" || normalized === "FINANCIERO" || normalized === "FINANCIERA" || normalized === "CONTABILIDAD" || normalized === "CONTABLE") return "FINANCE";
   return normalized;
 }
 
