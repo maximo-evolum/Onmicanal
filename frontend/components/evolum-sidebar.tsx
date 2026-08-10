@@ -220,6 +220,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   const [jobTitle, setJobTitle] = useState<string | null>(() => initialAccess?.jobTitle || initialSession?.jobTitle || null);
   const [industry, setIndustry] = useState<string | null>(() => initialAccess?.industry || null);
   const [menuReady, setMenuReady] = useState(Boolean(initialAccess));
+  const [openGroupId, setOpenGroupId] = useState<NavigationGroup["id"] | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const pathname = usePathname();
   // Se lee la query actual sin useSearchParams para que el menú pueda vivir
@@ -355,6 +356,18 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   }, [industry, items]);
 
   useEffect(() => {
+    const currentGroup = navigationGroups.find((group) => group.items.some(([label, href]) => {
+      const [targetPath, targetQuery] = href.split("?");
+      const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
+        const [key, value = ""] = entry.split("=");
+        return currentSearchParams.get(key) === value;
+      });
+      return targetPath === "/realty" ? label === active : (label === active || (pathname === targetPath && queryMatches));
+    }));
+    setOpenGroupId(currentGroup?.id || null);
+  }, [active, navigationGroups, pathname]);
+
+  useEffect(() => {
     const nav = navRef.current;
     if (!nav || typeof window === "undefined") return;
     const saved = Number(window.sessionStorage.getItem("evolum-sidebar-scroll") || "0");
@@ -405,17 +418,12 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
       <nav className="inbox-unified-nav-list evolum-nav-groups" ref={navRef} onScroll={saveMenuPosition} aria-busy={!menuReady}>
         {!menuReady ? <div className="evolum-nav-loading">Cargando menú de esta cuenta…</div> : navigationGroups.map((group) => {
-          const groupHasActiveItem = group.items.some(([label, href]) => {
-            const [targetPath, targetQuery] = href.split("?");
-            const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
-              const [key, value = ""] = entry.split("=");
-              return currentSearchParams.get(key) === value;
-            });
-            return targetPath === "/realty" ? label === active : (label === active || (pathname === targetPath && queryMatches));
-          });
           return (
-            <details className="evolum-nav-group" key={group.id} open={groupHasActiveItem || group.id === "crm"}>
-              <summary>
+            <details className="evolum-nav-group" key={group.id} open={openGroupId === group.id}>
+              <summary onClick={(event) => {
+                event.preventDefault();
+                setOpenGroupId((current) => current === group.id ? null : group.id);
+              }}>
                 <ModuleSymbol code={group.icon} label={group.label} />
                 <span className="evolum-nav-group-copy">
                   <strong>{group.label}</strong>
