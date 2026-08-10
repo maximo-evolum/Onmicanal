@@ -16621,3 +16621,75 @@ textarea:focus {
 :root[data-design-system="neon"] .realty-page .property-buyer-match-list strong { color: #fff; }
 :root[data-theme="dark"] .realty-page .property-buyer-match-list :is(span, small),
 :root[data-design-system="neon"] .realty-page .property-buyer-match-list :is(span, small) { color: #d1cadd; }
+
+/* Menú EV agrupado · Opción B: cada cuenta muestra CRM, su única vertical,
+   Core EVOLUM y Configuración como áreas desplegables. */
+.evolum-unified-nav .evolum-nav-groups {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.evolum-nav-group {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 18%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--theme-primary) 5%, transparent);
+}
+.evolum-nav-group > summary {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  cursor: pointer;
+  list-style: none;
+  color: #f8f3ff;
+  user-select: none;
+}
+.evolum-nav-group > summary::-webkit-details-marker { display: none; }
+.evolum-nav-group > summary:hover {
+  background: color-mix(in srgb, var(--theme-primary) 13%, transparent);
+}
+.evolum-nav-group[open] > summary {
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-primary-2) 16%, transparent);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--theme-primary) 22%, transparent), color-mix(in srgb, var(--theme-primary-2) 11%, transparent));
+}
+.evolum-nav-group > summary > .evolum-module-symbol {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 24%, transparent);
+  border-radius: 10px;
+  color: color-mix(in srgb, var(--theme-primary-2) 88%, #fff);
+  background: color-mix(in srgb, var(--theme-primary) 13%, transparent);
+  font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", sans-serif;
+  font-size: 18px;
+}
+.evolum-nav-group-copy { min-width: 0; }
+.evolum-nav-group-copy strong,
+.evolum-nav-group-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evolum-nav-group-copy strong { color: #f8f3ff; font-size: 12px; letter-spacing: .01em; }
+.evolum-nav-group-copy small { margin-top: 3px; color: #bbb1d0; font-size: 9.5px; }
+.evolum-nav-group-chevron { color: #a99bc9; font-size: 20px; line-height: 1; transition: transform 160ms ease; }
+.evolum-nav-group[open] .evolum-nav-group-chevron { transform: rotate(90deg); color: var(--theme-primary-2); }
+.evolum-nav-group-links { display: grid; gap: 4px; padding: 7px; background: rgba(5, 4, 12, .16); }
+.evolum-unified-nav .evolum-nav-group-links a {
+  min-height: 44px !important;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 8px 7px 11px !important;
+  border-radius: 9px !important;
+}
+.evolum-unified-nav .evolum-nav-group-links a span {
+  width: 30px !important;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 16px !important;
+}
+.evolum-unified-nav .evolum-nav-group-links a strong { font-size: 11.5px; }
+.evolum-unified-nav .evolum-nav-group-links a small { font-size: 9.5px; }
+@media (max-width: 900px) {
+  .evolum-nav-group-copy small { white-space: normal; line-height: 1.25; }
+}

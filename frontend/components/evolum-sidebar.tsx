@@ -24,14 +24,23 @@ type SidebarItem = readonly [
   moduleKey: ModuleAccessKey,
 ];
 
+type NavigationGroup = {
+  id: "crm" | "vertical" | "core" | "settings";
+  label: string;
+  description: string;
+  icon: string;
+  items: SidebarItem[];
+};
+
 const baseItems: SidebarItem[] = [
-  ["Inicio", "/crm-principal", "Centro principal de EVOLUM", "IN", "crm"],
+  ["CRM", "/crm-principal", "Centro comercial y operación transversal", "IN", "crm"],
   ["Chat's", "/inbox", "Conversaciones y atencion IA", "CH", "inbox"],
   ["Agenda", "/agenda", "Reservas, citas y disponibilidad", "AG", "agenda"],
   ["Pipeline", "/pipeline", "Leads, clientes y oportunidades", "PI", "pipeline"],
   ["Campañas", "/campaigns", "Marketing IA y publicaciones", "CA", "campaigns"],
   ["Pagos", "/payments", "Cobros, estados y links", "PA", "payments"],
   ["Centro de Conexiones", "/connections", "Correo, archivos, pagos y respaldo", "CX", "integrations"],
+  ["Documentos", "/documents", "Archivos, adjuntos y documentos operativos", "DO", "documents"],
   ["Configuracion de Agente", "/onboarding", "Perfil, documentos, FAQs y reglas IA", "CG", "onboarding"],
   ["Automatizaciones", "/workflows", "Acciones que EVOLUM realiza por ti", "FW", "workflows"],
   ["Datos y formularios", "/settings/metadata", "Define los datos que completará tu equipo", "MD", "metadata"],
@@ -137,6 +146,17 @@ function isShiftIndustry(industry?: string | null) {
 
 function isGastronomyIndustry(industry?: string | null) {
   return String(industry || "").toUpperCase().includes("GASTRON");
+}
+
+function currentVerticalLabel(industry?: string | null, product?: ReturnType<typeof getVerticalProduct>) {
+  if (product) return product.label;
+  const value = String(industry || "").toUpperCase();
+  if (value.includes("GASTRON")) return "Gastronomía";
+  if (value.includes("DENT")) return "Clínica dental";
+  if (value.includes("VETER")) return "Clínica veterinaria";
+  if (value.includes("HEALTH") || value.includes("SALUD") || value.includes("CLINIC")) return "Salud clínica";
+  if (value.includes("AUTO") || value.includes("TALLER") || value.includes("MECAN")) return "Automotriz y taller";
+  return null;
 }
 
 function contextualizeItem(item: SidebarItem, industry?: string | null): SidebarItem {
@@ -279,11 +299,60 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
     return [...availableItems].sort(([leftLabel, leftHref], [rightLabel, rightHref]) => {
       if (product && leftHref === product.href) return -1;
       if (product && rightHref === product.href) return 1;
-      if (leftLabel === "Inicio") return -1;
-      if (rightLabel === "Inicio") return 1;
+      if (leftLabel === "CRM") return -1;
+      if (rightLabel === "CRM") return 1;
       return leftLabel.localeCompare(rightLabel, "es");
     });
   }, [enabledModules, industry, isDeveloper, jobTitle, role]);
+
+  const navigationGroups = useMemo<NavigationGroup[]>(() => {
+    const product = getVerticalProduct(industry);
+    const crmModules = new Set<ModuleAccessKey>(["crm", "inbox", "agenda", "pipeline", "campaigns", "payments"]);
+    const settingsModules = new Set<ModuleAccessKey>(["onboarding", "metadata", "saas", "admin", "bot_lab"]);
+    const coreModules = new Set<ModuleAccessKey>(["dashboard", "ai_ops", "workflows", "integrations", "documents"]);
+    const verticalLabel = currentVerticalLabel(industry, product);
+
+    const crmItems = items.filter((item) => crmModules.has(item[4]));
+    const settingsItems = items.filter((item) => settingsModules.has(item[4]));
+    const coreItems = items.filter((item) => coreModules.has(item[4]));
+    const verticalItems = items.filter((item) => {
+      const moduleKey = item[4];
+      return !crmModules.has(moduleKey) && !settingsModules.has(moduleKey) && !coreModules.has(moduleKey);
+    });
+
+    const groups: NavigationGroup[] = [];
+    if (crmItems.length) groups.push({
+      id: "crm",
+      label: "CRM",
+      description: "Operación comercial, conversaciones y seguimiento",
+      icon: "IN",
+      items: crmItems
+    });
+    // Cada cuenta ve un único grupo vertical: el propio. Nunca se muestran
+    // rubros ajenos como opciones navegables dentro del menú EV.
+    if (verticalLabel && verticalItems.length) groups.push({
+      id: "vertical",
+      label: verticalLabel,
+      description: "Herramientas propias de esta operación",
+      icon: product?.code === "FINANCE" ? "FI" : "RE",
+      items: verticalItems
+    });
+    if (coreItems.length) groups.push({
+      id: "core",
+      label: "Core EVOLUM",
+      description: "Inteligencia, reportes, automatización e integraciones",
+      icon: "AI",
+      items: coreItems
+    });
+    if (settingsItems.length) groups.push({
+      id: "settings",
+      label: "Configuración",
+      description: "Cuenta, usuarios, datos y permisos",
+      icon: "CG",
+      items: settingsItems
+    });
+    return groups;
+  }, [industry, items]);
 
   useEffect(() => {
     const nav = navRef.current;
@@ -334,28 +403,44 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
         </button>
       </div>
 
-      <nav className="inbox-unified-nav-list" ref={navRef} onScroll={saveMenuPosition} aria-busy={!menuReady}>
-        {!menuReady ? <div className="evolum-nav-loading">Cargando menú de esta cuenta…</div> : items.map(([label, href, description, icon]) => {
-          const [targetPath, targetQuery] = href.split("?");
-          const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
-            const [key, value = ""] = entry.split("=");
-            return currentSearchParams.get(key) === value;
+      <nav className="inbox-unified-nav-list evolum-nav-groups" ref={navRef} onScroll={saveMenuPosition} aria-busy={!menuReady}>
+        {!menuReady ? <div className="evolum-nav-loading">Cargando menú de esta cuenta…</div> : navigationGroups.map((group) => {
+          const groupHasActiveItem = group.items.some(([label, href]) => {
+            const [targetPath, targetQuery] = href.split("?");
+            const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
+              const [key, value = ""] = entry.split("=");
+              return currentSearchParams.get(key) === value;
+            });
+            return targetPath === "/realty" ? label === active : (label === active || (pathname === targetPath && queryMatches));
           });
-          const matchesRoute = pathname === targetPath && queryMatches;
-          const isRealtyArea = targetPath === "/realty";
-          // Las áreas inmobiliarias comparten la misma ruta y cambian solo
-          // `view`. Durante una navegación cliente la query previa puede
-          // seguir disponible un render; por eso dentro de esa vertical la
-          // única fuente de selección es la vista resuelta por RealtyPage.
-          const selected = isRealtyArea ? label === active : (label === active || matchesRoute);
           return (
-          <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
-            <ModuleSymbol code={icon} label={label} />
-            <div>
-              <strong>{label}</strong>
-              <small>{description}</small>
-            </div>
-          </Link>
+            <details className="evolum-nav-group" key={group.id} open={groupHasActiveItem || group.id === "crm"}>
+              <summary>
+                <ModuleSymbol code={group.icon} label={group.label} />
+                <span className="evolum-nav-group-copy">
+                  <strong>{group.label}</strong>
+                  <small>{group.description}</small>
+                </span>
+                <span className="evolum-nav-group-chevron" aria-hidden="true">›</span>
+              </summary>
+              <div className="evolum-nav-group-links">
+                {group.items.map(([label, href, description, icon]) => {
+                  const [targetPath, targetQuery] = href.split("?");
+                  const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
+                    const [key, value = ""] = entry.split("=");
+                    return currentSearchParams.get(key) === value;
+                  });
+                  const matchesRoute = pathname === targetPath && queryMatches;
+                  const selected = targetPath === "/realty" ? label === active : (label === active || matchesRoute);
+                  return (
+                    <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
+                      <ModuleSymbol code={icon} label={label} />
+                      <div><strong>{label}</strong><small>{description}</small></div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </details>
           );
         })}
       </nav>
