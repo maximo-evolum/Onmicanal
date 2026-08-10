@@ -16726,18 +16726,16 @@ textarea:focus {
 /* Un grupo extenso no debe ocultar sus módulos: se compacta y conserva
    desplazamiento propio dentro del menú EV. */
 .evolum-unified-nav .evolum-nav-group-links {
-  max-block-size: min(330px, calc(100dvh - 270px));
+  max-block-size: min(300px, calc(100dvh - 365px));
   overflow-x: hidden;
-  overflow-y: auto;
-  padding-right: 4px;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--theme-primary-2) 74%, transparent) transparent;
+  overflow-y: scroll;
+  padding-right: 7px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
-.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar { width: 6px; }
-.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: linear-gradient(var(--theme-primary), var(--theme-primary-2));
-}
+.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar { display: none; }
 .evolum-unified-nav .evolum-nav-group-links a {
   min-height: 39px !important;
   padding-block: 5px !important;
@@ -16761,6 +16759,6 @@ textarea:focus {
     margin-top: 1px;
   }
   .evolum-unified-nav .evolum-nav-group-links {
-    max-block-size: calc(100dvh - 230px);
+    max-block-size: min(270px, calc(100dvh - 285px));
   }
 }
