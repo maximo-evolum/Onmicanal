@@ -16693,3 +16693,32 @@ textarea:focus {
 @media (max-width: 900px) {
   .evolum-nav-group-copy small { white-space: normal; line-height: 1.25; }
 }
+
+/* Ajustes de legibilidad y proporción del menú agrupado. */
+.evolum-unified-nav .evolum-nav-group > summary,
+.evolum-unified-nav .evolum-nav-group-copy strong {
+  color: #ffffff !important;
+}
+.evolum-unified-nav .evolum-nav-group-copy small {
+  color: #ded7f2 !important;
+  opacity: 1;
+}
+.evolum-unified-nav .evolum-nav-group:not([open]) > summary {
+  background: rgba(255, 255, 255, .035);
+}
+.inbox-nav-toggle {
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  text-align: center !important;
+  line-height: 1 !important;
+  font-size: 22px !important;
+}
+.evolum-menu-bubble {
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 50% !important;
+}
+.evolum-menu-bubble .evolum-brand-logo {
+  transform: none !important;
+}

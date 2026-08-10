@@ -399,7 +399,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
           <strong>EVOLUM OS</strong>
         </div>
         <button className="inbox-nav-toggle" type="button" onClick={toggleMenu} aria-label="Cerrar menu">
-          x
+          ×
         </button>
       </div>
 
