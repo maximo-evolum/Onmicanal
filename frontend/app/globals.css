@@ -13015,6 +13015,40 @@ textarea:focus {
   font-weight: 800;
 }
 
+.connection-google-oauth-help {
+  margin: 18px 0;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary) 26%, var(--border));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--theme-primary) 6%, var(--surface));
+}
+
+.connection-google-oauth-help > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--theme-primary);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.connection-google-oauth-help strong,
+.connection-google-oauth-help p,
+.connection-google-oauth-help ol {
+  margin: 0;
+}
+
+.connection-google-oauth-help p,
+.connection-google-oauth-help li {
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.connection-google-oauth-help p { margin-top: 6px; }
+.connection-google-oauth-help ol { margin: 10px 0 12px 20px; padding: 0; }
+.connection-google-oauth-help a { font-weight: 800; }
+
 .connection-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -623,6 +623,19 @@ export default function ConnectionsPage() {
                         </section>
                       ) : null}
 
+                      {selected.key === "gmail" && selected.oauthProvider === "google" ? (
+                        <section className="connection-google-oauth-help" aria-label="Ayuda para vincular Gmail">
+                          <span>Autorización de Google</span>
+                          <strong>¿Aparece “Error 403: access_denied”?</strong>
+                          <p>No se corrige ingresando claves aquí. La autorización se bloquea desde la configuración oficial de la aplicación EVOLUM en Google.</p>
+                          <ol>
+                            <li>Durante las pruebas, el correo de Google debe estar registrado como usuario de prueba.</li>
+                            <li>En producción, EVOLUM debe publicar y verificar su aplicación y su dominio propio.</li>
+                          </ol>
+                          <a href="https://developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification?hl=es-419" target="_blank" rel="noreferrer">Abrir guía oficial de Google</a>
+                        </section>
+                      ) : null}
+
                       {selected.oauthProvider && discoverySummary(selected) ? (
                         <div className="connection-oauth-discovery">
                           <span>Cuenta detectada por OAuth</span>

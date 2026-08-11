@@ -316,7 +316,10 @@ function cleanText(value, fallback = "") {
 function publicBaseUrl(req) {
   const host = req.get("host");
   const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
-  return env.publicBaseUrl || (host ? `${protocol}://${host}` : "");
+  // Google exige que la URL registrada coincida exactamente con el callback.
+  // Normalizamos una barra final para no generar `//api/...` en producción.
+  const value = env.publicBaseUrl || (host ? `${protocol}://${host}` : "");
+  return String(value || "").replace(/\/+$/, "");
 }
 
 function readEnv(key) {
