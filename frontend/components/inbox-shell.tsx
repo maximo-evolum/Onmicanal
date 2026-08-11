@@ -17,6 +17,7 @@ import { socket } from "@/lib/socket";
 import { Conversation, Message } from "@/lib/types";
 import { ChatPanel } from "./chat-panel";
 import { EvolumSidebar } from "./evolum-sidebar";
+import { NotificationCenter } from "./notification-center";
 
 export function InboxShell() {
   const agent = getStoredSession();
@@ -291,6 +292,7 @@ export function InboxShell() {
         isDeveloper={agent?.role === "SUPER_ADMIN"}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
+        showNotificationCenter={false}
       />
 
       <section className="inbox-unified-workspace">
@@ -431,7 +433,9 @@ function InboxAppHeader({
           <small>{roleLabel(agent?.role) || "Cliente"}</small>
         </div>
 
-        <div className="inbox-app-actions" aria-hidden="true" />
+        <div className="inbox-app-actions">
+          <NotificationCenter />
+        </div>
       </div>
     </header>
   );

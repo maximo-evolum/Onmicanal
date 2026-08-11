@@ -67,16 +67,16 @@ export function AccountPill({
   }, [avatarUrl]);
 
   return (
-    <>
+    <span className="account-pill-control">
       {showNotifications ? <NotificationCenter /> : null}
       <span className={`${className} account-pill-with-avatar`}>
-      {avatarUrl && !avatarFailed ? (
-        <img src={avatarUrl} alt={name} onError={() => setAvatarFailed(true)} />
-      ) : (
-        <i>{initials(name)}</i>
-      )}
-      <strong>{name}</strong>
+        {avatarUrl && !avatarFailed ? (
+          <img src={avatarUrl} alt={name} onError={() => setAvatarFailed(true)} />
+        ) : (
+          <i>{initials(name)}</i>
+        )}
+        <strong>{name}</strong>
       </span>
-    </>
+    </span>
   );
 }

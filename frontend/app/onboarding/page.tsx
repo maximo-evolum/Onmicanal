@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 import {
   applyOnboardingExtraction,
@@ -408,6 +409,7 @@ export default function OnboardingPage() {
         isDeveloper={agent?.role === "SUPER_ADMIN"}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
+        showNotificationCenter={false}
       />
     <main className="onboarding-page onboarding-pro-page">
       <section className="onboarding-pro-hero">
@@ -418,6 +420,7 @@ export default function OnboardingPage() {
             Configura el perfil comercial del tenant, sube documentos y aplica conocimiento para que Bot Lab, Inbox y respuestas automáticas usen datos reales del negocio.
           </p>
         </div>
+        <AccountPill fallbackName={agent?.name || "Usuario"} />
       </section>
 
       <section className="onboarding-status-panel">

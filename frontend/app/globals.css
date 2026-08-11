@@ -16849,8 +16849,10 @@ textarea:focus {
 .notification-center-severity { width: max-content; padding: 3px 7px; border-radius: 999px; color: #38617a; background: #e8f4fb; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }.notification-center-severity.is-warning { color: #835007; background: #fff1d7; }.notification-center-severity.is-critical { color: #a6273a; background: #ffe2e6; }.notification-center-severity.is-success { color: #14724e; background: #dff6ea; }
 .notification-center--sidebar .notification-center-trigger { width: 39px; height: 39px; border-color: rgba(62, 214, 206, .3); color: #74f7ef; background: rgba(11, 38, 67, .65); box-shadow: none; }.notification-center--sidebar .notification-center-count { border-color: #18112e; }.notification-center--sidebar .notification-center-panel { right: auto; left: 0; }
 .finance-search { gap: 10px; padding: 4px 14px; border-radius: 14px; }.finance-search-icon { flex: 0 0 auto; width: 19px; height: 19px; fill: none; stroke: #5b5472; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }.finance-search input { padding-left: 0; }.finance-product-workspace .finance-search-icon { stroke: #5a407d; }
-.finance-header-actions > .notification-center .notification-center-trigger { border-color: #cbd8d5; color: #4b3570; }
-.finance-header-actions > .notification-center .notification-center-trigger:hover { border-color: #0891b2; color: #087b93; }
+.account-pill-control { display: inline-flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+.crm-main-profile .account-pill-control { justify-content: center; }
+.finance-header-actions .account-pill-control .notification-center-trigger { border-color: #cbd8d5; color: #4b3570; }
+.finance-header-actions .account-pill-control .notification-center-trigger:hover { border-color: #0891b2; color: #087b93; }
 :root[data-theme="dark"] .notification-center-trigger { border-color: rgba(139, 107, 240, .5); color: #bda6ff; background: #17152b; box-shadow: none; }
 :root[data-theme="dark"] .notification-center-trigger:hover { border-color: #36d8d1; color: #83fff5; background: #201a3e; }
 :root[data-theme="dark"] .notification-center-count { border-color: #17152b; }
@@ -16859,5 +16861,26 @@ textarea:focus {
 :root[data-theme="dark"] .notification-center-list a { border-color: rgba(255, 255, 255, .08); }:root[data-theme="dark"] .notification-center-list a:hover,:root[data-theme="dark"] .notification-center-list a.is-unread { background: #211b40; }:root[data-theme="dark"] .notification-center-list strong { color: #fff; }
 /* En modo oscuro la cabecera financiera mantiene el mismo acabado del resto
    del workspace, sin recuperar el blanco intenso de la superficie Lumen. */
-:root[data-theme="dark"] .finance-header-actions > .notification-center .notification-center-trigger { border-color: rgba(167, 132, 250, .35); color: #c8a9ff; background: rgba(22, 20, 47, .82); }
+:root[data-theme="dark"] .finance-header-actions .account-pill-control .notification-center-trigger { border-color: rgba(167, 132, 250, .35); color: #c8a9ff; background: rgba(22, 20, 47, .82); }
 @media (max-width: 700px) { .notification-center-panel { position: fixed; top: 72px; right: 16px; left: 16px; width: auto; }.notification-center--sidebar .notification-center-panel { right: 16px; left: 16px; }.inbox-nav-head-actions { gap: 6px; } }
+
+/* Biblioteca independiente: Documentos ya no depende de Configuración de Agente. */
+.documents-page { min-width: 0; min-height: 100vh; padding: 34px; color: #1f2430; background: var(--theme-canvas, #f4f8f7); }
+.documents-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 26px 30px; border: 1px solid #d7e4e1; border-radius: 22px; background: rgba(255,255,255,.8); box-shadow: 0 12px 34px rgba(24,45,53,.06); }
+.documents-header h1 { margin: 4px 0 5px; font-size: clamp(28px, 3vw, 42px); line-height: 1; }.documents-header p { margin: 0; color: #627184; }
+.documents-eyebrow { display: block; color: #009b9c; font-size: 11px; font-weight: 900; letter-spacing: .16em; }
+.documents-message { margin-top: 16px; padding: 12px 15px; border: 1px solid #aee2d8; border-radius: 12px; color: #166a64; background: #ebfbf7; }
+.documents-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(0, 1.4fr); gap: 22px; margin-top: 22px; align-items: start; }
+.documents-upload-card,.documents-list-card { border: 1px solid #d7e4e1; border-radius: 20px; background: rgba(255,255,255,.85); box-shadow: 0 10px 26px rgba(24,45,53,.045); }
+.documents-upload-card { display: grid; gap: 13px; padding: 24px; }.documents-upload-card h2,.documents-list-card h2 { margin: 4px 0 0; color: #1c2430; }.documents-upload-card p { margin: 0 0 5px; color: #667487; font-size: 13px; line-height: 1.45; }
+.documents-upload-card > label { display: grid; gap: 6px; color: #435162; font-size: 12px; font-weight: 800; }.documents-upload-card input,.documents-upload-card select,.documents-upload-card textarea { width: 100%; min-height: 42px; box-sizing: border-box; padding: 10px 12px; border: 1px solid #cbdad7; border-radius: 11px; color: #27313d; background: #fff; font: inherit; font-weight: 500; }.documents-upload-card textarea { resize: vertical; }
+.documents-file-input { padding: 14px; border: 1px dashed #6bbcb4; border-radius: 13px; color: #187c7b !important; background: #f2fcfa; cursor: pointer; }.documents-file-input small { color: #667487; font-weight: 500; }.documents-file-input input { display: none; }
+.documents-list-card { padding: 24px; }.documents-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }.documents-list-heading .ghost-btn,.documents-row-actions .ghost-btn { min-height: 36px; padding: 8px 12px; border-radius: 10px; text-decoration: none; }
+.documents-list { display: grid; gap: 9px; margin-top: 18px; }.documents-row { display: grid; grid-template-columns: 42px minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 13px; border: 1px solid #e0e9e7; border-radius: 14px; }.documents-row > div:nth-child(2) { display: grid; gap: 3px; min-width: 0; }.documents-row strong { overflow: hidden; color: #202936; text-overflow: ellipsis; white-space: nowrap; }.documents-row span,.documents-row small { color: #667487; font-size: 12px; }.documents-file-badge { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: #fff; background: linear-gradient(135deg,#168e9e,#7354dd); font-size: 11px; font-weight: 900; }.documents-row-actions { display: flex; gap: 8px; }.documents-empty { margin: 24px 0 6px; color: #687688; }
+.onboarding-pro-hero { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+@media (max-width: 820px) { .documents-page { padding: 84px 16px 30px calc(16px + var(--ev-rail-width)); }.documents-layout { grid-template-columns: 1fr; }.documents-header { padding: 20px; }.documents-header .account-pill-control { display: none; }.documents-row { grid-template-columns: 40px minmax(0,1fr); }.documents-row-actions { grid-column: 1 / -1; }.onboarding-pro-hero .account-pill-control { display: none; } }
+
+/* La campana vive en la cabecera de Chats, no detrás del menú lateral. */
+.inbox-app-actions { display: flex !important; align-items: center; justify-content: flex-end; }
+.inbox-app-actions .notification-center-trigger { width: 40px; height: 40px; border-radius: 12px; }
+@media (max-width: 700px) { .inbox-app-actions { display: flex !important; }.inbox-account-box { display: none; }.inbox-app-header-top { grid-template-columns: minmax(0,1fr) auto; } }

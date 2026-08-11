@@ -1,5 +1,6 @@
 import { AgentSession, Booking, BookingSlot, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
 import { API_BASE_URL, SESSION_STORAGE_KEY } from "./constants";
+import { canQueueOfflineMutation, OfflineQueuedError, queueOfflineMutation } from "./offline-queue";
 
 export function getStoredApiSession() {
   if (typeof window === "undefined") return null;
@@ -26,6 +27,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const timeout = setTimeout(() => controller.abort(), 15_000);
   let response: Response;
   try {
+    if (typeof window !== "undefined" && !navigator.onLine && queueOfflineMutation(path, init)) {
+      throw new OfflineQueuedError();
+    }
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: buildHeaders(init),
@@ -34,6 +38,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       signal: init?.signal || controller.signal
     });
   } catch (error) {
+    if (error instanceof OfflineQueuedError) throw error;
+    if (typeof window !== "undefined" && !(error instanceof DOMException && error.name === "AbortError") && canQueueOfflineMutation(path, init) && queueOfflineMutation(path, init)) {
+      throw new OfflineQueuedError();
+    }
     if (error instanceof DOMException && error.name === "AbortError") {
       throw new Error("La conexión tardó demasiado. Revisa tu red e inténtalo nuevamente.");
     }

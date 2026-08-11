@@ -12,12 +12,12 @@ import {
   getMyModules,
   getOnboardingKnowledge,
   globalSearch,
-  exportTenantBackup,
   type CrmOperationalDashboard,
   type GlobalSearchResult,
 } from "@/lib/api";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { OfflineSyncButton } from "@/components/offline-sync-button";
 import { getStoredSession, mergeStoredSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
@@ -345,7 +345,6 @@ export default function CrmPrincipalPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [remoteResults, setRemoteResults] = useState<GlobalSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [backupStatus, setBackupStatus] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const isDeveloper = state.session?.role === "SUPER_ADMIN";
@@ -605,25 +604,6 @@ export default function CrmPrincipalPage() {
     router.push(first.href);
   }
 
-  async function downloadBackup() {
-    setBackupStatus("Generando respaldo...");
-    try {
-      const blob = await exportTenantBackup();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `evolum-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      setBackupStatus("Respaldo descargado");
-      window.setTimeout(() => setBackupStatus(""), 2600);
-    } catch (error) {
-      setBackupStatus(error instanceof Error ? error.message : "No se pudo descargar");
-    }
-  }
-
   return (
     <main className={`crm-main ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar
@@ -679,8 +659,7 @@ export default function CrmPrincipalPage() {
             ) : null}
           </form>
           <div className="crm-main-ops">
-            <button type="button" className="crm-main-ops-button" onClick={downloadBackup}>Respaldo</button>
-            {backupStatus ? <span className="crm-main-backup-status">{backupStatus}</span> : null}
+            <OfflineSyncButton />
           </div>
           <div className="crm-main-profile">
             <AccountPill fallbackName={currentSession?.name || "Usuario"} />
