@@ -12803,6 +12803,20 @@ textarea:focus {
   background: #64748b;
 }
 
+.connection-card.coming-soon {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--theme-surface) 88%, var(--theme-primary) 12%);
+}
+
+.connection-card.coming-soon::after {
+  background: linear-gradient(90deg, #f59e0b, color-mix(in srgb, var(--theme-primary-2) 72%, #f59e0b));
+}
+
+.status-coming_soon i,
+.connection-status-banner.status-coming_soon::before {
+  background: #f59e0b;
+}
+
 .connection-detail-panel {
   position: sticky;
   top: 18px;
@@ -12955,6 +12969,25 @@ textarea:focus {
 }
 
 .connection-next-step p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.connection-coming-soon {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+  border: 1px dashed color-mix(in srgb, #f59e0b 62%, var(--theme-border));
+  border-radius: 18px;
+  padding: 16px;
+  background: color-mix(in srgb, #f59e0b 9%, var(--theme-surface));
+}
+
+.connection-coming-soon strong {
+  color: color-mix(in srgb, #b45309 72%, var(--text-main));
+}
+
+.connection-coming-soon p {
   margin: 0;
   color: var(--text-muted);
 }

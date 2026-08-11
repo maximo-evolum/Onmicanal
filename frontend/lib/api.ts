@@ -1744,7 +1744,7 @@ export async function configureIntegration(channel: string, input: Partial<Integ
   });
 }
 
-export type ConnectionStatus = "CONNECTED" | "PENDING" | "DISCONNECTED" | "ERROR";
+export type ConnectionStatus = "CONNECTED" | "PENDING" | "DISCONNECTED" | "ERROR" | "COMING_SOON";
 
 export type ConnectionPublicConfig = {
   id: string;
@@ -1771,6 +1771,7 @@ export type ConnectionProvider = {
   oauthProvider?: string | null;
   module: string;
   description: string;
+  availability?: "AVAILABLE" | "COMING_SOON" | string;
   requiredEnv: string[];
   oauthRequiredEnv?: string[];
   requiredFields: string[];
@@ -1856,6 +1857,13 @@ export async function saveConnectionProvider(
 export async function testConnectionProvider(key: string): Promise<{ ok: boolean; missing: string[]; provider: ConnectionProvider }> {
   return request<{ ok: boolean; missing: string[]; provider: ConnectionProvider }>(`/connections/${encodeURIComponent(key)}/test`, {
     method: "POST"
+  });
+}
+
+export async function syncNuboxSales(period?: string): Promise<{ ok: boolean; period: string; received: number; total: number; created: number; updated: number; ignored: number }> {
+  return request<{ ok: boolean; period: string; received: number; total: number; created: number; updated: number; ignored: number }>("/connections/finance_nubox/sync", {
+    method: "POST",
+    body: JSON.stringify(period ? { period } : {})
   });
 }
 

@@ -200,8 +200,10 @@ const PROVIDERS = [
     type: "credentials",
     module: MODULES.FINANCE_INVOICES,
     description: "Sincroniza documentos tributarios y cuentas por cobrar cuando la API del cliente esté autorizada.",
-    requiredFields: ["companyRut", "accessToken"],
-    publicFields: ["companyRut"]
+    // Nubox se autentica con las cabeceras x-api-key y Authorization. Ambos
+    // valores son secretos por tenant: no se pide ni persiste RUT/empresa.
+    requiredFields: ["accessToken", "verifyToken"],
+    publicFields: []
   },
   {
     key: "finance_defontana",
@@ -211,9 +213,9 @@ const PROVIDERS = [
     icon: "DF",
     type: "credentials",
     module: MODULES.FINANCE_INVOICES,
-    description: "Conecta facturación y documentos contables desde la empresa autorizada en Defontana.",
-    requiredFields: ["companyCode", "accessToken"],
-    publicFields: ["companyCode"]
+    description: "Próxima conexión para facturación y documentos contables desde Defontana.",
+    availability: "COMING_SOON",
+    requiredFields: []
   },
   {
     key: "finance_softland",
@@ -223,9 +225,9 @@ const PROVIDERS = [
     icon: "SL",
     type: "credentials",
     module: MODULES.FINANCE_INVOICES,
-    description: "Configura la sincronización de documentos y cuentas por cobrar desde Softland.",
-    requiredFields: ["companyCode", "accessToken"],
-    publicFields: ["companyCode"]
+    description: "Próxima conexión para sincronizar documentos y cuentas por cobrar desde Softland.",
+    availability: "COMING_SOON",
+    requiredFields: []
   },
   {
     key: "finance_sii",
@@ -235,9 +237,9 @@ const PROVIDERS = [
     icon: "SI",
     type: "credentials",
     module: MODULES.FINANCE_INVOICES,
-    description: "Prepara la consulta de documentos tributarios electrónicos del contribuyente autorizado.",
-    requiredFields: ["taxpayerRut", "accessToken"],
-    publicFields: ["taxpayerRut"]
+    description: "Próxima conexión para documentos tributarios electrónicos y DTE autorizados.",
+    availability: "COMING_SOON",
+    requiredFields: []
   },
   {
     key: "backup_provider",
@@ -247,9 +249,9 @@ const PROVIDERS = [
     icon: "BK",
     type: "credentials",
     module: MODULES.BACKUP_PROVIDER,
-    description: "Azure Backup, AWS Backup, Backblaze, Wasabi u otro proveedor definido por cliente.",
-    requiredFields: ["provider", "bucket", "region", "accessToken"],
-    publicFields: ["provider", "bucket", "region"]
+    description: "Próxima conexión para respaldos administrados por EVOLUM o por el proveedor del cliente.",
+    availability: "COMING_SOON",
+    requiredFields: []
   },
   {
     key: "security_replica",
@@ -259,9 +261,9 @@ const PROVIDERS = [
     icon: "RP",
     type: "credentials",
     module: MODULES.SECURITY_REPLICA,
-    description: "Configuracion de replica logica para recuperacion y alta disponibilidad.",
-    requiredFields: ["provider", "target", "frequency"],
-    publicFields: ["provider", "target", "frequency"]
+    description: "Próxima conexión para réplica, recuperación y continuidad operativa.",
+    availability: "COMING_SOON",
+    requiredFields: []
   },
   {
     key: "offline_sync",
@@ -271,7 +273,8 @@ const PROVIDERS = [
     icon: "OF",
     type: "local",
     module: MODULES.OFFLINE_SYNC,
-    description: "Cola local de cambios offline para sincronizar automaticamente cuando vuelva internet.",
+    description: "Próxima conexión para sincronizar de forma segura el trabajo realizado sin internet.",
+    availability: "COMING_SOON",
     requiredFields: []
   }
 ];
@@ -368,6 +371,7 @@ function missingFields(provider, config) {
 }
 
 function providerStatus(provider, config) {
+  if (provider.availability === "COMING_SOON") return "COMING_SOON";
   if (!config || !config.isActive) return "DISCONNECTED";
   const fieldMissing = missingFields(provider, config);
   const lastTestStatus = String(configMetadata(config).lastTestStatus || "").toUpperCase();
@@ -379,6 +383,174 @@ function providerStatus(provider, config) {
   // no para reconocer una conexión ya configurada con token válido.
   if (fieldMissing.length) return "PENDING";
   return "CONNECTED";
+}
+
+function nuboxBaseUrl() {
+  const configured = String(env.nuboxApiBaseUrl || "").trim();
+  if (!configured) {
+    throw new Error("Falta configurar la URL base de Nubox en el servidor. Agrega NUBOX_API_BASE_URL con la URL entregada por Nubox para este ambiente.");
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    throw new Error("NUBOX_API_BASE_URL no tiene un formato de URL valido.");
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  if (parsed.protocol !== "https:" || !(host === "nubox.com" || host.endsWith(".nubox.com"))) {
+    throw new Error("NUBOX_API_BASE_URL debe ser una URL HTTPS oficial de Nubox.");
+  }
+  return configured.replace(/\/$/, "");
+}
+
+function nuboxAuthorization(value) {
+  const token = String(value || "").trim();
+  if (!token) return null;
+  return /^bearer\s+/i.test(token) ? token : `Bearer ${token}`;
+}
+
+function nuboxErrorMessage(status, payload) {
+  const message = typeof payload?.message === "string" ? payload.message.trim() : "";
+  if (status === 401 || status === 403) return "Nubox rechazo las credenciales. Revisa x-api-key y Authorization.";
+  if (status === 404) return "Nubox no encontro el recurso solicitado. Revisa NUBOX_API_BASE_URL y el ambiente configurado.";
+  if (status >= 500) return "Nubox no esta disponible temporalmente. Intenta nuevamente mas tarde.";
+  return message ? `Nubox no pudo validar la conexion: ${message.slice(0, 180)}` : `Nubox no pudo validar la conexion (HTTP ${status}).`;
+}
+
+async function nuboxRequest(config, path) {
+  const apiKey = decryptSecret(config?.accessToken);
+  const authorization = nuboxAuthorization(decryptSecret(config?.verifyToken));
+  if (!apiKey || !authorization) throw new Error("Faltan las credenciales de Nubox.");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch(`${nuboxBaseUrl()}${path}`, {
+      method: "GET",
+      headers: {
+        Authorization: authorization,
+        "X-Api-Key": apiKey,
+        Accept: "application/json"
+      },
+      signal: controller.signal
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(nuboxErrorMessage(response.status, payload));
+    return { payload, total: Number(response.headers.get("x-total-count") || 0) || 0 };
+  } catch (error) {
+    if (error?.name === "AbortError") throw new Error("La validacion con Nubox excedio el tiempo de espera. Intenta nuevamente.");
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function nuboxSalesFromPayload(payload) {
+  if (Array.isArray(payload)) return payload;
+  for (const key of ["content", "items", "data", "results"]) {
+    if (Array.isArray(payload?.[key])) return payload[key];
+  }
+  return [];
+}
+
+async function testNuboxConnection(config) {
+  const period = new Date().toISOString().slice(0, 7);
+  const result = await nuboxRequest(config, `/v1/sales?period=${encodeURIComponent(period)}&page=1&size=1`);
+  const documents = nuboxSalesFromPayload(result.payload);
+  return {
+    config,
+    discovery: {
+      label: cleanText(config?.label, "Nubox"),
+      documentCount: result.total || documents.length,
+      checkedPeriod: period
+    }
+  };
+}
+
+function nuboxInvoiceFromSale(sale, period) {
+  const source = sale && typeof sale === "object" ? sale : {};
+  const client = source.client && typeof source.client === "object" ? source.client : {};
+  const type = source.type && typeof source.type === "object" ? source.type : {};
+  const emission = source.emissionStatus && typeof source.emissionStatus === "object" ? source.emissionStatus : {};
+  const rawBalance = Number(source.balance);
+  const balance = Number.isFinite(rawBalance) ? Math.max(0, rawBalance) : Math.max(0, Number(source.totalAmount) || 0);
+  const emitted = String(emission.name || "").toLowerCase();
+  const status = source.dataCl?.annulled || emitted.includes("anulado")
+    ? "ANNULLED"
+    : emitted.includes("rechaz")
+      ? "REJECTED"
+      : balance === 0
+        ? "PAID"
+        : "OPEN";
+  const customerName = cleanText(client.tradeName, "Cliente sin nombre");
+  const invoiceNumber = cleanText(source.number, String(source.id || "Sin folio"));
+  return {
+    externalDocumentId: cleanText(source.id),
+    title: `${cleanText(type.name, "Documento tributario")} ${invoiceNumber} · ${customerName}`.slice(0, 220),
+    status,
+    data: {
+      source: "nubox",
+      nuboxDocumentId: cleanText(source.id),
+      invoiceNumber,
+      documentTypeCode: cleanText(type.legalCode),
+      documentTypeName: cleanText(type.name, "Documento tributario"),
+      customerName,
+      customerRut: cleanText(client.identification?.value),
+      rut: cleanText(client.identification?.value),
+      clientRut: cleanText(client.identification?.value),
+      customerActivity: cleanText(client.mainActivity),
+      amount: Number(source.totalAmount) || 0,
+      balance,
+      netAmount: Number(source.totalNetAmount) || 0,
+      vatAmount: Number(source.totalTaxVatAmount) || 0,
+      exemptAmount: Number(source.totalExemptAmount) || 0,
+      issueDate: cleanText(source.emissionDate),
+      dueDate: cleanText(source.dueDate),
+      emissionStatus: cleanText(emission.name),
+      emissionStatusDescription: cleanText(emission.description),
+      period,
+      syncedAt: new Date().toISOString()
+    }
+  };
+}
+
+async function syncNuboxSales({ tenantId, config, period, limit = 100 }) {
+  const result = await nuboxRequest(config, `/v1/sales?period=${encodeURIComponent(period)}&page=1&size=${limit}`);
+  const sales = nuboxSalesFromPayload(result.payload).slice(0, limit);
+  const existing = await prisma.industryRecord.findMany({
+    where: { tenantId, recordType: "finance_invoice" },
+    select: { id: true, data: true }
+  });
+  const existingByNuboxId = new Map(existing
+    .map((record) => [cleanText(record.data?.nuboxDocumentId), record])
+    .filter(([nuboxDocumentId]) => Boolean(nuboxDocumentId)));
+  let created = 0;
+  let updated = 0;
+  let ignored = 0;
+
+  for (const sale of sales) {
+    const invoice = nuboxInvoiceFromSale(sale, period);
+    if (!invoice.externalDocumentId) {
+      ignored += 1;
+      continue;
+    }
+    const current = existingByNuboxId.get(invoice.externalDocumentId);
+    if (current) {
+      await prisma.industryRecord.update({
+        where: { id: current.id },
+        data: { title: invoice.title, status: invoice.status, data: { ...current.data, ...invoice.data } }
+      });
+      updated += 1;
+    } else {
+      await prisma.industryRecord.create({
+        data: { tenantId, recordType: "finance_invoice", title: invoice.title, status: invoice.status, data: invoice.data }
+      });
+      created += 1;
+    }
+  }
+  return { received: sales.length, total: result.total || sales.length, created, updated, ignored };
 }
 
 function publicConfig(config, provider = null) {
@@ -445,6 +617,7 @@ function publicProvider(provider, config) {
     oauthProvider: provider.oauthProvider || null,
     module: provider.module,
     description: provider.description,
+    availability: provider.availability || "AVAILABLE",
     // Las credenciales OAuth pertenecen a EVOLUM como plataforma. Nunca se
     // exponen al tenant ni se solicitan al usuario que vincula su cuenta.
     oauthReady: !envMissing.length,
@@ -1152,6 +1325,7 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
     const key = String(req.params.key || "").trim().toLowerCase();
     const provider = PROVIDER_BY_KEY.get(key);
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });
+    if (provider.availability === "COMING_SOON") return res.status(409).json({ error: "Esta conexión aún no está disponible para configuración." });
 
     const existing = await findTenantProviderConfig(req.tenantId, provider);
     const incomingMetadata = normalizeMetadata(req.body?.metadata, {});
@@ -1199,6 +1373,7 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
     const key = String(req.params.key || "").trim().toLowerCase();
     const provider = PROVIDER_BY_KEY.get(key);
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });
+    if (provider.availability === "COMING_SOON") return res.status(409).json({ error: "Esta conexión aún no está disponible para pruebas." });
 
     const config = await findTenantProviderConfig(req.tenantId, provider);
     if (!config || !config.isActive) return res.status(400).json({ ok: false, error: "Conexion inactiva o no configurada" });
@@ -1217,6 +1392,14 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
       } catch (error) {
         testError = error instanceof Error ? error.message : "La prueba OAuth fallo";
       }
+    } else if (!missing.length && provider.key === "finance_nubox") {
+      try {
+        const result = await testNuboxConnection(config);
+        testedConfig = result.config;
+        discovery = result.discovery;
+      } catch (error) {
+        testError = error instanceof Error ? error.message : "La prueba con Nubox fallo";
+      }
     }
     const ok = missing.length === 0 && !testError;
     const metadata = normalizeMetadata({
@@ -1224,7 +1407,11 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
       lastTestedAt: new Date().toISOString(),
       lastTestStatus: ok ? "OK" : "ERROR",
       lastTestMessage: ok
-        ? (provider.oauthProvider ? "Token y cuenta OAuth validados" : "Configuracion completa")
+        ? (provider.oauthProvider
+          ? "Token y cuenta OAuth validados"
+          : provider.key === "finance_nubox"
+            ? "Credenciales Nubox validadas contra documentos de venta"
+            : "Configuracion completa")
         : (testError || `Faltan campos: ${missing.join(", ")}`),
       oauthDiscovery: discovery?.discovery ? compactDiscovery(discovery.discovery) : configMetadata(testedConfig).oauthDiscovery
     }, {});
@@ -1256,11 +1443,42 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
   }
 });
 
+connectionsRouter.post("/connections/finance_nubox/sync", requireRole(ROLE_GROUPS.MANAGERS), async (req, res, next) => {
+  try {
+    const provider = PROVIDER_BY_KEY.get("finance_nubox");
+    const config = await findTenantProviderConfig(req.tenantId, provider);
+    if (!config || !config.isActive) return res.status(400).json({ error: "Nubox no esta configurado o se encuentra inactivo." });
+    const missing = missingFields(provider, config);
+    if (missing.length) return res.status(400).json({ error: `Faltan campos: ${missing.join(", ")}` });
+
+    const requestedPeriod = cleanText(req.body?.period, new Date().toISOString().slice(0, 7));
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(requestedPeriod)) {
+      return res.status(400).json({ error: "El periodo debe tener formato AAAA-MM." });
+    }
+    const limit = Math.max(1, Math.min(Number(req.body?.limit) || 100, 100));
+    const summary = await syncNuboxSales({ tenantId: req.tenantId, config, period: requestedPeriod, limit });
+    const metadata = normalizeMetadata({
+      ...configMetadata(config),
+      lastSyncedAt: new Date().toISOString(),
+      lastSyncStatus: "OK",
+      lastSyncMessage: `${summary.created} creados, ${summary.updated} actualizados`,
+      lastTestStatus: "OK",
+      lastTestMessage: "Credenciales Nubox validadas y documentos sincronizados"
+    }, {});
+    await prisma.tenantChannelConfig.update({ where: { id: config.id }, data: { metadata } });
+    await recordAuditLog(req, "NUBOX_SALES_SYNCED", "tenant_channel_config", config.id, { period: requestedPeriod, ...summary });
+    res.json({ ok: true, period: requestedPeriod, ...summary });
+  } catch (error) {
+    next(error);
+  }
+});
+
 connectionsRouter.post("/connections/:key/disconnect", requireRole(ROLE_GROUPS.MANAGERS), async (req, res, next) => {
   try {
     const key = String(req.params.key || "").trim().toLowerCase();
     const provider = PROVIDER_BY_KEY.get(key);
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });
+    if (provider.availability === "COMING_SOON") return res.status(409).json({ error: "Esta conexión aún no está disponible para administración." });
 
     const config = await findTenantProviderConfig(req.tenantId, provider);
     if (!config) return res.json({ ok: true, provider: publicProvider(provider, null) });

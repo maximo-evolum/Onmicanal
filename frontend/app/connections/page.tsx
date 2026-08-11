@@ -7,6 +7,7 @@ import {
   getConnectionOAuthUrl,
   reconcileMetaConnections,
   saveConnectionProvider,
+  syncNuboxSales,
   testConnectionProvider,
   type ConnectionCenterResponse,
   type ConnectionProvider,
@@ -22,6 +23,7 @@ const statusLabels: Record<ConnectionStatus, string> = {
   PENDING: "Pendiente",
   ERROR: "Error",
   DISCONNECTED: "Desconectado",
+  COMING_SOON: "Próxima conexión",
 };
 
 const statusHelp: Record<ConnectionStatus, string> = {
@@ -29,6 +31,7 @@ const statusHelp: Record<ConnectionStatus, string> = {
   PENDING: "Faltan credenciales, campos o variables de entorno.",
   ERROR: "La ultima prueba fallo. Revisa credenciales.",
   DISCONNECTED: "Sin conexion activa para este tenant.",
+  COMING_SOON: "Esta integración estará disponible próximamente.",
 };
 
 type ConnectionActivity = {
@@ -43,6 +46,7 @@ function providerByKey(data: ConnectionCenterResponse | null, key: string | null
 }
 
 function providerProgress(provider: ConnectionProvider) {
+  if (provider.status === "COMING_SOON") return 0;
   const requiredTotal =
     (provider.requiredEnv?.length || 0) +
     (provider.requiredFields?.length || 0) +
@@ -52,6 +56,7 @@ function providerProgress(provider: ConnectionProvider) {
 }
 
 function providerActionLabel(provider: ConnectionProvider) {
+  if (provider.status === "COMING_SOON") return "Próxima conexión";
   if (provider.status === "CONNECTED") return provider.oauthProvider ? "Cuenta vinculada" : "Operativo";
   if (provider.oauthProvider) return "Vincular cuenta";
   if (provider.missing.length) return "Completar datos";
@@ -59,6 +64,12 @@ function providerActionLabel(provider: ConnectionProvider) {
 }
 
 function providerNextStep(provider: ConnectionProvider) {
+  if (provider.status === "COMING_SOON") {
+    return {
+      title: "En preparación",
+      description: "EVOLUM habilitará esta conexión cuando su integración, seguridad y validación estén terminadas. Aún no necesitas ingresar datos.",
+    };
+  }
   if (provider.status === "CONNECTED") {
     return {
       title: "Monitoreo activo",
@@ -87,6 +98,9 @@ function providerNextStep(provider: ConnectionProvider) {
 
 function providerCapabilities(provider: ConnectionProvider) {
   const haystack = `${provider.key} ${provider.label} ${provider.groupKey} ${provider.module}`.toLowerCase();
+  if (haystack.includes("nubox")) {
+    return ["Facturas y DTE", "PDF y XML", "Cuentas por cobrar"];
+  }
   if (haystack.includes("gmail") || haystack.includes("outlook") || haystack.includes("mail")) {
     return ["OAuth correo", "Envio y recepcion", "Trazabilidad"];
   }
@@ -121,7 +135,7 @@ function discoverySummary(provider: ConnectionProvider) {
   return candidates[0] || null;
 }
 
-type ConnectionFormState = { label: string; phoneNumberId: string; businessAccountId: string; externalAccountId: string; accessToken: string; metadata: Record<string, string>; isActive: boolean };
+type ConnectionFormState = { label: string; phoneNumberId: string; businessAccountId: string; externalAccountId: string; accessToken: string; verifyToken: string; metadata: Record<string, string>; isActive: boolean };
 type ProviderField = { key: string; label: string; placeholder?: string; secret?: boolean; options?: string[] };
 type FinanceBankAccount = { bank: string; alias: string; accountType: string; accountLast4: string };
 
@@ -172,7 +186,10 @@ function fieldsForProvider(provider: ConnectionProvider): ProviderField[] {
     bank_links: [{ key: "bankName", label: "Banco" }, { key: "accountType", label: "Tipo de cuenta", options: ["Cuenta corriente", "Cuenta vista", "Cuenta ahorro"] }, { key: "accountNumber", label: "Número de cuenta" }, { key: "accountHolder", label: "Titular de la cuenta" }, { key: "accountRut", label: "RUT del titular" }],
     backup_provider: [{ key: "provider", label: "Proveedor", options: ["Microsoft Azure", "AWS", "Google Cloud", "SONDA Cloud", "Otro"] }, { key: "bucket", label: "Contenedor o bucket" }, { key: "region", label: "Región de almacenamiento" }, { key: "accessToken", label: "Clave de acceso", secret: true }],
     security_replica: [{ key: "provider", label: "Proveedor de réplica" }, { key: "target", label: "Destino de réplica" }, { key: "frequency", label: "Frecuencia", options: ["Cada hora", "Diaria", "Semanal"] }],
-    finance_nubox: [{ key: "companyRut", label: "RUT de la empresa" }, { key: "accessToken", label: "Token API de Nubox", secret: true }],
+    // Nubox autentica la integración con dos cabeceras seguras. El RUT y el
+    // nombre de empresa no son credenciales y se obtienen desde la cuenta
+    // autorizada, por lo que no se solicitan en este formulario.
+    finance_nubox: [{ key: "accessToken", label: "x-api-key de Nubox", secret: true }, { key: "verifyToken", label: "Authorization de Nubox", secret: true, placeholder: "Bearer NP_SECRET_..." }],
     finance_defontana: [{ key: "companyCode", label: "Código de empresa" }, { key: "accessToken", label: "Clave API de Defontana", secret: true }],
     finance_softland: [{ key: "companyCode", label: "Código de empresa / sociedad" }, { key: "accessToken", label: "Clave API de Softland", secret: true }],
     finance_sii: [{ key: "taxpayerRut", label: "RUT del contribuyente" }, { key: "accessToken", label: "Credencial o token autorizado", secret: true }]
@@ -184,8 +201,8 @@ function ProviderFieldGrid({ provider, form, setForm }: { provider: ConnectionPr
   const fields = fieldsForProvider(provider);
   if (!fields.length) return <p className="connection-form-help">Esta conexión se completa por OAuth, carga local o mediante la configuración del proveedor. No requiere IDs de Meta.</p>;
   return <div className="connection-form-grid">{fields.map((field) => {
-    const direct = field.key === "businessAccountId" || field.key === "phoneNumberId" || field.key === "externalAccountId" || field.key === "accessToken";
-    const directValues: Record<string, string> = { businessAccountId: form.businessAccountId, phoneNumberId: form.phoneNumberId, externalAccountId: form.externalAccountId, accessToken: form.accessToken };
+    const direct = field.key === "businessAccountId" || field.key === "phoneNumberId" || field.key === "externalAccountId" || field.key === "accessToken" || field.key === "verifyToken";
+    const directValues: Record<string, string> = { businessAccountId: form.businessAccountId, phoneNumberId: form.phoneNumberId, externalAccountId: form.externalAccountId, accessToken: form.accessToken, verifyToken: form.verifyToken };
     const value = direct ? (directValues[field.key] || "") : (form.metadata[field.key] || "");
     const update = (next: string) => setForm((current) => direct ? ({ ...current, [field.key]: next } as ConnectionFormState) : { ...current, metadata: { ...current.metadata, [field.key]: next } });
     return <label key={field.key}>{field.label}{field.options ? <select value={value} onChange={(event) => update(event.target.value)}><option value="">Selecciona una opción</option>{field.options.map((option) => <option key={option}>{option}</option>)}</select> : <input type={field.secret ? "password" : "text"} autoComplete={field.secret ? "new-password" : "off"} placeholder={field.placeholder} value={value} onChange={(event) => update(event.target.value)} />}{field.secret ? <small>Se guarda cifrada y no vuelve a mostrarse.</small> : null}</label>;
@@ -209,6 +226,7 @@ export default function ConnectionsPage() {
     businessAccountId: "",
     externalAccountId: "",
     accessToken: "",
+    verifyToken: "",
     metadata: {} as Record<string, string>,
     isActive: true,
   });
@@ -254,6 +272,7 @@ export default function ConnectionsPage() {
       businessAccountId: selected.config?.businessAccountId || "",
       externalAccountId: selected.config?.externalAccountId || "",
       accessToken: "",
+      verifyToken: "",
       metadata: Object.fromEntries(
         Object.entries(selected.config?.metadata || {})
           .filter(([key, value]) => key !== "oauthDiscovery" && typeof value === "string")
@@ -278,6 +297,7 @@ export default function ConnectionsPage() {
         businessAccountId: form.businessAccountId,
         externalAccountId: form.externalAccountId,
         ...(form.accessToken ? { accessToken: form.accessToken } : {}),
+        ...(form.verifyToken ? { verifyToken: form.verifyToken } : {}),
         metadata: selected.key === "finance_bank_statements" ? { ...metadata, bankAccounts } : metadata,
         isActive: form.isActive,
       });
@@ -303,6 +323,23 @@ export default function ConnectionsPage() {
       setNotice({ type: "success", text: "Conexion validada" });
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "La prueba de conexion fallo" });
+    } finally {
+      await load(true);
+      setConnectionActivity(null);
+    }
+  }
+
+  async function syncNubox(provider: ConnectionProvider) {
+    if (connectionActivity) return;
+    try {
+      setConnectionActivity({ key: provider.key, stage: "Consultando documentos de Nubox...", progress: 32 });
+      setNotice(null);
+      setConnectionActivity({ key: provider.key, stage: "Actualizando cuentas por cobrar...", progress: 74 });
+      const result = await syncNuboxSales();
+      setConnectionActivity({ key: provider.key, stage: "Documentos sincronizados", progress: 100 });
+      setNotice({ type: "success", text: `Nubox sincronizado: ${result.created} nuevos y ${result.updated} actualizados.` });
+    } catch (error) {
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudieron sincronizar los documentos de Nubox" });
     } finally {
       await load(true);
       setConnectionActivity(null);
@@ -511,7 +548,7 @@ export default function ConnectionsPage() {
                           const activity = connectionActivity?.key === provider.key ? connectionActivity : null;
                           return (
                           <button
-                            className={`connection-card ${selectedKey === provider.key ? "selected" : ""} ${activity ? "working" : ""}`}
+                            className={`connection-card ${selectedKey === provider.key ? "selected" : ""} ${activity ? "working" : ""} ${provider.status === "COMING_SOON" ? "coming-soon" : ""}`}
                             key={provider.key}
                             type="button"
                             onClick={() => setSelectedKey(provider.key)}
@@ -565,7 +602,12 @@ export default function ConnectionsPage() {
                         </div>
                       ) : null}
 
-                      {selected.oauthProvider ? (
+                      {selected.status === "COMING_SOON" ? (
+                        <section className="connection-coming-soon" aria-live="polite">
+                          <strong>Esta conexión está en preparación</strong>
+                          <p>Cuando esté lista, aparecerá aquí su método de vinculación seguro. Por ahora no debes ingresar claves, RUT, cuentas ni otros datos.</p>
+                        </section>
+                      ) : selected.oauthProvider ? (
                         <section className="connection-account-context" aria-label="Cuentas involucradas en la vinculación">
                           <article>
                             <span>Cuenta que administra EVOLUM</span>
@@ -604,7 +646,7 @@ export default function ConnectionsPage() {
                         {providerCapabilities(selected).map((item) => <span key={item}>{item}</span>)}
                       </div>
 
-                      {selected.oauthProvider ? (
+                      {selected.status === "COMING_SOON" ? null : selected.oauthProvider ? (
                         <>
                           <div className="connection-oauth-action">
                             {selected.config && !selected.config.isActive ? (
@@ -652,18 +694,20 @@ export default function ConnectionsPage() {
                           {selected.key === "finance_bank_statements" ? (
                             <FinanceBankAccountsEditor accounts={bankAccounts} setAccounts={setBankAccounts} />
                           ) : <>
-                            <div className="connection-form-grid">
+                            {selected.key !== "finance_nubox" ? <div className="connection-form-grid">
                               <label>
                                 Nombre visible
                                 <input value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
                               </label>
-                            </div>
+                            </div> : null}
+                            {selected.key === "finance_nubox" ? <p className="connection-form-help">Ingresa solo las dos cabeceras entregadas por Nubox. El <strong>Authorization</strong> puede pegarse con o sin el prefijo <strong>Bearer</strong>; EVOLUM lo protege y nunca lo vuelve a mostrar.</p> : null}
                             <ProviderFieldGrid provider={selected} form={form} setForm={setForm} />
                           </>}
 
                           <div className="connection-actions">
                             <button className="primary" type="submit" disabled={saving || Boolean(connectionActivity)}>{saving ? "Guardando..." : "Guardar conexión"}</button>
                             <button type="button" onClick={() => runTest(selected)} disabled={Boolean(connectionActivity)}>Probar</button>
+                            {selected.key === "finance_nubox" ? <button type="button" onClick={() => syncNubox(selected)} disabled={Boolean(connectionActivity)}>Sincronizar documentos</button> : null}
                             <button className="danger" type="button" onClick={() => disconnect(selected)} disabled={Boolean(connectionActivity)}>Desconectar</button>
                           </div>
                         </>

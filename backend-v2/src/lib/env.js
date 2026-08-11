@@ -116,6 +116,11 @@ export const env = {
   paymentProvider:
     firstEnv("PAYMENT_PROVIDER", "paymentProvider") || "manual",
 
+  // Nubox entrega una URL base distinta para certificacion y produccion. Se
+  // mantiene solo en el servidor para no exponer detalles del proveedor a los
+  // usuarios del Centro de Conexiones.
+  nuboxApiBaseUrl: normalizeUrl(firstEnv("NUBOX_API_BASE_URL")),
+
   // Lanzamientos nativos de la app. Se publican por variable de entorno para
   // no acoplar el backend a un proveedor particular de archivos (S3, R2,
   // GitHub Releases, sitio web, etc.). El enlace es intencionalmente público:
