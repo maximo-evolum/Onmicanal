@@ -8,12 +8,14 @@ import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import { getVerticalProduct, type VerticalProductCode } from "@/lib/vertical-products";
 import { getStoredTenantAccess, storeTenantAccess } from "@/lib/session-access";
+import { NotificationCenter } from "@/components/notification-center";
 
 type EvolumSidebarProps = {
   active: string;
   isOpen: boolean;
   onToggle: () => void;
   isDeveloper?: boolean;
+  showNotificationCenter?: boolean;
 };
 
 type SidebarItem = readonly [
@@ -223,7 +225,7 @@ function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
   return true;
 }
 
-export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
+export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotificationCenter = true }: EvolumSidebarProps) {
   const initialSession = getStoredSession();
   const initialAccess = getStoredTenantAccess(initialSession);
   const [enabledModules, setEnabledModules] = useState<string[] | null>(() => initialAccess?.modules || null);
@@ -409,9 +411,12 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
   if (!isOpen) {
     return (
-      <button className="evolum-menu-bubble" type="button" onClick={toggleMenu} aria-label="Abrir menu EVOLUM">
-        <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
-      </button>
+      <div className="evolum-menu-rail-actions">
+        <button className="evolum-menu-bubble" type="button" onClick={toggleMenu} aria-label="Abrir menu EVOLUM">
+          <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
+        </button>
+        {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
+      </div>
     );
   }
 
@@ -422,9 +427,12 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
           <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
           <strong>EVOLUM OS</strong>
         </div>
+        <div className="inbox-nav-head-actions">
+          {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
         <button className="inbox-nav-toggle" type="button" onClick={toggleMenu} aria-label="Cerrar menu">
           ×
         </button>
+        </div>
       </div>
 
       <nav className="inbox-unified-nav-list evolum-nav-groups" ref={navRef} onScroll={saveMenuPosition} aria-busy={!menuReady}>

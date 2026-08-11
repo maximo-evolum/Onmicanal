@@ -11,16 +11,14 @@ import {
   getMe,
   getMyModules,
   getOnboardingKnowledge,
-  getNotifications,
   globalSearch,
-  markAllNotificationsRead,
   exportTenantBackup,
   type CrmOperationalDashboard,
   type GlobalSearchResult,
-  type TenantNotification
 } from "@/lib/api";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
+import { NotificationCenter } from "@/components/notification-center";
 import { getStoredSession, mergeStoredSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
@@ -36,7 +34,6 @@ type LoadState = {
   onboarding: any | null;
   plan: AccountLevel;
   tenant: TenantSession | null;
-  notifications: TenantNotification[];
   error: string | null;
 };
 
@@ -344,13 +341,11 @@ export default function CrmPrincipalPage() {
     onboarding: null,
     plan: "STARTER",
     tenant: null,
-    notifications: [],
     error: null
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [remoteResults, setRemoteResults] = useState<GlobalSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [backupStatus, setBackupStatus] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -373,7 +368,6 @@ export default function CrmPrincipalPage() {
       getOnboardingKnowledge()
     ]);
 
-    const notifications = await getNotifications({ limit: 6 }).catch(() => ({ notifications: [] }));
     const resolvedSession = me.status === "fulfilled" ? me.value.user : session;
     const catalogModules = modules.status === "fulfilled" ? modules.value.modules || [] : [];
     const sessionModules = me.status === "fulfilled" ? me.value.modules || [] : [];
@@ -396,7 +390,6 @@ export default function CrmPrincipalPage() {
       onboarding: onboarding.status === "fulfilled" ? onboarding.value : null,
       plan: modules.status === "fulfilled" ? accountLevelFromPlan(modules.value.plan) : accountLevelFromPlan(me.status === "fulfilled" ? me.value.tenant?.plan : null),
       tenant: me.status === "fulfilled" ? me.value.tenant : null,
-      notifications: notifications.notifications || [],
       error: [me, conversations, leadMetrics, crm, campaigns, modules, onboarding].some((item) => item.status === "rejected")
         ? "Algunos datos reales no pudieron cargarse. Se muestran datos disponibles y estructura base."
         : null
@@ -595,7 +588,6 @@ export default function CrmPrincipalPage() {
       .filter((item) => item.title.trim().toLowerCase().startsWith(normalizedSearch) || normalizedSearch.length > 1)
       .slice(0, 6)
     : [];
-  const unreadNotifications = state.notifications.filter((item) => item.status !== "READ").length;
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -612,14 +604,6 @@ export default function CrmPrincipalPage() {
       return;
     }
     router.push(first.href);
-  }
-
-  async function readAllNotifications() {
-    await markAllNotificationsRead().catch(() => null);
-    setState((current) => ({
-      ...current,
-      notifications: current.notifications.map((item) => ({ ...item, status: "READ" }))
-    }));
   }
 
   async function downloadBackup() {
@@ -648,6 +632,7 @@ export default function CrmPrincipalPage() {
         isDeveloper={isDeveloper}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
+        showNotificationCenter={false}
       />
 
       <section className="crm-main-workspace">
@@ -695,24 +680,7 @@ export default function CrmPrincipalPage() {
             ) : null}
           </form>
           <div className="crm-main-ops">
-            <button type="button" className="crm-main-ops-button" onClick={() => setNotificationsOpen((value) => !value)}>
-              Alertas <b>{unreadNotifications}</b>
-            </button>
-            {notificationsOpen ? (
-              <div className="crm-main-notification-popover">
-                <div>
-                  <strong>Notificaciones</strong>
-                  <button type="button" onClick={readAllNotifications}>Marcar leidas</button>
-                </div>
-                {state.notifications.length ? state.notifications.map((item) => (
-                  <Link href={item.targetUrl || "/crm-principal"} key={item.id} onClick={() => setNotificationsOpen(false)}>
-                    <small>{item.severity || "info"}</small>
-                    <strong>{item.title}</strong>
-                    <span>{item.body || "Evento operativo del workspace"}</span>
-                  </Link>
-                )) : <p>Sin notificaciones pendientes.</p>}
-              </div>
-            ) : null}
+            <NotificationCenter />
             <button type="button" className="crm-main-ops-button" onClick={downloadBackup}>Respaldo</button>
             {backupStatus ? <span className="crm-main-backup-status">{backupStatus}</span> : null}
           </div>

@@ -16762,3 +16762,102 @@ textarea:focus {
     max-block-size: min(270px, calc(100dvh - 285px));
   }
 }
+
+/* Finanzas: contraste reforzado para el modo Lumen. El ciclo conserva una
+   superficie de lectura diferenciada sin recuperar el aspecto "negativo" del
+   resto de la plataforma. */
+:root:not([data-theme="dark"]):not([data-design-system="neon"]) .finance-product-workspace .finance-cycle {
+  border-color: #5c4c9b;
+  background: linear-gradient(118deg, #17142d 0%, #292054 54%, #123d55 100%);
+  box-shadow: 0 14px 30px rgba(30, 22, 68, .18);
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]) .finance-product-workspace .finance-cycle :is(h2, strong, b) {
+  color: #ffffff !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]) .finance-product-workspace .finance-cycle :is(p, small, span) {
+  color: #e8e7f5 !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]) .finance-product-workspace .finance-cycle .finance-eyebrow,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]) .finance-product-workspace .finance-cycle-steps button > span {
+  color: #7df5ff !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]) .finance-product-workspace .finance-cycle-steps button {
+  border-color: rgba(190, 178, 255, .44);
+  background: linear-gradient(145deg, rgba(96, 76, 151, .78), rgba(20, 72, 95, .82));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]) .finance-product-workspace .finance-cycle-steps button:hover,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]) .finance-product-workspace .finance-cycle-steps button:focus-visible {
+  border-color: #82f5ff;
+  background: linear-gradient(145deg, #7556bf, #0b8fa6);
+  outline: 3px solid rgba(46, 139, 255, .28);
+  outline-offset: 2px;
+}
+
+/* Etiquetas y textos secundarios de integraciones: contraste AA sobre
+   superficies claras y estados fáciles de reconocer en una lectura rápida. */
+.finance-product-workspace .finance-readiness > b {
+  min-width: max-content;
+  padding: 6px 9px;
+  font-weight: 850;
+  letter-spacing: .01em;
+}
+.finance-product-workspace .finance-readiness > b.ready {
+  color: #075f48 !important;
+  background: #d9f5e9 !important;
+}
+.finance-product-workspace .finance-readiness > b.manual {
+  color: #214f91 !important;
+  background: #dfecff !important;
+}
+.finance-product-workspace .finance-readiness > b.requires_configuration {
+  color: #774300 !important;
+  background: #fff0ce !important;
+}
+.finance-product-workspace .finance-readiness strong {
+  color: var(--product-text) !important;
+  font-weight: 800;
+}
+.finance-product-workspace .finance-readiness span {
+  color: #4c5e6f !important;
+  line-height: 1.45;
+}
+
+/* Centro de notificaciones unificado. La campana usa un trazo reconocible,
+   conserva un objetivo táctil amplio y comparte el mismo comportamiento en
+   todos los módulos del workspace. */
+.inbox-nav-head-actions { display: flex; align-items: center; gap: 8px; }
+.evolum-menu-rail-actions { position: fixed; z-index: 76; top: 24px; left: 18px; display: grid; gap: 10px; justify-items: center; }
+.evolum-menu-rail-actions .evolum-menu-bubble { position: static; }
+.evolum-menu-rail-actions .notification-center-panel { left: 52px; right: auto; }
+.notification-center { position: relative; flex: 0 0 auto; z-index: 70; }
+.notification-center-trigger {
+  position: relative; display: grid; width: 44px; height: 44px; place-items: center;
+  border: 1px solid #c9d8d5; border-radius: 14px; color: #49356c; background: #fff;
+  box-shadow: 0 6px 18px rgba(17, 35, 48, .08); transition: transform .16s ease, border-color .16s ease, background .16s ease;
+}
+.notification-center-trigger:hover { border-color: #0b9ba1; background: #f0fbfa; transform: translateY(-1px); }
+.notification-center-trigger:focus-visible { outline: 3px solid rgba(46, 139, 255, .28); outline-offset: 2px; }
+.notification-center-trigger svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.notification-center-count { position: absolute; top: -6px; right: -6px; display: grid; min-width: 19px; height: 19px; place-items: center; padding: 0 4px; border: 2px solid #fff; border-radius: 999px; color: #fff; background: #e54458; font-size: 10px; font-weight: 900; line-height: 1; }
+.notification-center-panel { position: absolute; top: calc(100% + 10px); right: 0; width: min(360px, calc(100vw - 32px)); overflow: hidden; border: 1px solid #d4e0de; border-radius: 16px; color: #1d2430; background: #fff; box-shadow: 0 22px 52px rgba(18, 24, 46, .2); }
+.notification-center-panel-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 15px 16px 12px; border-bottom: 1px solid #e4ecea; }
+.notification-center-panel-head div { display: grid; gap: 2px; }.notification-center-panel-head strong { color: #202633; font-size: 14px; }.notification-center-panel-head span { color: #647182; font-size: 12px; }
+.notification-center-panel-head button { padding: 0; border: 0; color: #157e8a; background: transparent; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.notification-center-list { display: grid; max-height: min(430px, 62vh); overflow: auto; }.notification-center-list > p { margin: 0; padding: 20px 16px; color: #607082; font-size: 13px; }
+.notification-center-list a { display: grid; gap: 4px; padding: 13px 16px; border-bottom: 1px solid #e9f0ee; color: inherit; text-decoration: none; }.notification-center-list a:last-child { border-bottom: 0; }.notification-center-list a:hover { background: #f2fbfa; }.notification-center-list a.is-read { opacity: .7; }.notification-center-list a.is-unread { background: linear-gradient(90deg, #effbfa, #ffffff); }.notification-center-list strong { color: #202633; font-size: 13px; }.notification-center-list small { color: #627084; font-size: 12px; line-height: 1.35; }
+.notification-center-severity { width: max-content; padding: 3px 7px; border-radius: 999px; color: #38617a; background: #e8f4fb; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }.notification-center-severity.is-warning { color: #835007; background: #fff1d7; }.notification-center-severity.is-critical { color: #a6273a; background: #ffe2e6; }.notification-center-severity.is-success { color: #14724e; background: #dff6ea; }
+.notification-center--sidebar .notification-center-trigger { width: 39px; height: 39px; border-color: rgba(62, 214, 206, .3); color: #74f7ef; background: rgba(11, 38, 67, .65); box-shadow: none; }.notification-center--sidebar .notification-center-count { border-color: #18112e; }.notification-center--sidebar .notification-center-panel { right: auto; left: 0; }
+.finance-search { gap: 10px; padding: 4px 14px; border-radius: 14px; }.finance-search-icon { flex: 0 0 auto; width: 19px; height: 19px; fill: none; stroke: #5b5472; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }.finance-search input { padding-left: 0; }.finance-product-workspace .finance-search-icon { stroke: #5a407d; }
+.finance-header-actions > .notification-center .notification-center-trigger { border-color: #cbd8d5; color: #4b3570; }
+.finance-header-actions > .notification-center .notification-center-trigger:hover { border-color: #0891b2; color: #087b93; }
+:root[data-theme="dark"] .notification-center-trigger { border-color: rgba(139, 107, 240, .5); color: #bda6ff; background: #17152b; box-shadow: none; }
+:root[data-theme="dark"] .notification-center-trigger:hover { border-color: #36d8d1; color: #83fff5; background: #201a3e; }
+:root[data-theme="dark"] .notification-center-count { border-color: #17152b; }
+:root[data-theme="dark"] .notification-center-panel { border-color: rgba(139, 107, 240, .38); color: #f4f1ff; background: #17152b; box-shadow: 0 22px 52px rgba(0, 0, 0, .4); }
+:root[data-theme="dark"] .notification-center-panel-head { border-color: rgba(255, 255, 255, .1); }:root[data-theme="dark"] .notification-center-panel-head strong { color: #fff; }:root[data-theme="dark"] .notification-center-panel-head span,:root[data-theme="dark"] .notification-center-list small { color: #c0bbd1; }
+:root[data-theme="dark"] .notification-center-list a { border-color: rgba(255, 255, 255, .08); }:root[data-theme="dark"] .notification-center-list a:hover,:root[data-theme="dark"] .notification-center-list a.is-unread { background: #211b40; }:root[data-theme="dark"] .notification-center-list strong { color: #fff; }
+/* En modo oscuro la cabecera financiera mantiene el mismo acabado del resto
+   del workspace, sin recuperar el blanco intenso de la superficie Lumen. */
+:root[data-theme="dark"] .finance-header-actions > .notification-center .notification-center-trigger { border-color: rgba(167, 132, 250, .35); color: #c8a9ff; background: rgba(22, 20, 47, .82); }
+@media (max-width: 700px) { .notification-center-panel { position: fixed; top: 72px; right: 16px; left: 16px; width: auto; }.notification-center--sidebar .notification-center-panel { right: 16px; left: 16px; }.inbox-nav-head-actions { gap: 6px; } }

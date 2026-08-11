@@ -47,7 +47,15 @@ export const VERTICAL_PRODUCTS: Record<VerticalProductCode, VerticalProductDefin
       "finance_exceptions", "finance_collections", "finance_analytics"
     ],
     description: "Facturas, cartolas, conciliación y cobranza IA",
-    sharedModuleKeys: ["integrations", "onboarding", "saas"]
+    // Finanzas es una vertical independiente, pero su equipo conserva el
+    // Core EVOLUM y el CRM transversal que estén incluidos en su plan. No se
+    // muestran módulos propios de otras verticales (inmobiliaria, salud,
+    // taller, etc.), aunque existan en el catálogo global.
+    sharedModuleKeys: [
+      "crm", "inbox", "agenda", "pipeline", "campaigns", "payments",
+      "dashboard", "ai_ops", "integrations", "documents", "workflows",
+      "metadata", "onboarding", "saas"
+    ]
   }
 };
 
