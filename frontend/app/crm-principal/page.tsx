@@ -18,7 +18,6 @@ import {
 } from "@/lib/api";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
-import { NotificationCenter } from "@/components/notification-center";
 import { getStoredSession, mergeStoredSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import type { AgentSession, Campaign, Conversation, LeadMetrics, TenantSession } from "@/lib/types";
@@ -680,7 +679,6 @@ export default function CrmPrincipalPage() {
             ) : null}
           </form>
           <div className="crm-main-ops">
-            <NotificationCenter />
             <button type="button" className="crm-main-ops-button" onClick={downloadBackup}>Respaldo</button>
             {backupStatus ? <span className="crm-main-backup-status">{backupStatus}</span> : null}
           </div>

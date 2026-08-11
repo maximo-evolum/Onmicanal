@@ -16838,7 +16838,7 @@ textarea:focus {
 }
 .notification-center-trigger:hover { border-color: #0b9ba1; background: #f0fbfa; transform: translateY(-1px); }
 .notification-center-trigger:focus-visible { outline: 3px solid rgba(46, 139, 255, .28); outline-offset: 2px; }
-.notification-center-trigger svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.notification-center-trigger svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transform: translateY(-1px); }
 .notification-center-count { position: absolute; top: -6px; right: -6px; display: grid; min-width: 19px; height: 19px; place-items: center; padding: 0 4px; border: 2px solid #fff; border-radius: 999px; color: #fff; background: #e54458; font-size: 10px; font-weight: 900; line-height: 1; }
 .notification-center-panel { position: absolute; top: calc(100% + 10px); right: 0; width: min(360px, calc(100vw - 32px)); overflow: hidden; border: 1px solid #d4e0de; border-radius: 16px; color: #1d2430; background: #fff; box-shadow: 0 22px 52px rgba(18, 24, 46, .2); }
 .notification-center-panel-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 15px 16px 12px; border-bottom: 1px solid #e4ecea; }

@@ -4,7 +4,6 @@ import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useState } from "
 import { useSearchParams } from "next/navigation";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
-import { NotificationCenter } from "@/components/notification-center";
 import { ModuleGate } from "@/components/module-gate";
 import {
   analyzeFinanceAgents,
@@ -356,7 +355,7 @@ function FinanceWorkspace() {
         <main className="finance-workspace">
           <header className="finance-header">
             <div className="finance-title"><span>EVOLUM FINANZAS</span><h1>{activeTab === "resumen" ? `Hola, ${agent?.name?.split(" ")[0] || "equipo"}` : active.label}</h1><p>{activeTab === "resumen" ? "Esto es lo que necesita tu atencion financiera hoy." : active.detail}</p></div>
-            <div className="finance-header-actions"><label className="finance-search"><svg className="finance-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg><input aria-label="Buscar en Finanzas" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar facturas, clientes o movimientos" /></label><NotificationCenter /><AccountPill fallbackName={agent?.name || "Usuario"} /></div>
+            <div className="finance-header-actions"><label className="finance-search"><svg className="finance-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg><input aria-label="Buscar en Finanzas" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar facturas, clientes o movimientos" /></label><AccountPill fallbackName={agent?.name || "Usuario"} /></div>
           </header>
           {message ? <div className="finance-message">{message}</div> : null}
           {loading ? <div className="finance-loading">Actualizando informacion financiera...</div> : null}

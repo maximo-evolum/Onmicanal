@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getStoredSession } from "@/lib/auth";
+import { NotificationCenter } from "@/components/notification-center";
 import type { AgentSession } from "@/lib/types";
 
 function initials(name = "") {
@@ -34,9 +35,11 @@ function normalizeAvatarUrl(value?: string | null) {
 export function AccountPill({
   fallbackName = "Usuario",
   className = "module-account-pill",
+  showNotifications = true,
 }: {
   fallbackName?: string | null;
   className?: string;
+  showNotifications?: boolean;
 }) {
   const [session, setSession] = useState<AgentSession | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
@@ -64,13 +67,16 @@ export function AccountPill({
   }, [avatarUrl]);
 
   return (
-    <span className={`${className} account-pill-with-avatar`}>
+    <>
+      {showNotifications ? <NotificationCenter /> : null}
+      <span className={`${className} account-pill-with-avatar`}>
       {avatarUrl && !avatarFailed ? (
         <img src={avatarUrl} alt={name} onError={() => setAvatarFailed(true)} />
       ) : (
         <i>{initials(name)}</i>
       )}
       <strong>{name}</strong>
-    </span>
+      </span>
+    </>
   );
 }

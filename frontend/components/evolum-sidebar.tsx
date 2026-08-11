@@ -225,7 +225,7 @@ function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
   return true;
 }
 
-export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotificationCenter = true }: EvolumSidebarProps) {
+export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotificationCenter = false }: EvolumSidebarProps) {
   const initialSession = getStoredSession();
   const initialAccess = getStoredTenantAccess(initialSession);
   const [enabledModules, setEnabledModules] = useState<string[] | null>(() => initialAccess?.modules || null);
