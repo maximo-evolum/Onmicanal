@@ -33,18 +33,18 @@ import type { ModuleAccessKey } from "@/lib/module-access";
 type FinanceTab = "resumen" | "facturas" | "cartolas" | "conciliacion" | "excepciones" | "cobranza" | "aprobaciones" | "clientes" | "indicadores" | "integraciones" | "plan" | "agentes";
 
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
-  { key: "resumen", label: "Inicio", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
-  { key: "facturas", label: "Facturas", module: "finance_invoices", detail: "Registra documentos pendientes de cobro." },
-  { key: "cartolas", label: "Cartolas", module: "finance_bank_sync", detail: "Importa movimientos bancarios para conciliarlos." },
-  { key: "conciliacion", label: "Conciliacion IA", module: "finance_reconciliation", detail: "Revisa sugerencias antes de confirmar cambios." },
-  { key: "excepciones", label: "Excepciones", module: "finance_exceptions", detail: "Ordena diferencias y casos que requieren revision." },
+  { key: "resumen", label: "Resumen financiero", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
+  { key: "facturas", label: "Facturas por cobrar", module: "finance_invoices", detail: "Registra documentos pendientes de cobro." },
+  { key: "cartolas", label: "Cartolas y movimientos", module: "finance_bank_sync", detail: "Importa movimientos bancarios para conciliarlos." },
+  { key: "conciliacion", label: "Conciliación IA", module: "finance_reconciliation", detail: "Revisa sugerencias antes de confirmar cambios." },
+  { key: "excepciones", label: "Excepciones financieras", module: "finance_exceptions", detail: "Ordena diferencias y casos que requieren revision." },
   { key: "cobranza", label: "Cobranza IA", module: "finance_collections", detail: "Prepara la cartera vencida para un seguimiento aprobado." },
-  { key: "aprobaciones", label: "Aprobaciones", module: "finance_reconciliation", detail: "Valida sugerencias antes de modificar la operación financiera." },
-  { key: "clientes", label: "Clientes", module: "finance_invoices", detail: "Consulta la cartera y el riesgo por cliente." },
-  { key: "indicadores", label: "Indicadores", module: "finance_analytics", detail: "Revisa caja, cartera, DSO y proyecciones." },
-  { key: "integraciones", label: "Integraciones", module: "finance_analytics", detail: "Estado seguro de las fuentes que alimentan el ciclo." },
-  { key: "plan", label: "Plan y uso", module: "finance_analytics", detail: "Consulta el consumo de documentos de tu plan financiero." },
-  { key: "agentes", label: "Equipo IA", module: "finance_analytics", detail: "Cinco agentes especializados coordinados con controles humanos." }
+  { key: "aprobaciones", label: "Aprobaciones financieras", module: "finance_reconciliation", detail: "Valida sugerencias antes de modificar la operación financiera." },
+  { key: "clientes", label: "Clientes financieros", module: "finance_invoices", detail: "Consulta la cartera y el riesgo por cliente." },
+  { key: "indicadores", label: "Indicadores financieros", module: "finance_analytics", detail: "Revisa caja, cartera, DSO y proyecciones." },
+  { key: "integraciones", label: "Integraciones financieras", module: "finance_analytics", detail: "Estado seguro de las fuentes que alimentan el ciclo." },
+  { key: "plan", label: "Plan y uso financiero", module: "finance_analytics", detail: "Consulta el consumo de documentos de tu plan financiero." },
+  { key: "agentes", label: "Equipo IA financiero", module: "finance_analytics", detail: "Cinco agentes especializados coordinados con controles humanos." }
 ];
 
 function resolveFinanceTab(value: string | null): FinanceTab {
@@ -139,6 +139,13 @@ function FinanceWorkspace() {
     window.addEventListener("popstate", syncBrowserNavigation);
     return () => window.removeEventListener("popstate", syncBrowserNavigation);
   }, []);
+
+  // Los enlaces del menú EV cambian ?tab= sin recargar el workspace.
+  // Mantenemos el panel financiero sincronizado con el enlace seleccionado.
+  useEffect(() => {
+    const requestedTab = resolveFinanceTab(params.get("tab"));
+    setActiveTab((current) => current === requestedTab ? current : requestedTab);
+  }, [params]);
 
   function selectTab(tab: FinanceTab) {
     if (tab === activeTab) return;
@@ -304,13 +311,12 @@ function FinanceWorkspace() {
   return (
     <ModuleGate moduleKey="finance_analytics">
       <div className={`module-with-menu-shell product-workspace finance-shell finance-product-workspace ${sidebarOpen ? "" : "nav-collapsed"}`}>
-        <EvolumSidebar active={activeTab === "resumen" ? "Finanzas" : active.label} isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
+        <EvolumSidebar active={active.label} isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
         <main className="finance-workspace">
           <header className="finance-header">
             <div className="finance-title"><span>EVOLUM FINANZAS</span><h1>{activeTab === "resumen" ? `Hola, ${agent?.name?.split(" ")[0] || "equipo"}` : active.label}</h1><p>{activeTab === "resumen" ? "Esto es lo que necesita tu atencion financiera hoy." : active.detail}</p></div>
             <div className="finance-header-actions"><label className="finance-search"><span className="finance-search-label">Buscar</span><input aria-label="Buscar en Finance OS" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cliente, factura o movimiento" /></label><div className="finance-notification-wrap"><button className="finance-bell" type="button" onClick={() => setNotificationsOpen((value) => !value)} aria-label={notificationCount ? `Ver ${notificationCount} notificaciones` : "Ver notificaciones"}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>{notificationCount ? <span>{notificationCount > 9 ? "9+" : notificationCount}</span> : null}</button>{notificationsOpen ? <div className="finance-notification-panel"><strong>Notificaciones</strong>{overview?.invoices.overdue ? <span>{overview.invoices.overdue} facturas vencidas requieren atencion.</span> : null}{overview?.exceptions.open ? <span>{overview.exceptions.open} excepciones estan pendientes de revision.</span> : null}{!overview?.invoices.overdue && !overview?.exceptions.open ? <span>No hay alertas financieras nuevas.</span> : null}</div> : null}</div><AccountPill fallbackName={agent?.name || "Usuario"} /></div>
           </header>
-          <nav className="finance-tabs" aria-label="Secciones de Finance OS">{tabs.map((tab) => <a key={tab.key} href={tab.key === "resumen" ? "/finance" : `/finance?tab=${tab.key}`} className={tab.key === activeTab ? "active" : ""} aria-current={tab.key === activeTab ? "page" : undefined} onClick={(event) => { event.preventDefault(); selectTab(tab.key); }}>{tab.label}</a>)}</nav>
           {message ? <div className="finance-message">{message}</div> : null}
           {loading ? <div className="finance-loading">Actualizando informacion financiera...</div> : null}
 

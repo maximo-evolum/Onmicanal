@@ -75,7 +75,18 @@ const baseItems: SidebarItem[] = [
 // conciliación, cobranza y equipo IA) se navegan dentro del módulo para evitar
 // duplicar accesos y confundir a los usuarios.
 baseItems.push(
-  ["Finanzas", "/finance", "Facturas, cartolas, conciliación y cobranza IA", "FI", "finance_analytics"]
+  ["Resumen financiero", "/finance", "Cartera, flujo de caja y alertas de la operación", "FI", "finance_analytics"],
+  ["Facturas por cobrar", "/finance?tab=facturas", "Documentos emitidos, saldos y vencimientos", "FI", "finance_invoices"],
+  ["Cartolas y movimientos", "/finance?tab=cartolas", "Carga bancaria, importación y movimientos manuales", "FI", "finance_bank_sync"],
+  ["Conciliación IA", "/finance?tab=conciliacion", "Coincidencias sugeridas entre pagos y facturas", "FI", "finance_reconciliation"],
+  ["Excepciones financieras", "/finance?tab=excepciones", "Diferencias, pagos parciales y casos a revisar", "FI", "finance_exceptions"],
+  ["Cobranza IA", "/finance?tab=cobranza", "Seguimiento responsable de cartera vencida", "FI", "finance_collections"],
+  ["Aprobaciones financieras", "/finance?tab=aprobaciones", "Confirmaciones humanas antes de modificar registros", "FI", "finance_reconciliation"],
+  ["Clientes financieros", "/finance?tab=clientes", "Cartera, riesgo y saldos por cliente", "FI", "finance_invoices"],
+  ["Indicadores financieros", "/finance?tab=indicadores", "Caja proyectada, DSO y recuperación", "FI", "finance_analytics"],
+  ["Integraciones financieras", "/finance?tab=integraciones", "Estado seguro de ERP, bancos y fuentes conectadas", "FI", "finance_analytics"],
+  ["Plan y uso financiero", "/finance?tab=plan", "Consumo de documentos y capacidad de la cuenta", "FI", "finance_analytics"],
+  ["Equipo IA financiero", "/finance?tab=agentes", "Agentes, políticas y controles humanos", "FI", "finance_analytics"]
 );
 
 const developerItems: SidebarItem[] = [
