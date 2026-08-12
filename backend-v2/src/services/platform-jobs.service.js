@@ -23,6 +23,10 @@ function runKeyFor(jobKey, intervalMs, now = new Date()) {
 
 async function executeRecordedJob({ jobKey, intervalMs, task, now = new Date() }) {
   const runKey = runKeyFor(jobKey, intervalMs, now);
+  // Las tareas se revisan cada minuto, pero cada ventana solo debe ejecutarse
+  // una vez. Esta consulta evita registrar como error una colision esperada.
+  const existing = await prisma.scheduledJobRun.findUnique({ where: { runKey }, select: { id: true, status: true } });
+  if (existing) return { status: "SKIPPED", jobKey, reason: "already_executed", runKey };
   let run;
   try {
     run = await prisma.scheduledJobRun.create({ data: { jobKey, runKey } });
