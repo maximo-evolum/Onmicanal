@@ -12,6 +12,7 @@ import { ensureAutomatedMetadataDraft, getPublishedMetadataSchema } from "../ser
 import { evaluateMetadataRecord } from "../services/metadata-quality.service.js";
 import { redactMetadataForRole } from "../lib/metadata-access.js";
 import { runWorkflowsForEvent } from "./workflows.routes.js";
+import { runFinancePostIngestionAnalysis } from "../services/finance-automation.service.js";
 
 export const industryRecordsRouter = Router();
 
@@ -378,6 +379,13 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
       input: { recordType, status: record.status },
       target: { id: record.id, recordType, status: record.status }
     }).catch((error) => ({ event: "record.created", matched: 0, error: error?.message || "dispatch_failed" }));
+    // Facturas y movimientos recién cargados quedan disponibles al instante.
+    // El análisis se ejecuta aparte para no retrasar ni bloquear el guardado;
+    // solo prepara sugerencias o excepciones según la política del tenant.
+    if (["finance_invoice", "bank_movement", "bank_statement"].includes(recordType)) {
+      void runFinancePostIngestionAnalysis({ tenantId: req.tenantId, source: `record:${recordType}` })
+        .catch((error) => console.warn("[FINANCE_POST_INGESTION_WARNING]", error?.message || error));
+    }
     res.status(201).json({
       ...(await redactRecordForViewer(req, record)),
       metadataValidation: metadataValidationResponse(evaluation),

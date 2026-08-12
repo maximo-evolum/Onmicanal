@@ -860,6 +860,12 @@ export function generateFinanceCollectionCases(): Promise<{ created: number; cas
 export type FinanceCustomer = { key: string; name: string; rut: string | null; invoices: number; openInvoices: number; totalAmount: number; outstandingAmount: number; overdueAmount: number; lastActivityAt: string };
 export type FinanceIntegration = { key: string; label: string; status: "connected" | "not_connected" | "manual_ready"; detail: string };
 export type FinancePlan = { plan: string; usage: { processedDocuments: number; limit: number | null; percentage: number | null } };
+export type FinanceSyncHistoryEntry = {
+  id: string;
+  action: "NUBOX_SALES_SYNCED" | "NUBOX_SALES_SYNC_FAILED" | "FINANCE_POST_INGESTION_ANALYZED" | string;
+  createdAt: string;
+  metadata?: Record<string, unknown> | null;
+};
 
 export function getFinanceCustomers(): Promise<{ customers: FinanceCustomer[] }> {
   return request("/finance/customers");
@@ -871,6 +877,17 @@ export function getFinanceIntegrations(): Promise<{ integrations: FinanceIntegra
 
 export function getFinancePlan(): Promise<FinancePlan> {
   return request("/finance/plan");
+}
+
+export function getFinanceSyncHistory(limit = 12): Promise<{ generatedAt: string; entries: FinanceSyncHistoryEntry[] }> {
+  return request(`/finance/sync-history?limit=${encodeURIComponent(String(limit))}`);
+}
+
+export function syncFinanceNubox(period?: string): Promise<{ ok?: boolean; pending?: boolean; message?: string; created?: number; updated?: number; received?: number }> {
+  return request("/finance/sync/nubox", {
+    method: "POST",
+    body: JSON.stringify(period ? { period } : {})
+  });
 }
 
 export function rejectFinanceReconciliation(movementId: string, detail?: string): Promise<{ updatedMovement: IndustryRecord; exception: IndustryRecord }> {

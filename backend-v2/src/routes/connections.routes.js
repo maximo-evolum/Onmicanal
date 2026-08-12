@@ -7,6 +7,7 @@ import { MODULES } from "../lib/modules.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { decryptSecret, encryptSecret, hasSecret } from "../lib/credential-crypto.js";
+import { syncNuboxForTenant } from "../services/finance-sync.service.js";
 
 export const connectionsPublicRouter = Router();
 export const connectionsRouter = Router();
@@ -1309,7 +1310,9 @@ connectionsRouter.get("/connections", async (req, res, next) => {
       groups: groupProviders(providers)
     });
   } catch (error) {
-    next(error);
+    const message = error instanceof Error ? error.message : "No se pudo sincronizar Nubox.";
+    if (/faltan|configurad|periodo|per[ií]odo|url https/i.test(message)) return res.status(400).json({ error: message });
+    res.status(502).json({ error: message });
   }
 });
 
@@ -1448,29 +1451,14 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
 
 connectionsRouter.post("/connections/finance_nubox/sync", requireRole(ROLE_GROUPS.MANAGERS), async (req, res, next) => {
   try {
-    const provider = PROVIDER_BY_KEY.get("finance_nubox");
-    const config = await findTenantProviderConfig(req.tenantId, provider);
-    if (!config || !config.isActive) return res.status(400).json({ error: "Nubox no esta configurado o se encuentra inactivo." });
-    const missing = missingFields(provider, config);
-    if (missing.length) return res.status(400).json({ error: `Faltan campos: ${missing.join(", ")}` });
-
     const requestedPeriod = cleanText(req.body?.period, new Date().toISOString().slice(0, 7));
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(requestedPeriod)) {
       return res.status(400).json({ error: "El periodo debe tener formato AAAA-MM." });
     }
     const limit = Math.max(1, Math.min(Number(req.body?.limit) || 100, 100));
-    const summary = await syncNuboxSales({ tenantId: req.tenantId, config, period: requestedPeriod, limit });
-    const metadata = normalizeMetadata({
-      ...configMetadata(config),
-      lastSyncedAt: new Date().toISOString(),
-      lastSyncStatus: "OK",
-      lastSyncMessage: `${summary.created} creados, ${summary.updated} actualizados`,
-      lastTestStatus: "OK",
-      lastTestMessage: "Credenciales Nubox validadas y documentos sincronizados"
-    }, {});
-    await prisma.tenantChannelConfig.update({ where: { id: config.id }, data: { metadata } });
-    await recordAuditLog(req, "NUBOX_SALES_SYNCED", "tenant_channel_config", config.id, { period: requestedPeriod, ...summary });
-    res.json({ ok: true, period: requestedPeriod, ...summary });
+    const summary = await syncNuboxForTenant({ tenantId: req.tenantId, period: requestedPeriod, limit, source: "manual" });
+    if (summary?.skipped === "already_running") return res.status(202).json({ ok: false, pending: true, message: "Ya hay una sincronización de Nubox en curso para esta cuenta." });
+    res.json(summary);
   } catch (error) {
     next(error);
   }

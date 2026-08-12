@@ -12,6 +12,7 @@ import {
 } from "../services/finance.service.js";
 import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions, updateFinanceAgentPolicy } from "../services/finance-agents.service.js";
 import { recordAuditLog } from "../lib/audit.js";
+import { financeSyncHistory, syncNuboxForTenant } from "../services/finance-sync.service.js";
 
 export const financeRouter = Router();
 
@@ -109,13 +110,38 @@ financeRouter.get("/finance/integrations", async (req, res) => {
     // Nunca se devuelven tokens, IDs externos ni secretos técnicos al navegador.
     res.json({ integrations: [
       { key: "bank", label: "Cartolas bancarias", status: "manual_ready", detail: bankCount ? `${bankCount} ${bankCount === 1 ? "banco configurado" : "bancos configurados"}; carga CSV disponible para conciliación.` : "Carga CSV disponible; agrega uno o más bancos desde Centro de Conexiones." },
-      { key: "erp", label: "ERP / contabilidad", status: "not_connected", detail: "Conecta Nubox, Defontana, Softland u otro ERP autorizado." },
+      { key: "erp", label: "ERP / contabilidad", status: status(["finance_nubox", "finance_defontana", "finance_softland"]), detail: byChannel.get("finance_nubox")?.isActive ? `Nubox conectado. ${String(byChannel.get("finance_nubox")?.metadata?.lastSyncMessage || "Pendiente de primera sincronización.")}` : "Conecta Nubox, Defontana, Softland u otro ERP autorizado." },
       { key: "email", label: "Correo", status: status(["email", "gmail", "smtp"]), detail: "Canal usado para recordatorios aprobados." },
       { key: "whatsapp", label: "WhatsApp Business", status: status(["whatsapp", "whatsapp_business"]), detail: "Canal usado solo con consentimiento y plantilla aprobada." }
     ] });
   } catch (error) {
     console.error("Finance integrations error:", error);
     res.status(500).json({ error: "No se pudo obtener el estado de integraciones" });
+  }
+});
+
+financeRouter.get("/finance/sync-history", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    res.json(await financeSyncHistory({ tenantId: req.tenantId, limit: req.query?.limit }));
+  } catch (error) {
+    console.error("Finance sync history error:", error);
+    res.status(500).json({ error: "No se pudo cargar el historial de sincronización." });
+  }
+});
+
+financeRouter.post("/finance/sync/nubox", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const period = cleanText(req.body?.period) || new Date().toISOString().slice(0, 7);
+    const result = await syncNuboxForTenant({ tenantId: req.tenantId, period, limit: req.body?.limit, source: "finance_workspace" });
+    if (result?.skipped === "already_running") return res.status(202).json({ ok: false, pending: true, message: "Ya hay una sincronización de Nubox en curso para esta cuenta." });
+    res.json(result);
+  } catch (error) {
+    console.error("Finance Nubox sync error:", error);
+    const message = error instanceof Error ? error.message : "No se pudo sincronizar Nubox.";
+    const configurationError = /faltan|configurad|per[ií]odo|url https/i.test(message);
+    res.status(configurationError ? 400 : 502).json({ error: message });
   }
 });
 

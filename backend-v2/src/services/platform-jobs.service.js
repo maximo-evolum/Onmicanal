@@ -6,6 +6,7 @@ import { runScheduledWorkflows } from "../routes/workflows.routes.js";
 import { getRedisClient } from "../lib/redis.js";
 import { runtimeAlertSnapshot } from "../lib/runtime-metrics.js";
 import { publishObservabilityAlerts } from "./observability-alerts.service.js";
+import { syncAllActiveNuboxTenants } from "./finance-sync.service.js";
 
 function boundedNumber(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -70,7 +71,9 @@ export async function runPlatformJobs({ now = new Date() } = {}) {
   const retentionIntervalMs = jobIntervalMs(process.env.METADATA_RETENTION_INTERVAL_MS, 86_400_000, 3_600_000);
   const workflowIntervalMs = jobIntervalMs(process.env.WORKFLOW_SCHEDULER_INTERVAL_MS, 300_000, 60_000);
   const observabilityIntervalMs = jobIntervalMs(process.env.OBSERVABILITY_MONITOR_INTERVAL_MS, 60_000, 60_000);
-  const [retention, workflows, observability] = await Promise.all([
+  const financeSyncIntervalMs = jobIntervalMs(process.env.FINANCE_NUBOX_SYNC_INTERVAL_MS, 21_600_000, 300_000);
+  const financeSyncEnabled = String(process.env.FINANCE_NUBOX_SYNC_ENABLED || "true").toLowerCase() !== "false";
+  const [retention, workflows, observability, financeSync] = await Promise.all([
     executeRecordedJob({ jobKey: "metadata-retention", intervalMs: retentionIntervalMs, now, task: () => runMetadataRetentionSweep({ now }) }),
     executeRecordedJob({ jobKey: "scheduled-workflows", intervalMs: workflowIntervalMs, now, task: () => runScheduledWorkflows({ now }) }),
     executeRecordedJob({
@@ -88,9 +91,17 @@ export async function runPlatformJobs({ now = new Date() } = {}) {
         const delivery = await publishObservabilityAlerts(snapshot);
         return { ok: snapshot.ok, alerts: snapshot.alerts.map((alert) => alert.code), delivery };
       }
-    })
+    }),
+    financeSyncEnabled
+      ? executeRecordedJob({
+        jobKey: "finance-nubox-sync",
+        intervalMs: financeSyncIntervalMs,
+        now,
+        task: () => syncAllActiveNuboxTenants({ limit: Math.max(1, Math.min(100, Number(process.env.FINANCE_NUBOX_SYNC_LIMIT) || 100)) })
+      })
+      : Promise.resolve({ status: "SKIPPED", jobKey: "finance-nubox-sync", reason: "disabled" })
   ]);
-  return { retention, workflows, observability };
+  return { retention, workflows, observability, financeSync };
 }
 
 export async function platformJobStatus(limit = 30) {

@@ -12,6 +12,7 @@ import {
   generateFinanceCollectionCases,
   getFinanceCustomers,
   getFinanceIntegrations,
+  getFinanceSyncHistory,
   getFinancePlan,
   getFinanceAgentWorkspace,
   getFinanceOverview,
@@ -22,10 +23,12 @@ import {
   type FinanceAgentWorkspace,
   type FinanceCustomer,
   type FinanceIntegration,
+  type FinanceSyncHistoryEntry,
   type FinancePlan,
   type FinanceReconciliationSuggestion,
   type IndustryRecord,
-  updateFinanceAgentPolicy
+  updateFinanceAgentPolicy,
+  syncFinanceNubox
 } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
@@ -162,10 +165,12 @@ function FinanceWorkspace() {
   const [agentWorkspace, setAgentWorkspace] = useState<FinanceAgentWorkspace | null>(null);
   const [financeCustomers, setFinanceCustomers] = useState<FinanceCustomer[]>([]);
   const [financeIntegrations, setFinanceIntegrations] = useState<FinanceIntegration[]>([]);
+  const [financeSyncHistory, setFinanceSyncHistory] = useState<FinanceSyncHistoryEntry[]>([]);
   const [financePlan, setFinancePlan] = useState<FinancePlan | null>(null);
   const [agentPolicy, setAgentPolicy] = useState<FinanceAgentPolicy | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [syncingNubox, setSyncingNubox] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [invoiceForm, setInvoiceForm] = useState({ number: "", client: "", rut: "", amount: "", dueDate: "" });
@@ -207,7 +212,11 @@ function FinanceWorkspace() {
       if (activeTab === "aprobaciones") setSuggestions(normalizeFinanceSuggestions((await getFinanceReconciliationSuggestions()).suggestions));
       if (activeTab === "clientes") setFinanceCustomers((await getFinanceCustomers()).customers);
       if (activeTab === "indicadores") setOverview(await getFinanceOverview());
-      if (activeTab === "integraciones") setFinanceIntegrations((await getFinanceIntegrations()).integrations);
+      if (activeTab === "integraciones") {
+        const [integrations, history] = await Promise.all([getFinanceIntegrations(), getFinanceSyncHistory()]);
+        setFinanceIntegrations(integrations.integrations);
+        setFinanceSyncHistory(history.entries || []);
+      }
       if (activeTab === "plan") setFinancePlan(await getFinancePlan());
       if (activeTab === "agentes") {
         const workspace = await getFinanceAgentWorkspace();
@@ -348,6 +357,21 @@ function FinanceWorkspace() {
     finally { setSaving(false); }
   }
 
+  async function synchronizeNubox() {
+    setSyncingNubox(true);
+    try {
+      const result = await syncFinanceNubox();
+      setMessage(result.pending ? (result.message || "Ya existe una sincronización en curso.") : `Nubox sincronizado: ${result.created || 0} nuevos y ${result.updated || 0} actualizados.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo sincronizar Nubox.");
+    } finally {
+      setSyncingNubox(false);
+    }
+  }
+
+  const canManageFinance = ["OWNER", "ADMIN", "SUPER_ADMIN"].includes(String(agent?.role || "").toUpperCase());
+
   return (
     <ModuleGate moduleKey="finance_analytics">
       <div className={`module-with-menu-shell product-workspace finance-shell finance-product-workspace ${sidebarOpen ? "" : "nav-collapsed"}`}>
@@ -389,7 +413,22 @@ function FinanceWorkspace() {
           {activeTab === "aprobaciones" ? <section className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Control humano</span><h2>Aprobaciones pendientes</h2></div><span className="finance-approval-count">{suggestions.length}</span></div><p>Las conciliaciones sugeridas no modifican facturas ni movimientos hasta que una persona autorizada las confirme.</p><div className="finance-suggestions">{suggestions.map((item) => <article key={`${item.movement.id}-${item.invoice.id}`}><div><b className={`finance-confidence ${item.level.toLowerCase()}`}>{item.confidence}% {financeConfidenceLabel(item.level)}</b><strong>{financeLabel(asData(item.movement).description, financeLabel(item.movement.title))}</strong><span>{money(asData(item.movement).amount)} · {shortDate(asData(item.movement).date)}</span></div><div><strong>{financeLabel(asData(item.invoice).invoiceNumber, financeLabel(item.invoice.title))}</strong><span>{financeLabel(asData(item.invoice).customerName)} · {money(asData(item.invoice).amount)}</span><small>{financeReasons(item.reasons)}</small></div><button className="primary-btn" type="button" disabled={saving} onClick={() => approveSuggestion(item)}>Aprobar</button></article>)}{!suggestions.length && !loading ? <p className="finance-empty">No hay aprobaciones financieras pendientes.</p> : null}</div></section> : null}
           {activeTab === "clientes" ? <section className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Cartera de clientes</span><h2>Riesgo y saldo por cliente</h2></div><span>{financeCustomers.length} clientes</span></div><div className="finance-client-table"><div className="finance-client-table-head"><span>Cliente</span><span>Facturas</span><span>Por cobrar</span><span>Vencido</span></div>{financeCustomers.filter((item) => `${item.name} ${item.rut || ""}`.toLocaleLowerCase("es").includes(search.toLocaleLowerCase("es"))).map((item) => <div key={item.key}><div><strong>{financeLabel(item.name)}</strong><small>{item.rut || "Sin RUT registrado"}</small></div><span>{item.openInvoices}/{item.invoices}</span><b>{money(item.outstandingAmount)}</b><b className={item.overdueAmount ? "is-overdue" : ""}>{money(item.overdueAmount)}</b></div>)}{!financeCustomers.length && !loading ? <p className="finance-empty">Aún no hay facturas para construir la cartera de clientes.</p> : null}</div></section> : null}
           {activeTab === "indicadores" && overview ? <section className="finance-indicator-layout"><article className="finance-card"><span className="finance-eyebrow">Flujo de caja proyectado</span><h2>{money(overview.collection.expectedNext30Days)}</h2><p>Estimación de cobros para los próximos 30 días, basada en vencimientos y saldos abiertos.</p><div className="finance-projection-bars">{[28, 44, 57, 43, 70, 86].map((value, index) => <div key={index}><i style={{ height: `${value}%` }} /><span>S{index + 1}</span></div>)}</div></article><article className="finance-card"><span className="finance-eyebrow">Indicadores clave</span><div className="finance-indicator-list"><div><span>Tasa de recuperación</span><strong>{overview.collection.rate}%</strong></div><div><span>DSO</span><strong>{overview.collection.dsoDays} días</strong></div><div><span>Conciliación automática</span><strong>{overview.reconciliation.rate}%</strong></div><div><span>Excepciones críticas</span><strong>{overview.exceptions.critical}</strong></div></div></article></section> : null}
-          {activeTab === "integraciones" ? <section className="finance-card"><span className="finance-eyebrow">Fuentes del ciclo</span><h2>Integraciones autorizadas</h2><p>Solo se muestra el estado operativo. Las credenciales, tokens e identificadores técnicos nunca se exponen en esta pantalla.</p><div className="finance-integration-grid">{financeIntegrations.map((item) => <article key={item.key}><span className={`finance-integration-dot ${item.status}`} /><div><strong>{item.label}</strong><p>{item.detail}</p></div><b>{item.status === "connected" ? "Conectada" : item.status === "manual_ready" ? "Carga manual" : "Sin conectar"}</b></article>)}{!financeIntegrations.length && !loading ? <p className="finance-empty">No se pudo obtener el estado de las integraciones.</p> : null}</div><button className="primary-btn" type="button" onClick={() => window.location.assign("/connections")}>Gestionar conexiones</button></section> : null}
+          {activeTab === "integraciones" ? <section className="finance-grid finance-integrations-workspace">
+            <article className="finance-card">
+              <span className="finance-eyebrow">Fuentes del ciclo</span>
+              <h2>Integraciones autorizadas</h2>
+              <p>Solo se muestra el estado operativo. Las credenciales, tokens e identificadores técnicos nunca se exponen en esta pantalla.</p>
+              <div className="finance-integration-grid">{financeIntegrations.map((item) => <article key={item.key}><span className={`finance-integration-dot ${item.status}`} /><div><strong>{item.label}</strong><p>{item.detail}</p></div><b>{item.status === "connected" ? "Conectada" : item.status === "manual_ready" ? "Carga manual" : "Sin conectar"}</b></article>)}{!financeIntegrations.length && !loading ? <p className="finance-empty">No se pudo obtener el estado de las integraciones.</p> : null}</div>
+              <button className="primary-btn" type="button" onClick={() => window.location.assign("/connections")}>Gestionar conexiones</button>
+            </article>
+            <article className="finance-card finance-sync-card">
+              <span className="finance-eyebrow">Automatización segura</span>
+              <h2>Sincronización Nubox</h2>
+              <p>Cuando Nubox esté conectado, EVOLUM actualiza las facturas en segundo plano y prepara el análisis para revisión humana. No confirma pagos, no modifica el ERP ni envía cobranzas.</p>
+              {canManageFinance ? <button className="primary-btn" type="button" disabled={syncingNubox} onClick={synchronizeNubox}>{syncingNubox ? "Sincronizando..." : "Sincronizar ahora"}</button> : <div className="finance-note">Solo una cuenta administradora puede iniciar una sincronización manual.</div>}
+              <div className="finance-sync-history"><h3>Historial reciente</h3>{financeSyncHistory.slice(0, 5).map((entry) => <div key={entry.id}><b className={entry.action === "NUBOX_SALES_SYNC_FAILED" ? "is-error" : "is-success"}>{entry.action === "NUBOX_SALES_SYNCED" ? "Sincronización completada" : entry.action === "NUBOX_SALES_SYNC_FAILED" ? "Sincronización con incidencia" : "Análisis preparado"}</b><span>{shortDate(entry.createdAt)}</span></div>)}{!financeSyncHistory.length && !loading ? <p className="finance-empty">Aún no hay sincronizaciones registradas.</p> : null}</div>
+            </article>
+          </section> : null}
           {activeTab === "plan" ? <section className="finance-grid"><article className="finance-card finance-plan-card"><span className="finance-eyebrow">Plan actual</span><h2>{financePlan?.plan || "Cargando plan"}</h2><p>El uso contabiliza facturas y movimientos procesados en esta cuenta financiera.</p>{financePlan ? <><div className="finance-plan-usage"><span style={{ width: `${financePlan.usage.percentage ?? 0}%` }} /></div><strong>{financePlan.usage.processedDocuments}{financePlan.usage.limit ? ` / ${financePlan.usage.limit}` : " documentos procesados"}</strong></> : null}</article><article className="finance-card"><span className="finance-eyebrow">Escalabilidad</span><h2>Cuando tu operación crezca</h2><p>Los límites comerciales se administran desde Planes y módulos. Ningún dato financiero se elimina al cambiar de plan.</p><button className="primary-btn" type="button" onClick={() => window.location.assign("/saas")}>Ver planes y módulos</button></article></section> : null}
         </main>
       </div>
