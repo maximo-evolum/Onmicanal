@@ -29,9 +29,11 @@ function nuboxBaseUrl() {
   const configured = String(env.nuboxApiBaseUrl || "").trim();
   if (!configured) throw new Error("Falta configurar NUBOX_API_BASE_URL en el servidor.");
   const parsed = new URL(configured);
-  const host = parsed.hostname.toLowerCase();
-  if (parsed.protocol !== "https:" || !(host === "nubox.com" || host.endsWith(".nubox.com"))) {
-    throw new Error("NUBOX_API_BASE_URL debe ser una URL HTTPS oficial de Nubox.");
+  // Nubox provee una base URL propia por ambiente (UAT o producción). La
+  // variable se administra sólo en Railway, por lo que aceptamos el host
+  // HTTPS que Nubox haya entregado sin exponerlo al usuario final.
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new Error("NUBOX_API_BASE_URL debe ser una URL HTTPS válida, sin credenciales incluidas, entregada por Nubox.");
   }
   return configured.replace(/\/$/, "");
 }
@@ -59,7 +61,12 @@ async function nuboxRequest(config, path) {
   try {
     const response = await fetch(`${nuboxBaseUrl()}${path}`, {
       method: "GET",
-      headers: { Authorization: auth, "X-Api-Key": apiKey, Accept: "application/json" },
+      headers: {
+        Authorization: auth,
+        "X-Api-Key": apiKey,
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
       signal: controller.signal
     });
     const payload = await response.json().catch(() => null);

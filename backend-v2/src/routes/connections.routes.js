@@ -402,9 +402,12 @@ function nuboxBaseUrl() {
     throw new Error("NUBOX_API_BASE_URL no tiene un formato de URL valido.");
   }
 
-  const host = parsed.hostname.toLowerCase();
-  if (parsed.protocol !== "https:" || !(host === "nubox.com" || host.endsWith(".nubox.com"))) {
-    throw new Error("NUBOX_API_BASE_URL debe ser una URL HTTPS oficial de Nubox.");
+  // Nubox entrega un host distinto para certificación y producción. No se
+  // restringe a un dominio fijo porque el host oficial puede variar por
+  // ambiente; esta variable sólo existe en la configuración segura del
+  // servidor, nunca en un formulario de tenant.
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw new Error("NUBOX_API_BASE_URL debe ser una URL HTTPS válida, sin credenciales incluidas, entregada por Nubox.");
   }
   return configured.replace(/\/$/, "");
 }
@@ -436,6 +439,7 @@ async function nuboxRequest(config, path) {
       headers: {
         Authorization: authorization,
         "X-Api-Key": apiKey,
+        "Content-Type": "application/json",
         Accept: "application/json"
       },
       signal: controller.signal
