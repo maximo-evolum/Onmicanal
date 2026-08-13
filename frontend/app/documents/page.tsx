@@ -5,7 +5,7 @@ import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { deleteTenantDocument, getTenantDocuments, type TenantDocument, uploadTenantDocuments } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 
 function formatSize(size?: number) {
   if (!size) return "Tamaño no informado";
@@ -14,7 +14,7 @@ function formatSize(size?: number) {
 }
 
 export default function DocumentsPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [documents, setDocuments] = useState<TenantDocument[]>([]);
   const [files, setFiles] = useState<File[]>([]);

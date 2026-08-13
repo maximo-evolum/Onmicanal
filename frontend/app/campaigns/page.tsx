@@ -5,7 +5,7 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 import { generateCampaignCopy, generateCampaignImages, generateCampaignPro, getCampaignJob, getConversations, publishCampaign, CampaignPlatform, CampaignVariant, CampaignProResult } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import { Conversation } from "@/lib/types";
 
 const PLATFORM_LABELS: Record<CampaignPlatform, string> = {
@@ -38,7 +38,7 @@ function phoneFromConversation(conversation: Conversation) {
 }
 
 export default function CampaignsPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [product, setProduct] = useState("");
   const [idea, setIdea] = useState("");
   const [visualTitle, setVisualTitle] = useState("");

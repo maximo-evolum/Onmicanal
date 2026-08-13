@@ -191,21 +191,27 @@ export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], rol
 }
 
 export function useModuleAccess(moduleKey?: ModuleAccessKey) {
-  const session = getStoredSession();
-  const cacheKey = moduleAccessCacheKey(session);
-  const stored = getStoredTenantAccess(session);
-  const cached = cacheKey ? moduleAccessCache.get(cacheKey) : null;
-  const resolvedAccess = cached || stored;
-  const [modules, setModules] = useState<string[] | null>(() => resolvedAccess?.modules || null);
-  const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(() => resolvedAccess?.role || session?.role || null);
-  const [industry, setIndustry] = useState<string | null>(() => resolvedAccess?.industry || null);
-  const [loading, setLoading] = useState(Boolean(moduleKey) && !resolvedAccess);
-  const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey) && !resolvedAccess);
+  // El primer render debe ser idéntico en servidor y navegador. La sesión y
+  // el cache de permisos se leen únicamente tras montar la interfaz.
+  const [session, setSession] = useState<ReturnType<typeof getStoredSession>>(null);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [modules, setModules] = useState<string[] | null>(null);
+  const [authoritativeRole, setAuthoritativeRole] = useState<string | null>(null);
+  const [industry, setIndustry] = useState<string | null>(null);
+  const [loading, setLoading] = useState(Boolean(moduleKey));
+  const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setSession(getStoredSession());
+    setSessionReady(true);
+  }, []);
+
+  const cacheKey = moduleAccessCacheKey(session);
+
+  useEffect(() => {
     let active = true;
-    if (!moduleKey) return;
+    if (!moduleKey || !sessionReady) return;
 
     const currentCache = cacheKey ? moduleAccessCache.get(cacheKey) : null;
     const persistedAccess = getStoredTenantAccess(session);
@@ -294,7 +300,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
     return () => {
       active = false;
     };
-  }, [cacheKey, moduleKey, session?.role]);
+  }, [cacheKey, moduleKey, session, sessionReady]);
 
   const allowed = useMemo(() => {
     if (!moduleKey) return true;

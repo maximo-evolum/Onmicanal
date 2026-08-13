@@ -5,7 +5,7 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { DataManagementWorkspace } from "@/components/data-management-workspace";
 import { createIndustryRecord, getIndustryRecords, getMe, updateIndustryRecord, type IndustryRecord } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 
 const emptyPatient = { name: "", phone: "", email: "", reason: "", professional: "", notes: "", status: "ACTIVE" };
 
@@ -22,7 +22,7 @@ function patientCopy(industry?: string | null) {
 }
 
 export default function PatientsPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [patients, setPatients] = useState<IndustryRecord[]>([]);
   const [industry, setIndustry] = useState<string | null>(null);

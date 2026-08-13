@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createTeamUser, getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";
-import { getStoredSession, mergeStoredSession } from "@/lib/auth";
+import { useAgentSession, mergeStoredSession } from "@/lib/auth";
 import { roleLabel } from "@/lib/role-labels";
 import { getIndustryRoleOptions } from "@/lib/industry-roles";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
@@ -44,7 +44,7 @@ function isAvatarFile(file: File) {
 }
 
 export default function SaasPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [data, setData] = useState<SaasOverview | null>(null);
   const [users, setUsers] = useState<Array<{ id: string; name: string; email: string; role: string; jobTitle?: string | null; isActive: boolean }>>([]);
   const [error, setError] = useState<string | null>(null);

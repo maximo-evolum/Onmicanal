@@ -13,7 +13,7 @@ import {
   type ConnectionProvider,
   type ConnectionStatus,
 } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
@@ -210,7 +210,11 @@ function ProviderFieldGrid({ provider, form, setForm }: { provider: ConnectionPr
 }
 
 export default function ConnectionsPage() {
-  const agent = getStoredSession();
+  // La sesión vive en el almacenamiento del navegador. Leerla durante el
+  // render inicial produce HTML distinto entre SSR y el cliente autenticado,
+  // lo que en producción termina en React #418. El hook comienza en null y la
+  // incorpora después de hidratar la página.
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [data, setData] = useState<ConnectionCenterResponse | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);

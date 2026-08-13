@@ -6,7 +6,7 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { DataManagementWorkspace } from "@/components/data-management-workspace";
 import { createIndustryRecord, getIndustryRecords, getMe, type IndustryRecord } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
 
 type Entity = { type: string; label: string; fields: string[]; description: string };
@@ -114,7 +114,7 @@ function recordFieldDisplay(record: IndustryRecord, field: string, references: M
 export default function VerticalOperationsPage() {
   const params = useParams<{ vertical: string }>();
   const profile = profiles[String(params?.vertical || "").toLowerCase()];
-  const session = getStoredSession();
+  const session = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [industry, setIndustry] = useState<string | null>(null);
   const [records, setRecords] = useState<Record<string, IndustryRecord[]>>({});

@@ -13,7 +13,7 @@ import {
   updateIndustryRecord,
   type IndustryRecord
 } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import type { Lead } from "@/lib/types";
 
 type CustomerMode = "GASTRONOMY" | "HEALTH" | "DENTAL" | "VETERINARY" | "REAL_ESTATE" | "GENERAL";
@@ -312,7 +312,7 @@ function RealtyBuyerWorkspace() {
 }
 
 export default function CustomersPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [records, setRecords] = useState<IndustryRecord[]>([]);
   const [mode, setMode] = useState<CustomerMode>("GENERAL");

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { simulateLeadUtf8, testBot, type BotLabResult } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "./evolum-sidebar";
 
@@ -44,7 +44,7 @@ type LabMessage = {
 };
 
 export function BotLabShell() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const [channel, setChannel] = useState("whatsapp");
   const [tenantSlug, setTenantSlug] = useState("demo-parrilladas");

@@ -5,7 +5,7 @@ import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { createMetadataSchema, getMetadataCatalog, getMetadataSchemas, migrateMetadataSchema, publishMetadataSchema, type MetadataCatalog, type MetadataSchema } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 
 type FieldType = "string" | "number" | "date" | "boolean" | "array" | "relation";
 type DataCare = "INTERNAL" | "PERSONAL" | "SENSITIVE" | "CONFIDENTIAL";
@@ -156,7 +156,8 @@ export default function MetadataSettingsPage() {
 
   const generatedType = useMemo(() => toKey(recordType || label), [label, recordType]);
   const fieldCount = fieldRows.filter((item) => item.label.trim()).length;
-  const isSuperAdmin = String(getStoredSession()?.role || "").toUpperCase() === "SUPER_ADMIN";
+  const session = useAgentSession();
+  const isSuperAdmin = String(session?.role || "").toUpperCase() === "SUPER_ADMIN";
   const visiblePresets = useMemo(() => {
     const source = catalog?.entities || [];
     const unique = new Map<string, Preset>();

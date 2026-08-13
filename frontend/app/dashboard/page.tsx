@@ -6,7 +6,7 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 import { downloadExecutiveReport, getCrmOperationalDashboard, getLeadMetrics, type CrmOperationalDashboard } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import type { LeadMetrics } from "@/lib/types";
 
 function money(value = 0) {
@@ -34,7 +34,7 @@ function stageLabel(stage = "") {
 }
 
 export default function DashboardPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [metrics, setMetrics] = useState<LeadMetrics | null>(null);
   const [crm, setCrm] = useState<CrmOperationalDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);

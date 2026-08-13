@@ -10,7 +10,7 @@ import {
   sendManualMessage,
   takeConversation,
 } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, useAgentSession } from "@/lib/auth";
 import { getCommercialState } from "@/lib/commercial-state";
 import { roleLabel } from "@/lib/role-labels";
 import { socket } from "@/lib/socket";
@@ -20,7 +20,7 @@ import { EvolumSidebar } from "./evolum-sidebar";
 import { NotificationCenter } from "./notification-center";
 
 export function InboxShell() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);

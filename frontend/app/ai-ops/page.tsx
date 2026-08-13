@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getAiOpsSummary, getConversations, type AiOpsSummary } from "@/lib/api";
 import { Conversation } from "@/lib/types";
 import { buildAiOpsProfile, getAiBadgeClass, getConversationState, isReadyToClose, riskLabel } from "@/lib/ai-ops";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
@@ -18,7 +18,7 @@ function customerName(conversation: Conversation) {
 }
 
 export default function AiOpsPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [summary, setSummary] = useState<AiOpsSummary | null>(null);
   const [loading, setLoading] = useState(true);

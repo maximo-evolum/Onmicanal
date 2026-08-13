@@ -5,7 +5,7 @@ import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { createIndustryRecord, getIndustryRecords, type IndustryRecord } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 
 const emptyForm = { title: "", patient: "", type: "EXAMEN", status: "PENDING", amount: "", notes: "" };
 
@@ -15,7 +15,7 @@ function valueOf(record: IndustryRecord, key: string) {
 }
 
 export default function ExamsPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [records, setRecords] = useState<IndustryRecord[]>([]);
   const [form, setForm] = useState(emptyForm);

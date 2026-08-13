@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ChangeEvent } from "
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { createIndustryRecord, getIndustryRecords, getIndustryUsers, updateIndustryRecord, type IndustryRecord, type IndustryUser } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 
 const emptyVehicle = { title: "", plate: "", client: "", ownerPhone: "", ownerEmail: "", mileage: "", diagnosis: "", assignedToId: "" };
 const emptyPart = { title: "", sku: "", stock: "", location: "", cost: "", photoUrl: "", photoFileName: "", compatibility: "" };
@@ -32,7 +32,7 @@ function valueOf(record: IndustryRecord, key: string): string | number {
 }
 
 export default function WorkshopPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [vehicles, setVehicles] = useState<IndustryRecord[]>([]);
   const [parts, setParts] = useState<IndustryRecord[]>([]);

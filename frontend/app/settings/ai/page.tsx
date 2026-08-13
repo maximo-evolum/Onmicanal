@@ -5,7 +5,7 @@ import { AccountPill } from "@/components/account-pill";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import { approveAiAction, createAiEvaluation, getAiGovernance, getAIConfig, rejectAiAction, updateAIConfig, type AiGovernanceRecord } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 
 const controlledActions = [
   { key: "create_booking", label: "Crear una reserva" },
@@ -23,7 +23,7 @@ function asText(value: unknown) {
 }
 
 export default function AiGovernancePage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [approvalActions, setApprovalActions] = useState<string[]>(["create_booking", "mark_payment_ready"]);
   const [maxActions, setMaxActions] = useState(3);

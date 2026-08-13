@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { cancelPayment, confirmPayment, createPayment, getPaymentMetrics, getPayments, Payment, PaymentMetrics } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
@@ -25,7 +25,7 @@ function statusLabel(status: string) {
 }
 
 export default function PaymentsPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [metrics, setMetrics] = useState<PaymentMetrics | null>(null);
   const [status, setStatus] = useState("all");

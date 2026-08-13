@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getLeads, updateIndustryRecord, updateLeadApi, type IndustryRecord } from "@/lib/api";
 import { Lead } from "@/lib/types";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
@@ -51,7 +51,7 @@ function getLeadSignal(lead: Lead) {
 }
 
 export default function PipelinePage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const { data: realtyData, reload: reloadRealty } = useRealtyWorkspace();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);

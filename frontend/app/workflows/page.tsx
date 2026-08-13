@@ -16,7 +16,7 @@ import {
   type WorkflowDefinition,
   type WorkflowRun,
 } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 
 type WorkflowAction = {
   type: "set_status" | "set_field" | "create_record" | "create_notification" | "emit_event";
@@ -94,7 +94,7 @@ function safeJson(value: string) {
 }
 
 export default function WorkflowsPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
   const [deadLetters, setDeadLetters] = useState<WorkflowDeadLetter[]>([]);

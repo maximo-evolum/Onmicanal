@@ -24,7 +24,7 @@ import {
   WorkflowDefinition,
   uploadOnboardingFiles
 } from "../../lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 
 type OnboardingForm = {
   businessName: string;
@@ -132,7 +132,7 @@ function integrationLabel(channel: string) {
 }
 
 export default function OnboardingPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<OnboardingForm>(emptyForm);
   const [files, setFiles] = useState<File[]>([]);

@@ -14,7 +14,7 @@ import {
   RealtyShell
 } from "@/components/realty-workspace";
 import { getMe } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, useAgentSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import { getStoredTenantAccess, storeTenantAccess, type TenantAccessSnapshot } from "@/lib/session-access";
 
@@ -100,7 +100,7 @@ function RealtyDashboardContent() {
 
   const requestedView = String(searchParams.get("view") || "summary") as RealtyView;
   const requested = views[requestedView] || views.summary;
-  const session = getStoredSession();
+  const session = useAgentSession();
   const mayOpenRequested = !requested.module || moduleAllowed(requested.module, enabledModules, role, session?.jobTitle, "REAL_ESTATE");
   const current = mayOpenRequested ? requested : views.summary;
   const CurrentView = current.content;

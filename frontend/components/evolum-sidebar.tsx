@@ -226,13 +226,14 @@ function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
 }
 
 export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotificationCenter = false }: EvolumSidebarProps) {
-  const initialSession = getStoredSession();
-  const initialAccess = getStoredTenantAccess(initialSession);
-  const [enabledModules, setEnabledModules] = useState<string[] | null>(() => initialAccess?.modules || null);
-  const [role, setRole] = useState<string | null>(() => initialAccess?.role || initialSession?.role || null);
-  const [jobTitle, setJobTitle] = useState<string | null>(() => initialAccess?.jobTitle || initialSession?.jobTitle || null);
-  const [industry, setIndustry] = useState<string | null>(() => initialAccess?.industry || null);
-  const [menuReady, setMenuReady] = useState(Boolean(initialAccess));
+  // No leer localStorage durante el primer render. El servidor no tiene
+  // sesión, pero el navegador sí; usarla aquí generaba un menú distinto antes
+  // de hidratar y disparaba el error minificado React #418.
+  const [enabledModules, setEnabledModules] = useState<string[] | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [jobTitle, setJobTitle] = useState<string | null>(null);
+  const [industry, setIndustry] = useState<string | null>(null);
+  const [menuReady, setMenuReady] = useState(false);
   const [openGroupId, setOpenGroupId] = useState<NavigationGroup["id"] | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const pathname = usePathname();

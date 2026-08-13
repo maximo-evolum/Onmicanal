@@ -30,7 +30,7 @@ import {
   updateFinanceAgentPolicy,
   syncFinanceNubox
 } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { useAgentSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
 
 type FinanceTab = "resumen" | "facturas" | "cartolas" | "conciliacion" | "excepciones" | "cobranza" | "aprobaciones" | "clientes" | "indicadores" | "integraciones" | "plan" | "agentes";
@@ -157,7 +157,7 @@ function FinanceWorkspace() {
   const params = useSearchParams();
   const [activeTab, setActiveTab] = useState<FinanceTab>(() => resolveFinanceTab(params.get("tab")));
   const active = tabs.find((tab) => tab.key === activeTab) || tabs[0];
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [overview, setOverview] = useState<FinanceOverview | null>(null);
   const [records, setRecords] = useState<IndustryRecord[]>([]);

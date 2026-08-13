@@ -6,7 +6,7 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
 import { createBookingApi, getBookingSlots, getBookings, getMe, markBookingPaymentReady, updateBookingApi } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, useAgentSession } from "@/lib/auth";
 import type { AgentSession, Booking, BookingSlot, TenantSession } from "@/lib/types";
 
 type AgendaMode = {
@@ -275,7 +275,7 @@ function calendarMonths(bookings: Booking[], selectedDate: string, visibleMonthC
 }
 
 export default function AgendaPage() {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [session, setSession] = useState<AgentSession | null>(agent);
   const [tenant, setTenant] = useState<TenantSession | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);

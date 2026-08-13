@@ -23,7 +23,7 @@ import {
   type IndustryUser,
   type RealtyIntelligence
 } from "@/lib/api";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, useAgentSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
 import type { Lead } from "@/lib/types";
 
@@ -448,7 +448,7 @@ export function RealtyShell({
   moduleKey: ModuleAccessKey;
   children: ReactNode;
 }) {
-  const agent = getStoredSession();
+  const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
@@ -579,7 +579,7 @@ export function RealtyHeader({
       </div>
       <div className="realty-hero-actions">
         {actions}
-        <AccountPill fallbackName={getStoredSession()?.name || "Usuario"} />
+        <AccountPill />
       </div>
     </header>
   );
@@ -1326,7 +1326,7 @@ export function RealtyActivityPageContent() {
 }
 
 export function BrokerPortalPageContent() {
-  const session = getStoredSession();
+  const session = useAgentSession();
   const { data, error, reload } = useRealtyWorkspace();
   const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
   const canSeeAll = ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(String(session?.role || "").toUpperCase());
