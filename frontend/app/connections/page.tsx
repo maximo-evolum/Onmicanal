@@ -238,7 +238,9 @@ export default function ConnectionsPage() {
       const response = await getConnectionCenter();
       setData(response);
       setSelectedKey((current) => current || response.groups[0]?.providers[0]?.key || null);
-      setNotice(null);
+      // Al volver desde Guardar o Probar se hace una recarga silenciosa.
+      // Conservamos el resultado para que un error de Nubox no desaparezca.
+      if (!silent) setNotice(null);
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudo cargar el centro de conexiones" });
     } finally {
@@ -318,6 +320,18 @@ export default function ConnectionsPage() {
       setConnectionActivity({ key: provider.key, stage: "Probando conexión...", progress: 24 });
       setNotice(null);
       setConnectionActivity({ key: provider.key, stage: "Validando acceso y disponibilidad...", progress: 68 });
+      // Nubox usa dos cabeceras. Si la persona acaba de pegarlas, las
+      // protegemos primero y luego probamos la misma configuraciÃ³n; de ese
+      // modo el flujo es pegar -> Probar y no depende de un guardado previo.
+      if (provider.key === "finance_nubox" && (form.accessToken || form.verifyToken)) {
+        setConnectionActivity({ key: provider.key, stage: "Guardando credenciales cifradas...", progress: 48 });
+        await saveConnectionProvider(provider.key, {
+          label: form.label || provider.label,
+          ...(form.accessToken ? { accessToken: form.accessToken } : {}),
+          ...(form.verifyToken ? { verifyToken: form.verifyToken } : {}),
+          isActive: true,
+        });
+      }
       await testConnectionProvider(provider.key);
       setConnectionActivity({ key: provider.key, stage: "Conexión validada", progress: 100 });
       setNotice({ type: "success", text: "Conexion validada" });
@@ -593,6 +607,12 @@ export default function ConnectionsPage() {
                         <span>{statusLabels[selected.status]}</span>
                         {selected.missing.length ? <small>Faltan datos de configuración</small> : <small>Configuracion completa</small>}
                       </div>
+
+                      {notice ? (
+                        <div className={`connection-notice ${notice.type} connection-detail-notice`} role="status" aria-live="polite">
+                          {notice.text}
+                        </div>
+                      ) : null}
 
                       {connectionActivity?.key === selected.key ? (
                         <div className="connection-activity-panel" role="status" aria-live="polite">
