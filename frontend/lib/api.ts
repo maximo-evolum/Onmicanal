@@ -51,7 +51,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
-    let message = "Request failed";
+    let message = "La solicitud no pudo completarse.";
     try {
       const data = await response.json();
       message = data?.error || message;

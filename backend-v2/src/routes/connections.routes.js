@@ -426,6 +426,17 @@ function nuboxErrorMessage(status, payload) {
   return message ? `Nubox no pudo validar la conexion: ${message.slice(0, 180)}` : `Nubox no pudo validar la conexion (HTTP ${status}).`;
 }
 
+function nuboxNetworkErrorMessage(error, action = "validar la conexión") {
+  const code = String(error?.cause?.code || error?.code || "").toUpperCase();
+  if (["ENOTFOUND", "EAI_AGAIN"].includes(code)) {
+    return "EVOLUM no pudo encontrar el servidor de Nubox. Revisa la URL base configurada y vuelve a intentar.";
+  }
+  if (["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET"].includes(code)) {
+    return "No fue posible establecer una conexión segura con Nubox desde el servidor. El servicio puede estar temporalmente no disponible; inténtalo nuevamente.";
+  }
+  return `No fue posible ${action} con Nubox desde el servidor. Revisa el diagnóstico de Railway o intenta nuevamente en unos minutos.`;
+}
+
 async function nuboxRequest(config, path) {
   const apiKey = decryptSecret(config?.accessToken);
   const authorization = nuboxAuthorization(decryptSecret(config?.verifyToken));
@@ -433,8 +444,9 @@ async function nuboxRequest(config, path) {
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
+  const baseUrl = nuboxBaseUrl();
   try {
-    const response = await fetch(`${nuboxBaseUrl()}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       method: "GET",
       headers: {
         Authorization: authorization,
@@ -449,6 +461,16 @@ async function nuboxRequest(config, path) {
     return { payload, total: Number(response.headers.get("x-total-count") || 0) || 0 };
   } catch (error) {
     if (error?.name === "AbortError") throw new Error("La validacion con Nubox excedio el tiempo de espera. Intenta nuevamente.");
+    if (error instanceof TypeError && /fetch failed/i.test(String(error.message || ""))) {
+      // Nunca se registran encabezados ni secretos: sólo el host y el código de
+      // red permiten diagnosticar problemas de salida desde Railway.
+      console.warn("[NUBOX_REQUEST_FAILED]", {
+        host: new URL(baseUrl).host,
+        endpoint: String(path || "").split("?")[0],
+        code: error?.cause?.code || error?.code || "unknown"
+      });
+      throw new Error(nuboxNetworkErrorMessage(error));
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
