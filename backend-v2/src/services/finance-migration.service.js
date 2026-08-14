@@ -166,6 +166,7 @@ export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit =
     return {
       rowNumber: index + 2,
       kind,
+      documentSide: kind === "PAYABLE" ? "SUPPLIER" : "CUSTOMER",
       recordType: kind === "PAYABLE" ? "finance_payable" : "finance_invoice",
       documentNumber,
       partyName,

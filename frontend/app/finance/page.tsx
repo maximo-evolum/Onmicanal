@@ -47,6 +47,7 @@ import { useAgentSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
 
 type FinanceTab = "resumen" | "facturas" | "cartolas" | "conciliacion" | "excepciones" | "cobranza" | "pagos" | "migracion" | "aprobaciones" | "clientes" | "indicadores" | "integraciones" | "plan" | "agentes";
+type FinanceDocumentStatusFilter = "all" | "paid" | "cancelled" | "pending" | "overdue";
 
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
   { key: "resumen", label: "Resumen financiero", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
@@ -93,6 +94,9 @@ function financeLabel(value: unknown, fallback = "-") {
     RECEIVED: "Recibido",
     SENT: "Enviado",
     PAID: "Pagada",
+    CANCELLED: "Cancelada",
+    CANCELED: "Cancelada",
+    ANNULLED: "Anulada",
     PARTIAL: "Pago parcial",
     REGISTERED: "Registrado",
     OVERDUE: "Vencida",
@@ -191,6 +195,8 @@ function FinanceWorkspace() {
   const [agentPolicy, setAgentPolicy] = useState<FinanceAgentPolicy | null>(null);
   const [financeDocuments, setFinanceDocuments] = useState<FinanceDocument[]>([]);
   const [documentFilter, setDocumentFilter] = useState<"all" | "customers" | "suppliers">("all");
+  const [documentQuery, setDocumentQuery] = useState("");
+  const [documentStatusFilter, setDocumentStatusFilter] = useState<FinanceDocumentStatusFilter>("all");
   const [collectionPortfolio, setCollectionPortfolio] = useState<FinanceCollectionPortfolioRow[]>([]);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<FinanceDocument | null>(null);
@@ -553,7 +559,12 @@ function FinanceWorkspace() {
             <article className="finance-card finance-document-portal">
               <div className="finance-card-heading finance-document-heading"><div><span className="finance-eyebrow">Portal documental</span><h2>Facturas y documentos financieros</h2><p>Consulta por separado las facturas emitidas a clientes y las obligaciones registradas de proveedores.</p></div><button type="button" className="secondary-btn" onClick={() => setSelectedDocument(null)}>Limpiar detalle</button></div>
               <div className="finance-document-filters" role="group" aria-label="Filtrar documentos"><button type="button" className={documentFilter === "all" ? "is-active" : ""} onClick={() => setDocumentFilter("all")}>Todos</button><button type="button" className={documentFilter === "customers" ? "is-active" : ""} onClick={() => setDocumentFilter("customers")}>Facturas de clientes</button><button type="button" className={documentFilter === "suppliers" ? "is-active" : ""} onClick={() => setDocumentFilter("suppliers")}>Facturas de proveedores</button></div>
-              <FinanceDocumentsTable documents={financeDocuments} query={search} saving={saving} openActionId={openActionId} onToggleActions={setOpenActionId} onSelect={setSelectedDocument} onRegisterReceipt={registerInvoiceReceipt} onPrepareReminder={(document) => prepareReminder({ key: document.partyRut?.replace(/[^0-9kK]/g, "") || document.partyName.toLocaleLowerCase("es"), name: document.partyName, rut: document.partyRut, documents: 0, openDocuments: 0, overdueDocuments: 0, dueSoonAmount: 0, overdueAmount: 0, totalDebt: 0, oldestInvoiceDate: null, averagePaymentDays: null, reminders: 0, lastReminderAt: null, latestCaseId: null, reminderStatus: "" })} onCopy={copyFinanceText} onOpenCollections={() => selectTab("cobranza")} onOpenPayables={() => selectTab("pagos")} />
+              <div className="finance-document-tools" aria-label="Búsqueda y filtros del portal documental">
+                <label className="finance-document-search"><span>Buscar documento</span><input type="search" value={documentQuery} onChange={(event) => setDocumentQuery(event.target.value)} placeholder="Folio, RUT o razón social" /></label>
+                <label className="finance-document-status-filter"><span>Estado</span><select value={documentStatusFilter} onChange={(event) => setDocumentStatusFilter(event.target.value as FinanceDocumentStatusFilter)}><option value="all">Todos los estados</option><option value="paid">Pagadas</option><option value="cancelled">Canceladas</option><option value="pending">Pendientes</option><option value="overdue">Vencidas</option></select></label>
+                <button type="button" className="secondary-btn finance-clear-document-filters" disabled={!documentQuery && documentStatusFilter === "all"} onClick={() => { setDocumentQuery(""); setDocumentStatusFilter("all"); }}>Limpiar filtros</button>
+              </div>
+              <FinanceDocumentsTable documents={financeDocuments} documentFilter={documentFilter} query={documentQuery} statusFilter={documentStatusFilter} saving={saving} openActionId={openActionId} onToggleActions={setOpenActionId} onSelect={setSelectedDocument} onRegisterReceipt={registerInvoiceReceipt} onPrepareReminder={(document) => prepareReminder({ key: document.partyRut?.replace(/[^0-9kK]/g, "") || document.partyName.toLocaleLowerCase("es"), name: document.partyName, rut: document.partyRut, documents: 0, openDocuments: 0, overdueDocuments: 0, dueSoonAmount: 0, overdueAmount: 0, totalDebt: 0, oldestInvoiceDate: null, averagePaymentDays: null, reminders: 0, lastReminderAt: null, latestCaseId: null, reminderStatus: "" })} onCopy={copyFinanceText} onOpenCollections={() => selectTab("cobranza")} onOpenPayables={() => selectTab("pagos")} />
               {selectedDocument ? <FinanceDocumentDetail document={selectedDocument} onClose={() => setSelectedDocument(null)} /> : null}
             </article>
             <form className="finance-card finance-form finance-document-entry" onSubmit={createInvoice}><span className="finance-eyebrow">Registro manual</span><h2>Nueva factura de cliente</h2><p>Registra una factura emitida. El cobro y cualquier aviso posterior quedan siempre bajo revisión humana.</p><input required placeholder="Número de factura" value={invoiceForm.number} onChange={(event) => setInvoiceForm({ ...invoiceForm, number: event.target.value })} /><input required placeholder="Cliente o empresa" value={invoiceForm.client} onChange={(event) => setInvoiceForm({ ...invoiceForm, client: event.target.value })} /><input placeholder="RUT cliente (opcional)" value={invoiceForm.rut} onChange={(event) => setInvoiceForm({ ...invoiceForm, rut: event.target.value })} /><input required type="number" placeholder="Monto CLP" value={invoiceForm.amount} onChange={(event) => setInvoiceForm({ ...invoiceForm, amount: event.target.value })} /><label>Vencimiento<input required type="date" value={invoiceForm.dueDate} onChange={(event) => setInvoiceForm({ ...invoiceForm, dueDate: event.target.value })} /></label><button className="primary-btn" disabled={saving}>Guardar factura</button></form>
@@ -616,10 +627,21 @@ function FinanceWorkspace() {
   );
 }
 
-function FinanceDocumentsTable({ documents, query, saving, openActionId, onToggleActions, onSelect, onRegisterReceipt, onPrepareReminder, onCopy, onOpenCollections, onOpenPayables }: { documents: FinanceDocument[]; query: string; saving: boolean; openActionId: string | null; onToggleActions: (id: string | null) => void; onSelect: (document: FinanceDocument) => void; onRegisterReceipt: (document: FinanceDocument) => void; onPrepareReminder: (document: FinanceDocument) => void; onCopy: (value: string, successMessage: string) => void; onOpenCollections: () => void; onOpenPayables: () => void }) {
+function FinanceDocumentsTable({ documents, documentFilter, query, statusFilter, saving, openActionId, onToggleActions, onSelect, onRegisterReceipt, onPrepareReminder, onCopy, onOpenCollections, onOpenPayables }: { documents: FinanceDocument[]; documentFilter: "all" | "customers" | "suppliers"; query: string; statusFilter: FinanceDocumentStatusFilter; saving: boolean; openActionId: string | null; onToggleActions: (id: string | null) => void; onSelect: (document: FinanceDocument) => void; onRegisterReceipt: (document: FinanceDocument) => void; onPrepareReminder: (document: FinanceDocument) => void; onCopy: (value: string, successMessage: string) => void; onOpenCollections: () => void; onOpenPayables: () => void }) {
   const normalizedQuery = query.trim().toLocaleLowerCase("es");
-  const visible = normalizedQuery ? documents.filter((item) => `${item.documentNumber} ${item.partyName} ${item.partyRut || ""} ${item.status}`.toLocaleLowerCase("es").includes(normalizedQuery)) : documents;
-  if (!visible.length) return <p className="finance-empty">No hay documentos para este filtro. Puedes registrar una factura de cliente o una obligación de proveedor.</p>;
+  const visible = documents.filter((item) => {
+    const status = String(item.status || "").toUpperCase();
+    const balance = amount(item.balance);
+    const isCancelled = ["CANCELLED", "CANCELED", "ANNULLED"].includes(status);
+    const matchesQuery = !normalizedQuery || `${item.documentNumber} ${item.partyName} ${item.partyRut || ""}`.toLocaleLowerCase("es").includes(normalizedQuery);
+    const matchesStatus = statusFilter === "all"
+      || (statusFilter === "paid" && (status === "PAID" || (balance <= 0 && !isCancelled)))
+      || (statusFilter === "cancelled" && isCancelled)
+      || (statusFilter === "pending" && ["OPEN", "PENDING", "PARTIAL"].includes(status) && balance > 0)
+      || (statusFilter === "overdue" && status === "OVERDUE");
+    return matchesQuery && matchesStatus;
+  });
+  if (!visible.length) return <p className="finance-empty">{documents.length ? "No hay documentos que coincidan con la búsqueda y los filtros aplicados." : documentFilter === "suppliers" ? "Aún no hay documentos de proveedores registrados. Puedes crear una cuenta por pagar o importar el historial de proveedores." : "No hay documentos para este filtro. Puedes registrar una factura de cliente o una obligación de proveedor."}</p>;
   return <div className="finance-document-table-wrap"><div className="finance-document-table" role="table" aria-label="Documentos financieros"><div className="finance-document-table-head" role="row"><span>Documento</span><span>Estado</span><span>Fecha de emisión</span><span>Registro de cobro / pago</span><span>Monto total</span><span>Acciones</span></div>{visible.map((document) => {
     const isCustomer = document.side === "CUSTOMER";
     const isPaid = String(document.status).toUpperCase() === "PAID" || document.balance <= 0;

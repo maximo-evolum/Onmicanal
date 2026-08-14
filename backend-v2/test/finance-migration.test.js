@@ -11,9 +11,11 @@ test("la migración histórica clasifica cuentas por cobrar, pagar y filas que r
   ], { now: new Date("2026-02-01T12:00:00.000Z") });
 
   assert.equal(rows[0].recordType, "finance_invoice");
+  assert.equal(rows[0].documentSide, "CUSTOMER");
   assert.equal(rows[0].amount, 1250000);
   assert.equal(rows[0].status, "PAID");
   assert.equal(rows[1].recordType, "finance_payable");
+  assert.equal(rows[1].documentSide, "SUPPLIER");
   assert.equal(rows[1].status, "OVERDUE");
   assert.equal(rows[2].needsReview, true);
 

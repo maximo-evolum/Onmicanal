@@ -388,7 +388,16 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
         const [key, value = ""] = entry.split("=");
         return currentSearchParams.get(key) === value;
       });
-      return targetPath === "/realty" ? label === active : (label === active || (pathname === targetPath && queryMatches));
+      if (targetPath === "/realty") return label === active;
+      // Finanzas conserva el estado de cada sección en ?tab=. No usar el
+      // nombre activo como respaldo aquí: al cambiar de pestaña podía dejar
+      // marcada la anterior junto a la actual.
+      if (targetPath === "/finance") {
+        return targetQuery
+          ? pathname === targetPath && queryMatches
+          : pathname === targetPath && !currentSearchParams.get("tab");
+      }
+      return label === active || (pathname === targetPath && queryMatches);
     }));
     setOpenGroupId(currentGroup?.id || null);
   }, [active, navigationGroups, pathname]);
@@ -471,7 +480,13 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
                     return currentSearchParams.get(key) === value;
                   });
                   const matchesRoute = pathname === targetPath && queryMatches;
-                  const selected = targetPath === "/realty" ? label === active : (label === active || matchesRoute);
+                  // Para cada pestaña de Finanzas la URL completa es la
+                  // fuente única de verdad; así solo un módulo queda activo.
+                  const selected = targetPath === "/realty"
+                    ? label === active
+                    : targetPath === "/finance"
+                      ? (targetQuery ? matchesRoute : pathname === targetPath && !currentSearchParams.get("tab"))
+                      : (label === active || matchesRoute);
                   return (
                     <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
                       <ModuleSymbol code={icon} label={label} />

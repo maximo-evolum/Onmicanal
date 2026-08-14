@@ -123,7 +123,7 @@ function invoiceFromSale(sale, period) {
     title: `${text(type.name, "Documento tributario")} ${invoiceNumber} · ${customerName}`.slice(0, 220),
     status,
     data: {
-      source: "nubox", nuboxDocumentId: text(source.id), invoiceNumber,
+      source: "nubox", documentSide: "CUSTOMER", direction: "SALE", nuboxDocumentId: text(source.id), invoiceNumber,
       documentTypeCode: text(type.legalCode), documentTypeName: text(type.name, "Documento tributario"),
       customerName, customerRut: text(client.identification?.value), rut: text(client.identification?.value), clientRut: text(client.identification?.value),
       customerActivity: text(client.mainActivity), amount: Number(source.totalAmount) || 0, balance,

@@ -70,9 +70,28 @@ function payableState(record, now = new Date()) {
   return { amount, balance, status: balance === 0 ? "PAID" : overdue ? "OVERDUE" : status, dueDate };
 }
 
+function normalizedDocumentSide(value) {
+  const candidate = cleanText(value).toUpperCase();
+  if (["SUPPLIER", "PROVIDER", "PAYABLE", "PURCHASE", "COMPRA", "PROVEEDOR", "EGRESO"].includes(candidate)) return "SUPPLIER";
+  if (["CUSTOMER", "CLIENT", "RECEIVABLE", "SALE", "VENTA", "CLIENTE", "INGRESO"].includes(candidate)) return "CUSTOMER";
+  return null;
+}
+
+// Compatibilidad con importaciones anteriores a finance_payable. La fuente y
+// los campos de contraparte definen el lado económico; no el nombre mostrado.
+function financeDocumentSide(record) {
+  if (record.recordType === "finance_payable") return "SUPPLIER";
+  const data = financeRecordData(record);
+  const explicit = normalizedDocumentSide(data.documentSide || data.side || data.direction || data.kind || data.documentFlow || data.counterpartyType);
+  if (explicit) return explicit;
+  const hasSupplier = Boolean(cleanText(data.supplierName || data.supplier || data.providerName));
+  const hasCustomer = Boolean(cleanText(data.customerName || data.customer || data.clientName));
+  return hasSupplier && !hasCustomer ? "SUPPLIER" : "CUSTOMER";
+}
+
 function financeParty(record) {
   const data = financeRecordData(record);
-  const isPayable = record.recordType === "finance_payable";
+  const isPayable = financeDocumentSide(record) === "SUPPLIER";
   return {
     side: isPayable ? "SUPPLIER" : "CUSTOMER",
     name: cleanText(isPayable ? (data.supplierName || data.supplier || data.providerName) : (data.customerName || data.customer || data.clientName), isPayable ? "Proveedor sin nombre" : "Cliente sin nombre"),
@@ -109,6 +128,7 @@ financeRouter.get("/finance/customers", async (req, res) => {
     const invoices = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" }, take: 1000 });
     const customers = new Map();
     for (const invoice of invoices) {
+      if (financeDocumentSide(invoice) !== "CUSTOMER") continue;
       const data = financeRecordData(invoice);
       const name = cleanText(data.customerName || data.customer || data.clientName, "Cliente sin nombre");
       const key = `${cleanText(data.rut || data.clientRut).replace(/[^0-9kK]/g, "") || name.toLocaleLowerCase("es")}`;
@@ -135,7 +155,13 @@ financeRouter.get("/finance/documents", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
     const requestedType = cleanText(req.query?.type, "all").toLowerCase();
-    const includeInvoices = requestedType !== "suppliers";
+    if (!["all", "customers", "suppliers"].includes(requestedType)) {
+      return res.status(400).json({ error: "El filtro de documentos no es válido." });
+    }
+    // Las migraciones históricas antiguas pudieron guardar una compra como
+    // finance_invoice. Se consulta también ese tipo y luego se filtra por el
+    // lado financiero real del documento.
+    const includeInvoices = true;
     let includePayables = requestedType !== "customers";
     // Los documentos de proveedores pertenecen al módulo de Cuentas por pagar.
     // Un acceso a Facturas por cobrar no concede, por sí solo, visibilidad de esa cartera.
@@ -158,7 +184,7 @@ financeRouter.get("/finance/documents", async (req, res) => {
     const documents = records.map((record) => {
       const data = financeRecordData(record);
       const party = financeParty(record);
-      const state = record.recordType === "finance_payable" ? payableState(record, now) : invoiceState(record, now);
+      const state = party.side === "SUPPLIER" ? payableState(record, now) : invoiceState(record, now);
       return {
         id: record.id,
         recordType: record.recordType,
@@ -175,7 +201,7 @@ financeRouter.get("/finance/documents", async (req, res) => {
         createdAt: record.createdAt,
         updatedAt: record.updatedAt
       };
-    });
+    }).filter((document) => requestedType === "all" || (requestedType === "customers" ? document.side === "CUSTOMER" : document.side === "SUPPLIER"));
     res.json({ documents });
   } catch (error) {
     console.error("Finance documents error:", error);
@@ -486,6 +512,8 @@ financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGER
       const records = [];
       for (const row of rows) {
         const historicalData = {
+          documentSide: row.documentSide,
+          direction: row.kind === "PAYABLE" ? "PURCHASE" : "SALE",
           documentNumber: row.documentNumber,
           invoiceNumber: row.kind === "RECEIVABLE" ? row.documentNumber : undefined,
           customerName: row.kind === "RECEIVABLE" ? row.partyName : undefined,
