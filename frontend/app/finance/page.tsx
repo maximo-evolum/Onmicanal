@@ -11,6 +11,8 @@ import {
   createIndustryRecord,
   generateFinanceCollectionCases,
   getFinanceCustomers,
+  getFinanceCollectionPortfolio,
+  getFinanceDocuments,
   getFinanceIntegrations,
   getFinanceSyncHistory,
   getFinancePlan,
@@ -22,6 +24,8 @@ import {
   importFinanceMigration,
   previewFinanceMigration,
   previewFinanceMigrationFile,
+  prepareFinanceCollectionReminders,
+  registerFinanceInvoiceReceipt,
   registerFinancePayablePayment,
   type FinanceOverview,
   type FinanceMigrationPreview,
@@ -29,6 +33,8 @@ import {
   type FinanceAgentPolicy,
   type FinanceAgentWorkspace,
   type FinanceCustomer,
+  type FinanceCollectionPortfolioRow,
+  type FinanceDocument,
   type FinanceIntegration,
   type FinanceSyncHistoryEntry,
   type FinancePlan,
@@ -87,6 +93,8 @@ function financeLabel(value: unknown, fallback = "-") {
     RECEIVED: "Recibido",
     SENT: "Enviado",
     PAID: "Pagada",
+    PARTIAL: "Pago parcial",
+    REGISTERED: "Registrado",
     OVERDUE: "Vencida",
     MATCHED: "Conciliado",
     APPROVED: "Aprobada",
@@ -181,6 +189,11 @@ function FinanceWorkspace() {
   const [migrationRows, setMigrationRows] = useState<Array<Record<string, unknown>>>([]);
   const [migrationSourceFile, setMigrationSourceFile] = useState("");
   const [agentPolicy, setAgentPolicy] = useState<FinanceAgentPolicy | null>(null);
+  const [financeDocuments, setFinanceDocuments] = useState<FinanceDocument[]>([]);
+  const [documentFilter, setDocumentFilter] = useState<"all" | "customers" | "suppliers">("all");
+  const [collectionPortfolio, setCollectionPortfolio] = useState<FinanceCollectionPortfolioRow[]>([]);
+  const [openActionId, setOpenActionId] = useState<string | null>(null);
+  const [selectedDocument, setSelectedDocument] = useState<FinanceDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncingNubox, setSyncingNubox] = useState(false);
@@ -218,10 +231,10 @@ function FinanceWorkspace() {
     setMessage(null);
     try {
       if (activeTab === "resumen") setOverview(await getFinanceOverview());
-      if (activeTab === "facturas") setRecords(await getIndustryRecords("finance_invoice"));
+      if (activeTab === "facturas") setFinanceDocuments((await getFinanceDocuments(documentFilter)).documents);
       if (activeTab === "cartolas") setRecords(await getIndustryRecords("bank_movement"));
       if (activeTab === "excepciones") setRecords(await getIndustryRecords("finance_exception"));
-      if (activeTab === "cobranza") setRecords(await getIndustryRecords("finance_collection_case"));
+      if (activeTab === "cobranza") setCollectionPortfolio((await getFinanceCollectionPortfolio()).portfolio);
       if (activeTab === "pagos") setPayableSummary(await getFinancePayables());
       if (activeTab === "conciliacion") setSuggestions(normalizeFinanceSuggestions((await getFinanceReconciliationSuggestions()).suggestions));
       if (activeTab === "aprobaciones") setSuggestions(normalizeFinanceSuggestions((await getFinanceReconciliationSuggestions()).suggestions));
@@ -245,7 +258,7 @@ function FinanceWorkspace() {
     }
   }
 
-  useEffect(() => { void load(); }, [activeTab]);
+  useEffect(() => { void load(); }, [activeTab, documentFilter]);
 
   const headline = useMemo(() => {
     if (!overview) return null;
@@ -322,6 +335,44 @@ function FinanceWorkspace() {
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo registrar el pago."); }
     finally { setSaving(false); }
+  }
+
+  async function registerInvoiceReceipt(document: FinanceDocument) {
+    const pending = amount(document.balance);
+    const amountValue = window.prompt(`Monto recibido (saldo pendiente ${money(pending)}):`, String(pending));
+    if (amountValue === null) return;
+    const receiptAmount = amount(amountValue.replace(/\./g, "").replace(",", "."));
+    if (!receiptAmount) return setMessage("Ingresa un monto de cobro válido.");
+    const reference = window.prompt("Referencia o comprobante del cobro (opcional):", "") || "";
+    setSaving(true);
+    try {
+      await registerFinanceInvoiceReceipt(document.id, { amount: receiptAmount, reference });
+      setMessage("Cobro registrado con trazabilidad. No se envió ninguna cobranza ni se modificó el ERP.");
+      setOpenActionId(null);
+      await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo registrar el cobro."); }
+    finally { setSaving(false); }
+  }
+
+  async function prepareReminder(row: FinanceCollectionPortfolioRow) {
+    setSaving(true);
+    try {
+      const result = await prepareFinanceCollectionReminders(row.key);
+      setMessage(`${result.count} borrador(es) de recordatorio preparados para revisión. No se envió ningún mensaje.`);
+      setOpenActionId(null);
+      await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo preparar el recordatorio."); }
+    finally { setSaving(false); }
+  }
+
+  async function copyFinanceText(value: string, successMessage: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage(successMessage);
+    } catch {
+      setMessage("No se pudo copiar desde este navegador.");
+    }
+    setOpenActionId(null);
   }
 
   async function previewHistoricalMigration(event: ChangeEvent<HTMLInputElement>) {
@@ -498,7 +549,15 @@ function FinanceWorkspace() {
             </section>
           </> : null}
 
-          {activeTab === "facturas" ? <section className="finance-grid"><form className="finance-card finance-form" onSubmit={createInvoice}><h2>Nueva factura por cobrar</h2><input required placeholder="Numero de factura" value={invoiceForm.number} onChange={(event) => setInvoiceForm({ ...invoiceForm, number: event.target.value })} /><input required placeholder="Cliente o empresa" value={invoiceForm.client} onChange={(event) => setInvoiceForm({ ...invoiceForm, client: event.target.value })} /><input placeholder="RUT cliente (opcional)" value={invoiceForm.rut} onChange={(event) => setInvoiceForm({ ...invoiceForm, rut: event.target.value })} /><input required type="number" placeholder="Monto CLP" value={invoiceForm.amount} onChange={(event) => setInvoiceForm({ ...invoiceForm, amount: event.target.value })} /><label>Vencimiento<input required type="date" value={invoiceForm.dueDate} onChange={(event) => setInvoiceForm({ ...invoiceForm, dueDate: event.target.value })} /></label><button className="primary-btn" disabled={saving}>Guardar factura</button></form><article className="finance-card"><h2>Facturas registradas</h2><FinanceTable records={records} kind="invoice" query={search} /></article></section> : null}
+          {activeTab === "facturas" ? <section className="finance-document-workspace">
+            <article className="finance-card finance-document-portal">
+              <div className="finance-card-heading finance-document-heading"><div><span className="finance-eyebrow">Portal documental</span><h2>Facturas y documentos financieros</h2><p>Consulta por separado las facturas emitidas a clientes y las obligaciones registradas de proveedores.</p></div><button type="button" className="secondary-btn" onClick={() => setSelectedDocument(null)}>Limpiar detalle</button></div>
+              <div className="finance-document-filters" role="group" aria-label="Filtrar documentos"><button type="button" className={documentFilter === "all" ? "is-active" : ""} onClick={() => setDocumentFilter("all")}>Todos</button><button type="button" className={documentFilter === "customers" ? "is-active" : ""} onClick={() => setDocumentFilter("customers")}>Facturas de clientes</button><button type="button" className={documentFilter === "suppliers" ? "is-active" : ""} onClick={() => setDocumentFilter("suppliers")}>Facturas de proveedores</button></div>
+              <FinanceDocumentsTable documents={financeDocuments} query={search} saving={saving} openActionId={openActionId} onToggleActions={setOpenActionId} onSelect={setSelectedDocument} onRegisterReceipt={registerInvoiceReceipt} onPrepareReminder={(document) => prepareReminder({ key: document.partyRut?.replace(/[^0-9kK]/g, "") || document.partyName.toLocaleLowerCase("es"), name: document.partyName, rut: document.partyRut, documents: 0, openDocuments: 0, overdueDocuments: 0, dueSoonAmount: 0, overdueAmount: 0, totalDebt: 0, oldestInvoiceDate: null, averagePaymentDays: null, reminders: 0, lastReminderAt: null, latestCaseId: null, reminderStatus: "" })} onCopy={copyFinanceText} onOpenCollections={() => selectTab("cobranza")} onOpenPayables={() => selectTab("pagos")} />
+              {selectedDocument ? <FinanceDocumentDetail document={selectedDocument} onClose={() => setSelectedDocument(null)} /> : null}
+            </article>
+            <form className="finance-card finance-form finance-document-entry" onSubmit={createInvoice}><span className="finance-eyebrow">Registro manual</span><h2>Nueva factura de cliente</h2><p>Registra una factura emitida. El cobro y cualquier aviso posterior quedan siempre bajo revisión humana.</p><input required placeholder="Número de factura" value={invoiceForm.number} onChange={(event) => setInvoiceForm({ ...invoiceForm, number: event.target.value })} /><input required placeholder="Cliente o empresa" value={invoiceForm.client} onChange={(event) => setInvoiceForm({ ...invoiceForm, client: event.target.value })} /><input placeholder="RUT cliente (opcional)" value={invoiceForm.rut} onChange={(event) => setInvoiceForm({ ...invoiceForm, rut: event.target.value })} /><input required type="number" placeholder="Monto CLP" value={invoiceForm.amount} onChange={(event) => setInvoiceForm({ ...invoiceForm, amount: event.target.value })} /><label>Vencimiento<input required type="date" value={invoiceForm.dueDate} onChange={(event) => setInvoiceForm({ ...invoiceForm, dueDate: event.target.value })} /></label><button className="primary-btn" disabled={saving}>Guardar factura</button></form>
+          </section> : null}
 
           {activeTab === "cartolas" ? <section className="finance-grid"><article className="finance-card finance-form"><h2>Importar cartola</h2><p>CSV queda listo para conciliacion. PDF y Excel pueden guardarse en Archivos mientras se activa el parser de la integracion contratada.</p><label className="finance-upload">Seleccionar cartola CSV<input type="file" accept=".csv,text/csv" onChange={importCsv} disabled={saving} /></label><hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripcion" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form></article><article className="finance-card"><h2>Movimientos cargados</h2><FinanceTable records={records} kind="movement" query={search} /></article></section> : null}
 
@@ -506,7 +565,9 @@ function FinanceWorkspace() {
 
           {activeTab === "excepciones" ? <section className="finance-grid"><form className="finance-card finance-form" onSubmit={createException}><h2>Nueva excepcion</h2><input placeholder="Ej. Pago parcial factura 1520" value={exceptionForm.title} onChange={(event) => setExceptionForm({ ...exceptionForm, title: event.target.value })} /><select value={exceptionForm.type} onChange={(event) => setExceptionForm({ ...exceptionForm, type: event.target.value })}><option>Pago parcial</option><option>Pago duplicado</option><option>Factura sin pago</option><option>Diferencia de monto</option><option>Transferencia desconocida</option></select><textarea placeholder="Contexto para quien revise el caso" value={exceptionForm.detail} onChange={(event) => setExceptionForm({ ...exceptionForm, detail: event.target.value })} /><button className="primary-btn" disabled={saving}>Enviar a revision</button></form><article className="finance-card"><h2>Casos pendientes</h2><FinanceTable records={records} kind="exception" query={search} /></article></section> : null}
 
-          {activeTab === "cobranza" ? <section className="finance-grid"><article className="finance-card"><h2>Preparar cobranza responsable</h2><p>Genera casos para facturas vencidas. Antes de enviar WhatsApp, correo o SMS, el equipo debe revisar el mensaje, canal y consentimiento del cliente.</p><button className="primary-btn" type="button" onClick={generateCollections} disabled={saving}>Generar casos vencidos</button><div className="finance-note">La ejecucion multicanal se habilita cuando WhatsApp Business, correo o SMS esten conectados y aprobados para este tenant.</div></article><article className="finance-card"><h2>Casos de cobranza</h2><FinanceTable records={records} kind="collection" query={search} /></article></section> : null}
+          {activeTab === "cobranza" ? <section className="finance-collections-workspace">
+            <article className="finance-card finance-collections-portal"><div className="finance-card-heading"><div><span className="finance-eyebrow">Cartera de cobranza</span><h2>Seguimiento por cliente</h2><p>Prioriza documentos vencidos, prepara acciones y conserva la trazabilidad por razón social.</p></div><button className="primary-btn" type="button" onClick={generateCollections} disabled={saving}>Generar casos vencidos</button></div><div className="finance-note">Los recordatorios que prepares aquí son borradores internos. Nunca se envían por WhatsApp, correo o SMS sin canal, consentimiento y aprobación humana.</div><FinanceCollectionsTable portfolio={collectionPortfolio} query={search} saving={saving} openActionId={openActionId} onToggleActions={setOpenActionId} onPrepareReminder={prepareReminder} onOpenDocuments={() => { setDocumentFilter("customers"); selectTab("facturas"); }} onCopy={copyFinanceText} /></article>
+          </section> : null}
 
           {activeTab === "pagos" ? <section className="finance-grid finance-payables-workspace">
             <form className="finance-card finance-form" onSubmit={createPayable}>
@@ -553,6 +614,29 @@ function FinanceWorkspace() {
       </div>
     </ModuleGate>
   );
+}
+
+function FinanceDocumentsTable({ documents, query, saving, openActionId, onToggleActions, onSelect, onRegisterReceipt, onPrepareReminder, onCopy, onOpenCollections, onOpenPayables }: { documents: FinanceDocument[]; query: string; saving: boolean; openActionId: string | null; onToggleActions: (id: string | null) => void; onSelect: (document: FinanceDocument) => void; onRegisterReceipt: (document: FinanceDocument) => void; onPrepareReminder: (document: FinanceDocument) => void; onCopy: (value: string, successMessage: string) => void; onOpenCollections: () => void; onOpenPayables: () => void }) {
+  const normalizedQuery = query.trim().toLocaleLowerCase("es");
+  const visible = normalizedQuery ? documents.filter((item) => `${item.documentNumber} ${item.partyName} ${item.partyRut || ""} ${item.status}`.toLocaleLowerCase("es").includes(normalizedQuery)) : documents;
+  if (!visible.length) return <p className="finance-empty">No hay documentos para este filtro. Puedes registrar una factura de cliente o una obligación de proveedor.</p>;
+  return <div className="finance-document-table-wrap"><div className="finance-document-table" role="table" aria-label="Documentos financieros"><div className="finance-document-table-head" role="row"><span>Documento</span><span>Estado</span><span>Fecha de emisión</span><span>Registro de cobro / pago</span><span>Monto total</span><span>Acciones</span></div>{visible.map((document) => {
+    const isCustomer = document.side === "CUSTOMER";
+    const isPaid = String(document.status).toUpperCase() === "PAID" || document.balance <= 0;
+    const actionId = `document-${document.id}`;
+    return <div className="finance-document-row" role="row" key={document.id}><div><b className={`finance-document-side ${isCustomer ? "customer" : "supplier"}`}>{isCustomer ? "Cliente" : "Proveedor"}</b><strong>{financeLabel(document.documentNumber)}</strong><small>{financeLabel(document.partyName)}{document.partyRut ? ` · ${document.partyRut}` : ""}</small></div><span className={`finance-document-status ${String(document.status).toLowerCase()}`}>{financeLabel(document.status)}</span><span>{shortDate(document.issueDate)}</span><div><strong>{isPaid ? "Registrado" : isCustomer ? "Pendiente de cobro" : "Pendiente de pago"}</strong><small>{isPaid ? `${money(document.paidAmount)} aplicado` : `Saldo ${money(document.balance)}`}</small></div><b>{money(document.amount)}</b><div className="finance-row-actions"><button className="secondary-btn finance-actions-trigger" type="button" aria-expanded={openActionId === actionId} onClick={() => onToggleActions(openActionId === actionId ? null : actionId)}>Acciones <span aria-hidden="true">⌄</span></button>{openActionId === actionId ? <div className="finance-actions-menu" role="menu"><button type="button" onClick={() => { onSelect(document); onToggleActions(null); }}>Ver detalle</button><button type="button" onClick={() => onCopy(document.documentNumber, "Folio copiado.")}>Copiar folio</button>{isCustomer ? <><button type="button" disabled={saving || isPaid} onClick={() => onRegisterReceipt(document)}>{isPaid ? "Cobro registrado" : "Registrar cobro"}</button><button type="button" disabled={saving || isPaid} onClick={() => onPrepareReminder(document)}>Preparar recordatorio</button><button type="button" onClick={onOpenCollections}>Abrir cobranza</button></> : <button type="button" onClick={onOpenPayables}>Ir a cuentas por pagar</button>}</div> : null}</div></div>;
+  })}</div></div>;
+}
+
+function FinanceDocumentDetail({ document, onClose }: { document: FinanceDocument; onClose: () => void }) {
+  return <section className="finance-document-detail" aria-label="Detalle del documento seleccionado"><div><span className="finance-eyebrow">Documento seleccionado</span><h3>{financeLabel(document.documentNumber)} · {financeLabel(document.partyName)}</h3><p>{document.side === "CUSTOMER" ? "Factura emitida a cliente" : "Documento recibido de proveedor"}{document.partyRut ? ` · RUT ${document.partyRut}` : ""}</p></div><div className="finance-document-detail-values"><span><small>Estado</small><b>{financeLabel(document.status)}</b></span><span><small>Emisión</small><b>{shortDate(document.issueDate)}</b></span><span><small>Saldo</small><b>{money(document.balance)}</b></span></div><button type="button" className="secondary-btn" onClick={onClose}>Cerrar detalle</button></section>;
+}
+
+function FinanceCollectionsTable({ portfolio, query, saving, openActionId, onToggleActions, onPrepareReminder, onOpenDocuments, onCopy }: { portfolio: FinanceCollectionPortfolioRow[]; query: string; saving: boolean; openActionId: string | null; onToggleActions: (id: string | null) => void; onPrepareReminder: (row: FinanceCollectionPortfolioRow) => void; onOpenDocuments: () => void; onCopy: (value: string, successMessage: string) => void }) {
+  const normalizedQuery = query.trim().toLocaleLowerCase("es");
+  const visible = normalizedQuery ? portfolio.filter((item) => `${item.name} ${item.rut || ""}`.toLocaleLowerCase("es").includes(normalizedQuery)) : portfolio;
+  if (!visible.length) return <p className="finance-empty">Aún no hay clientes con facturas registradas para construir la cartera de cobranza.</p>;
+  return <div className="finance-collections-table-wrap"><div className="finance-collections-table" role="table" aria-label="Cartera de cobranza"><div className="finance-collections-table-head" role="row"><span>Razón social</span><span>Días promedio de pago</span><span>Último recordatorio</span><span>Factura más antigua</span><span>Recordatorios enviados</span><span>Documentos</span><span>Por vencer</span><span>Vencido</span><span>Total deudas</span><span>Acciones</span></div>{visible.map((row) => { const actionId = `collection-${row.key}`; return <div className="finance-collections-row" role="row" key={row.key}><div><strong>{financeLabel(row.name)}</strong><small>{row.rut || "Sin RUT registrado"}</small></div><span>{row.averagePaymentDays === null ? "Sin pagos" : `${row.averagePaymentDays} días`}</span><span>{row.lastReminderAt ? shortDate(row.lastReminderAt) : "Sin recordatorio"}</span><span>{shortDate(row.oldestInvoiceDate)}</span><span>{row.reminders ? `${row.reminders} preparado(s)` : "Sin enviar"}</span><span>{row.documents}<small>{row.overdueDocuments ? `${row.overdueDocuments} vencido(s)` : "Sin vencidos"}</small></span><b>{money(row.dueSoonAmount)}</b><b className={row.overdueAmount ? "is-overdue" : ""}>{money(row.overdueAmount)}</b><b>{money(row.totalDebt)}</b><div className="finance-row-actions"><button className="secondary-btn finance-actions-trigger" type="button" aria-expanded={openActionId === actionId} onClick={() => onToggleActions(openActionId === actionId ? null : actionId)}>Acciones <span aria-hidden="true">⌄</span></button>{openActionId === actionId ? <div className="finance-actions-menu" role="menu"><button type="button" onClick={onOpenDocuments}>Ver documentos</button><button type="button" disabled={saving || !row.totalDebt} onClick={() => onPrepareReminder(row)}>Preparar recordatorio</button>{row.rut ? <button type="button" onClick={() => onCopy(row.rut || "", "RUT copiado.")}>Copiar RUT</button> : null}</div> : null}</div></div>; })}</div></div>;
 }
 
 function FinanceTable({ records, kind, query = "" }: { records: IndustryRecord[]; kind: "invoice" | "movement" | "exception" | "collection"; query?: string }) {

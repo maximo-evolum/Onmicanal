@@ -8,6 +8,7 @@ import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { decryptSecret, encryptSecret, hasSecret } from "../lib/credential-crypto.js";
 import { syncNuboxForTenant } from "../services/finance-sync.service.js";
+import { createTenantNotification } from "../lib/notifications.js";
 
 export const connectionsPublicRouter = Router();
 export const connectionsRouter = Router();
@@ -1141,6 +1142,120 @@ async function testOAuthConnection(provider, config) {
   return { config: refreshed, discovery };
 }
 
+function verificationSuccessMessage(provider) {
+  if (provider.key === "finance_nubox") return "Credenciales Nubox validadas contra documentos de venta";
+  if (provider.oauthProvider) return "Token y cuenta OAuth validados";
+  return "Configuración completa";
+}
+
+// Comprueba solo conexiones que cuentan con una API de verificación. Las
+// conexiones manuales/locales no se marcan como listas solo por tener campos.
+async function verifyStoredConnection(provider, config) {
+  const previousMetadata = configMetadata(config);
+  const previousStatus = String(previousMetadata.lastTestStatus || "").toUpperCase();
+  const missing = missingFields(provider, config);
+  const checkedAt = new Date().toISOString();
+
+  if (missing.length || (!provider.oauthProvider && provider.key !== "finance_nubox")) {
+    return { status: "SKIPPED", provider: provider.key, reason: missing.length ? "missing_fields" : "not_verifiable" };
+  }
+
+  let testedConfig = config;
+  let discovery = null;
+  let testError = null;
+  try {
+    if (provider.oauthProvider) {
+      const result = await testOAuthConnection(provider, config);
+      testedConfig = result.config;
+      discovery = result.discovery;
+    } else if (provider.key === "finance_nubox") {
+      const result = await testNuboxConnection(config);
+      testedConfig = result.config;
+      discovery = result.discovery;
+    }
+  } catch (error) {
+    testError = error instanceof Error ? error.message : "No se pudo verificar la conexión";
+  }
+
+  const ok = !testError;
+  const metadata = normalizeMetadata({
+    ...configMetadata(testedConfig),
+    lastTestedAt: checkedAt,
+    lastTestStatus: ok ? "OK" : "ERROR",
+    lastTestMessage: ok ? verificationSuccessMessage(provider) : testError,
+    lastConnectionCheckSource: "scheduled",
+    ...(ok ? { connectedAt: previousMetadata.connectedAt || checkedAt, connectionReadyNotifiedAt: checkedAt } : {}),
+    oauthDiscovery: discovery?.discovery ? compactDiscovery(discovery.discovery) : configMetadata(testedConfig).oauthDiscovery
+  }, {});
+  const updated = await prisma.tenantChannelConfig.update({
+    where: { id: testedConfig.id },
+    data: {
+      label: discovery?.label || testedConfig.label,
+      phoneNumberId: discovery?.phoneNumberId || testedConfig.phoneNumberId,
+      businessAccountId: discovery?.businessAccountId || testedConfig.businessAccountId,
+      externalAccountId: discovery?.externalAccountId || testedConfig.externalAccountId,
+      metadata
+    }
+  });
+
+  // Avisamos solo si pasa de pendiente/error a validada. Si luego falla y se
+  // recupera, se emite otro aviso útil, sin repetirlo en cada ciclo sano.
+  if (ok && previousStatus !== "OK") {
+    await createTenantNotification({
+      tenantId: updated.tenantId,
+      title: `${provider.label} está listo para usar`,
+      body: "La conexión fue verificada automáticamente. Ya puedes usarla desde EVOLUM.",
+      severity: "success",
+      targetUrl: "/connections",
+      metadata: {
+        notificationType: "connection",
+        screen: "connections",
+        provider: provider.key,
+        verifiedAt: checkedAt
+      }
+    }).catch(() => null);
+  }
+
+  await prisma.tenantAuditLog.create({
+    data: {
+      tenantId: updated.tenantId,
+      action: "CONNECTION_AUTO_VERIFIED",
+      entity: "tenant_channel_config",
+      entityId: updated.id,
+      metadata: { provider: provider.key, ok, checkedAt, message: ok ? verificationSuccessMessage(provider) : testError }
+    }
+  }).catch(() => null);
+
+  return { status: ok ? "VERIFIED" : "ERROR", provider: provider.key, tenantId: updated.tenantId, error: testError || null };
+}
+
+// Trabajo de Railway: una autorización que tomó horas/días queda lista sin
+// exigir que la persona vuelva a abrir el Centro de Conexiones.
+export async function verifyPendingConnections({ limit = 100 } = {}) {
+  const configs = await prisma.tenantChannelConfig.findMany({
+    where: { isActive: true },
+    orderBy: { updatedAt: "asc" },
+    take: Math.min(500, Math.max(1, Number(limit) || 100))
+  });
+  const results = [];
+  for (const config of configs) {
+    const provider = reconciliationProviderForChannel(config.channel);
+    if (!provider || provider.availability === "COMING_SOON") continue;
+    const lastStatus = String(configMetadata(config).lastTestStatus || "").toUpperCase();
+    // Priorizamos pendientes y errores. Las conexiones sanas se mantienen por
+    // sus rutinas de renovación/sincronización y no consumen cuota innecesaria.
+    if (lastStatus === "OK") continue;
+    results.push(await verifyStoredConnection(provider, config));
+  }
+  return {
+    scanned: configs.length,
+    verified: results.filter((item) => item.status === "VERIFIED").length,
+    failed: results.filter((item) => item.status === "ERROR").length,
+    skipped: results.filter((item) => item.status === "SKIPPED").length,
+    results
+  };
+}
+
 async function reconcileMetaAssets(tenantId) {
   const configs = await prisma.tenantChannelConfig.findMany({ where: { tenantId } });
   const sourceCandidates = ["facebook", "instagram", "whatsapp"]
@@ -1364,12 +1479,26 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
     if (provider.key === "finance_bank_statements" && Object.prototype.hasOwnProperty.call(incomingMetadata, "bankAccounts")) {
       incomingMetadata.bankAccounts = normalizeBankAccounts(incomingMetadata.bankAccounts);
     }
+    // Una credencial recién guardada no hereda un error de una credencial
+    // anterior. Queda pendiente hasta que la prueba manual o el verificador
+    // programado confirme que el proveedor realmente la acepta.
+    const supportsRemoteVerification = Boolean(provider.oauthProvider || provider.key === "finance_nubox");
+    const verificationInputChanged = ["accessToken", "verifyToken", ...(provider.requiredFields || [])]
+      .some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field));
     const metadata = normalizeMetadata({
       ...configMetadata(existing),
       ...incomingMetadata,
       providerType: provider.type,
       providerGroup: provider.groupKey,
-      updatedFrom: "connection_center"
+      updatedFrom: "connection_center",
+      ...(supportsRemoteVerification && verificationInputChanged
+        ? {
+          lastTestStatus: "PENDING",
+          lastTestMessage: "Configuración guardada. Pendiente de verificación automática.",
+          lastTestedAt: null,
+          connectionReadyNotifiedAt: null
+        }
+        : {})
     }, {});
 
     const data = {

@@ -243,7 +243,11 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
   const pathname = usePathname();
   const brandLabel = useMemo(() => {
     const product = getVerticalProduct(industry);
-    return product ? `EVOLUM ${product.label}` : "EVOLUM OS";
+    // Dentro de una vertical el encabezado identifica el espacio de trabajo,
+    // no la marca matriz. Así evitamos etiquetas como "EVOLUM Finanzas".
+    if (product?.code === "FINANCE") return "Finanzas OS";
+    if (product) return product.label;
+    return "EVOLUM OS";
   }, [industry]);
   // Se lee la query actual sin useSearchParams para que el menú pueda vivir
   // en todas las páginas estáticas sin forzar un límite Suspense global.
@@ -434,7 +438,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
       <div className="inbox-nav-head">
         <div className="inbox-nav-brand" title={brandLabel}>
           <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt={brandLabel} />
-          <strong>{brandLabel}</strong>
+          <strong className="evolum-sidebar-brand-label">{brandLabel}</strong>
         </div>
         <div className="inbox-nav-head-actions">
           {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}

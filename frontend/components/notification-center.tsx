@@ -21,6 +21,18 @@ function severityLabel(severity?: string) {
   return "Información";
 }
 
+function notificationDateTime(value?: string | null) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "Fecha no disponible";
+  return new Intl.DateTimeFormat("es-CL", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
 export function NotificationCenter({ placement = "header" }: NotificationCenterProps) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<TenantNotification[]>([]);
@@ -83,7 +95,7 @@ export function NotificationCenter({ placement = "header" }: NotificationCenterP
           {loading && !notifications.length ? <p>Cargando notificaciones…</p> : null}
           {!loading && !notifications.length ? <p>No tienes notificaciones por ahora.</p> : null}
           {notifications.map((item) => <Link href={safeTarget(item.targetUrl)} key={item.id} className={item.status === "READ" ? "is-read" : "is-unread"} onClick={() => markRead(item.id)}>
-            <span className={`notification-center-severity is-${String(item.severity || "info").toLowerCase()}`}>{severityLabel(item.severity)}</span><strong>{item.title}</strong><small>{item.body || "Hay una novedad en tu operación."}</small>
+            <span className={`notification-center-severity is-${String(item.severity || "info").toLowerCase()}`}>{severityLabel(item.severity)}</span><strong>{item.title}</strong><small>{item.body || "Hay una novedad en tu operación."}</small><time dateTime={item.createdAt}>{notificationDateTime(item.createdAt)}</time>
           </Link>)}
         </div>
       </div> : null}

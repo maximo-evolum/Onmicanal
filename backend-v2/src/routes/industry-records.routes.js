@@ -68,6 +68,7 @@ const RECORD_MODULES = Object.freeze({
   finance_reconciliation: MODULES.FINANCE_RECONCILIATION,
   finance_exception: MODULES.FINANCE_EXCEPTIONS,
   finance_collection_case: MODULES.FINANCE_COLLECTIONS,
+  finance_invoice_receipt: MODULES.FINANCE_INVOICES,
   finance_payable: MODULES.FINANCE_PAYABLES,
   finance_payable_payment: MODULES.FINANCE_PAYABLES,
   finance_migration_batch: MODULES.FINANCE_MIGRATION

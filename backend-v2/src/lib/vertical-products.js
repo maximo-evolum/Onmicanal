@@ -45,7 +45,7 @@ export const VERTICAL_PRODUCT_DEFINITIONS = Object.freeze({
     recordTypes: new Set([
       "finance_invoice", "bank_statement", "bank_movement",
       "finance_reconciliation", "finance_exception", "finance_collection_case",
-      "finance_payable", "finance_payable_payment", "finance_migration_batch"
+      "finance_invoice_receipt", "finance_payable", "finance_payable_payment", "finance_migration_batch"
     ])
   })
 });

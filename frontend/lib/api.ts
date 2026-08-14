@@ -861,6 +861,39 @@ export function generateFinanceCollectionCases(): Promise<{ created: number; cas
 }
 
 export type FinanceCustomer = { key: string; name: string; rut: string | null; invoices: number; openInvoices: number; totalAmount: number; outstandingAmount: number; overdueAmount: number; lastActivityAt: string };
+export type FinanceDocument = {
+  id: string;
+  recordType: "finance_invoice" | "finance_payable" | string;
+  side: "CUSTOMER" | "SUPPLIER";
+  documentNumber: string;
+  partyName: string;
+  partyRut: string | null;
+  status: string;
+  issueDate: string;
+  dueDate: string | null;
+  amount: number;
+  balance: number;
+  paidAmount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+export type FinanceCollectionPortfolioRow = {
+  key: string;
+  name: string;
+  rut: string | null;
+  documents: number;
+  openDocuments: number;
+  overdueDocuments: number;
+  dueSoonAmount: number;
+  overdueAmount: number;
+  totalDebt: number;
+  oldestInvoiceDate: string | null;
+  averagePaymentDays: number | null;
+  reminders: number;
+  lastReminderAt: string | null;
+  latestCaseId: string | null;
+  reminderStatus: string;
+};
 export type FinanceIntegration = { key: string; label: string; status: "connected" | "not_connected" | "manual_ready"; detail: string };
 export type FinancePlan = { plan: string; usage: { processedDocuments: number; limit: number | null; percentage: number | null } };
 export type FinancePayableSummary = {
@@ -890,6 +923,22 @@ export type FinanceSyncHistoryEntry = {
 
 export function getFinanceCustomers(): Promise<{ customers: FinanceCustomer[] }> {
   return request("/finance/customers");
+}
+
+export function getFinanceDocuments(type: "all" | "customers" | "suppliers" = "all"): Promise<{ documents: FinanceDocument[] }> {
+  return request(`/finance/documents?type=${encodeURIComponent(type)}`);
+}
+
+export function getFinanceCollectionPortfolio(): Promise<{ portfolio: FinanceCollectionPortfolioRow[] }> {
+  return request("/finance/collections/portfolio");
+}
+
+export function registerFinanceInvoiceReceipt(id: string, input: { amount: number; paymentDate?: string; reference?: string }): Promise<{ receipt: IndustryRecord; invoice: IndustryRecord; remainingBalance: number }> {
+  return request(`/finance/invoices/${encodeURIComponent(id)}/receipts`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function prepareFinanceCollectionReminders(partyKey: string): Promise<{ prepared: IndustryRecord[]; count: number }> {
+  return request(`/finance/collections/portfolio/${encodeURIComponent(partyKey)}/reminders`, { method: "POST" });
 }
 
 export function getFinanceIntegrations(): Promise<{ integrations: FinanceIntegration[] }> {

@@ -32,8 +32,9 @@ async function requireFinanceModule(req, res, module) {
   return true;
 }
 
-function cleanText(value) {
-  return String(value || "").trim();
+function cleanText(value, fallback = "") {
+  const normalized = String(value || "").trim();
+  return normalized || fallback;
 }
 
 function financeHistory(data) {
@@ -69,6 +70,29 @@ function payableState(record, now = new Date()) {
   return { amount, balance, status: balance === 0 ? "PAID" : overdue ? "OVERDUE" : status, dueDate };
 }
 
+function financeParty(record) {
+  const data = financeRecordData(record);
+  const isPayable = record.recordType === "finance_payable";
+  return {
+    side: isPayable ? "SUPPLIER" : "CUSTOMER",
+    name: cleanText(isPayable ? (data.supplierName || data.supplier || data.providerName) : (data.customerName || data.customer || data.clientName), isPayable ? "Proveedor sin nombre" : "Cliente sin nombre"),
+    rut: cleanText(isPayable ? (data.supplierRut || data.rut) : (data.clientRut || data.rut)) || null
+  };
+}
+
+function financePartyKey({ name, rut }) {
+  return cleanText(rut).replace(/[^0-9kK]/g, "") || cleanText(name).toLocaleLowerCase("es");
+}
+
+function invoiceState(record, now = new Date()) {
+  return getInvoiceFinancialState(record, now);
+}
+
+function isoDate(value) {
+  const date = value ? new Date(String(value)) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+}
+
 financeRouter.get("/finance/overview", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
@@ -102,6 +126,228 @@ financeRouter.get("/finance/customers", async (req, res) => {
   } catch (error) {
     console.error("Finance customers error:", error);
     res.status(500).json({ error: "No se pudo construir la cartera de clientes" });
+  }
+});
+
+// Portal documental: reúne las facturas de venta y los documentos de compra
+// sin confundirlos. Cada fila conserva su flujo propio (cobro o pago).
+financeRouter.get("/finance/documents", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const requestedType = cleanText(req.query?.type, "all").toLowerCase();
+    const includeInvoices = requestedType !== "suppliers";
+    let includePayables = requestedType !== "customers";
+    // Los documentos de proveedores pertenecen al módulo de Cuentas por pagar.
+    // Un acceso a Facturas por cobrar no concede, por sí solo, visibilidad de esa cartera.
+    if (includePayables && req.user?.role !== "SUPER_ADMIN") {
+      includePayables = await ensureTenantModuleEligibility({ tenantId: req.tenantId, module: MODULES.FINANCE_PAYABLES, tenant: req.tenant });
+    }
+    if (requestedType === "suppliers" && !includePayables) {
+      return res.status(403).json({ error: "Cuentas por pagar no está habilitado para esta cuenta." });
+    }
+    const recordTypes = [
+      ...(includeInvoices ? ["finance_invoice"] : []),
+      ...(includePayables ? ["finance_payable"] : [])
+    ];
+    const now = new Date();
+    const records = await prisma.industryRecord.findMany({
+      where: { tenantId: req.tenantId, recordType: { in: recordTypes } },
+      orderBy: { updatedAt: "desc" },
+      take: 1000
+    });
+    const documents = records.map((record) => {
+      const data = financeRecordData(record);
+      const party = financeParty(record);
+      const state = record.recordType === "finance_payable" ? payableState(record, now) : invoiceState(record, now);
+      return {
+        id: record.id,
+        recordType: record.recordType,
+        side: party.side,
+        documentNumber: cleanText(data.documentNumber || data.invoiceNumber || data.number, "Sin folio"),
+        partyName: party.name,
+        partyRut: party.rut,
+        status: state.status,
+        issueDate: data.issueDate || record.createdAt,
+        dueDate: data.dueDate || null,
+        amount: state.amount,
+        balance: state.balance,
+        paidAmount: Math.max(0, state.amount - state.balance),
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt
+      };
+    });
+    res.json({ documents });
+  } catch (error) {
+    console.error("Finance documents error:", error);
+    res.status(500).json({ error: "No se pudo cargar el portal de documentos financieros." });
+  }
+});
+
+// Cartera agrupada por cliente para que Cobranza trabaje desde una sola fila
+// por razón social, con las cifras que se ven en la vista operativa.
+financeRouter.get("/finance/collections/portfolio", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS))) return;
+    const [invoices, cases] = await Promise.all([
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" }, take: 1000 }),
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_collection_case" }, orderBy: { updatedAt: "desc" }, take: 1000 })
+    ]);
+    const now = new Date();
+    const rows = new Map();
+    for (const invoice of invoices) {
+      const data = financeRecordData(invoice);
+      const party = financeParty(invoice);
+      const key = financePartyKey(party);
+      const state = invoiceState(invoice, now);
+      const row = rows.get(key) || {
+        key,
+        name: party.name,
+        rut: party.rut,
+        documents: 0,
+        openDocuments: 0,
+        overdueDocuments: 0,
+        dueSoonAmount: 0,
+        overdueAmount: 0,
+        totalDebt: 0,
+        oldestInvoiceDate: null,
+        averagePaymentDays: [],
+        reminders: 0,
+        lastReminderAt: null,
+        latestCaseId: null,
+        reminderStatus: "Sin recordatorio preparado"
+      };
+      row.documents += 1;
+      if (state.status !== "PAID") {
+        row.openDocuments += 1;
+        row.totalDebt += state.balance;
+        if (state.status === "OVERDUE") {
+          row.overdueDocuments += 1;
+          row.overdueAmount += state.balance;
+        }
+        const dueDate = state.dueDate;
+        if (dueDate && dueDate >= now && dueDate.getTime() - now.getTime() <= 30 * 24 * 60 * 60 * 1000) row.dueSoonAmount += state.balance;
+      }
+      const issuedAt = isoDate(data.issueDate || invoice.createdAt);
+      const paidAt = isoDate(data.paidAt);
+      if (state.status === "PAID" && issuedAt && paidAt) row.averagePaymentDays.push(Math.max(0, Math.round((paidAt.getTime() - issuedAt.getTime()) / (24 * 60 * 60 * 1000))));
+      const candidateDate = state.dueDate || issuedAt;
+      if (candidateDate && (!row.oldestInvoiceDate || candidateDate < new Date(row.oldestInvoiceDate))) row.oldestInvoiceDate = candidateDate.toISOString();
+      rows.set(key, row);
+    }
+    for (const collectionCase of cases) {
+      const data = financeRecordData(collectionCase);
+      const party = { name: cleanText(data.customerName || data.customer || data.clientName, "Cliente sin nombre"), rut: cleanText(data.clientRut || data.rut) || null };
+      const key = financePartyKey(party);
+      const row = rows.get(key);
+      if (!row) continue;
+      const history = financeHistory(data);
+      const reminders = history.filter((entry) => ["REMINDER_PREPARED", "REMINDER_DRAFT_PREPARED"].includes(String(entry?.type || "").toUpperCase()));
+      row.reminders += reminders.length;
+      const latestReminder = reminders.at(-1)?.at || data.lastReminderAt || null;
+      if (latestReminder && (!row.lastReminderAt || new Date(latestReminder) > new Date(row.lastReminderAt))) row.lastReminderAt = latestReminder;
+      if (!row.latestCaseId || new Date(collectionCase.updatedAt) > new Date(rows.get(key).caseUpdatedAt || 0)) {
+        row.latestCaseId = collectionCase.id;
+        row.caseUpdatedAt = collectionCase.updatedAt;
+        row.reminderStatus = data.reminderStatus || (reminders.length ? "Recordatorio preparado" : "Seguimiento pendiente");
+      }
+    }
+    const portfolio = [...rows.values()].map((row) => ({
+      ...row,
+      averagePaymentDays: row.averagePaymentDays.length ? Math.round(row.averagePaymentDays.reduce((sum, value) => sum + value, 0) / row.averagePaymentDays.length) : null,
+      caseUpdatedAt: undefined
+    })).sort((left, right) => right.totalDebt - left.totalDebt);
+    res.json({ portfolio });
+  } catch (error) {
+    console.error("Finance collection portfolio error:", error);
+    res.status(500).json({ error: "No se pudo cargar la cartera de cobranza." });
+  }
+});
+
+// Registrar un cobro es una acción humana y trazable. No dispara mensajes ni
+// cambios hacia Nubox/ERP: solo actualiza el registro interno de EVOLUM.
+financeRouter.post("/finance/invoices/:id/receipts", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const invoice = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_invoice" } });
+    if (!invoice) return res.status(404).json({ error: "Factura no encontrada." });
+    const receiptAmount = safeAmount(req.body?.amount);
+    const current = invoiceState(invoice);
+    if (!receiptAmount) return res.status(400).json({ error: "Ingresa un monto de cobro válido." });
+    if (!current.balance) return res.status(409).json({ error: "Esta factura ya está pagada." });
+    if (receiptAmount > current.balance) return res.status(400).json({ error: "El cobro no puede superar el saldo pendiente." });
+    const now = new Date();
+    const reference = cleanText(req.body?.reference);
+    const paymentDate = cleanText(req.body?.paymentDate) || now.toISOString().slice(0, 10);
+    const remainingBalance = Math.max(0, current.balance - receiptAmount);
+    const result = await prisma.$transaction(async (tx) => {
+      const receipt = await tx.industryRecord.create({
+        data: {
+          tenantId: req.tenantId,
+          recordType: "finance_invoice_receipt",
+          title: `Cobro ${financeRecordData(invoice).invoiceNumber || invoice.title}`.slice(0, 220),
+          status: "REGISTERED",
+          data: { invoiceId: invoice.id, amount: receiptAmount, paymentDate, reference, registeredById: req.user?.id || null }
+        }
+      });
+      const data = financeRecordData(invoice);
+      const history = financeHistory(data);
+      const updatedInvoice = await tx.industryRecord.update({
+        where: { id: invoice.id },
+        data: {
+          status: remainingBalance === 0 ? "PAID" : "PARTIAL",
+          data: {
+            ...data,
+            balance: remainingBalance,
+            paidAmount: safeAmount(data.paidAmount) + receiptAmount,
+            status: remainingBalance === 0 ? "PAID" : "PARTIAL",
+            paidAt: remainingBalance === 0 ? now.toISOString() : data.paidAt || null,
+            history: [...history, { at: now.toISOString(), type: "RECEIPT_REGISTERED", amount: receiptAmount, reference, receiptId: receipt.id }]
+          }
+        }
+      });
+      return { receipt, invoice: updatedInvoice };
+    });
+    await recordAuditLog(req, "FINANCE_INVOICE_RECEIPT_REGISTERED", "finance_invoice", invoice.id, { receiptId: result.receipt.id, amount: receiptAmount, paymentDate });
+    res.status(201).json({ ...result, remainingBalance });
+  } catch (error) {
+    console.error("Register finance invoice receipt error:", error);
+    res.status(500).json({ error: "No se pudo registrar el cobro de la factura." });
+  }
+});
+
+// Prepara un borrador interno de recordatorio. El envío siempre queda fuera de
+// esta ruta y requiere canal, consentimiento y aprobación posterior.
+financeRouter.post("/finance/collections/portfolio/:partyKey/reminders", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS))) return;
+    const partyKey = cleanText(req.params.partyKey);
+    if (!partyKey) return res.status(400).json({ error: "Cliente inválido." });
+    const invoices = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" }, take: 1000 });
+    const selected = invoices.filter((invoice) => financePartyKey(financeParty(invoice)) === partyKey && invoiceState(invoice).balance > 0);
+    if (!selected.length) return res.status(404).json({ error: "No hay documentos abiertos para este cliente." });
+    const cases = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_collection_case", status: { notIn: ["PAID", "CLOSED"] } }, take: 1000 });
+    const existingByInvoice = new Map(cases.map((item) => [String(financeRecordData(item).invoiceId || ""), item]));
+    const now = new Date().toISOString();
+    const prepared = [];
+    for (const invoice of selected) {
+      const state = invoiceState(invoice);
+      const data = financeRecordData(invoice);
+      const party = financeParty(invoice);
+      const existing = existingByInvoice.get(invoice.id);
+      const event = { at: now, type: "REMINDER_DRAFT_PREPARED", detail: "Borrador preparado. No se envió ningún mensaje.", userId: req.user?.id || null };
+      if (existing) {
+        const updated = await prisma.industryRecord.update({ where: { id: existing.id }, data: { data: { ...financeRecordData(existing), reminderStatus: "Recordatorio preparado", lastReminderAt: now, history: [...financeHistory(financeRecordData(existing)), event] } } });
+        prepared.push(updated);
+      } else {
+        const created = await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_collection_case", title: `Cobranza ${data.invoiceNumber || invoice.title}`.slice(0, 220), status: "PENDING", data: { invoiceId: invoice.id, invoiceNumber: data.invoiceNumber || invoice.title, customerName: party.name, clientRut: party.rut, balance: state.balance, channel: "manual", reminderStatus: "Recordatorio preparado", lastReminderAt: now, nextActionAt: now, history: [{ at: now, type: "CASE_CREATED", detail: "Caso preparado para revisión humana." }, event] } } });
+        prepared.push(created);
+      }
+    }
+    await recordAuditLog(req, "FINANCE_COLLECTION_REMINDERS_PREPARED", "finance_collection_case", req.tenantId, { partyKey, count: prepared.length });
+    res.status(201).json({ prepared, count: prepared.length });
+  } catch (error) {
+    console.error("Prepare finance collection reminders error:", error);
+    res.status(500).json({ error: "No se pudieron preparar los recordatorios." });
   }
 });
 
