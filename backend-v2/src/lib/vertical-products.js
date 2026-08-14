@@ -38,11 +38,14 @@ export const VERTICAL_PRODUCT_DEFINITIONS = Object.freeze({
       MODULES.FINANCE_RECONCILIATION,
       MODULES.FINANCE_EXCEPTIONS,
       MODULES.FINANCE_COLLECTIONS,
-      MODULES.FINANCE_ANALYTICS
+      MODULES.FINANCE_ANALYTICS,
+      MODULES.FINANCE_PAYABLES,
+      MODULES.FINANCE_MIGRATION
     ]),
     recordTypes: new Set([
       "finance_invoice", "bank_statement", "bank_movement",
-      "finance_reconciliation", "finance_exception", "finance_collection_case"
+      "finance_reconciliation", "finance_exception", "finance_collection_case",
+      "finance_payable", "finance_payable_payment", "finance_migration_batch"
     ])
   })
 });

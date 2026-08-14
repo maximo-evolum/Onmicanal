@@ -67,7 +67,10 @@ const RECORD_MODULES = Object.freeze({
   bank_movement: MODULES.FINANCE_BANK_SYNC,
   finance_reconciliation: MODULES.FINANCE_RECONCILIATION,
   finance_exception: MODULES.FINANCE_EXCEPTIONS,
-  finance_collection_case: MODULES.FINANCE_COLLECTIONS
+  finance_collection_case: MODULES.FINANCE_COLLECTIONS,
+  finance_payable: MODULES.FINANCE_PAYABLES,
+  finance_payable_payment: MODULES.FINANCE_PAYABLES,
+  finance_migration_batch: MODULES.FINANCE_MIGRATION
 });
 
 function cleanText(value, fallback = "") {

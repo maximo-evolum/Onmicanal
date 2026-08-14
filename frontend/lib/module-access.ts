@@ -55,7 +55,9 @@ export type ModuleAccessKey =
   | "finance_reconciliation"
   | "finance_exceptions"
   | "finance_collections"
-  | "finance_analytics";
+  | "finance_analytics"
+  | "finance_payables"
+  | "finance_migration";
 
 const moduleAliases: Record<ModuleAccessKey, string[]> = {
   crm: ["crm", "crm_principal"],
@@ -108,6 +110,8 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
   finance_exceptions: ["finance_exceptions", "finance_exception", "excepciones_financieras"],
   finance_collections: ["finance_collections", "collections", "cobranza_ia"],
   finance_analytics: ["finance_analytics", "finance_dashboard", "analitica_financiera"],
+  finance_payables: ["finance_payables", "finance_payable", "cuentas_por_pagar", "proveedores"],
+  finance_migration: ["finance_migration", "finance_migration_batch", "migracion_historica", "migracion"],
 };
 
 // CRM y administración de cuenta son parte del Core EVOLUM.
@@ -157,7 +161,8 @@ const verticalModuleIndustries: Partial<Record<ModuleAccessKey, string[]>> = {
   mechanic_assignments: ["AUTOMOTIVE"], ready_notifications: ["AUTOMOTIVE"],
   gastronomy_operations: ["GASTRONOMY"], dental_care: ["DENTAL"], health_care: ["HEALTH"], veterinary_care: ["VETERINARY"],
   finance_invoices: ["FINANCE"], finance_bank_sync: ["FINANCE"], finance_reconciliation: ["FINANCE"],
-  finance_exceptions: ["FINANCE"], finance_collections: ["FINANCE"], finance_analytics: ["FINANCE"]
+  finance_exceptions: ["FINANCE"], finance_collections: ["FINANCE"], finance_analytics: ["FINANCE"],
+  finance_payables: ["FINANCE"], finance_migration: ["FINANCE"]
 };
 
 function normalizeIndustry(value?: string | null) {

@@ -218,9 +218,11 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
       moduleItem(MODULES.FINANCE_INVOICES, "Facturas por cobrar", "Facturas emitidas, saldos, vencimientos y estado de cada cobro."),
       moduleItem(MODULES.FINANCE_BANK_SYNC, "Cartolas y movimientos", "Carga manual segura de cartolas y movimientos bancarios para normalizarlos.", "STARTER"),
       moduleItem(MODULES.FINANCE_RECONCILIATION, "Conciliacion IA", "Propone el cruce de pagos y facturas con un nivel de confianza explicable."),
-      moduleItem(MODULES.FINANCE_EXCEPTIONS, "Excepciones financieras", "Gestiona pagos parciales, duplicados, diferencias y movimientos sin factura."),
-      moduleItem(MODULES.FINANCE_COLLECTIONS, "Cobranza IA", "Segmenta facturas vencidas, organiza seguimientos y registra compromisos de pago.", "PRO"),
-      moduleItem(MODULES.FINANCE_ANALYTICS, "Dashboard financiero", "Caja, cartera, DSO, morosidad, conciliaciones y acciones prioritarias.")
+        moduleItem(MODULES.FINANCE_EXCEPTIONS, "Excepciones financieras", "Gestiona pagos parciales, duplicados, diferencias y movimientos sin factura."),
+        moduleItem(MODULES.FINANCE_COLLECTIONS, "Cobranza IA", "Segmenta facturas vencidas, organiza seguimientos y registra compromisos de pago.", "PRO"),
+        moduleItem(MODULES.FINANCE_ANALYTICS, "Dashboard financiero", "Caja, cartera, DSO, morosidad, conciliaciones y acciones prioritarias."),
+        moduleItem(MODULES.FINANCE_PAYABLES, "Cuentas por pagar", "Proveedores, gastos, vencimientos, pagos y aprobaciones de egresos.", "PRO"),
+        moduleItem(MODULES.FINANCE_MIGRATION, "Migración histórica", "Importa cartera anterior, clasifica saldos y conserva la trazabilidad de la carga.", "BUSINESS")
     ],
     entities: [
       { key: "finance_invoice", label: "Factura por cobrar", fields: { invoiceNumber: { type: "string", required: true }, customerName: { type: "string", required: true }, rut: "string", issueDate: "string", dueDate: { type: "string", required: true }, amount: { type: "number", required: true }, balance: "number", status: { type: "string", options: ["OPEN", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"] }, erpSource: "string" } },
@@ -228,9 +230,12 @@ export const INDUSTRY_TEMPLATES = Object.freeze({
       { key: "bank_movement", label: "Movimiento bancario", fields: { statementId: "string", transactionDate: { type: "string", required: true }, amount: { type: "number", required: true }, reference: "string", payerName: "string", rut: "string", movementType: { type: "string", options: ["credit", "debit", "transfer", "charge", "commission", "interest"] }, status: { type: "string", options: ["UNRECONCILED", "MATCHED", "EXCEPTION"] } } },
       { key: "finance_reconciliation", label: "Conciliacion", fields: { invoiceId: { type: "string", required: true }, movementId: { type: "string", required: true }, confidence: "number", matchReasons: "json", status: { type: "string", options: ["SUGGESTED", "APPROVED", "REJECTED"] }, approvedAt: "string" } },
       { key: "finance_exception", label: "Excepcion financiera", fields: { type: { type: "string", options: ["PARTIAL_PAYMENT", "DUPLICATE_PAYMENT", "NO_INVOICE", "UNPAID_INVOICE", "AMOUNT_DIFFERENCE", "UNKNOWN_TRANSFER"] }, invoiceId: "string", movementId: "string", resolution: "string", status: { type: "string", options: ["OPEN", "IN_REVIEW", "RESOLVED"] } } },
-      { key: "finance_collection_case", label: "Caso de cobranza", fields: { invoiceId: { type: "string", required: true }, customerName: "string", agingBucket: "string", channel: { type: "string", options: ["whatsapp", "email", "sms", "manual"] }, nextActionAt: "string", promiseDueDate: "string", status: { type: "string", options: ["PENDING", "CONTACTED", "PROMISE", "PAID", "ESCALATED"] } } }
-    ],
-    workflows: ["registrar factura", "cargar cartola", "normalizar movimientos", "conciliar", "revisar excepcion", "gestionar cobranza", "actualizar ERP", "analizar cartera"]
+      { key: "finance_collection_case", label: "Caso de cobranza", fields: { invoiceId: { type: "string", required: true }, customerName: "string", agingBucket: "string", channel: { type: "string", options: ["whatsapp", "email", "sms", "manual"] }, nextActionAt: "string", promiseDueDate: "string", status: { type: "string", options: ["PENDING", "CONTACTED", "PROMISE", "PAID", "ESCALATED"] } } },
+      { key: "finance_payable", label: "Cuenta por pagar", fields: { documentNumber: { type: "string", required: true }, supplierName: { type: "string", required: true }, supplierRut: "string", category: "string", issueDate: "string", dueDate: { type: "string", required: true }, amount: { type: "number", required: true }, balance: "number", paidAmount: "number", status: { type: "string", options: ["OPEN", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"] } } },
+      { key: "finance_payable_payment", label: "Pago a proveedor", fields: { payableId: { type: "string", required: true }, paymentDate: { type: "string", required: true }, amount: { type: "number", required: true }, reference: "string", status: { type: "string", options: ["REGISTERED", "REVERSED"] } } },
+      { key: "finance_migration_batch", label: "Migración histórica", fields: { sourceFile: { type: "string", required: true }, totalRows: "number", importedRows: "number", reviewRows: "number", summary: "json", importedAt: "string" } }
+      ],
+      workflows: ["registrar factura", "cargar cartola", "normalizar movimientos", "conciliar", "revisar excepcion", "gestionar cobranza", "registrar cuenta por pagar", "registrar pago a proveedor", "previsualizar migración histórica", "importar saldos anteriores", "actualizar ERP", "analizar cartera"]
   },
   AUTOMOTIVE: {
     code: "AUTOMOTIVE",

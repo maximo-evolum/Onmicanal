@@ -14,10 +14,13 @@ export function getStoredApiSession() {
 }
 
 function buildHeaders(init?: RequestInit) {
-  return {
-    "Content-Type": "application/json",
-    ...(init?.headers || {})
-  };
+  const headers = new Headers(init?.headers || {});
+  // El navegador añade el boundary correcto para cargas multipart. Forzarlo a
+  // application/json rompe la lectura de Excel/CSV en el backend.
+  if (!(init?.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  return headers;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -860,6 +863,24 @@ export function generateFinanceCollectionCases(): Promise<{ created: number; cas
 export type FinanceCustomer = { key: string; name: string; rut: string | null; invoices: number; openInvoices: number; totalAmount: number; outstandingAmount: number; overdueAmount: number; lastActivityAt: string };
 export type FinanceIntegration = { key: string; label: string; status: "connected" | "not_connected" | "manual_ready"; detail: string };
 export type FinancePlan = { plan: string; usage: { processedDocuments: number; limit: number | null; percentage: number | null } };
+export type FinancePayableSummary = {
+  summary: { total: number; paid: number; overdue: number; registeredAmount: number; pendingAmount: number; overdueAmount: number };
+  payables: IndustryRecord[];
+};
+export type FinanceMigrationPreview = {
+  maxRows: number;
+  sourceFile?: string;
+  summary: {
+    totalRows: number;
+    reviewRows: number;
+    byStatus: Record<string, number>;
+    byKind: Record<string, number>;
+    openReceivables: number;
+    openPayables: number;
+  };
+  rows: Array<Record<string, unknown>>;
+  sourceRows?: Array<Record<string, unknown>>;
+};
 export type FinanceSyncHistoryEntry = {
   id: string;
   action: "NUBOX_SALES_SYNCED" | "NUBOX_SALES_SYNC_FAILED" | "FINANCE_POST_INGESTION_ANALYZED" | string;
@@ -877,6 +898,28 @@ export function getFinanceIntegrations(): Promise<{ integrations: FinanceIntegra
 
 export function getFinancePlan(): Promise<FinancePlan> {
   return request("/finance/plan");
+}
+
+export function getFinancePayables(): Promise<FinancePayableSummary> {
+  return request<FinancePayableSummary>("/finance/payables/summary");
+}
+
+export function registerFinancePayablePayment(id: string, input: { amount: number; paymentDate?: string; reference?: string }): Promise<{ payment: IndustryRecord; payable: IndustryRecord; remainingBalance: number }> {
+  return request(`/finance/payables/${encodeURIComponent(id)}/payments`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function previewFinanceMigration(rows: Array<Record<string, unknown>>): Promise<FinanceMigrationPreview> {
+  return request<FinanceMigrationPreview>("/finance/migrations/preview", { method: "POST", body: JSON.stringify({ rows }) });
+}
+
+export function previewFinanceMigrationFile(file: File): Promise<FinanceMigrationPreview> {
+  const data = new FormData();
+  data.append("file", file);
+  return request<FinanceMigrationPreview>("/finance/migrations/preview-file", { method: "POST", body: data });
+}
+
+export function importFinanceMigration(input: { sourceFile: string; rows: Array<Record<string, unknown>> }): Promise<{ imported: number; requiresReview: number; summary: FinanceMigrationPreview["summary"] }> {
+  return request("/finance/migrations/import", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function getFinanceSyncHistory(limit = 12): Promise<{ generatedAt: string; entries: FinanceSyncHistoryEntry[] }> {

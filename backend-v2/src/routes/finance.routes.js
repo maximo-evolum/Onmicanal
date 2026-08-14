@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import { prisma } from "../lib/db.js";
 import { MODULES } from "../lib/modules.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
@@ -13,8 +14,13 @@ import {
 import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions, updateFinanceAgentPolicy } from "../services/finance-agents.service.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { financeSyncHistory, syncNuboxForTenant } from "../services/finance-sync.service.js";
+import { MAX_MIGRATION_FILE_BYTES, MAX_MIGRATION_ROWS, normalizeHistoricalFinanceRows, readHistoricalFinanceFile, summarizeHistoricalFinanceRows } from "../services/finance-migration.service.js";
 
 export const financeRouter = Router();
+const historicalMigrationUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_MIGRATION_FILE_BYTES, files: 1 }
+});
 
 async function requireFinanceModule(req, res, module) {
   if (req.user?.role === "SUPER_ADMIN") return true;
@@ -44,6 +50,23 @@ function financeCaseUpdate(input = {}) {
     ...(cleanText(input.promiseDueDate) ? { promiseDueDate: cleanText(input.promiseDueDate) } : {}),
     ...(input.promiseAmount !== undefined && input.promiseAmount !== null && input.promiseAmount !== "" ? { promiseAmount: Number(input.promiseAmount) || 0 } : {})
   };
+}
+
+function safeAmount(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+function payableState(record, now = new Date()) {
+  const data = financeRecordData(record);
+  const amount = safeAmount(data.amount ?? data.total);
+  const balance = data.balance === undefined || data.balance === null || data.balance === ""
+    ? amount
+    : Math.min(amount, safeAmount(data.balance));
+  const status = String(record.status || data.status || "OPEN").toUpperCase();
+  const dueDate = data.dueDate ? new Date(String(data.dueDate)) : null;
+  const overdue = status !== "PAID" && dueDate && !Number.isNaN(dueDate.getTime()) && dueDate < now;
+  return { amount, balance, status: balance === 0 ? "PAID" : overdue ? "OVERDUE" : status, dueDate };
 }
 
 financeRouter.get("/finance/overview", async (req, res) => {
@@ -79,6 +102,189 @@ financeRouter.get("/finance/customers", async (req, res) => {
   } catch (error) {
     console.error("Finance customers error:", error);
     res.status(500).json({ error: "No se pudo construir la cartera de clientes" });
+  }
+});
+
+financeRouter.get("/finance/payables/summary", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_PAYABLES))) return;
+    const payables = await prisma.industryRecord.findMany({
+      where: { tenantId: req.tenantId, recordType: "finance_payable" },
+      orderBy: { updatedAt: "desc" },
+      take: 1000
+    });
+    const now = new Date();
+    const summary = payables.reduce((total, record) => {
+      const state = payableState(record, now);
+      total.total += 1;
+      total.registeredAmount += state.amount;
+      total.pendingAmount += state.balance;
+      if (state.status === "PAID") total.paid += 1;
+      if (state.status === "OVERDUE") {
+        total.overdue += 1;
+        total.overdueAmount += state.balance;
+      }
+      return total;
+    }, { total: 0, paid: 0, overdue: 0, registeredAmount: 0, pendingAmount: 0, overdueAmount: 0 });
+    res.json({ summary, payables });
+  } catch (error) {
+    console.error("Finance payables summary error:", error);
+    res.status(500).json({ error: "No se pudieron cargar las cuentas por pagar." });
+  }
+});
+
+financeRouter.post("/finance/payables/:id/payments", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_PAYABLES))) return;
+    const payable = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_payable" } });
+    if (!payable) return res.status(404).json({ error: "Cuenta por pagar no encontrada." });
+    const paymentAmount = safeAmount(req.body?.amount);
+    if (!paymentAmount) return res.status(400).json({ error: "Ingresa un monto de pago válido." });
+    const state = payableState(payable);
+    if (!state.balance) return res.status(409).json({ error: "Esta cuenta ya se encuentra pagada." });
+    if (paymentAmount > state.balance) return res.status(400).json({ error: "El pago no puede superar el saldo pendiente." });
+    const now = new Date();
+    const paymentDate = cleanText(req.body?.paymentDate) || now.toISOString().slice(0, 10);
+    const reference = cleanText(req.body?.reference);
+    const nextBalance = Math.max(0, state.balance - paymentAmount);
+    const result = await prisma.$transaction(async (tx) => {
+      const payment = await tx.industryRecord.create({
+        data: {
+          tenantId: req.tenantId,
+          recordType: "finance_payable_payment",
+          title: `Pago ${payable.title}`.slice(0, 220),
+          status: "REGISTERED",
+          data: { payableId: payable.id, amount: paymentAmount, paymentDate, reference, registeredById: req.user?.id || null }
+        }
+      });
+      const data = financeRecordData(payable);
+      const history = Array.isArray(data.history) ? data.history.slice(-49) : [];
+      const updated = await tx.industryRecord.update({
+        where: { id: payable.id },
+        data: {
+          status: nextBalance === 0 ? "PAID" : "PARTIAL",
+          data: {
+            ...data,
+            balance: nextBalance,
+            paidAmount: safeAmount(data.paidAmount) + paymentAmount,
+            status: nextBalance === 0 ? "PAID" : "PARTIAL",
+            paidAt: nextBalance === 0 ? now.toISOString() : data.paidAt || null,
+            history: [...history, { at: now.toISOString(), type: "PAYMENT_REGISTERED", amount: paymentAmount, reference, paymentId: payment.id }]
+          }
+        }
+      });
+      return { payment, payable: updated };
+    });
+    await recordAuditLog(req, "FINANCE_PAYABLE_PAYMENT_REGISTERED", "finance_payable", payable.id, { paymentId: result.payment.id, amount: paymentAmount, paymentDate });
+    res.status(201).json({ ...result, remainingBalance: nextBalance });
+  } catch (error) {
+    console.error("Register finance payable payment error:", error);
+    res.status(500).json({ error: "No se pudo registrar el pago a proveedor." });
+  }
+});
+
+financeRouter.post("/finance/migrations/preview", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_MIGRATION))) return;
+    const rows = normalizeHistoricalFinanceRows(req.body?.rows, { limit: MAX_MIGRATION_ROWS });
+    if (!rows.length) return res.status(400).json({ error: "No se detectaron filas para revisar." });
+    res.json({
+      maxRows: MAX_MIGRATION_ROWS,
+      summary: summarizeHistoricalFinanceRows(rows),
+      rows: rows.slice(0, 100),
+      sourceRows: req.body.rows.slice(0, MAX_MIGRATION_ROWS)
+    });
+  } catch (error) {
+    console.error("Preview historical finance migration error:", error);
+    res.status(500).json({ error: "No se pudo preparar la vista previa de la migración." });
+  }
+});
+
+financeRouter.post("/finance/migrations/preview-file", requireRole(ROLE_GROUPS.MANAGERS), historicalMigrationUpload.single("file"), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_MIGRATION))) return;
+    const sourceRows = await readHistoricalFinanceFile(req.file);
+    const rows = normalizeHistoricalFinanceRows(sourceRows, { limit: MAX_MIGRATION_ROWS });
+    if (!rows.length) return res.status(400).json({ error: "No se detectaron filas con datos para revisar." });
+    res.json({
+      maxRows: MAX_MIGRATION_ROWS,
+      sourceFile: cleanText(req.file?.originalname, "migracion-historica"),
+      summary: summarizeHistoricalFinanceRows(rows),
+      rows: rows.slice(0, 100),
+      sourceRows: sourceRows.slice(0, MAX_MIGRATION_ROWS)
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo leer el archivo de migración.";
+    res.status(400).json({ error: message });
+  }
+});
+
+financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_MIGRATION))) return;
+    const sourceFile = (cleanText(req.body?.sourceFile) || "migracion-historica.csv").slice(0, 180);
+    const rows = normalizeHistoricalFinanceRows(req.body?.rows, { limit: MAX_MIGRATION_ROWS });
+    if (!rows.length) return res.status(400).json({ error: "No se detectaron filas para importar." });
+    const summary = summarizeHistoricalFinanceRows(rows);
+    const importedAt = new Date().toISOString();
+    const batch = await prisma.$transaction(async (tx) => {
+      const batchRecord = await tx.industryRecord.create({
+        data: {
+          tenantId: req.tenantId,
+          recordType: "finance_migration_batch",
+          title: `Migración histórica · ${sourceFile}`.slice(0, 220),
+          status: "COMPLETED",
+          data: { sourceFile, totalRows: rows.length, reviewRows: summary.reviewRows, summary, importedAt, importedById: req.user?.id || null }
+        }
+      });
+      const records = [];
+      for (const row of rows) {
+        const historicalData = {
+          documentNumber: row.documentNumber,
+          invoiceNumber: row.kind === "RECEIVABLE" ? row.documentNumber : undefined,
+          customerName: row.kind === "RECEIVABLE" ? row.partyName : undefined,
+          supplierName: row.kind === "PAYABLE" ? row.partyName : undefined,
+          clientRut: row.kind === "RECEIVABLE" ? row.rut : undefined,
+          supplierRut: row.kind === "PAYABLE" ? row.rut : undefined,
+          category: row.category,
+          amount: row.amount,
+          balance: row.balance,
+          paidAmount: row.paidAmount,
+          issueDate: row.issueDate,
+          dueDate: row.dueDate,
+          status: row.status,
+          source: "historical_migration",
+          sourceFile,
+          migrationBatchId: batchRecord.id,
+          migrationRow: row.rowNumber,
+          isHistorical: true,
+          needsReview: row.needsReview,
+          reviewReasons: row.reviewReasons,
+          sourceStatus: row.sourceStatus,
+          sourceRow: row.source
+        };
+        records.push(await tx.industryRecord.create({
+          data: {
+            tenantId: req.tenantId,
+            recordType: row.needsReview ? "finance_exception" : row.recordType,
+            title: row.needsReview
+              ? `Revisar migración fila ${row.rowNumber} · ${row.partyName || "sin contraparte"}`.slice(0, 220)
+              : `${row.kind === "PAYABLE" ? "Cuenta por pagar" : "Factura"} ${row.documentNumber} · ${row.partyName}`.slice(0, 220),
+            status: row.needsReview ? "OPEN" : row.status,
+            data: row.needsReview
+              ? { type: "MIGRATION_REVIEW", detail: `Faltan: ${row.reviewReasons.join(", ")}`, priority: "MEDIUM", ...historicalData }
+              : historicalData
+          }
+        }));
+      }
+      await tx.industryRecord.update({ where: { id: batchRecord.id }, data: { data: { ...financeRecordData(batchRecord), importedRows: records.length, exceptionRows: summary.reviewRows } } });
+      return { batch: batchRecord, records };
+    });
+    await recordAuditLog(req, "FINANCE_HISTORICAL_MIGRATION_IMPORTED", "finance_migration_batch", batch.batch.id, { sourceFile, totalRows: rows.length, summary });
+    res.status(201).json({ batch: batch.batch, summary, imported: batch.records.length, requiresReview: summary.reviewRows });
+  } catch (error) {
+    console.error("Import historical finance migration error:", error);
+    res.status(500).json({ error: "No se pudo importar la migración histórica." });
   }
 });
 

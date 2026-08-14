@@ -4,8 +4,8 @@ import { ThemeBootstrap } from "@/components/theme-bootstrap";
 import { ContextualModuleHelp } from "@/components/contextual-module-help";
 
 export const metadata: Metadata = {
-  title: "Inbox Omnicanal",
-  description: "Panel de conversaciones para WhatsApp e Instagram"
+  title: "EVOLUM OS",
+  description: "Sistema operativo para gestionar la operación de tu empresa"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

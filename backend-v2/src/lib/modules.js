@@ -53,7 +53,11 @@ export const MODULES = Object.freeze({
   FINANCE_RECONCILIATION: "finance_reconciliation",
   FINANCE_EXCEPTIONS: "finance_exceptions",
   FINANCE_COLLECTIONS: "finance_collections",
-  FINANCE_ANALYTICS: "finance_analytics"
+  FINANCE_ANALYTICS: "finance_analytics",
+  // Ciclo de egresos y adopción inicial de una cartera histórica. Se
+  // mantienen separados de cuentas por cobrar para evitar saldos cruzados.
+  FINANCE_PAYABLES: "finance_payables",
+  FINANCE_MIGRATION: "finance_migration"
 });
 
 export const PLAN_DEFINITIONS = Object.freeze({

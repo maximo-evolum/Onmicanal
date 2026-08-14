@@ -44,7 +44,8 @@ export const VERTICAL_PRODUCTS: Record<VerticalProductCode, VerticalProductDefin
     entryModule: "finance_analytics",
     gatewayModules: [
       "finance_invoices", "finance_bank_sync", "finance_reconciliation",
-      "finance_exceptions", "finance_collections", "finance_analytics"
+      "finance_exceptions", "finance_collections", "finance_analytics",
+      "finance_payables", "finance_migration"
     ],
     description: "Facturas, cartolas, conciliación y cobranza IA",
     // Finanzas es una vertical independiente, pero su equipo conserva el

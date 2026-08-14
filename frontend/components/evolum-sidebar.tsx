@@ -83,6 +83,8 @@ baseItems.push(
   ["Conciliación IA", "/finance?tab=conciliacion", "Coincidencias sugeridas entre pagos y facturas", "FI", "finance_reconciliation"],
   ["Excepciones financieras", "/finance?tab=excepciones", "Diferencias, pagos parciales y casos a revisar", "FI", "finance_exceptions"],
   ["Cobranza IA", "/finance?tab=cobranza", "Seguimiento responsable de cartera vencida", "FI", "finance_collections"],
+  ["Cuentas por pagar", "/finance?tab=pagos", "Proveedores, obligaciones, pagos y saldos pendientes", "FI", "finance_payables"],
+  ["Migración histórica", "/finance?tab=migracion", "Revisión e incorporación segura de cartera anterior", "FI", "finance_migration"],
   ["Aprobaciones financieras", "/finance?tab=aprobaciones", "Confirmaciones humanas antes de modificar registros", "FI", "finance_reconciliation"],
   ["Clientes financieros", "/finance?tab=clientes", "Cartera, riesgo y saldos por cliente", "FI", "finance_invoices"],
   ["Indicadores financieros", "/finance?tab=indicadores", "Caja proyectada, DSO y recuperación", "FI", "finance_analytics"],
@@ -107,7 +109,8 @@ const realtyGatewayModules: ModuleAccessKey[] = [
 
 const financeGatewayModules: ModuleAccessKey[] = [
   "finance_invoices", "finance_bank_sync", "finance_reconciliation",
-  "finance_exceptions", "finance_collections", "finance_analytics"
+  "finance_exceptions", "finance_collections", "finance_analytics",
+  "finance_payables", "finance_migration"
 ];
 
 // Símbolos funcionales, no siglas: reducen el tiempo de reconocimiento del
@@ -208,7 +211,8 @@ function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
   ]);
   const financeModules = new Set<ModuleAccessKey>([
     "finance_invoices", "finance_bank_sync", "finance_reconciliation",
-    "finance_exceptions", "finance_collections", "finance_analytics"
+    "finance_exceptions", "finance_collections", "finance_analytics",
+    "finance_payables", "finance_migration"
   ]);
   if (moduleKey === "gastronomy_operations") return isGastronomyIndustry(industry);
   if (moduleKey === "dental_care") return String(industry || "").toUpperCase().includes("DENT");
@@ -237,6 +241,10 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
   const [openGroupId, setOpenGroupId] = useState<NavigationGroup["id"] | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const pathname = usePathname();
+  const brandLabel = useMemo(() => {
+    const product = getVerticalProduct(industry);
+    return product ? `EVOLUM ${product.label}` : "EVOLUM OS";
+  }, [industry]);
   // Se lee la query actual sin useSearchParams para que el menú pueda vivir
   // en todas las páginas estáticas sin forzar un límite Suspense global.
   const currentSearchParams = typeof window === "undefined"
@@ -414,7 +422,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
     return (
       <div className="evolum-menu-rail-actions">
         <button className="evolum-menu-bubble" type="button" onClick={toggleMenu} aria-label="Abrir menu EVOLUM">
-          <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
+          <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt={brandLabel} />
         </button>
         {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
       </div>
@@ -424,9 +432,9 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
   return (
     <aside className="inbox-unified-nav evolum-unified-nav">
       <div className="inbox-nav-head">
-        <div className="inbox-nav-brand" title="EVOLUM OS">
-          <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt="EVOLUM OS" />
-          <strong>EVOLUM OS</strong>
+        <div className="inbox-nav-brand" title={brandLabel}>
+          <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt={brandLabel} />
+          <strong>{brandLabel}</strong>
         </div>
         <div className="inbox-nav-head-actions">
           {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
