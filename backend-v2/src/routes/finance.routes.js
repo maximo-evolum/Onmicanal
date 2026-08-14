@@ -1,5 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
+import { randomUUID } from "node:crypto";
 import { prisma } from "../lib/db.js";
 import { MODULES } from "../lib/modules.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
@@ -13,7 +14,15 @@ import {
 } from "../services/finance.service.js";
 import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions, updateFinanceAgentPolicy } from "../services/finance-agents.service.js";
 import { recordAuditLog } from "../lib/audit.js";
-import { financeSyncHistory, syncNuboxForTenant } from "../services/finance-sync.service.js";
+import {
+  downloadNuboxSaleFile,
+  financeSyncHistory,
+  getNuboxSale,
+  getNuboxSaleDetails,
+  getNuboxSaleReferences,
+  issueNuboxSales,
+  syncNuboxForTenant
+} from "../services/finance-sync.service.js";
 import { MAX_MIGRATION_FILE_BYTES, MAX_MIGRATION_ROWS, normalizeHistoricalFinanceRows, readHistoricalFinanceFile, summarizeHistoricalFinanceRows } from "../services/finance-migration.service.js";
 
 export const financeRouter = Router();
@@ -82,11 +91,16 @@ function normalizedDocumentSide(value) {
 function financeDocumentSide(record) {
   if (record.recordType === "finance_payable") return "SUPPLIER";
   const data = financeRecordData(record);
-  const explicit = normalizedDocumentSide(data.documentSide || data.side || data.direction || data.kind || data.documentFlow || data.counterpartyType);
-  if (explicit) return explicit;
   const hasSupplier = Boolean(cleanText(data.supplierName || data.supplier || data.providerName));
   const hasCustomer = Boolean(cleanText(data.customerName || data.customer || data.clientName));
-  return hasSupplier && !hasCustomer ? "SUPPLIER" : "CUSTOMER";
+  // Las importaciones antiguas pueden contener documentSide heredado como
+  // CUSTOMER aunque el registro solo traiga una contraparte proveedora. Los
+  // campos de contraparte son la fuente más específica cuando no hay ambigüedad.
+  if (hasSupplier && !hasCustomer) return "SUPPLIER";
+  if (hasCustomer && !hasSupplier) return "CUSTOMER";
+  const explicit = normalizedDocumentSide(data.documentSide || data.side || data.direction || data.kind || data.documentFlow || data.counterpartyType);
+  if (explicit) return explicit;
+  return "CUSTOMER";
 }
 
 function financeParty(record) {
@@ -110,6 +124,26 @@ function invoiceState(record, now = new Date()) {
 function isoDate(value) {
   const date = value ? new Date(String(value)) : null;
   return date && !Number.isNaN(date.getTime()) ? date : null;
+}
+
+async function nuboxDocumentForTenant(tenantId, recordId) {
+  const record = await prisma.industryRecord.findFirst({
+    where: { id: recordId, tenantId, recordType: "finance_invoice" },
+    select: { id: true, data: true, title: true }
+  });
+  const data = financeRecordData(record || {});
+  const nuboxDocumentId = cleanText(data.nuboxDocumentId);
+  if (!record || cleanText(data.source).toLowerCase() !== "nubox" || !nuboxDocumentId) {
+    const error = new Error("Este documento no proviene de Nubox o no tiene un identificador remoto disponible.");
+    error.statusCode = 404;
+    throw error;
+  }
+  return { record, nuboxDocumentId };
+}
+
+function nuboxRouteError(res, error, fallback) {
+  const status = Number(error?.statusCode) || (/identificador|formato solicitado|entre 1 y 20|idempotencia/i.test(String(error?.message || "")) ? 400 : 502);
+  return res.status(status).json({ error: error instanceof Error ? error.message : fallback });
 }
 
 financeRouter.get("/finance/overview", async (req, res) => {
@@ -198,6 +232,7 @@ financeRouter.get("/finance/documents", async (req, res) => {
         amount: state.amount,
         balance: state.balance,
         paidAmount: Math.max(0, state.amount - state.balance),
+        nuboxDocument: cleanText(data.source).toLowerCase() === "nubox" && Boolean(cleanText(data.nuboxDocumentId)),
         createdAt: record.createdAt,
         updatedAt: record.updatedAt
       };
@@ -206,6 +241,74 @@ financeRouter.get("/finance/documents", async (req, res) => {
   } catch (error) {
     console.error("Finance documents error:", error);
     res.status(500).json({ error: "No se pudo cargar el portal de documentos financieros." });
+  }
+});
+
+// Recursos complementarios de una venta Nubox. Se recibe el id interno de
+// EVOLUM, no un id remoto arbitrario, para asegurar el aislamiento por tenant.
+financeRouter.get("/finance/documents/:id/nubox", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id);
+    res.json({ sale: await getNuboxSale({ tenantId: req.tenantId, documentId: nuboxDocumentId }) });
+  } catch (error) {
+    console.error("Finance Nubox document error:", error);
+    return nuboxRouteError(res, error, "No se pudo obtener el documento desde Nubox.");
+  }
+});
+
+financeRouter.get("/finance/documents/:id/nubox/details", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id);
+    res.json({ details: await getNuboxSaleDetails({ tenantId: req.tenantId, documentId: nuboxDocumentId }) });
+  } catch (error) {
+    console.error("Finance Nubox details error:", error);
+    return nuboxRouteError(res, error, "No se pudo obtener el detalle del documento desde Nubox.");
+  }
+});
+
+financeRouter.get("/finance/documents/:id/nubox/references", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id);
+    res.json({ references: await getNuboxSaleReferences({ tenantId: req.tenantId, documentId: nuboxDocumentId }) });
+  } catch (error) {
+    console.error("Finance Nubox references error:", error);
+    return nuboxRouteError(res, error, "No se pudieron obtener las referencias del documento desde Nubox.");
+  }
+});
+
+financeRouter.get("/finance/documents/:id/nubox/:format", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id);
+    const format = String(req.params.format).toLowerCase();
+    const file = await downloadNuboxSaleFile({ tenantId: req.tenantId, documentId: nuboxDocumentId, format });
+    res.setHeader("Content-Type", file.contentType || (format === "pdf" ? "application/pdf" : "application/xml"));
+    res.setHeader("Content-Disposition", `attachment; filename="nubox-${nuboxDocumentId}.${format}"`);
+    res.send(file.payload);
+  } catch (error) {
+    console.error("Finance Nubox download error:", error);
+    return nuboxRouteError(res, error, "No se pudo descargar el archivo desde Nubox.");
+  }
+});
+
+// Nubox emite documentos hacia su plataforma y eventualmente al SII. Por ese
+// motivo esta ruta exige rol administrador, confirmación literal e idempotencia.
+financeRouter.post("/finance/nubox/sales/issuance", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    if (cleanText(req.body?.confirmation) !== "EMITIR") {
+      return res.status(400).json({ error: "Confirma la emisión escribiendo EMITIR. Esta acción crea documentos en Nubox." });
+    }
+    const documents = Array.isArray(req.body?.documents) ? req.body.documents : [];
+    const issued = await issueNuboxSales({ tenantId: req.tenantId, documents, idempotenceId: randomUUID() });
+    await recordAuditLog(req, "NUBOX_SALES_ISSUANCE_REQUESTED", "finance_nubox_sales", req.tenantId, { count: documents.length });
+    res.status(202).json({ ok: true, issued, message: "La emisión fue solicitada a Nubox. Revisa el estado del documento antes de comunicarlo al cliente." });
+  } catch (error) {
+    console.error("Finance Nubox issuance error:", error);
+    return nuboxRouteError(res, error, "Nubox no pudo recibir la solicitud de emisión.");
   }
 });
 

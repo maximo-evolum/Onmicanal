@@ -9,10 +9,14 @@ import {
   analyzeFinanceAgents,
   approveFinanceReconciliation,
   createIndustryRecord,
+  downloadFinanceNuboxDocument,
   generateFinanceCollectionCases,
   getFinanceCustomers,
   getFinanceCollectionPortfolio,
   getFinanceDocuments,
+  getFinanceNuboxDocument,
+  getFinanceNuboxDocumentDetails,
+  getFinanceNuboxDocumentReferences,
   getFinanceIntegrations,
   getFinanceSyncHistory,
   getFinancePlan,
@@ -48,6 +52,8 @@ import type { ModuleAccessKey } from "@/lib/module-access";
 
 type FinanceTab = "resumen" | "facturas" | "cartolas" | "conciliacion" | "excepciones" | "cobranza" | "pagos" | "migracion" | "aprobaciones" | "clientes" | "indicadores" | "integraciones" | "plan" | "agentes";
 type FinanceDocumentStatusFilter = "all" | "paid" | "cancelled" | "pending" | "overdue";
+type NuboxResourceKind = "documento" | "productos" | "referencias";
+type NuboxResourcePanel = { documentId: string; title: string; value: unknown };
 
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
   { key: "resumen", label: "Resumen financiero", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
@@ -200,6 +206,7 @@ function FinanceWorkspace() {
   const [collectionPortfolio, setCollectionPortfolio] = useState<FinanceCollectionPortfolioRow[]>([]);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [selectedDocument, setSelectedDocument] = useState<FinanceDocument | null>(null);
+  const [nuboxResourcePanel, setNuboxResourcePanel] = useState<NuboxResourcePanel | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncingNubox, setSyncingNubox] = useState(false);
@@ -294,6 +301,30 @@ function FinanceWorkspace() {
     finally { setSaving(false); }
   }
 
+  function duplicateInvoice(documentToDuplicate: FinanceDocument) {
+    const nextDueDate = documentToDuplicate.dueDate
+      ? String(documentToDuplicate.dueDate).slice(0, 10)
+      : "";
+    setInvoiceForm({
+      number: "",
+      client: documentToDuplicate.partyName || "",
+      rut: documentToDuplicate.partyRut || "",
+      amount: documentToDuplicate.amount ? String(amount(documentToDuplicate.amount)) : "",
+      dueDate: nextDueDate
+    });
+    setDocumentFilter("customers");
+    setDocumentQuery("");
+    setDocumentStatusFilter("all");
+    setSelectedDocument(null);
+    setNuboxResourcePanel(null);
+    setOpenActionId(null);
+    setMessage("Se preparó una nueva factura con los datos de la contraparte. Completa el folio y revisa monto y vencimiento antes de guardarla.");
+    window.setTimeout(() => {
+      window.document.querySelector<HTMLFormElement>(".finance-document-entry")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.document.querySelector<HTMLInputElement>(".finance-document-entry input")?.focus();
+    }, 0);
+  }
+
   async function createPayable(event: FormEvent) {
     event.preventDefault();
     if (!payableForm.number || !payableForm.supplier || !payableForm.amount || !payableForm.dueDate) {
@@ -379,6 +410,53 @@ function FinanceWorkspace() {
       setMessage("No se pudo copiar desde este navegador.");
     }
     setOpenActionId(null);
+  }
+
+  async function openNuboxResource(document: FinanceDocument, resource: NuboxResourceKind) {
+    setSaving(true);
+    try {
+      let value: unknown;
+      if (resource === "documento") {
+        value = (await getFinanceNuboxDocument(document.id)).sale;
+      } else if (resource === "productos") {
+        value = (await getFinanceNuboxDocumentDetails(document.id)).details;
+      } else {
+        value = (await getFinanceNuboxDocumentReferences(document.id)).references;
+      }
+      setSelectedDocument(document);
+      setNuboxResourcePanel({
+        documentId: document.id,
+        title: resource === "documento" ? "Información de Nubox" : resource === "productos" ? "Productos y servicios" : "Documentos relacionados",
+        value
+      });
+      setMessage(`${resource === "documento" ? "Documento" : resource === "productos" ? "Detalle de productos" : "Referencias"} actualizado desde Nubox.`);
+      setOpenActionId(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo consultar Nubox.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function downloadNuboxResource(document: FinanceDocument, format: "pdf" | "xml") {
+    setSaving(true);
+    try {
+      const blob = await downloadFinanceNuboxDocument(document.id, format);
+      const url = URL.createObjectURL(blob);
+      const anchor = window.document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${document.documentNumber || "documento-nubox"}.${format}`;
+      window.document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setMessage(`${format.toUpperCase()} descargado desde Nubox.`);
+      setOpenActionId(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : `No se pudo descargar el ${format.toUpperCase()}.`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function previewHistoricalMigration(event: ChangeEvent<HTMLInputElement>) {
@@ -557,14 +635,14 @@ function FinanceWorkspace() {
 
           {activeTab === "facturas" ? <section className="finance-document-workspace">
             <article className="finance-card finance-document-portal">
-              <div className="finance-card-heading finance-document-heading"><div><span className="finance-eyebrow">Portal documental</span><h2>Facturas y documentos financieros</h2><p>Consulta por separado las facturas emitidas a clientes y las obligaciones registradas de proveedores.</p></div><button type="button" className="secondary-btn" onClick={() => setSelectedDocument(null)}>Limpiar detalle</button></div>
+              <div className="finance-card-heading finance-document-heading"><div><span className="finance-eyebrow">Portal documental</span><h2>Facturas y documentos financieros</h2><p>Consulta por separado las facturas emitidas a clientes y las obligaciones registradas de proveedores.</p></div><button type="button" className="secondary-btn" onClick={() => { setSelectedDocument(null); setNuboxResourcePanel(null); }}>Limpiar detalle</button></div>
               <div className="finance-document-filters" role="group" aria-label="Filtrar documentos"><button type="button" className={documentFilter === "all" ? "is-active" : ""} onClick={() => setDocumentFilter("all")}>Todos</button><button type="button" className={documentFilter === "customers" ? "is-active" : ""} onClick={() => setDocumentFilter("customers")}>Facturas de clientes</button><button type="button" className={documentFilter === "suppliers" ? "is-active" : ""} onClick={() => setDocumentFilter("suppliers")}>Facturas de proveedores</button></div>
               <div className="finance-document-tools" aria-label="Búsqueda y filtros del portal documental">
                 <label className="finance-document-search"><span>Buscar documento</span><input type="search" value={documentQuery} onChange={(event) => setDocumentQuery(event.target.value)} placeholder="Folio, RUT o razón social" /></label>
                 <label className="finance-document-status-filter"><span>Estado</span><select value={documentStatusFilter} onChange={(event) => setDocumentStatusFilter(event.target.value as FinanceDocumentStatusFilter)}><option value="all">Todos los estados</option><option value="paid">Pagadas</option><option value="cancelled">Canceladas</option><option value="pending">Pendientes</option><option value="overdue">Vencidas</option></select></label>
                 <button type="button" className="secondary-btn finance-clear-document-filters" disabled={!documentQuery && documentStatusFilter === "all"} onClick={() => { setDocumentQuery(""); setDocumentStatusFilter("all"); }}>Limpiar filtros</button>
               </div>
-              <FinanceDocumentsTable documents={financeDocuments} documentFilter={documentFilter} query={documentQuery} statusFilter={documentStatusFilter} saving={saving} openActionId={openActionId} selectedDocument={selectedDocument} onToggleActions={setOpenActionId} onSelect={setSelectedDocument} onCloseDetail={() => setSelectedDocument(null)} onRegisterReceipt={registerInvoiceReceipt} onPrepareReminder={(document) => prepareReminder({ key: document.partyRut?.replace(/[^0-9kK]/g, "") || document.partyName.toLocaleLowerCase("es"), name: document.partyName, rut: document.partyRut, documents: 0, openDocuments: 0, overdueDocuments: 0, dueSoonAmount: 0, overdueAmount: 0, totalDebt: 0, oldestInvoiceDate: null, averagePaymentDays: null, reminders: 0, lastReminderAt: null, latestCaseId: null, reminderStatus: "" })} onCopy={copyFinanceText} onOpenCollections={() => selectTab("cobranza")} onOpenPayables={() => selectTab("pagos")} />
+              <FinanceDocumentsTable documents={financeDocuments} documentFilter={documentFilter} query={documentQuery} statusFilter={documentStatusFilter} saving={saving} openActionId={openActionId} selectedDocument={selectedDocument} nuboxResourcePanel={nuboxResourcePanel} onToggleActions={setOpenActionId} onSelect={(document) => { setSelectedDocument(document); setNuboxResourcePanel(null); }} onCloseDetail={() => { setSelectedDocument(null); setNuboxResourcePanel(null); }} onRegisterReceipt={registerInvoiceReceipt} onPrepareReminder={(document) => prepareReminder({ key: document.partyRut?.replace(/[^0-9kK]/g, "") || document.partyName.toLocaleLowerCase("es"), name: document.partyName, rut: document.partyRut, documents: 0, openDocuments: 0, overdueDocuments: 0, dueSoonAmount: 0, overdueAmount: 0, totalDebt: 0, oldestInvoiceDate: null, averagePaymentDays: null, reminders: 0, lastReminderAt: null, latestCaseId: null, reminderStatus: "" })} onDuplicate={duplicateInvoice} onCopy={copyFinanceText} onOpenNuboxResource={openNuboxResource} onDownloadNubox={downloadNuboxResource} onOpenCollections={() => selectTab("cobranza")} onOpenPayables={() => selectTab("pagos")} />
             </article>
             <form className="finance-card finance-form finance-document-entry" onSubmit={createInvoice}><span className="finance-eyebrow">Registro manual</span><h2>Nueva factura de cliente</h2><p>Registra una factura emitida. El cobro y cualquier aviso posterior quedan siempre bajo revisión humana.</p><input required placeholder="Número de factura" value={invoiceForm.number} onChange={(event) => setInvoiceForm({ ...invoiceForm, number: event.target.value })} /><input required placeholder="Cliente o empresa" value={invoiceForm.client} onChange={(event) => setInvoiceForm({ ...invoiceForm, client: event.target.value })} /><input placeholder="RUT cliente (opcional)" value={invoiceForm.rut} onChange={(event) => setInvoiceForm({ ...invoiceForm, rut: event.target.value })} /><input required type="number" placeholder="Monto CLP" value={invoiceForm.amount} onChange={(event) => setInvoiceForm({ ...invoiceForm, amount: event.target.value })} /><label>Vencimiento<input required type="date" value={invoiceForm.dueDate} onChange={(event) => setInvoiceForm({ ...invoiceForm, dueDate: event.target.value })} /></label><button className="primary-btn" disabled={saving}>Guardar factura</button></form>
           </section> : null}
@@ -627,7 +705,7 @@ function FinanceWorkspace() {
   );
 }
 
-function FinanceDocumentsTable({ documents, documentFilter, query, statusFilter, saving, openActionId, selectedDocument, onToggleActions, onSelect, onCloseDetail, onRegisterReceipt, onPrepareReminder, onCopy, onOpenCollections, onOpenPayables }: { documents: FinanceDocument[]; documentFilter: "all" | "customers" | "suppliers"; query: string; statusFilter: FinanceDocumentStatusFilter; saving: boolean; openActionId: string | null; selectedDocument: FinanceDocument | null; onToggleActions: (id: string | null) => void; onSelect: (document: FinanceDocument) => void; onCloseDetail: () => void; onRegisterReceipt: (document: FinanceDocument) => void; onPrepareReminder: (document: FinanceDocument) => void; onCopy: (value: string, successMessage: string) => void; onOpenCollections: () => void; onOpenPayables: () => void }) {
+function FinanceDocumentsTable({ documents, documentFilter, query, statusFilter, saving, openActionId, selectedDocument, nuboxResourcePanel, onToggleActions, onSelect, onCloseDetail, onRegisterReceipt, onPrepareReminder, onDuplicate, onCopy, onOpenNuboxResource, onDownloadNubox, onOpenCollections, onOpenPayables }: { documents: FinanceDocument[]; documentFilter: "all" | "customers" | "suppliers"; query: string; statusFilter: FinanceDocumentStatusFilter; saving: boolean; openActionId: string | null; selectedDocument: FinanceDocument | null; nuboxResourcePanel: NuboxResourcePanel | null; onToggleActions: (id: string | null) => void; onSelect: (document: FinanceDocument) => void; onCloseDetail: () => void; onRegisterReceipt: (document: FinanceDocument) => void; onPrepareReminder: (document: FinanceDocument) => void; onDuplicate: (document: FinanceDocument) => void; onCopy: (value: string, successMessage: string) => void; onOpenNuboxResource: (document: FinanceDocument, resource: NuboxResourceKind) => void; onDownloadNubox: (document: FinanceDocument, format: "pdf" | "xml") => void; onOpenCollections: () => void; onOpenPayables: () => void }) {
   const normalizedQuery = query.trim().toLocaleLowerCase("es");
   const visible = documents.filter((item) => {
     const status = String(item.status || "").toUpperCase();
@@ -654,14 +732,30 @@ function FinanceDocumentsTable({ documents, documentFilter, query, statusFilter,
 
       return <div className={`finance-document-row-group${showDetail ? " is-selected" : ""}`} key={document.id}>
         <div className="finance-document-row" role="row">
-          <div><b className={`finance-document-side ${isCustomer ? "customer" : "supplier"}`}>{isCustomer ? "Cliente" : "Proveedor"}</b><strong>{financeLabel(document.documentNumber)}</strong><small>{financeLabel(document.partyName)}{document.partyRut ? ` · ${document.partyRut}` : ""}</small></div>
+          <div><b className={`finance-document-side ${isCustomer ? "customer" : "supplier"}`}>{isCustomer ? "Venta a cliente" : "Compra a proveedor"}</b><strong>{financeLabel(document.documentNumber)}</strong><small>{financeLabel(document.partyName)}{document.partyRut ? ` · ${document.partyRut}` : ""}</small></div>
           <span className={`finance-document-status ${String(document.status).toLowerCase()}`}>{financeLabel(document.status)}</span>
           <span>{shortDate(document.issueDate)}</span>
           <div><strong>{isPaid ? "Registrado" : isCustomer ? "Pendiente de cobro" : "Pendiente de pago"}</strong><small>{isPaid ? `${money(document.paidAmount)} aplicado` : `Saldo ${money(document.balance)}`}</small></div>
           <b>{money(document.amount)}</b>
-          <div className="finance-row-actions"><button className="secondary-btn finance-actions-trigger" type="button" aria-expanded={openActionId === actionId} onClick={() => onToggleActions(openActionId === actionId ? null : actionId)}>Acciones <span aria-hidden="true">⌄</span></button>{openActionId === actionId ? <div className="finance-actions-menu" role="menu"><button type="button" onClick={() => { onSelect(document); onToggleActions(null); }}>Ver detalle</button><button type="button" onClick={() => onCopy(document.documentNumber, "Folio copiado.")}>Copiar folio</button>{isCustomer ? <><button type="button" disabled={saving || isPaid} onClick={() => onRegisterReceipt(document)}>{isPaid ? "Cobro registrado" : "Registrar cobro"}</button><button type="button" disabled={saving || isPaid} onClick={() => onPrepareReminder(document)}>Preparar recordatorio</button><button type="button" onClick={onOpenCollections}>Abrir cobranza</button></> : <button type="button" onClick={onOpenPayables}>Ir a cuentas por pagar</button>}</div> : null}</div>
+          <div className="finance-row-actions">
+            <button className="secondary-btn finance-actions-trigger" type="button" aria-expanded={openActionId === actionId} onClick={() => onToggleActions(openActionId === actionId ? null : actionId)}>Acciones <span aria-hidden="true">⌄</span></button>
+            {openActionId === actionId ? <div className="finance-actions-menu" role="menu">
+              <button type="button" onClick={() => { onSelect(document); onToggleActions(null); }}>Ver detalle</button>
+              <button type="button" onClick={() => onDuplicate(document)}>Copiar a nuevo</button>
+              {document.nuboxDocument ? <>
+                <button type="button" disabled={saving} onClick={() => onOpenNuboxResource(document, "documento")}>Ver en Nubox</button>
+                <button type="button" disabled={saving} onClick={() => onDownloadNubox(document, "pdf")}>Descargar PDF</button>
+                <button type="button" disabled={saving} onClick={() => onDownloadNubox(document, "xml")}>Descargar XML</button>
+              </> : null}
+              {isCustomer ? <>
+                <button type="button" disabled={saving || isPaid} onClick={() => onRegisterReceipt(document)}>{isPaid ? "Cobro registrado" : "Registrar cobro"}</button>
+                <button type="button" disabled={saving || isPaid} onClick={() => onPrepareReminder(document)}>Preparar recordatorio</button>
+                <button type="button" onClick={onOpenCollections}>Abrir cobranza</button>
+              </> : <button type="button" onClick={onOpenPayables}>Ir a cuentas por pagar</button>}
+            </div> : null}
+          </div>
         </div>
-        {showDetail ? <div className="finance-document-inline-detail"><FinanceDocumentDetail document={selectedDocument} onClose={onCloseDetail} /></div> : null}
+        {showDetail ? <div className="finance-document-inline-detail"><FinanceDocumentDetail document={document} onClose={onCloseDetail} />{document.nuboxDocument ? <NuboxDocumentActions document={document} saving={saving} panel={nuboxResourcePanel?.documentId === document.id ? nuboxResourcePanel : null} onOpen={onOpenNuboxResource} onDownload={onDownloadNubox} /> : null}</div> : null}
       </div>;
     })}
   </div></div>;
@@ -669,6 +763,46 @@ function FinanceDocumentsTable({ documents, documentFilter, query, statusFilter,
 
 function FinanceDocumentDetail({ document, onClose }: { document: FinanceDocument; onClose: () => void }) {
   return <section className="finance-document-detail" aria-label="Detalle del documento seleccionado"><div><span className="finance-eyebrow">Documento seleccionado</span><h3>{financeLabel(document.documentNumber)} · {financeLabel(document.partyName)}</h3><p>{document.side === "CUSTOMER" ? "Factura emitida a cliente" : "Documento recibido de proveedor"}{document.partyRut ? ` · RUT ${document.partyRut}` : ""}</p></div><div className="finance-document-detail-values"><span><small>Estado</small><b>{financeLabel(document.status)}</b></span><span><small>Emisión</small><b>{shortDate(document.issueDate)}</b></span><span><small>Saldo</small><b>{money(document.balance)}</b></span></div><button type="button" className="secondary-btn" onClick={onClose}>Cerrar detalle</button></section>;
+}
+
+const nuboxLabels: Record<string, string> = {
+  id: "Identificador", documentId: "Identificador del documento", number: "Folio", folio: "Folio", type: "Tipo de documento",
+  name: "Nombre", description: "Descripción", quantity: "Cantidad", amount: "Monto", total: "Total", totalAmount: "Monto total",
+  unitPrice: "Precio unitario", price: "Precio", code: "Código", sku: "Código", emissionDate: "Fecha de emisión",
+  dueDate: "Fecha de vencimiento", status: "Estado", reference: "Referencia", reason: "Motivo", client: "Cliente"
+};
+
+function nuboxLabel(key: string) {
+  const lastKey = key.split(".").pop() || key;
+  return nuboxLabels[lastKey] || lastKey.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
+}
+
+function nuboxRows(value: unknown, prefix = "", depth = 0, rows: Array<{ label: string; value: string }> = []) {
+  if (rows.length >= 36 || depth > 3 || value === null || value === undefined) return rows;
+  if (typeof value !== "object") {
+    rows.push({ label: nuboxLabel(prefix || "valor"), value: String(value) });
+    return rows;
+  }
+  if (Array.isArray(value)) {
+    value.slice(0, 12).forEach((item, index) => nuboxRows(item, `${prefix || "detalle"} ${index + 1}`, depth + 1, rows));
+    return rows;
+  }
+  Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+    const label = prefix ? `${prefix} · ${nuboxLabel(key)}` : nuboxLabel(key);
+    if (item === null || item === undefined) return;
+    if (typeof item === "object") nuboxRows(item, label, depth + 1, rows);
+    else if (rows.length < 36) rows.push({ label, value: String(item) });
+  });
+  return rows;
+}
+
+function NuboxDocumentActions({ document, saving, panel, onOpen, onDownload }: { document: FinanceDocument; saving: boolean; panel: NuboxResourcePanel | null; onOpen: (document: FinanceDocument, resource: NuboxResourceKind) => void; onDownload: (document: FinanceDocument, format: "pdf" | "xml") => void }) {
+  const rows = panel ? nuboxRows(panel.value) : [];
+  return <section className="finance-nubox-document-actions" aria-label="Acciones del documento Nubox">
+    <div><span className="finance-eyebrow">Documento Nubox</span><h4>Información y archivos tributarios</h4><p>Estas acciones consultan Nubox bajo demanda. No exponen credenciales ni modifican el documento.</p></div>
+    <div className="finance-nubox-action-buttons"><button type="button" className="secondary-btn" disabled={saving} onClick={() => onOpen(document, "documento")}>Ver documento</button><button type="button" className="secondary-btn" disabled={saving} onClick={() => onOpen(document, "productos")}>Ver productos</button><button type="button" className="secondary-btn" disabled={saving} onClick={() => onOpen(document, "referencias")}>Ver referencias</button><button type="button" className="secondary-btn" disabled={saving} onClick={() => onDownload(document, "pdf")}>Descargar PDF</button><button type="button" className="secondary-btn" disabled={saving} onClick={() => onDownload(document, "xml")}>Descargar XML</button></div>
+    {panel ? <div className="finance-nubox-resource"><h5>{panel.title}</h5>{rows.length ? <dl>{rows.map((row, index) => <div key={`${row.label}-${index}`}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : <p>No hay datos adicionales para mostrar en esta respuesta de Nubox.</p>}</div> : null}
+  </section>;
 }
 
 function FinanceCollectionsTable({ portfolio, query, saving, openActionId, onToggleActions, onPrepareReminder, onOpenDocuments, onCopy }: { portfolio: FinanceCollectionPortfolioRow[]; query: string; saving: boolean; openActionId: string | null; onToggleActions: (id: string | null) => void; onPrepareReminder: (row: FinanceCollectionPortfolioRow) => void; onOpenDocuments: () => void; onCopy: (value: string, successMessage: string) => void }) {

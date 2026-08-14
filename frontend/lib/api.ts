@@ -874,8 +874,15 @@ export type FinanceDocument = {
   amount: number;
   balance: number;
   paidAmount: number;
+  nuboxDocument?: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type FinanceNuboxDocumentResource = {
+  sale?: Record<string, unknown>;
+  details?: unknown;
+  references?: unknown;
 };
 export type FinanceCollectionPortfolioRow = {
   key: string;
@@ -927,6 +934,36 @@ export function getFinanceCustomers(): Promise<{ customers: FinanceCustomer[] }>
 
 export function getFinanceDocuments(type: "all" | "customers" | "suppliers" = "all"): Promise<{ documents: FinanceDocument[] }> {
   return request(`/finance/documents?type=${encodeURIComponent(type)}`);
+}
+
+export function getFinanceNuboxDocument(id: string): Promise<{ sale: Record<string, unknown> }> {
+  return request(`/finance/documents/${encodeURIComponent(id)}/nubox`);
+}
+
+export function getFinanceNuboxDocumentDetails(id: string): Promise<{ details: unknown }> {
+  return request(`/finance/documents/${encodeURIComponent(id)}/nubox/details`);
+}
+
+export function getFinanceNuboxDocumentReferences(id: string): Promise<{ references: unknown }> {
+  return request(`/finance/documents/${encodeURIComponent(id)}/nubox/references`);
+}
+
+export async function downloadFinanceNuboxDocument(id: string, format: "pdf" | "xml"): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/finance/documents/${encodeURIComponent(id)}/nubox/${format}`, {
+    headers: buildHeaders(),
+    cache: "no-store",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    let message = `No se pudo descargar el ${format.toUpperCase()} desde Nubox.`;
+    try { message = (await response.json())?.error || message; } catch {}
+    throw new Error(message);
+  }
+  return response.blob();
+}
+
+export function requestFinanceNuboxIssuance(input: { documents: Array<Record<string, unknown>>; confirmation: "EMITIR" }): Promise<{ ok: true; issued: unknown; message: string }> {
+  return request("/finance/nubox/sales/issuance", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function getFinanceCollectionPortfolio(): Promise<{ portfolio: FinanceCollectionPortfolioRow[] }> {

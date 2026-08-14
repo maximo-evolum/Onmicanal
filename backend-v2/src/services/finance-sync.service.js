@@ -62,7 +62,7 @@ function nuboxNetworkError(error) {
   return "No fue posible sincronizar con Nubox desde el servidor. Revisa el diagnóstico de Railway o intenta nuevamente en unos minutos.";
 }
 
-async function nuboxRequest(config, path) {
+async function nuboxRequest(config, path, { method = "GET", body, responseType = "json", extraHeaders = {} } = {}) {
   const apiKey = decryptSecret(config?.accessToken);
   const auth = authorization(decryptSecret(config?.verifyToken));
   if (!apiKey || !auth) throw new Error("Faltan las credenciales de Nubox.");
@@ -72,17 +72,28 @@ async function nuboxRequest(config, path) {
   const baseUrl = nuboxBaseUrl();
   try {
     const response = await fetch(`${baseUrl}${path}`, {
-      method: "GET",
+      method,
       headers: {
         Authorization: auth,
         "X-Api-Key": apiKey,
-        "Content-Type": "application/json",
-        Accept: "application/json"
+        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        Accept: responseType === "binary" ? "application/pdf, application/xml, application/octet-stream" : "application/json",
+        ...extraHeaders
       },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal: controller.signal
     });
-    const payload = await response.json().catch(() => null);
+    const payload = responseType === "binary"
+      ? await response.arrayBuffer().catch(() => null)
+      : await response.json().catch(() => null);
     if (!response.ok) throw new Error(nuboxError(response.status, payload));
+    if (responseType === "binary") {
+      return {
+        payload: Buffer.from(payload || new ArrayBuffer(0)),
+        contentType: response.headers.get("content-type") || "application/octet-stream",
+        total: 0
+      };
+    }
     return { payload, total: Number(response.headers.get("x-total-count") || 0) || 0 };
   } catch (error) {
     if (error?.name === "AbortError") throw new Error("La sincronización con Nubox excedió el tiempo de espera.");
@@ -98,6 +109,72 @@ async function nuboxRequest(config, path) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function validNuboxDocumentId(value) {
+  const documentId = text(value);
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(documentId)) {
+    throw new Error("El identificador de documento de Nubox no es válido.");
+  }
+  return documentId;
+}
+
+async function nuboxConfigForTenant(tenantId) {
+  const config = await prisma.tenantChannelConfig.findFirst({
+    where: { tenantId, channel: NUBOX_CHANNEL, isActive: true },
+    orderBy: { updatedAt: "desc" }
+  });
+  if (!config) throw new Error("Nubox no está configurado o se encuentra inactivo.");
+  if (!decryptSecret(config.accessToken) || !decryptSecret(config.verifyToken)) {
+    throw new Error("Faltan las credenciales de Nubox.");
+  }
+  return config;
+}
+
+// Estas lecturas se exponen por rutas que primero comprueban que el
+// documento pertenece al tenant. Ninguna respuesta incluye secretos técnicos.
+export async function getNuboxSale({ tenantId, documentId }) {
+  const config = await nuboxConfigForTenant(tenantId);
+  const id = validNuboxDocumentId(documentId);
+  return (await nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}`)).payload;
+}
+
+export async function getNuboxSaleDetails({ tenantId, documentId }) {
+  const config = await nuboxConfigForTenant(tenantId);
+  const id = validNuboxDocumentId(documentId);
+  return (await nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}/details`)).payload;
+}
+
+export async function getNuboxSaleReferences({ tenantId, documentId }) {
+  const config = await nuboxConfigForTenant(tenantId);
+  const id = validNuboxDocumentId(documentId);
+  return (await nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}/references`)).payload;
+}
+
+export async function downloadNuboxSaleFile({ tenantId, documentId, format }) {
+  const normalizedFormat = String(format || "").toLowerCase();
+  if (!new Set(["pdf", "xml"]).has(normalizedFormat)) throw new Error("El formato solicitado no es válido.");
+  const config = await nuboxConfigForTenant(tenantId);
+  const id = validNuboxDocumentId(documentId);
+  return nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}/${normalizedFormat}`, { responseType: "binary" });
+}
+
+// Esta operación permanece explícita y protegida: jamás se invoca desde la
+// sincronización ni desde los agentes automáticos.
+export async function issueNuboxSales({ tenantId, documents, idempotenceId }) {
+  if (!Array.isArray(documents) || !documents.length || documents.length > 20) {
+    throw new Error("Debes enviar entre 1 y 20 documentos para emitir.");
+  }
+  const requestId = text(idempotenceId);
+  if (!/^[A-Za-z0-9-]{16,80}$/i.test(requestId)) {
+    throw new Error("La solicitud de emisión no tiene un identificador de idempotencia válido.");
+  }
+  const config = await nuboxConfigForTenant(tenantId);
+  return (await nuboxRequest(config, "/v1/sales/issuance", {
+    method: "POST",
+    body: documents,
+    extraHeaders: { "X-Idempotence-Id": requestId }
+  })).payload;
 }
 
 function salesFromPayload(payload) {
