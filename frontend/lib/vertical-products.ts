@@ -20,7 +20,7 @@ export type VerticalProductDefinition = {
 export const VERTICAL_PRODUCTS: Record<VerticalProductCode, VerticalProductDefinition> = {
   REAL_ESTATE: {
     code: "REAL_ESTATE",
-    label: "Inmobiliaria",
+    label: "Broker OS",
     href: "/realty",
     entryModule: "properties",
     gatewayModules: [
