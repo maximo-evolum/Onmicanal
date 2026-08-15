@@ -17175,3 +17175,106 @@ textarea:focus {
 }
 :root[data-theme="dark"] .product-workspace .primary-btn,
 :root[data-design-system="neon"] .product-workspace .primary-btn { color: #fff !important; }
+
+/* Broker OS · capa final de modo oscuro.
+   ThemeBootstrap activa data-design-system="dark". Esta regla queda al final
+   para prevalecer sobre la variante clara Lumen y conservar el lenguaje Nexo:
+   negro profundo, superficies violeta y lectura blanca. */
+:root[data-design-system="dark"] .vertical-shell.realty-product-workspace,
+:root[data-design-system="dark"] .vertical-shell.realty-product-workspace > main.realty-page.realty-workspace {
+  --product-bg: #05070d;
+  --product-surface: #121025;
+  --product-surface-2: #1a1531;
+  --product-line: rgba(151, 83, 255, .48);
+  --product-text: #f7f5ff;
+  --product-muted: #d1cddd;
+  --product-success: #50ddcf;
+  min-height: 100dvh;
+  color: var(--product-text) !important;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(46, 139, 255, .16), transparent 30%),
+    radial-gradient(circle at 46% -12%, rgba(138, 46, 255, .18), transparent 33%),
+    #05070d !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-hero, .realty-ws-hero, .realty-ws-card, .realty-ws-kpis article,
+  .realty-dashboard-section, .vertical-card, .property-portal-card,
+  .realty-buyer-form, .realty-buyer-results, .realty-buyer-item,
+  .realty-match-panel, .realty-property-match, .realty-ws-activity-summary article,
+  .realty-alert-list article, .realty-portal-switch, .realty-training-grid article,
+  .broker-os-header, .broker-os-form, .broker-os-list, .broker-agents-panel,
+  .broker-agent-card, .broker-recommendations, .broker-expedient-panel,
+  .broker-reporting article, .broker-training-panel, .broker-training-scenarios,
+  .broker-training-review, .broker-automation-rules, .broker-automation-rules article
+) {
+  border-color: var(--product-line) !important;
+  color: var(--product-text) !important;
+  background: linear-gradient(145deg, rgba(22, 18, 45, .98), rgba(10, 13, 29, .98)) !important;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .28) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-hero, .realty-ws-hero, .broker-os-header
+) {
+  background:
+    radial-gradient(circle at 93% 16%, rgba(46, 139, 255, .28), transparent 28%),
+    linear-gradient(118deg, #17112f, #101a37) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(h1, h2, h3, h4, strong, b) {
+  color: #faf8ff !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(p, small, label, span, li, td, th) {
+  color: #d1cddd !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-hero > div > span, .realty-ws-intro > span, .realty-ws-card-head > div > span,
+  .realty-dashboard-heading > div > span, .realty-training-grid article > span,
+  .broker-operation-card span, .broker-record-card span, .broker-reporting span,
+  .broker-training-review > span, .broker-automation-rules > span
+) { color: #c69cff !important; }
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .property-portal-price, .realty-ws-kpis article small, .realty-match-heading > strong,
+  .broker-operation-card > span, .broker-record-card > b
+) { color: #59e6d2 !important; }
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-ws-row, .realty-ws-row-head, .broker-operation-card, .broker-record-card,
+  .broker-recommendation, .broker-training-scenarios button, .broker-automation-rules article,
+  .broker-expedient-summary, .broker-expedient-counts span
+) {
+  border-color: rgba(195, 171, 255, .24) !important;
+  color: #f6f3ff !important;
+  background: rgba(15, 13, 34, .82) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace .realty-ws-row-head {
+  background: rgba(98, 57, 172, .28) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(input, select, textarea) {
+  border-color: rgba(185, 149, 255, .48) !important;
+  color: #fff !important;
+  background: rgba(5, 7, 18, .90) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(input, select, textarea)::placeholder {
+  color: #aaa5bd !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(.secondary-btn, .finance-link-button) {
+  border-color: rgba(196, 165, 255, .62) !important;
+  color: #f3efff !important;
+  background: rgba(28, 22, 58, .92) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(.primary-btn, .broker-os-tabs button.active, .broker-type-picker button.selected) {
+  border-color: transparent !important;
+  color: #fff !important;
+  background: linear-gradient(110deg, #8a2eff, #2e8bff) !important;
+  box-shadow: 0 10px 24px rgba(96, 68, 236, .32) !important;
+}
