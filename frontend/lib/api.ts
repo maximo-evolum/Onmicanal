@@ -1085,6 +1085,110 @@ export async function createRealtyBuyer(input: { name: string; phone?: string; e
   });
 }
 
+export type BrokerOperationType = "SALE" | "RENTAL" | "ADMINISTRATION";
+
+export type BrokerOperation = IndustryRecord & {
+  data: Record<string, unknown> & {
+    operationType: BrokerOperationType;
+    propertyId?: string | null;
+    buyerId?: string | null;
+    stage: string;
+    timeline: Array<{ at: string; type: string; stage?: string; from?: string; note: string }>;
+  };
+};
+
+export type BrokerOverview = {
+  kpis: {
+    properties: number;
+    activeOperations: number;
+    scheduledVisits: number;
+    openAlerts: number;
+    activeRentals: number;
+    openMaintenance: number;
+    openPostSale: number;
+    activeFinancing: number;
+  };
+  properties: IndustryRecord[];
+  operations: BrokerOperation[];
+  agents: BrokerAgent[];
+};
+
+export type BrokerRecordArea = "commercial" | "rentals" | "maintenance" | "projects" | "post_sale" | "documents" | "financing";
+
+export type BrokerRecordDefinition = {
+  label: string;
+  area: BrokerRecordArea;
+  required: string[];
+  statuses: string[];
+};
+
+export type BrokerAgent = {
+  key: string;
+  name: string;
+  status: "AVAILABLE" | "PLANNED";
+  module: string;
+  description: string;
+};
+
+export type BrokerCatalog = {
+  areas: Record<BrokerRecordArea, string[]>;
+  recordDefinitions: Record<string, BrokerRecordDefinition>;
+  agents: BrokerAgent[];
+  operationStages: Record<BrokerOperationType, string[]>;
+};
+
+export function getBrokerOverview(): Promise<BrokerOverview> {
+  return request<BrokerOverview>("/broker/overview");
+}
+
+export function getBrokerCatalog(): Promise<BrokerCatalog> {
+  return request<BrokerCatalog>("/broker/catalog");
+}
+
+export function getBrokerOperations(type?: BrokerOperationType): Promise<BrokerOperation[]> {
+  const query = type ? `?type=${encodeURIComponent(type)}` : "";
+  return request<BrokerOperation[]>(`/broker/operations${query}`);
+}
+
+export function createBrokerOperation(input: {
+  title: string;
+  operationType: BrokerOperationType;
+  propertyId?: string;
+  buyerId?: string;
+  assignedToId?: string;
+  stage?: string;
+  data?: Record<string, unknown>;
+}): Promise<BrokerOperation> {
+  return request<BrokerOperation>("/broker/operations", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function advanceBrokerOperation(id: string, input: { stage: string; note?: string }): Promise<BrokerOperation> {
+  return request<BrokerOperation>(`/broker/operations/${encodeURIComponent(id)}/stage`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function addBrokerOperationEvent(id: string, input: { note: string; type?: string }): Promise<BrokerOperation> {
+  return request<BrokerOperation>(`/broker/operations/${encodeURIComponent(id)}/timeline`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getBrokerRecords(area: BrokerRecordArea): Promise<IndustryRecord[]> {
+  return request<IndustryRecord[]>(`/broker/records/${encodeURIComponent(area)}`);
+}
+
+export function createBrokerRecord(input: {
+  recordType: string;
+  title: string;
+  status?: string;
+  assignedToId?: string;
+  propertyId?: string;
+  data?: Record<string, unknown>;
+}): Promise<IndustryRecord> {
+  return request<IndustryRecord>("/broker/records", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBrokerRecord(id: string, input: { title?: string; status?: string; data?: Record<string, unknown> }): Promise<IndustryRecord> {
+  return request<IndustryRecord>(`/broker/records/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
 export async function createRealtyPropertyCampaignDraft(propertyId: string, input: { platforms?: CampaignPlatform[]; variantCount?: number; tone?: string } = {}): Promise<CampaignProResult> {
   return request<CampaignProResult>(`/campaigns/realty/property/${encodeURIComponent(propertyId)}/draft`, {
     method: "POST",

@@ -13,6 +13,7 @@ import {
   RealtyPropertiesPageContent,
   RealtyShell
 } from "@/components/realty-workspace";
+import { BrokerOperationsPageContent } from "@/components/broker-operations-workspace";
 import { getMe } from "@/lib/api";
 import { getStoredSession, useAgentSession } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
@@ -35,7 +36,8 @@ const views = {
   activity: { label: "Actividad inmobiliaria", module: "realty_activity", content: RealtyActivityPageContent },
   portal: { label: "Portal corredor", module: "broker_portal", content: BrokerPortalPageContent },
   buyers: { label: "Clientes inmobiliarios", module: "realty_clients", content: RealtyBuyersPageContent },
-  training: { label: "Capacitación de corredores", module: "brokers", content: BrokerTrainingPageContent }
+  training: { label: "Capacitación de corredores", module: "brokers", content: BrokerTrainingPageContent },
+  broker_os: { label: "Operación Broker", module: "properties", content: BrokerOperationsPageContent }
 } as const;
 
 type RealtyView = keyof typeof views;

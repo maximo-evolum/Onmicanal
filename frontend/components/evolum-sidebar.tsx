@@ -54,6 +54,7 @@ const baseItems: SidebarItem[] = [
   // menú EV. Así no se duplican pestañas dentro del workspace ni se ocultan
   // funciones importantes al corredor.
   ["Resumen inmobiliario", "/realty", "Centro de control de la cartera", "RE", "properties"],
+  ["Operación Broker", "/realty?view=broker_os", "Ventas, arriendos, expedientes y postventa", "BO", "properties"],
   ["Cargas inmobiliarias", "/realty?view=operations", "Captación, carga manual e importación", "RC", "realty_loads"],
   ["Propiedades", "/realty?view=properties", "Inventario, fichas y publicación", "RP", "properties"],
   ["Corredores", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],

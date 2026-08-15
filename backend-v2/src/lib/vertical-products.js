@@ -25,7 +25,14 @@ export const VERTICAL_PRODUCT_DEFINITIONS = Object.freeze({
     recordTypes: new Set([
       "property", "property_import", "property_training", "owner",
       "broker_profile", "seller_assignment", "visit", "realty_alert",
-      "broker_followup", "customer"
+      "broker_followup", "customer", "broker_operation", "property_mandate",
+      "property_appraisal", "property_offer", "property_promise", "commission_settlement",
+      "property_inspection", "property_handover", "rental_application",
+      "rental_contract", "rental_payment", "administration_liquidation",
+      "maintenance_ticket", "service_provider", "provider_quote", "material_purchase",
+      "remodeling_project", "project_budget", "project_milestone", "marketing_publication",
+      "post_sale_case", "warranty_case", "property_document", "legal_document",
+      "digital_signature", "operation_financing", "operation_financing_expense"
     ])
   }),
   FINANCE: Object.freeze({

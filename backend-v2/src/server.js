@@ -50,6 +50,7 @@ import { observeRequest, prometheusMetrics, runtimeMetrics } from "./lib/runtime
 import { operationsRouter } from "./routes/operations.routes.js";
 import { getRedisClient } from "./lib/redis.js";
 import { realtyIntelligenceRouter } from "./routes/realty-intelligence.routes.js";
+import { brokerRouter } from "./routes/broker.routes.js";
 import { runPlatformJobs } from "./services/platform-jobs.service.js";
 import { mobileReleasesRouter } from "./routes/mobile-releases.routes.js";
 
@@ -255,6 +256,9 @@ app.use("/api", ...protectedApi, conversationsRouter); // Inbox: auth + tenant, 
 app.use("/api", ...protectedApi, messagesRouter); // Mensajes manuales del inbox: auth + tenant
 app.use("/api", ...protectedApi, leadsRouter); // Lead panel universal usado desde Inbox
 app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.PROPERTIES, "/realty"), realtyIntelligenceRouter);
+// Broker OS reutiliza las capacidades inmobiliarias habilitadas del tenant,
+// pero su API valida además las etapas de cada operación y sus expedientes.
+app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.PROPERTIES, "/broker"), brokerRouter);
 app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.SALES, "/products"), productRoutes);
 app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.DOCUMENTS, "/documents"), documentsRouter);
 app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.WORKFLOWS, "/workflows"), workflowsRouter);
