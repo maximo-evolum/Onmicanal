@@ -1112,6 +1112,12 @@ export type BrokerOverview = {
   operations: BrokerOperation[];
   agents: BrokerAgent[];
   recommendations: BrokerRecommendation[];
+  reporting: BrokerReporting;
+  aiTraining: {
+    scenarios: BrokerAiScenario[];
+    evaluations: BrokerAiEvaluation[];
+    automationRules: BrokerAutomationRule[];
+  };
 };
 
 export type BrokerRecordArea = "commercial" | "rentals" | "maintenance" | "projects" | "post_sale" | "documents" | "financing";
@@ -1129,6 +1135,42 @@ export type BrokerAgent = {
   status: "AVAILABLE" | "PLANNED";
   module: string;
   description: string;
+};
+
+export type BrokerAiScenario = {
+  key: string;
+  agentKey: string;
+  area: BrokerRecordArea;
+  title: string;
+  trigger: string;
+  expectedRecommendation: string;
+  requiresHumanApproval: boolean;
+};
+
+export type BrokerAiEvaluation = IndustryRecord & {
+  scenarioKey: string;
+  agentKey: string;
+  decision: "PENDING_REVIEW" | "CONFIRMED" | "ADJUSTMENT_NEEDED" | "DISCARDED";
+  outcome: string;
+  note: string;
+  reviewedAt: string;
+  reviewedBy: string;
+};
+
+export type BrokerAutomationRule = {
+  key: string;
+  title: string;
+  trigger: string;
+  action: string;
+  approval: string;
+};
+
+export type BrokerReporting = {
+  portfolioValue: number;
+  projectedCommission: number;
+  propertyCompleteness: number;
+  byOperationType: Array<{ type: BrokerOperationType; count: number }>;
+  aiEvaluations: { total: number; confirmed: number; needsAdjustment: number; pending: number };
 };
 
 export type BrokerRecommendation = {
@@ -1153,6 +1195,8 @@ export type BrokerCatalog = {
   areas: Record<BrokerRecordArea, string[]>;
   recordDefinitions: Record<string, BrokerRecordDefinition>;
   agents: BrokerAgent[];
+  aiScenarios: BrokerAiScenario[];
+  automationRules: BrokerAutomationRule[];
   operationStages: Record<BrokerOperationType, string[]>;
 };
 
@@ -1162,6 +1206,19 @@ export function getBrokerOverview(): Promise<BrokerOverview> {
 
 export function getBrokerCatalog(): Promise<BrokerCatalog> {
   return request<BrokerCatalog>("/broker/catalog");
+}
+
+export function getBrokerAiEvaluations(): Promise<{ scenarios: BrokerAiScenario[]; evaluations: BrokerAiEvaluation[]; automationRules: BrokerAutomationRule[] }> {
+  return request("/broker/ai-evaluations");
+}
+
+export function saveBrokerAiEvaluation(input: {
+  scenarioKey: string;
+  decision: BrokerAiEvaluation["decision"];
+  outcome?: string;
+  note?: string;
+}): Promise<BrokerAiEvaluation> {
+  return request("/broker/ai-evaluations", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function getBrokerPropertyExpedient(propertyId: string): Promise<BrokerPropertyExpedient> {

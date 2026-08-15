@@ -29,15 +29,15 @@ const realtySections: ReadonlyArray<ModuleAccessKey> = [
 ];
 
 const views = {
-  summary: { label: "Resumen inmobiliario", module: null, content: RealtyDashboardPageContent },
-  operations: { label: "Cargas inmobiliarias", module: "realty_loads", content: RealtyLoadsPageContent },
+  summary: { label: "Resumen Broker", module: null, content: RealtyDashboardPageContent },
+  operations: { label: "Captación e importación", module: "realty_loads", content: RealtyLoadsPageContent },
   properties: { label: "Propiedades", module: "properties", content: RealtyPropertiesPageContent },
-  brokers: { label: "Corredores", module: "brokers", content: BrokersPageContent },
-  activity: { label: "Actividad inmobiliaria", module: "realty_activity", content: RealtyActivityPageContent },
-  portal: { label: "Portal corredor", module: "broker_portal", content: BrokerPortalPageContent },
-  buyers: { label: "Clientes inmobiliarios", module: "realty_clients", content: RealtyBuyersPageContent },
-  training: { label: "Capacitación de corredores", module: "brokers", content: BrokerTrainingPageContent },
-  broker_os: { label: "Operación Broker", module: "properties", content: BrokerOperationsPageContent }
+  brokers: { label: "Corredores y asignaciones", module: "brokers", content: BrokersPageContent },
+  activity: { label: "Visitas y seguimiento", module: "realty_activity", content: RealtyActivityPageContent },
+  portal: { label: "Cartera del corredor", module: "broker_portal", content: BrokerPortalPageContent },
+  buyers: { label: "Compradores y matching", module: "realty_clients", content: RealtyBuyersPageContent },
+  training: { label: "Equipo y formación", module: "brokers", content: BrokerTrainingPageContent },
+  broker_os: { label: "Operaciones Broker", module: "properties", content: BrokerOperationsPageContent }
 } as const;
 
 type RealtyView = keyof typeof views;

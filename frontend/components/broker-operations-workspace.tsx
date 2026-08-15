@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   advanceBrokerOperation,
   createBrokerOperation,
@@ -11,8 +12,10 @@ import {
   getBrokerPropertyExpedient,
   getBrokerRecords,
   getIndustryRecords,
+  saveBrokerAiEvaluation,
   updateBrokerRecord,
   type BrokerCatalog,
+  type BrokerAiScenario,
   type BrokerOperation,
   type BrokerOperationType,
   type BrokerPropertyExpedient,
@@ -21,7 +24,7 @@ import {
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | BrokerRecordArea;
+type Tab = "operations" | "agents" | "training" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -175,6 +178,7 @@ function recordSummary(record: IndustryRecord, definition?: BrokerRecordDefiniti
 }
 
 export function BrokerOperationsPageContent() {
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("operations");
   const [overview, setOverview] = useState<Awaited<ReturnType<typeof getBrokerOverview>> | null>(null);
   const [catalog, setCatalog] = useState<BrokerCatalog | null>(null);
@@ -187,6 +191,8 @@ export function BrokerOperationsPageContent() {
   const [notice, setNotice] = useState("");
   const [operationType, setOperationType] = useState<BrokerOperationType>("SALE");
   const [recordType, setRecordType] = useState("");
+  const [selectedScenarioKey, setSelectedScenarioKey] = useState("");
+  const [evaluationNote, setEvaluationNote] = useState("");
 
   const load = useCallback(async () => {
     const [nextOverview, nextOperations, nextProperties, nextCatalog] = await Promise.all([
@@ -202,14 +208,29 @@ export function BrokerOperationsPageContent() {
     load().catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar Broker OS."));
   }, [load]);
 
+  // El menú EV puede abrir un área concreta del workspace sin montar una
+  // segunda pantalla de documentos, arriendos o postventa. Así el expediente
+  // sigue siendo la fuente oficial de esos antecedentes por propiedad.
   useEffect(() => {
-    if (tab === "operations" || tab === "agents") return;
+    const requestedArea = searchParams.get("area");
+    const requestedTab = searchParams.get("tab");
+    if (requestedArea && Object.prototype.hasOwnProperty.call(AREA_CONFIG, requestedArea)) {
+      setTab(requestedArea as BrokerRecordArea);
+      return;
+    }
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations") {
+      setTab(requestedTab);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (tab === "operations" || tab === "agents" || tab === "training") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab]);
 
   useEffect(() => {
-    if (!catalog || tab === "operations" || tab === "agents") return;
+    if (!catalog || tab === "operations" || tab === "agents" || tab === "training") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -219,10 +240,19 @@ export function BrokerOperationsPageContent() {
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
   const recommendations = overview?.recommendations || [];
-  const currentArea = tab !== "operations" && tab !== "agents" ? tab : null;
+  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" ? tab : null;
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
   const operationStages = catalog?.operationStages[operationType] || [];
+  const scenarios = overview?.aiTraining?.scenarios || catalog?.aiScenarios || [];
+  const evaluations = overview?.aiTraining?.evaluations || [];
+  const automationRules = overview?.aiTraining?.automationRules || catalog?.automationRules || [];
+  const selectedScenario = scenarios.find((scenario) => scenario.key === selectedScenarioKey) || scenarios[0];
+  const reporting = overview?.reporting;
+
+  useEffect(() => {
+    if (!selectedScenarioKey && scenarios[0]?.key) setSelectedScenarioKey(scenarios[0].key);
+  }, [scenarios, selectedScenarioKey]);
 
   async function createOperation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -298,6 +328,24 @@ export function BrokerOperationsPageContent() {
     } finally { setBusy(false); }
   }
 
+  async function saveEvaluation(decision: "CONFIRMED" | "ADJUSTMENT_NEEDED" | "DISCARDED") {
+    if (!selectedScenario) return;
+    setBusy(true); setNotice("");
+    try {
+      await saveBrokerAiEvaluation({
+        scenarioKey: selectedScenario.key,
+        decision,
+        outcome: `Revisión humana registrada para: ${selectedScenario.title}.`,
+        note: evaluationNote
+      });
+      setEvaluationNote("");
+      await load();
+      setNotice("La evaluación quedó registrada. La sugerencia no ejecutó acciones sobre la cartera.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo guardar la evaluación del agente.");
+    } finally { setBusy(false); }
+  }
+
   return <main className="broker-os-workspace">
     <header className="broker-os-header">
       <div>
@@ -316,6 +364,7 @@ export function BrokerOperationsPageContent() {
       <button className={tab === "operations" ? "active" : ""} onClick={() => setTab("operations")}>Operaciones</button>
       {Object.entries(AREA_CONFIG).map(([key, value]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as BrokerRecordArea)}>{value.label}</button>)}
       <button className={tab === "agents" ? "active" : ""} onClick={() => setTab("agents")}>Agentes IA</button>
+      <button className={tab === "training" ? "active" : ""} onClick={() => setTab("training")}>Entrenamiento IA</button>
     </nav>
     {notice ? <p className="broker-os-notice" role="status">{notice}</p> : null}
 
@@ -329,6 +378,12 @@ export function BrokerOperationsPageContent() {
         <div className="broker-expedient-controls"><select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select><button type="button" className="primary-btn" disabled={busy || !selectedPropertyId} onClick={openExpedient}>Abrir expediente</button></div>
         {expedient ? <div className="broker-expedient-summary"><div><b>{expedient.property.title}</b><p>{expedient.completion.complete ? "Ficha completa para operación y publicación." : `Falta completar: ${expedient.completion.missing.join(", ")}.`}</p></div><div className="broker-expedient-counts">{Object.entries(expedient.grouped).filter(([, items]) => items?.length).map(([area, items]) => <span key={area}><b>{items?.length}</b>{AREA_CONFIG[area as BrokerRecordArea]?.label || readable(area)}</span>)}</div></div> : null}
       </section>
+      {reporting ? <section className="broker-reporting" aria-label="Indicadores y aprendizaje de Broker OS">
+        <article><span>Valor de cartera</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(reporting.portfolioValue)}</b><small>Inventario de propiedades</small></article>
+        <article><span>Comisión proyectada</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(reporting.projectedCommission)}</b><small>Según operaciones activas</small></article>
+        <article><span>Fichas completas</span><b>{reporting.propertyCompleteness}%</b><small>Datos listos para publicar</small></article>
+        <article><span>Aprendizajes IA</span><b>{reporting.aiEvaluations.confirmed}/{reporting.aiEvaluations.total}</b><small>Confirmados por el equipo</small></article>
+      </section> : null}
       <section className="broker-os-grid">
       <form className="broker-os-form" onSubmit={createOperation}>
         <span>Ingreso operativo</span><h2>Nueva operacion</h2><p>Selecciona el flujo correcto. EVOLUM no permite saltar etapas sensibles.</p>
@@ -372,6 +427,8 @@ export function BrokerOperationsPageContent() {
       </section>
     </section> : null}
 
-    {tab === "agents" ? <section className="broker-agents-panel"><div className="broker-list-heading"><span>Agentes de IA</span><h2>Asistentes especializados del Broker</h2><p>Los agentes disponibles preparan analisis y borradores; ninguna accion legal, pago, firma o comunicacion externa se ejecuta sin aprobacion humana.</p></div><div className="broker-agent-grid">{(overview?.agents || catalog?.agents || []).map((agent) => <article key={agent.key} className={`broker-agent-card ${agent.status === "AVAILABLE" ? "available" : "planned"}`}><span>{agent.status === "AVAILABLE" ? "Disponible" : "Proxima etapa"}</span><h3>{agent.name}</h3><p>{agent.description}</p><small>Modulo: {readable(agent.module)}</small></article>)}</div></section> : null}
+    {tab === "agents" ? <section className="broker-agents-panel"><div className="broker-list-heading"><span>Agentes de IA</span><h2>Asistentes especializados del Broker</h2><p>Los agentes disponibles preparan análisis y borradores; ninguna acción legal, pago, firma o comunicación externa se ejecuta sin aprobación humana.</p></div><div className="broker-agent-grid">{(overview?.agents || catalog?.agents || []).map((agent) => <article key={agent.key} className={`broker-agent-card ${agent.status === "AVAILABLE" ? "available" : "planned"}`}><span>{agent.status === "AVAILABLE" ? "Disponible" : "Próxima etapa"}</span><h3>{agent.name}</h3><p>{agent.description}</p><small>Módulo: {readable(agent.module)}</small></article>)}</div></section> : null}
+
+    {tab === "training" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Entrenamiento supervisado</span><h2>Evalúa sugerencias antes de usarlas</h2><p>Estos escenarios de demostración permiten registrar el criterio del equipo. El resultado mejora las reglas operativas, pero nunca activa comunicaciones, firmas, pagos ni cambios de estado automáticamente.</p></div><div className="broker-training-grid"><section className="broker-training-scenarios">{scenarios.map((scenario: BrokerAiScenario) => { const evaluation = evaluations.find((item) => item.scenarioKey === scenario.key); return <button type="button" key={scenario.key} onClick={() => setSelectedScenarioKey(scenario.key)} className={selectedScenario?.key === scenario.key ? "selected" : ""}><strong>{scenario.title}</strong><span>{evaluation ? readable(evaluation.decision) : "Pendiente de revisión"}</span><small>{scenario.trigger}</small></button>; })}</section><section className="broker-training-review">{selectedScenario ? <><span>Escenario seleccionado</span><h3>{selectedScenario.title}</h3><p><b>Cuando ocurre:</b> {selectedScenario.trigger}</p><p><b>La IA propone:</b> {selectedScenario.expectedRecommendation}</p><p className="broker-human-note">Requiere confirmación humana antes de afectar la operación.</p><label>Comentario del equipo<textarea value={evaluationNote} onChange={(event) => setEvaluationNote(event.target.value)} rows={4} placeholder="Qué fue útil, qué debe cambiar o qué evidencia faltó" /></label><div><button className="primary-btn" disabled={busy} onClick={() => saveEvaluation("CONFIRMED")}>Confirmar sugerencia</button><button className="secondary-btn" disabled={busy} onClick={() => saveEvaluation("ADJUSTMENT_NEEDED")}>Pedir ajuste</button><button className="secondary-btn" disabled={busy} onClick={() => saveEvaluation("DISCARDED")}>Descartar</button></div></> : <p className="broker-empty">No hay escenarios de entrenamiento disponibles.</p>}</section></div><section className="broker-automation-rules"><span>Automatizaciones seguras</span><div>{automationRules.map((rule) => <article key={rule.key}><b>{rule.title}</b><p><strong>Disparador:</strong> {rule.trigger}</p><p><strong>Acción interna:</strong> {rule.action}</p><small>{rule.approval}</small></article>)}</div></section></section> : null}
   </main>;
 }

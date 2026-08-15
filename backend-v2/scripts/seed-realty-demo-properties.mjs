@@ -2,6 +2,7 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { MODULES } from "../src/lib/modules.js";
+import { BROKER_AGENT_SCENARIOS } from "../src/services/broker-workflows.service.js";
 
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = "Demo1234!";
@@ -660,6 +661,43 @@ async function upsertDemoRecord(tenantId, { recordType, title, status, data, ass
   });
 }
 
+async function seedAgentEvaluations(tenantId) {
+  const results = {
+    "comprador-providencia": { decision: "CONFIRMED", outcome: "La recomendación permitió priorizar una visita con una compradora compatible.", note: "El equipo confirmó que presupuesto, comuna y dormitorios coincidían." },
+    "oferta-bajo-rango": { decision: "ADJUSTMENT_NEEDED", outcome: "La contraoferta se ajustó después de revisar comparables y condiciones de financiamiento.", note: "La IA debe mostrar el margen porcentual antes de sugerir el siguiente paso." },
+    "publicacion-pendiente": { decision: "CONFIRMED", outcome: "Se completaron fotografías y descripción antes de publicar la propiedad.", note: "La publicación siguió pendiente hasta la aprobación del corredor responsable." },
+    "documento-por-vencer": { decision: "CONFIRMED", outcome: "Se solicitó el documento actualizado y se registró la revisión humana.", note: "El aviso fue útil y no modificó ningún antecedente por sí solo." },
+    "visita-sin-seguimiento": { decision: "CONFIRMED", outcome: "El corredor registró una llamada de seguimiento después de la visita.", note: "La tarea quedó como borrador hasta que el corredor decidió ejecutarla." },
+    "arriendo-vencimiento": { decision: "PENDING_REVIEW", outcome: "Caso preparado para revisar renovación, reajuste y antecedentes del arrendatario.", note: "No se envió ningún aviso al arrendatario sin aprobación humana." },
+    "mantencion-presupuesto": { decision: "CONFIRMED", outcome: "La cotización se comparó con el presupuesto aprobado de la propiedad.", note: "La selección del proveedor quedó pendiente de autorización del administrador." },
+    "postventa-garantia": { decision: "ADJUSTMENT_NEEDED", outcome: "El caso se derivó a postventa con evidencia fotográfica adicional.", note: "Se pidió a la IA priorizar garantía vigente y fecha de compromiso." },
+    "financiamiento-en-revision": { decision: "PENDING_REVIEW", outcome: "La solicitud quedó lista para validar antecedentes con la entidad financiera.", note: "La IA no aprueba créditos ni comparte información financiera." },
+    "cartera-sin-responsable": { decision: "CONFIRMED", outcome: "Se propuso un corredor según carga de cartera y zona de trabajo.", note: "La asignación se dejó para confirmación de un administrador." }
+  };
+  const records = [];
+  for (const scenario of BROKER_AGENT_SCENARIOS) {
+    const result = results[scenario.key] || { decision: "PENDING_REVIEW", outcome: "Escenario preparado para revisión del equipo.", note: "Pendiente de retroalimentación humana." };
+    records.push(await upsertDemoRecord(tenantId, {
+      recordType: "broker_agent_evaluation",
+      title: `Evaluación IA: ${scenario.title}`,
+      status: result.decision,
+      data: {
+        scenarioKey: scenario.key,
+        agentKey: scenario.agentKey,
+        area: scenario.area,
+        expectedRecommendation: scenario.expectedRecommendation,
+        requiresHumanApproval: scenario.requiresHumanApproval,
+        decision: result.decision,
+        outcome: result.outcome,
+        note: result.note,
+        reviewedAt: "2026-08-15T12:00:00.000Z",
+        reviewedBy: "Equipo de demostración Broker OS"
+      }
+    }));
+  }
+  return records;
+}
+
 async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
   const propertyId = (title) => {
     const record = properties.find((property) => property.title === title);
@@ -801,6 +839,7 @@ async function main() {
     properties.push(await upsertProperty(realtyTenant.id, PROPERTIES[index], index, brokers));
   }
   const brokerRecords = await seedBrokerWorkspace(realtyTenant.id, properties, brokers, buyers);
+  const agentEvaluations = await seedAgentEvaluations(realtyTenant.id);
 
   console.log(JSON.stringify({
     tenant: realtyTenant.name,
@@ -811,6 +850,7 @@ async function main() {
     buyers: buyers.length,
     properties: properties.length,
     brokerWorkspaceRecords: brokerRecords.length,
+    agentEvaluations: agentEvaluations.length,
     legacyPropertyNormalized: Boolean(normalizedLegacy),
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,

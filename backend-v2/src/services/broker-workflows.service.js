@@ -115,6 +115,34 @@ export const BROKER_AGENT_CATALOG = Object.freeze([
   { key: "customer_care", label: "Agente de Atención al Cliente", status: "PLANNED", scope: "Propondrá agenda y seguimiento; los envíos dependen del canal y aprobación." }
 ]);
 
+// Escenarios reproducibles para validar y mejorar los asistentes sin usar
+// datos de clientes reales. Cada recomendación debe terminar en una decisión
+// humana y un resultado que el equipo pueda revisar después.
+export const BROKER_AGENT_SCENARIOS = Object.freeze([
+  { key: "comprador-providencia", agentKey: "commercial", area: "commercial", title: "Compradora con presupuesto y comuna definidos", trigger: "Carolina busca un departamento en Providencia con tres dormitorios.", expectedRecommendation: "Sugerir propiedades compatibles, proponer visita y pedir confirmación de financiamiento.", requiresHumanApproval: true },
+  { key: "oferta-bajo-rango", agentKey: "commercial", area: "commercial", title: "Oferta bajo el valor publicado", trigger: "La oferta recibida está bajo la referencia de tasación.", expectedRecommendation: "Preparar comparación de oferta, tasación y condiciones; no aceptar ni rechazar automáticamente.", requiresHumanApproval: true },
+  { key: "publicacion-pendiente", agentKey: "marketing", area: "projects", title: "Ficha preparada para publicación", trigger: "La propiedad tiene fotos, precio y dirección validados.", expectedRecommendation: "Preparar borrador de publicación por canal y pedir aprobación antes de publicar.", requiresHumanApproval: true },
+  { key: "documento-por-vencer", agentKey: "analytics", area: "documents", title: "Documento legal próximo a vencer", trigger: "Un certificado de dominio vence antes de la fecha estimada de cierre.", expectedRecommendation: "Priorizar renovación documental y asignarla al responsable de la operación.", requiresHumanApproval: false },
+  { key: "visita-sin-seguimiento", agentKey: "commercial", area: "commercial", title: "Visita realizada sin siguiente paso", trigger: "Una visita terminó y no tiene seguimiento registrado.", expectedRecommendation: "Crear una tarea de seguimiento y proponer preguntas de calificación para el corredor.", requiresHumanApproval: true },
+  { key: "arriendo-vencimiento", agentKey: "analytics", area: "rentals", title: "Cobro de arriendo próximo a vencer", trigger: "El arriendo tiene saldo pendiente y fecha de vencimiento cercana.", expectedRecommendation: "Preparar recordatorio interno y solicitar aprobación antes de cualquier comunicación externa.", requiresHumanApproval: true },
+  { key: "mantencion-presupuesto", agentKey: "analytics", area: "maintenance", title: "Mantención con cotización recibida", trigger: "Existe una cotización de proveedor para una incidencia abierta.", expectedRecommendation: "Resumir alcance, monto y evidencia para aprobación; no generar orden de compra.", requiresHumanApproval: true },
+  { key: "postventa-garantia", agentKey: "analytics", area: "post_sale", title: "Garantía con revisión pendiente", trigger: "Un caso de postventa tiene garantía vigente y evidencia incompleta.", expectedRecommendation: "Solicitar evidencia faltante y proponer responsable y fecha de seguimiento.", requiresHumanApproval: false },
+  { key: "financiamiento-en-revision", agentKey: "analytics", area: "financing", title: "Financiamiento en revisión", trigger: "Una solicitud hipotecaria requiere nuevos antecedentes.", expectedRecommendation: "Listar antecedentes faltantes y riesgos; no aprobar, desembolsar ni modificar la solicitud.", requiresHumanApproval: true },
+  { key: "cartera-sin-responsable", agentKey: "analytics", area: "commercial", title: "Propiedad sin corredor asignado", trigger: "Una propiedad activa no tiene responsable comercial.", expectedRecommendation: "Proponer reparto por carga actual y dejar la asignación para confirmación humana.", requiresHumanApproval: true }
+]);
+
+export const BROKER_AUTOMATION_RULES = Object.freeze([
+  { key: "ficha_incompleta", title: "Control de ficha incompleta", trigger: "Una propiedad no tiene precio, ubicación o imagen principal.", action: "Crear prioridad interna para completar antecedentes.", approval: "No requiere aprobación para crear la tarea; no publica la propiedad." },
+  { key: "documento_vencimiento", title: "Alerta documental", trigger: "Un documento legal vence dentro de 30 días.", action: "Crear alerta y proponer responsable de renovación.", approval: "La renovación y el envío se revisan por una persona." },
+  { key: "visita_sin_seguimiento", title: "Seguimiento de visita", trigger: "Una visita termina sin próxima acción registrada.", action: "Crear borrador de tarea comercial.", approval: "El corredor confirma la acción y cualquier mensaje externo." },
+  { key: "cobro_arriendo", title: "Cobro de arriendo", trigger: "Un cobro se acerca a su fecha de vencimiento.", action: "Preparar recordatorio y ordenarlo por prioridad.", approval: "Nunca envía correo, WhatsApp o SMS sin canal, consentimiento y aprobación." },
+  { key: "mantencion_cotizada", title: "Revisión de mantención", trigger: "Se recibe una cotización para una incidencia abierta.", action: "Consolidar monto, proveedor y alcance en una solicitud de revisión.", approval: "No crea órdenes de compra ni confirma trabajos." }
+]);
+
+export function brokerAgentScenario(key) {
+  return BROKER_AGENT_SCENARIOS.find((scenario) => scenario.key === String(key || "").trim()) || null;
+}
+
 export function normalizeBrokerOperationType(value) {
   const normalized = String(value || "SALE").trim().toUpperCase();
   return Object.values(BROKER_OPERATION_TYPES).includes(normalized) ? normalized : null;

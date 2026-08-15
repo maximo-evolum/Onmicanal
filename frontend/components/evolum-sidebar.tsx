@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getMe } from "@/lib/api";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
@@ -53,15 +53,15 @@ const baseItems: SidebarItem[] = [
   // Inmobiliaria es un producto aislado, pero sus áreas se navegan desde el
   // menú EV. Así no se duplican pestañas dentro del workspace ni se ocultan
   // funciones importantes al corredor.
-  ["Resumen inmobiliario", "/realty", "Centro de control de la cartera", "RE", "properties"],
-  ["Operación Broker", "/realty?view=broker_os", "Ventas, arriendos, expedientes y postventa", "BO", "properties"],
-  ["Cargas inmobiliarias", "/realty?view=operations", "Captación, carga manual e importación", "RC", "realty_loads"],
+  ["Resumen Broker", "/realty", "Centro de control de la cartera", "RE", "properties"],
+  ["Operaciones Broker", "/realty?view=broker_os", "Ventas, arriendos, expedientes y postventa", "BO", "properties"],
+  ["Captación e importación", "/realty?view=operations", "Carga manual e importación de propiedades", "RC", "realty_loads"],
   ["Propiedades", "/realty?view=properties", "Inventario, fichas y publicación", "RP", "properties"],
-  ["Corredores", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],
-  ["Actividad inmobiliaria", "/realty?view=activity", "Visitas, alertas y seguimientos", "RA", "realty_activity"],
-  ["Portal corredor", "/realty?view=portal", "Cartera asignada y publicación", "RO", "broker_portal"],
-  ["Clientes inmobiliarios", "/realty?view=buyers", "Perfiles compradores y matching", "RL", "realty_clients"],
-  ["Capacitación de corredores", "/realty?view=training", "Formación y progreso comercial", "RT", "brokers"],
+  ["Corredores y asignaciones", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],
+  ["Visitas y seguimiento", "/realty?view=activity", "Visitas, alertas y próximos pasos", "RA", "realty_activity"],
+  ["Cartera del corredor", "/realty?view=portal", "Propiedades asignadas y publicación", "RO", "broker_portal"],
+  ["Compradores y matching", "/realty?view=buyers", "Perfiles compradores y compatibilidades", "RL", "realty_clients"],
+  ["Equipo y formación", "/realty?view=training", "Formación y progreso comercial", "RT", "brokers"],
   // Pacientes y exámenes son rutas de compatibilidad para datos antiguos.
   // Las nuevas fichas, órdenes y presupuestos se administran exclusivamente
   // dentro de Atención clínica, dental o veterinaria.
@@ -174,6 +174,32 @@ function currentVerticalLabel(industry?: string | null, product?: ReturnType<typ
   if (value.includes("HEALTH") || value.includes("SALUD") || value.includes("CLINIC")) return "Salud clínica";
   if (value.includes("AUTO") || value.includes("TALLER") || value.includes("MECAN")) return "Automotriz y taller";
   return null;
+}
+
+function brokerNavigationSection(item: SidebarItem) {
+  const [, href] = item;
+  if (href === "/realty" || href.includes("view=properties") || href.includes("view=operations") || href.includes("view=buyers")) return "Cartera";
+  if (href.includes("view=broker_os") || href.includes("view=activity")) return "Operación";
+  if (href.includes("view=portal")) return "Comercial";
+  if (href.includes("view=brokers") || href.includes("view=training")) return "Equipo";
+  return "Broker OS";
+}
+
+function brokerNavigationOrder(item: SidebarItem) {
+  const [, href] = item;
+  const order = [
+    "/realty",
+    "/realty?view=properties",
+    "/realty?view=operations",
+    "/realty?view=buyers",
+    "/realty?view=broker_os",
+    "/realty?view=activity",
+    "/realty?view=portal",
+    "/realty?view=brokers",
+    "/realty?view=training"
+  ];
+  const index = order.indexOf(href);
+  return index === -1 ? order.length : index;
 }
 
 function contextualizeItem(item: SidebarItem, industry?: string | null): SidebarItem {
@@ -340,13 +366,21 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
     const coreModules = new Set<ModuleAccessKey>(["dashboard", "ai_ops", "workflows", "integrations", "documents"]);
     const verticalLabel = currentVerticalLabel(industry, product);
 
-    const crmItems = items.filter((item) => crmModules.has(item[4]));
+    // En Broker OS, Operaciones Broker ya es el pipeline operacional y
+    // Visitas y seguimiento es la agenda propia de cartera. Ocultamos solo
+    // esos duplicados de esta navegación; los módulos globales siguen
+    // habilitados, disponibles por URL y administrables desde Desarrollador.
+    const hideBrokerDuplicates = product?.code === "REAL_ESTATE";
+    const crmItems = items.filter((item) => crmModules.has(item[4])
+      && (!hideBrokerDuplicates || !["agenda", "pipeline"].includes(item[4])));
     const settingsItems = items.filter((item) => settingsModules.has(item[4]));
     const coreItems = items.filter((item) => coreModules.has(item[4]));
     const verticalItems = items.filter((item) => {
       const moduleKey = item[4];
       return !crmModules.has(moduleKey) && !settingsModules.has(moduleKey) && !coreModules.has(moduleKey);
-    });
+    }).sort((left, right) => product?.code === "REAL_ESTATE"
+      ? brokerNavigationOrder(left) - brokerNavigationOrder(right)
+      : 0);
 
     const groups: NavigationGroup[] = [];
     if (crmItems.length) groups.push({
@@ -474,7 +508,13 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
                 <span className="evolum-nav-group-chevron" aria-hidden="true">›</span>
               </summary>
               <div className="evolum-nav-group-links">
-                {group.items.map(([label, href, description, icon]) => {
+                {group.items.map(([label, href, description, icon], index) => {
+                  const brokerSection = isRealtyIndustry(industry) && group.id === "vertical"
+                    ? brokerNavigationSection(group.items[index])
+                    : null;
+                  const previousBrokerSection = index > 0 && isRealtyIndustry(industry) && group.id === "vertical"
+                    ? brokerNavigationSection(group.items[index - 1])
+                    : null;
                   const [targetPath, targetQuery] = href.split("?");
                   const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
                     const [key, value = ""] = entry.split("=");
@@ -489,10 +529,13 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
                       ? (targetQuery ? matchesRoute : pathname === targetPath && !currentSearchParams.get("tab"))
                       : (label === active || matchesRoute);
                   return (
-                    <Link className={selected ? "active" : ""} href={href} key={label} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
-                      <ModuleSymbol code={icon} label={label} />
-                      <div><strong>{label}</strong><small>{description}</small></div>
-                    </Link>
+                    <Fragment key={label}>
+                      {brokerSection && brokerSection !== previousBrokerSection ? <span className="evolum-nav-subsection">{brokerSection}</span> : null}
+                      <Link className={selected ? "active" : ""} href={href} title={label} data-evolum-active={selected ? "true" : "false"} onClick={saveMenuPosition}>
+                        <ModuleSymbol code={icon} label={label} />
+                        <div><strong>{label}</strong><small>{description}</small></div>
+                      </Link>
+                    </Fragment>
                   );
                 })}
               </div>

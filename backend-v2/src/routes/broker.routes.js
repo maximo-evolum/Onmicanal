@@ -6,8 +6,12 @@ import {
   BROKER_RECORD_AREAS,
   BROKER_RECORD_TYPES,
   BROKER_RECORD_DEFINITIONS,
+  BROKER_OPERATION_TYPES,
   BROKER_AGENT_CATALOG,
+  BROKER_AGENT_SCENARIOS,
+  BROKER_AUTOMATION_RULES,
   SALE_STAGES,
+  brokerAgentScenario,
   isBrokerRecordArea,
   normalizeBrokerOperationType,
   stagesForBrokerOperation,
@@ -68,6 +72,46 @@ function brokerAgentPayload(agent) {
     status: agent.status,
     module: BROKER_AGENT_MODULES[agent.key] || "properties",
     description: agent.scope
+  };
+}
+
+function evaluationPayload(record) {
+  const data = dataOf(record);
+  return {
+    ...record,
+    scenarioKey: text(data.scenarioKey),
+    agentKey: text(data.agentKey),
+    decision: text(data.decision, "PENDING_REVIEW"),
+    outcome: text(data.outcome),
+    note: text(data.note),
+    reviewedAt: text(data.reviewedAt),
+    reviewedBy: text(data.reviewedBy)
+  };
+}
+
+function brokerReporting({ properties, operations, evaluations }) {
+  const portfolioValue = properties.reduce((sum, property) => sum + Number(dataOf(property).price || 0), 0);
+  const projectedCommission = operations.reduce((sum, operation) => {
+    const data = dataOf(operation);
+    return sum + Number(data.estimatedCommission || data.monthlyManagementFee || 0);
+  }, 0);
+  const byOperationType = Object.values(BROKER_OPERATION_TYPES).map((type) => ({
+    type,
+    count: operations.filter((operation) => (normalizeBrokerOperationType(dataOf(operation).operationType) || "SALE") === type).length
+  }));
+  const completeProperties = properties.filter((property) => missingPropertyData(property).length === 0).length;
+  const confirmedEvaluations = evaluations.filter((item) => text(dataOf(item).decision) === "CONFIRMED").length;
+  return {
+    portfolioValue,
+    projectedCommission,
+    propertyCompleteness: properties.length ? Math.round((completeProperties / properties.length) * 100) : 0,
+    byOperationType,
+    aiEvaluations: {
+      total: evaluations.length,
+      confirmed: confirmedEvaluations,
+      needsAdjustment: evaluations.filter((item) => text(dataOf(item).decision) === "ADJUSTMENT_NEEDED").length,
+      pending: evaluations.filter((item) => text(dataOf(item).decision, "PENDING_REVIEW") === "PENDING_REVIEW").length
+    }
   };
 }
 
@@ -142,7 +186,7 @@ async function assertAssignedUser(req, assignedToId) {
 
 brokerRouter.get("/broker/overview", async (req, res) => {
   try {
-    const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing] = await Promise.all([
+    const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations] = await Promise.all([
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "property" }) }),
       prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), orderBy: { updatedAt: "desc" }, take: 12 }),
       prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 50 }),
@@ -151,7 +195,8 @@ brokerRouter.get("/broker/overview", async (req, res) => {
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "rental_contract", status: { in: ["ACTIVE", "PENDING_RENEWAL"] } }) }),
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "maintenance_ticket", status: { notIn: ["CLOSED", "CANCELLED"] } }) }),
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "post_sale_case", status: { notIn: ["CLOSED", "RESOLVED"] } }) }),
-      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "operation_financing", status: { in: ["REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED"] } }) })
+      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "operation_financing", status: { in: ["REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED"] } }) }),
+      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 100 })
     ]);
     const normalizedOperations = operations.map(operationPayload);
     const kpis = {
@@ -169,7 +214,13 @@ brokerRouter.get("/broker/overview", async (req, res) => {
       properties,
       operations: normalizedOperations,
       recommendations: brokerRecommendations({ properties, operations, maintenance, postSale, financing }),
-      agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload)
+      agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload),
+      reporting: brokerReporting({ properties, operations, evaluations }),
+      aiTraining: {
+        scenarios: BROKER_AGENT_SCENARIOS,
+        evaluations: evaluations.map(evaluationPayload),
+        automationRules: BROKER_AUTOMATION_RULES
+      }
     });
   } catch (error) {
     console.error("Broker overview error:", error);
@@ -182,12 +233,64 @@ brokerRouter.get("/broker/catalog", (_req, res) => {
     areas: BROKER_RECORD_AREAS,
     recordDefinitions: BROKER_RECORD_DEFINITIONS,
     agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload),
+    aiScenarios: BROKER_AGENT_SCENARIOS,
+    automationRules: BROKER_AUTOMATION_RULES,
     operationStages: {
       SALE: SALE_STAGES,
       RENTAL: stagesForBrokerOperation("RENTAL"),
       ADMINISTRATION: stagesForBrokerOperation("ADMINISTRATION")
     }
   });
+});
+
+brokerRouter.get("/broker/ai-evaluations", async (req, res) => {
+  try {
+    const records = await prisma.industryRecord.findMany({
+      where: brokerWhere(req, { recordType: "broker_agent_evaluation" }),
+      include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } },
+      orderBy: { updatedAt: "desc" },
+      take: 200
+    });
+    res.json({ scenarios: BROKER_AGENT_SCENARIOS, evaluations: records.map(evaluationPayload), automationRules: BROKER_AUTOMATION_RULES });
+  } catch (error) {
+    console.error("List broker AI evaluations error:", error);
+    res.status(500).json({ error: "No se pudieron obtener las evaluaciones de los agentes." });
+  }
+});
+
+brokerRouter.post("/broker/ai-evaluations", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const scenario = brokerAgentScenario(req.body?.scenarioKey);
+    if (!scenario) return res.status(400).json({ error: "El escenario de evaluación no existe." });
+    const decision = text(req.body?.decision, "PENDING_REVIEW").toUpperCase();
+    if (!["PENDING_REVIEW", "CONFIRMED", "ADJUSTMENT_NEEDED", "DISCARDED"].includes(decision)) {
+      return res.status(400).json({ error: "La decisión de evaluación no es válida." });
+    }
+    const now = new Date().toISOString();
+    const title = `Evaluación IA: ${scenario.title}`;
+    const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { recordType: "broker_agent_evaluation", title }) });
+    const data = {
+      scenarioKey: scenario.key,
+      agentKey: scenario.agentKey,
+      area: scenario.area,
+      expectedRecommendation: scenario.expectedRecommendation,
+      requiresHumanApproval: scenario.requiresHumanApproval,
+      decision,
+      outcome: text(req.body?.outcome),
+      note: text(req.body?.note),
+      reviewedAt: now,
+      reviewedBy: req.user?.name || req.user?.email || "Usuario autorizado",
+      source: "broker_os"
+    };
+    const record = existing
+      ? await prisma.industryRecord.update({ where: { id: existing.id }, data: { status: decision, data } })
+      : await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "broker_agent_evaluation", title, status: decision, data } });
+    await recordAuditLog(req, "BROKER_AGENT_EVALUATION_RECORDED", "broker_agent_evaluation", record.id, { scenarioKey: scenario.key, decision });
+    res.status(existing ? 200 : 201).json(evaluationPayload(record));
+  } catch (error) {
+    console.error("Create broker AI evaluation error:", error);
+    res.status(500).json({ error: "No se pudo guardar la evaluación del agente." });
+  }
 });
 
 brokerRouter.get("/broker/operations", async (req, res) => {

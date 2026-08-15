@@ -2,12 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   BROKER_AGENT_CATALOG,
+  BROKER_AGENT_SCENARIOS,
+  BROKER_AUTOMATION_RULES,
   BROKER_RECORD_AREAS,
   RENTAL_STAGES,
   SALE_STAGES,
   isBrokerRecordArea,
   stagesForBrokerOperation,
   validateBrokerRecord,
+  brokerAgentScenario,
   validateBrokerStageTransition
 } from "../src/services/broker-workflows.service.js";
 
@@ -50,4 +53,11 @@ test("Broker OS expone agentes con estado real de disponibilidad", () => {
   assert.equal(BROKER_AGENT_CATALOG.length, 13);
   assert.equal(BROKER_AGENT_CATALOG.some((agent) => agent.key === "commercial" && agent.status === "AVAILABLE"), true);
   assert.equal(BROKER_AGENT_CATALOG.some((agent) => agent.key === "legal" && agent.status === "PLANNED"), true);
+});
+
+test("Broker OS mantiene escenarios evaluables y automatizaciones con control humano", () => {
+  assert.equal(BROKER_AGENT_SCENARIOS.length >= 10, true);
+  assert.equal(brokerAgentScenario("comprador-providencia")?.agentKey, "commercial");
+  assert.equal(BROKER_AUTOMATION_RULES.every((rule) => typeof rule.approval === "string" && rule.approval.length > 0), true);
+  assert.equal(BROKER_AUTOMATION_RULES.some((rule) => rule.key === "visita_sin_seguimiento"), true);
 });
