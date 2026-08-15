@@ -6,6 +6,7 @@ import { MODULES } from "../src/lib/modules.js";
 const prisma = new PrismaClient();
 const DEMO_PASSWORD = "Demo1234!";
 const REALTY_TENANT_EMAIL = "inmobiliaria@prueba.cl";
+const DEMO_SOURCE = "DATOS_DEMOSTRACION_BROKER_OS";
 
 const REALTY_MODULES = [
   MODULES.INBOX,
@@ -624,6 +625,151 @@ async function upsertProperty(tenantId, property, index, brokers) {
   });
 }
 
+async function upsertDemoRecord(tenantId, { recordType, title, status, data, assignedToId = null }) {
+  const payload = {
+    ...data,
+    source: DEMO_SOURCE,
+    demo: true,
+    demoLabel: "Datos de demostración Broker OS",
+  };
+  const existing = await prisma.industryRecord.findFirst({
+    where: { tenantId, recordType, title },
+    select: { id: true },
+  });
+  if (existing) {
+    return prisma.industryRecord.update({
+      where: { id: existing.id },
+      data: { status, assignedToId, data: payload },
+    });
+  }
+  return prisma.industryRecord.create({
+    data: { tenantId, recordType, title, status, assignedToId, data: payload },
+  });
+}
+
+async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
+  const propertyId = (title) => {
+    const record = properties.find((property) => property.title === title);
+    if (!record) throw new Error(`No se encontró la propiedad demo: ${title}`);
+    return record.id;
+  };
+  const brokerId = (name) => brokers.find((broker) => broker.name === name)?.id || null;
+  const buyerId = (name) => buyers.find((buyer) => buyer.name === name)?.id || null;
+  const property = {
+    pocuro: propertyId("Departamento Vista Parque Pocuro"),
+    piedraRoja: propertyId("Townhouse Piedra Roja"),
+    apoquindo: propertyId("Oficina Premium Apoquindo"),
+    nunoa: propertyId("Departamento Nuevo Nunoa"),
+    penalolen: propertyId("Casa Familiar Penalolen Alto"),
+    vitacura: propertyId("Local Comercial Vitacura"),
+    santiago: propertyId("Departamento Inversion Santiago Centro"),
+    montemar: propertyId("Penthouse Costa de Montemar"),
+    quilicura: propertyId("Bodega Industrial Quilicura"),
+  };
+  const assigned = {
+    maria: brokerId("Maria Fernanda Ruiz"),
+    carlos: brokerId("Carlos Mendoza Soto"),
+    laura: brokerId("Laura Campos Vidal"),
+    diego: brokerId("Diego Alvarez Pena"),
+  };
+  const buyersByName = {
+    carolina: buyerId("Carolina Fuentes"),
+    felipe: buyerId("Felipe Arancibia"),
+    camila: buyerId("Camila Soto"),
+    valentina: buyerId("Valentina Mella"),
+    oficinas: buyerId("Oficinas Cordillera SpA"),
+  };
+
+  const records = [];
+  const put = async (record) => {
+    const result = await upsertDemoRecord(tenantId, record);
+    records.push(result);
+    return result;
+  };
+
+  // Operaciones principales: muestran venta, arriendo y administración en etapas reales.
+  await put({
+    recordType: "broker_operation", title: "Venta Departamento Vista Parque Pocuro", status: "ACTIVE", assignedToId: assigned.maria,
+    data: {
+      operationType: "SALE", propertyId: property.pocuro, buyerId: buyersByName.carolina, clientName: "Carolina Fuentes", stage: "NEGOCIACION",
+      expectedCloseDate: "2026-09-18", estimatedCommission: 7140000,
+      timeline: [
+        { at: "2026-07-28T10:00:00.000Z", type: "CAPTACION", stage: "CAPTACION", note: "Propiedad incorporada a cartera con mandato vigente." },
+        { at: "2026-08-03T16:30:00.000Z", type: "VISITA", stage: "VISITA", note: "Visita realizada con compradora preaprobada." },
+        { at: "2026-08-12T11:15:00.000Z", type: "NEGOCIACION", stage: "NEGOCIACION", note: "Oferta recibida; se revisan condiciones de cierre." },
+      ],
+    },
+  });
+  await put({
+    recordType: "broker_operation", title: "Arriendo Departamento Inversión Santiago Centro", status: "ACTIVE", assignedToId: assigned.carlos,
+    data: {
+      operationType: "RENTAL", propertyId: property.santiago, buyerId: buyersByName.camila, clientName: "Camila Soto", stage: "CONTRATO",
+      expectedCloseDate: "2026-08-28", monthlyRent: 590000,
+      timeline: [
+        { at: "2026-07-30T14:00:00.000Z", type: "CAPTACION", stage: "CAPTACION", note: "Unidad preparada para arriendo de inversión." },
+        { at: "2026-08-06T18:00:00.000Z", type: "EVALUACION", stage: "EVALUACION", note: "Antecedentes de arrendataria revisados por el equipo." },
+        { at: "2026-08-13T12:00:00.000Z", type: "CONTRATO", stage: "CONTRATO", note: "Contrato listo para firma y fecha de entrega acordada." },
+      ],
+    },
+  });
+  await put({
+    recordType: "broker_operation", title: "Administración Local Comercial Vitacura", status: "ACTIVE", assignedToId: assigned.laura,
+    data: {
+      operationType: "ADMINISTRATION", propertyId: property.vitacura, clientName: "Comercial Oriente SpA", stage: "LIQUIDACION",
+      expectedCloseDate: "2026-08-31", monthlyManagementFee: 174000,
+      timeline: [
+        { at: "2026-07-01T09:00:00.000Z", type: "INCORPORACION", stage: "INCORPORACION", note: "Cartera comercial recibida con inventario documental." },
+        { at: "2026-08-02T10:00:00.000Z", type: "COBRO", stage: "COBRO", note: "Canon de agosto registrado para conciliación." },
+        { at: "2026-08-14T12:00:00.000Z", type: "LIQUIDACION", stage: "LIQUIDACION", note: "Liquidación del período preparada para aprobación humana." },
+      ],
+    },
+  });
+
+  // Comercial y cierre.
+  await put({ recordType: "property_appraisal", title: "Tasación aprobada - Townhouse Piedra Roja", status: "APPROVED", assignedToId: assigned.diego, data: { propertyId: property.piedraRoja, estimatedValue: 425000000, method: "Comparables de mercado", appraisedAt: "2026-08-04", notes: "Valor referencial validado con oferta y demanda de Chicureo." } });
+  await put({ recordType: "property_mandate", title: "Mandato vigente - Departamento Vista Parque Pocuro", status: "SIGNED", assignedToId: assigned.maria, data: { propertyId: property.pocuro, ownerName: "Andrés Toledo", startDate: "2026-07-25", endDate: "2026-10-25", exclusivity: true } });
+  await put({ recordType: "property_offer", title: "Oferta Carolina Fuentes - Vista Parque Pocuro", status: "SUBMITTED", assignedToId: assigned.maria, data: { propertyId: property.pocuro, buyerName: "Carolina Fuentes", buyerId: buyersByName.carolina, amount: 229000000, validityUntil: "2026-08-20", financing: "Crédito hipotecario preaprobado" } });
+  await put({ recordType: "property_promise", title: "Promesa de compraventa - Casa Familiar Peñalolén Alto", status: "PENDING_SIGNATURE", assignedToId: assigned.carlos, data: { propertyId: property.penalolen, buyerName: "Felipe Arancibia", buyerId: buyersByName.felipe, signingDate: "2026-08-22", agreedAmount: 338000000, notary: "Notaría de Peñalolén" } });
+  await put({ recordType: "commission_settlement", title: "Liquidación de comisión - Penthouse Costa de Montemar", status: "PENDING", assignedToId: assigned.laura, data: { propertyId: property.montemar, amount: 8700000, operationAmount: 435000000, percentage: 2, payableTo: "Laura Campos Vidal" } });
+
+  // Arriendos y administración.
+  await put({ recordType: "rental_application", title: "Postulación de arriendo - Camila Soto", status: "APPROVED", assignedToId: assigned.carlos, data: { propertyId: property.santiago, tenantName: "Camila Soto", tenantId: buyersByName.camila, incomeVerified: true, guarantor: "Javiera Soto" } });
+  await put({ recordType: "rental_contract", title: "Contrato activo - Departamento Inversión Santiago Centro", status: "ACTIVE", assignedToId: assigned.carlos, data: { propertyId: property.santiago, tenantName: "Camila Soto", startDate: "2026-09-01", monthlyRent: 590000, endDate: "2027-08-31", paymentDay: 5 } });
+  await put({ recordType: "rental_payment", title: "Cobro de arriendo - Agosto 2026", status: "PENDING", assignedToId: assigned.carlos, data: { propertyId: property.santiago, amount: 590000, dueDate: "2026-08-20", period: "Agosto 2026", tenantName: "Camila Soto" } });
+  await put({ recordType: "administration_liquidation", title: "Liquidación administración - Local Vitacura", status: "PENDING_APPROVAL", assignedToId: assigned.laura, data: { propertyId: property.vitacura, period: "Agosto 2026", amount: 174000, income: 5800000, expenses: 420000 } });
+
+  // Mantenciones y proveedores.
+  await put({ recordType: "maintenance_ticket", title: "Mantención climatización - Oficina Premium Apoquindo", status: "QUOTING", assignedToId: assigned.diego, data: { propertyId: property.apoquindo, category: "Climatización", description: "Revisión preventiva de equipos de aire acondicionado antes de nueva visita comercial.", priority: "MEDIA", reportedAt: "2026-08-11" } });
+  await put({ recordType: "service_provider", title: "Servicios Técnicos Cordillera SpA", status: "ACTIVE", data: { providerName: "Servicios Técnicos Cordillera SpA", specialty: "Climatización y mantención de oficinas", contactName: "Tomás Vega", phone: "+56962223344", rating: 4.8 } });
+  await put({ recordType: "provider_quote", title: "Cotización climatización - Oficina Apoquindo", status: "RECEIVED", assignedToId: assigned.diego, data: { propertyId: property.apoquindo, providerName: "Servicios Técnicos Cordillera SpA", amount: 485000, validUntil: "2026-08-23", scope: "Mantención preventiva de cuatro equipos." } });
+  await put({ recordType: "material_purchase", title: "Compra materiales - Casa Peñalolén Alto", status: "APPROVED", assignedToId: assigned.diego, data: { propertyId: property.penalolen, supplierName: "Ferretería Los Presidentes", amount: 198500, concept: "Reparación de cierre perimetral", approvedAt: "2026-08-12" } });
+
+  // Proyecto, publicación y postventa.
+  await put({ recordType: "remodeling_project", title: "Puesta en valor - Penthouse Costa de Montemar", status: "IN_PROGRESS", assignedToId: assigned.laura, data: { propertyId: property.montemar, projectType: "Puesta en valor para publicación", budget: 3200000, startDate: "2026-08-01", targetDate: "2026-09-05" } });
+  await put({ recordType: "project_budget", title: "Presupuesto remodelación - Penthouse Costa de Montemar", status: "APPROVED", assignedToId: assigned.laura, data: { propertyId: property.montemar, amount: 3200000, scope: "Pintura, iluminación y estilismo comercial", approvedBy: "Admin inmobiliaria" } });
+  await put({ recordType: "project_milestone", title: "Hito fotografías profesionales - Penthouse Costa de Montemar", status: "PENDING", assignedToId: assigned.laura, data: { propertyId: property.montemar, milestoneDate: "2026-08-21", description: "Sesión fotográfica, tour virtual y material de publicación." } });
+  await put({ recordType: "marketing_publication", title: "Publicación portal y redes - Departamento Nuevo Ñuñoa", status: "PUBLISHED", assignedToId: assigned.maria, data: { propertyId: property.nunoa, channel: "Portal inmobiliario y redes sociales", publicationStatus: "Publicado", publishedAt: "2026-08-08", leadsGenerated: 14 } });
+  await put({ recordType: "property_inspection", title: "Inspección pre-entrega - Casa Familiar Peñalolén Alto", status: "COMPLETED", assignedToId: assigned.carlos, data: { propertyId: property.penalolen, inspectionDate: "2026-08-13", checklist: "Pintura revisada, medidores fotografiados, llaves completas y observaciones documentadas." } });
+  await put({ recordType: "property_handover", title: "Entrega programada - Casa Familiar Peñalolén Alto", status: "PENDING_SIGNATURE", assignedToId: assigned.carlos, data: { propertyId: property.penalolen, handoverDate: "2026-08-30", recipientName: "Felipe Arancibia", inventoryAttached: true } });
+  await put({ recordType: "post_sale_case", title: "Postventa terraza - Casa Familiar Peñalolén Alto", status: "IN_PROGRESS", assignedToId: assigned.carlos, data: { propertyId: property.penalolen, description: "Revisión de sello exterior en terraza antes de la entrega definitiva.", openedAt: "2026-08-14", owner: "Constructora y vendedor" } });
+  await put({ recordType: "warranty_case", title: "Garantía iluminación - Casa Familiar Peñalolén Alto", status: "UNDER_REVIEW", assignedToId: assigned.carlos, data: { propertyId: property.penalolen, description: "Una luminaria exterior requiere validación de garantía del proveedor.", warrantyUntil: "2027-02-28" } });
+
+  // Expediente documental y financiamiento: siempre bajo aprobación humana.
+  await put({ recordType: "property_document", title: "Carpeta propiedad - Departamento Vista Parque Pocuro", status: "AVAILABLE", assignedToId: assigned.maria, data: { propertyId: property.pocuro, documentType: "Carpeta comercial y fotografías", url: "demo://broker/pocuro/carpeta", verifiedAt: "2026-08-09" } });
+  await put({ recordType: "legal_document", title: "Certificado de dominio vigente - Departamento Vista Parque Pocuro", status: "APPROVED", assignedToId: assigned.maria, data: { propertyId: property.pocuro, documentType: "Certificado de dominio vigente", expiresAt: "2026-09-30", reviewedBy: "Revisión documental humana" } });
+  await put({ recordType: "digital_signature", title: "Firma digital de mandato - Departamento Vista Parque Pocuro", status: "SIGNED", assignedToId: assigned.maria, data: { propertyId: property.pocuro, documentType: "Mandato de corretaje", signerName: "Andrés Toledo", signedAt: "2026-07-25" } });
+  const financing = await put({ recordType: "operation_financing", title: "Financiamiento de compra - Departamento Vista Parque Pocuro", status: "UNDER_REVIEW", assignedToId: assigned.maria, data: { propertyId: property.pocuro, purpose: "Crédito hipotecario para compra", requestedAmount: 175000000, applicantName: "Carolina Fuentes", buyerId: buyersByName.carolina, institution: "Banco de demostración", requiresHumanApproval: true } });
+  await put({ recordType: "operation_financing_expense", title: "Gasto tasación bancaria - Departamento Vista Parque Pocuro", status: "APPROVED", assignedToId: assigned.maria, data: { financingId: financing.id, propertyId: property.pocuro, concept: "Tasación bancaria", amount: 180000, dueDate: "2026-08-19", requiresHumanApproval: true } });
+
+  // Actividad y alertas para el centro de control inmobiliario.
+  await put({ recordType: "visit", title: "Visita confirmada - Oficina Premium Apoquindo", status: "SCHEDULED", assignedToId: assigned.diego, data: { propertyId: property.apoquindo, buyerId: buyersByName.oficinas, buyerName: "Oficinas Cordillera SpA", brokerName: "Diego Alvarez Pena", visitAt: "2026-08-18T16:30:00-04:00", notes: "Visita con gerencia y encargado de operaciones." } });
+  await put({ recordType: "visit", title: "Visita realizada - Departamento Nuevo Ñuñoa", status: "ACTIVE", assignedToId: assigned.maria, data: { propertyId: property.nunoa, buyerId: buyersByName.valentina, buyerName: "Valentina Mella", brokerName: "Maria Fernanda Ruiz", visitAt: "2026-08-12T18:00:00-04:00", notes: "Interesada solicita simulación de crédito y segunda visita." } });
+  await put({ recordType: "realty_alert", title: "Renovar certificado de dominio - Vista Parque Pocuro", status: "OPEN", assignedToId: assigned.maria, data: { propertyId: property.pocuro, priority: "MEDIA", dueDate: "2026-08-25", detail: "El certificado vigente vence antes de la fecha estimada de cierre." } });
+  await put({ recordType: "realty_alert", title: "Confirmar proveedor de iluminación - Casa Peñalolén Alto", status: "OPEN", assignedToId: assigned.carlos, data: { propertyId: property.penalolen, priority: "ALTA", dueDate: "2026-08-17", detail: "Se requiere confirmación humana antes de cerrar el caso de garantía." } });
+
+  return records;
+}
+
 async function main() {
   const tenant = await findTenant();
   if (!tenant) {
@@ -641,20 +787,20 @@ async function main() {
   for (let index = 0; index < PROPERTIES.length; index += 1) {
     properties.push(await upsertProperty(realtyTenant.id, PROPERTIES[index], index, brokers));
   }
+  const brokerRecords = await seedBrokerWorkspace(realtyTenant.id, properties, brokers, buyers);
 
   console.log(JSON.stringify({
     tenant: realtyTenant.name,
     tenantId: realtyTenant.id,
     adminEmail: REALTY_TENANT_EMAIL,
-    adminPassword: DEMO_PASSWORD,
     modulesEnabled: REALTY_MODULES.length,
     brokers: brokers.length,
     buyers: buyers.length,
     properties: properties.length,
+    brokerWorkspaceRecords: brokerRecords.length,
     legacyPropertyNormalized: Boolean(normalizedLegacy),
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,
-    brokerPassword: DEMO_PASSWORD,
   }, null, 2));
 }
 
