@@ -8,12 +8,14 @@ import {
   getBrokerCatalog,
   getBrokerOperations,
   getBrokerOverview,
+  getBrokerPropertyExpedient,
   getBrokerRecords,
   getIndustryRecords,
   updateBrokerRecord,
   type BrokerCatalog,
   type BrokerOperation,
   type BrokerOperationType,
+  type BrokerPropertyExpedient,
   type BrokerRecordArea,
   type BrokerRecordDefinition,
   type IndustryRecord
@@ -97,6 +99,8 @@ export function BrokerOperationsPageContent() {
   const [operations, setOperations] = useState<BrokerOperation[]>([]);
   const [records, setRecords] = useState<IndustryRecord[]>([]);
   const [properties, setProperties] = useState<IndustryRecord[]>([]);
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [expedient, setExpedient] = useState<BrokerPropertyExpedient | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [operationType, setOperationType] = useState<BrokerOperationType>("SALE");
@@ -132,6 +136,7 @@ export function BrokerOperationsPageContent() {
     properties: 0, activeOperations: 0, scheduledVisits: 0, openAlerts: 0,
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
+  const recommendations = overview?.recommendations || [];
   const currentArea = tab !== "operations" && tab !== "agents" ? tab : null;
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
@@ -201,6 +206,16 @@ export function BrokerOperationsPageContent() {
     } finally { setBusy(false); }
   }
 
+  async function openExpedient() {
+    if (!selectedPropertyId) return setNotice("Selecciona una propiedad para revisar su expediente.");
+    setBusy(true); setNotice("");
+    try {
+      setExpedient(await getBrokerPropertyExpedient(selectedPropertyId));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo abrir el expediente de esta propiedad.");
+    } finally { setBusy(false); }
+  }
+
   return <main className="broker-os-workspace">
     <header className="broker-os-header">
       <div>
@@ -222,7 +237,17 @@ export function BrokerOperationsPageContent() {
     </nav>
     {notice ? <p className="broker-os-notice" role="status">{notice}</p> : null}
 
-    {tab === "operations" ? <section className="broker-os-grid">
+    {tab === "operations" ? <>
+      <section className="broker-recommendations" aria-label="Prioridades operativas">
+        <div className="broker-list-heading"><span>Prioridades operativas</span><h2>Qué revisar a continuación</h2><p>Son sugerencias internas basadas en la cartera. EVOLUM no cambia estados, publica ni contacta personas por su cuenta.</p></div>
+        {recommendations.length ? <div className="broker-recommendation-grid">{recommendations.map((recommendation) => <article key={recommendation.id} className={`broker-recommendation ${recommendation.priority.toLowerCase()}`}><b>{recommendation.priority === "HIGH" ? "Prioridad alta" : recommendation.priority === "MEDIUM" ? "Prioridad media" : "Informativa"}</b><h3>{recommendation.title}</h3><p>{recommendation.detail}</p><button type="button" className="secondary-btn" onClick={() => setTab(recommendation.area)}>{recommendation.requiresApproval ? "Revisar y confirmar" : "Completar ficha"}</button></article>)}</div> : <p className="broker-empty">La cartera no tiene prioridades pendientes por ahora.</p>}
+      </section>
+      <section className="broker-expedient-panel" aria-label="Expediente por propiedad">
+        <div className="broker-list-heading"><span>Expediente digital</span><h2>Revisa una propiedad completa</h2><p>Consulta documentos, contratos, mantenciones, postventa y antecedentes sin cambiar de pantalla.</p></div>
+        <div className="broker-expedient-controls"><select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select><button type="button" className="primary-btn" disabled={busy || !selectedPropertyId} onClick={openExpedient}>Abrir expediente</button></div>
+        {expedient ? <div className="broker-expedient-summary"><div><b>{expedient.property.title}</b><p>{expedient.completion.complete ? "Ficha completa para operación y publicación." : `Falta completar: ${expedient.completion.missing.join(", ")}.`}</p></div><div className="broker-expedient-counts">{Object.entries(expedient.grouped).filter(([, items]) => items?.length).map(([area, items]) => <span key={area}><b>{items?.length}</b>{AREA_CONFIG[area as BrokerRecordArea]?.label || readable(area)}</span>)}</div></div> : null}
+      </section>
+      <section className="broker-os-grid">
       <form className="broker-os-form" onSubmit={createOperation}>
         <span>Ingreso operativo</span><h2>Nueva operacion</h2><p>Selecciona el flujo correcto. EVOLUM no permite saltar etapas sensibles.</p>
         <div className="broker-type-picker">{(Object.keys(OPERATION_LABELS) as BrokerOperationType[]).map((type) => <button type="button" key={type} className={operationType === type ? "selected" : ""} onClick={() => setOperationType(type)}>{OPERATION_LABELS[type]}</button>)}</div>
@@ -240,7 +265,8 @@ export function BrokerOperationsPageContent() {
           return <article key={operation.id} className="broker-operation-card"><div><span>{OPERATION_LABELS[operation.data.operationType]}</span><h3>{operation.title}</h3><p>{readable(operation.data.stage)} · {String(operation.data.clientName || "Sin contraparte registrada")}</p></div><div className="broker-stage"><div><i style={{ width: `${stages.length ? ((index + 1) / stages.length) * 100 : 0}%` }} /></div><small>Etapa {index + 1} de {stages.length}: {readable(stages[index])}</small></div><button className="secondary-btn" disabled={busy || !next} onClick={() => nextStage(operation)}>{next ? `Avanzar a ${readable(next)}` : "Flujo completado"}</button></article>;
         })}
       </section>
-    </section> : null}
+      </section>
+    </> : null}
 
     {currentArea ? <section className="broker-os-grid broker-area-grid">
       <form className="broker-os-form" onSubmit={createRecord}>

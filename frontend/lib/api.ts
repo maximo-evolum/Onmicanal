@@ -1111,6 +1111,7 @@ export type BrokerOverview = {
   properties: IndustryRecord[];
   operations: BrokerOperation[];
   agents: BrokerAgent[];
+  recommendations: BrokerRecommendation[];
 };
 
 export type BrokerRecordArea = "commercial" | "rentals" | "maintenance" | "projects" | "post_sale" | "documents" | "financing";
@@ -1130,6 +1131,24 @@ export type BrokerAgent = {
   description: string;
 };
 
+export type BrokerRecommendation = {
+  id: string;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+  area: BrokerRecordArea;
+  title: string;
+  detail: string;
+  propertyId?: string;
+  operationId?: string;
+  requiresApproval: boolean;
+};
+
+export type BrokerPropertyExpedient = {
+  property: Pick<IndustryRecord, "id" | "title">;
+  records: IndustryRecord[];
+  grouped: Partial<Record<BrokerRecordArea, IndustryRecord[]>>;
+  completion: { missing: string[]; complete: boolean };
+};
+
 export type BrokerCatalog = {
   areas: Record<BrokerRecordArea, string[]>;
   recordDefinitions: Record<string, BrokerRecordDefinition>;
@@ -1143,6 +1162,10 @@ export function getBrokerOverview(): Promise<BrokerOverview> {
 
 export function getBrokerCatalog(): Promise<BrokerCatalog> {
   return request<BrokerCatalog>("/broker/catalog");
+}
+
+export function getBrokerPropertyExpedient(propertyId: string): Promise<BrokerPropertyExpedient> {
+  return request<BrokerPropertyExpedient>(`/broker/properties/${encodeURIComponent(propertyId)}/expedient`);
 }
 
 export function getBrokerOperations(type?: BrokerOperationType): Promise<BrokerOperation[]> {
