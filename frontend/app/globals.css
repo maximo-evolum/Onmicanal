@@ -17093,3 +17093,85 @@ textarea:focus {
 :root[data-theme="dark"] .broker-reporting article,:root[data-theme="dark"] .broker-training-panel,:root[data-theme="dark"] .broker-training-scenarios,:root[data-theme="dark"] .broker-training-review,:root[data-theme="dark"] .broker-automation-rules { border-color: rgba(119,231,224,.2); background: #16132a; box-shadow: none; }:root[data-theme="dark"] .broker-reporting b,:root[data-theme="dark"] .broker-training-review h3,:root[data-theme="dark"] .broker-automation-rules b { color: #fff; }:root[data-theme="dark"] .broker-reporting small,:root[data-theme="dark"] .broker-training-review p,:root[data-theme="dark"] .broker-training-scenarios small,:root[data-theme="dark"] .broker-automation-rules p { color: #c1bbd4; }:root[data-theme="dark"] .broker-training-scenarios button { color: #e7e0f7; background: #211b3c; }:root[data-theme="dark"] .broker-training-scenarios button:hover,:root[data-theme="dark"] .broker-training-scenarios button.selected { color: #fff; border-color: #40d9d3; background: #163946; }:root[data-theme="dark"] .broker-training-review label { color: #d8d0e9; }:root[data-theme="dark"] .broker-training-review textarea { border-color: rgba(198,181,255,.25); color: #f5f1ff; background: #211b3c; }:root[data-theme="dark"] .broker-human-note { background: #3a2e1a; }
 @media (max-width: 980px) { .broker-reporting { grid-template-columns: repeat(2,minmax(0,1fr)); }.broker-training-grid { grid-template-columns: 1fr; }.broker-automation-rules > div { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 600px) { .broker-reporting { grid-template-columns: 1fr 1fr; }.broker-training-panel,.broker-training-review,.broker-automation-rules { padding: 18px; border-radius: 16px; }.broker-automation-rules > div { grid-template-columns: 1fr; } }
+
+/* Broker OS · modo oscuro/Nexo
+   Esta capa debe vivir después de Lumen: los estilos claros del workspace se
+   cargan más abajo que la primera definición nocturna y, sin este cierre,
+   dejaban títulos oscuros sobre encabezados violetas. */
+:root[data-theme="dark"] .vertical-shell.product-workspace > main.realty-page.realty-workspace,
+:root[data-design-system="neon"] .vertical-shell.product-workspace > main.realty-page.realty-workspace {
+  --product-bg: #070711;
+  --product-surface: #151329;
+  --product-surface-2: #1d1a35;
+  --product-line: rgba(159, 122, 248, .34);
+  --product-text: #f8f7ff;
+  --product-muted: #c5c2d6;
+  --product-success: #59e6d2;
+  background:
+    radial-gradient(circle at 94% 0%, rgba(46, 139, 255, .16), transparent 27%),
+    radial-gradient(circle at 52% -16%, rgba(138, 46, 255, .20), transparent 33%),
+    #090a18;
+  color: var(--product-text);
+}
+
+:root[data-theme="dark"] .product-workspace .realty-hero,
+:root[data-design-system="neon"] .product-workspace .realty-hero,
+:root[data-theme="dark"] .product-workspace .realty-ws-hero,
+:root[data-design-system="neon"] .product-workspace .realty-ws-hero {
+  border-color: var(--product-line) !important;
+  background:
+    radial-gradient(circle at 94% 15%, rgba(46, 139, 255, .27), transparent 29%),
+    linear-gradient(118deg, #1a1633, #121d3a) !important;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .28) !important;
+}
+
+:root[data-theme="dark"] .product-workspace :is(.realty-ws-kpis article, .realty-ws-card, .realty-dashboard-section, .realty-workspace .vertical-card, .realty-workspace .property-portal-card, .realty-buyer-form, .realty-buyer-results, .realty-buyer-item, .realty-match-panel, .realty-property-match, .realty-ws-activity-summary article, .realty-alert-list article, .realty-portal-switch, .realty-training-grid article),
+:root[data-design-system="neon"] .product-workspace :is(.realty-ws-kpis article, .realty-ws-card, .realty-dashboard-section, .realty-workspace .vertical-card, .realty-workspace .property-portal-card, .realty-buyer-form, .realty-buyer-results, .realty-buyer-item, .realty-match-panel, .realty-property-match, .realty-ws-activity-summary article, .realty-alert-list article, .realty-portal-switch, .realty-training-grid article) {
+  border-color: var(--product-line) !important;
+  color: var(--product-text) !important;
+  background: linear-gradient(145deg, rgba(25, 22, 51, .98), rgba(13, 19, 39, .98)) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .20) !important;
+}
+
+:root[data-theme="dark"] .product-workspace .realty-ws-row,
+:root[data-design-system="neon"] .product-workspace .realty-ws-row,
+:root[data-theme="dark"] .product-workspace .realty-ws-row-head,
+:root[data-design-system="neon"] .product-workspace .realty-ws-row-head,
+:root[data-theme="dark"] .product-workspace .realty-workspace .realty-ws-row,
+:root[data-design-system="neon"] .product-workspace .realty-workspace .realty-ws-row {
+  border-color: rgba(194, 174, 255, .17) !important;
+  color: var(--product-text) !important;
+  background: rgba(9, 11, 27, .72) !important;
+}
+:root[data-theme="dark"] .product-workspace .realty-ws-row-head,
+:root[data-design-system="neon"] .product-workspace .realty-ws-row-head { background: rgba(108, 65, 186, .24) !important; }
+
+:root[data-theme="dark"] .product-workspace :is(h1, h2, h3, h4, strong, b),
+:root[data-design-system="neon"] .product-workspace :is(h1, h2, h3, h4, strong, b) { color: var(--product-text) !important; }
+:root[data-theme="dark"] .product-workspace :is(p, small, label, span),
+:root[data-design-system="neon"] .product-workspace :is(p, small, label, span) { color: var(--product-muted) !important; }
+
+:root[data-theme="dark"] .product-workspace :is(.realty-hero > div > span, .realty-ws-intro > span, .realty-ws-card-head > div > span, .realty-dashboard-heading > div > span, .realty-training-grid article > span),
+:root[data-design-system="neon"] .product-workspace :is(.realty-hero > div > span, .realty-ws-intro > span, .realty-ws-card-head > div > span, .realty-dashboard-heading > div > span, .realty-training-grid article > span) { color: #c59aff !important; }
+:root[data-theme="dark"] .product-workspace :is(.property-portal-price, .realty-ws-kpis article small, .realty-match-heading > strong),
+:root[data-design-system="neon"] .product-workspace :is(.property-portal-price, .realty-ws-kpis article small, .realty-match-heading > strong) { color: var(--product-success) !important; }
+
+:root[data-theme="dark"] .product-workspace :is(input, select, textarea),
+:root[data-design-system="neon"] .product-workspace :is(input, select, textarea) {
+  border-color: rgba(184, 153, 255, .38) !important;
+  color: #fff !important;
+  background: rgba(7, 9, 23, .78) !important;
+}
+:root[data-theme="dark"] .product-workspace :is(input, select, textarea)::placeholder,
+:root[data-design-system="neon"] .product-workspace :is(input, select, textarea)::placeholder { color: #aaa6bc; }
+
+:root[data-theme="dark"] .product-workspace .secondary-btn,
+:root[data-theme="dark"] .product-workspace .finance-link-button,
+:root[data-design-system="neon"] .product-workspace .secondary-btn,
+:root[data-design-system="neon"] .product-workspace .finance-link-button {
+  border-color: rgba(191, 159, 255, .56) !important;
+  color: #eeeaff !important;
+  background: rgba(25, 21, 51, .86) !important;
+}
+:root[data-theme="dark"] .product-workspace .primary-btn,
+:root[data-design-system="neon"] .product-workspace .primary-btn { color: #fff !important; }
