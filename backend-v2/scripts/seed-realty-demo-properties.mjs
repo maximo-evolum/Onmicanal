@@ -101,8 +101,8 @@ const PROPERTIES = [
     stage: "CONTACT",
   },
   {
-    title: "Townhouse Piedra Roja",
-    propertyType: "Townhouse",
+    title: "Casa adosada Piedra Roja",
+    propertyType: "Casa adosada",
     operation: "Venta",
     price: 420000000,
     ufPrice: 11000,
@@ -201,8 +201,8 @@ const PROPERTIES = [
     orientation: "Suroriente",
     commonExpenses: 115000,
     photoUrl: "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1400&q=80",
-    observations: "Edificio nuevo con cowork, quincho panoramico y gimnasio.",
-    features: ["nuevo", "cowork", "gimnasio", "quincho"],
+    observations: "Edificio nuevo con espacio colaborativo, quincho panorámico y gimnasio.",
+    features: ["nuevo", "espacio colaborativo", "gimnasio", "quincho"],
     ownerName: "Constructora Urbano",
     ownerPhone: "+56970010016",
     ownerEmail: "ventas@urbano.example.com",
@@ -598,14 +598,20 @@ async function upsertProperty(tenantId, property, index, brokers) {
     ],
   };
 
+  const legacyTitle = property.title === "Casa adosada Piedra Roja" ? "Townhouse Piedra Roja" : null;
   const existing = await prisma.industryRecord.findFirst({
-    where: { tenantId, recordType: "property", title: property.title },
+    where: {
+      tenantId,
+      recordType: "property",
+      ...(legacyTitle ? { title: { in: [property.title, legacyTitle] } } : { title: property.title })
+    },
   });
 
   if (existing) {
     return prisma.industryRecord.update({
       where: { id: existing.id },
       data: {
+        title: property.title,
         status: "ACTIVE",
         assignedToId: broker?.id || null,
         data,
@@ -632,14 +638,21 @@ async function upsertDemoRecord(tenantId, { recordType, title, status, data, ass
     demo: true,
     demoLabel: "Datos de demostración Broker OS",
   };
+  const legacyTitle = title === "Tasación aprobada - Casa adosada Piedra Roja"
+    ? "Tasación aprobada - Townhouse Piedra Roja"
+    : null;
   const existing = await prisma.industryRecord.findFirst({
-    where: { tenantId, recordType, title },
+    where: {
+      tenantId,
+      recordType,
+      ...(legacyTitle ? { title: { in: [title, legacyTitle] } } : { title })
+    },
     select: { id: true },
   });
   if (existing) {
     return prisma.industryRecord.update({
       where: { id: existing.id },
-      data: { status, assignedToId, data: payload },
+      data: { title, status, assignedToId, data: payload },
     });
   }
   return prisma.industryRecord.create({
@@ -657,7 +670,7 @@ async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
   const buyerId = (name) => buyers.find((buyer) => buyer.name === name)?.id || null;
   const property = {
     pocuro: propertyId("Departamento Vista Parque Pocuro"),
-    piedraRoja: propertyId("Townhouse Piedra Roja"),
+    piedraRoja: propertyId("Casa adosada Piedra Roja"),
     apoquindo: propertyId("Oficina Premium Apoquindo"),
     nunoa: propertyId("Departamento Nuevo Nunoa"),
     penalolen: propertyId("Casa Familiar Penalolen Alto"),
@@ -726,7 +739,7 @@ async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
   });
 
   // Comercial y cierre.
-  await put({ recordType: "property_appraisal", title: "Tasación aprobada - Townhouse Piedra Roja", status: "APPROVED", assignedToId: assigned.diego, data: { propertyId: property.piedraRoja, estimatedValue: 425000000, method: "Comparables de mercado", appraisedAt: "2026-08-04", notes: "Valor referencial validado con oferta y demanda de Chicureo." } });
+  await put({ recordType: "property_appraisal", title: "Tasación aprobada - Casa adosada Piedra Roja", status: "APPROVED", assignedToId: assigned.diego, data: { propertyId: property.piedraRoja, estimatedValue: 425000000, method: "Comparables de mercado", appraisedAt: "2026-08-04", notes: "Valor referencial validado con oferta y demanda de Chicureo." } });
   await put({ recordType: "property_mandate", title: "Mandato vigente - Departamento Vista Parque Pocuro", status: "SIGNED", assignedToId: assigned.maria, data: { propertyId: property.pocuro, ownerName: "Andrés Toledo", startDate: "2026-07-25", endDate: "2026-10-25", exclusivity: true } });
   await put({ recordType: "property_offer", title: "Oferta Carolina Fuentes - Vista Parque Pocuro", status: "SUBMITTED", assignedToId: assigned.maria, data: { propertyId: property.pocuro, buyerName: "Carolina Fuentes", buyerId: buyersByName.carolina, amount: 229000000, validityUntil: "2026-08-20", financing: "Crédito hipotecario preaprobado" } });
   await put({ recordType: "property_promise", title: "Promesa de compraventa - Casa Familiar Peñalolén Alto", status: "PENDING_SIGNATURE", assignedToId: assigned.carlos, data: { propertyId: property.penalolen, buyerName: "Felipe Arancibia", buyerId: buyersByName.felipe, signingDate: "2026-08-22", agreedAmount: 338000000, notary: "Notaría de Peñalolén" } });
