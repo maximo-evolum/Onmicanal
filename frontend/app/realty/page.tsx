@@ -45,6 +45,7 @@ type RealtyView = keyof typeof views;
 /** Entrada única de Inmobiliaria desde el menú EV. */
 function RealtyDashboardContent() {
   const searchParams = useSearchParams();
+  const agentSession = useAgentSession();
   const [accessModule, setAccessModule] = useState<ModuleAccessKey | null>(null);
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [role, setRole] = useState<string | null>(null);
@@ -68,10 +69,10 @@ function RealtyDashboardContent() {
     };
 
     const snapshot = getStoredTenantAccess(session);
-    if (snapshot) {
-      resolveAccess(snapshot);
-      return () => { mounted = false; };
-    }
+    // Use the cached session immediately, then refresh it once from the
+    // server. This prevents stale module permissions after an administrator
+    // enables a module without revalidating on every internal navigation.
+    if (snapshot) resolveAccess(snapshot);
 
     // Respaldo para una sesión abierta antes de esta mejora. En sesiones
     // nuevas el snapshot se crea en login y este bloque no vuelve a ejecutarse
@@ -91,7 +92,7 @@ function RealtyDashboardContent() {
         resolveAccess(access);
       })
       .catch(() => {
-        if (mounted) setStatus("No pudimos verificar los módulos inmobiliarios. Reintenta en unos segundos.");
+        if (mounted && !snapshot) setStatus("No pudimos verificar los módulos inmobiliarios. Reintenta en unos segundos.");
       });
     return () => { mounted = false; };
   }, []);
@@ -102,8 +103,7 @@ function RealtyDashboardContent() {
 
   const requestedView = String(searchParams.get("view") || "summary") as RealtyView;
   const requested = views[requestedView] || views.summary;
-  const session = useAgentSession();
-  const mayOpenRequested = !requested.module || moduleAllowed(requested.module, enabledModules, role, session?.jobTitle, "REAL_ESTATE");
+  const mayOpenRequested = !requested.module || moduleAllowed(requested.module, enabledModules, role, agentSession?.jobTitle, "REAL_ESTATE");
   const current = mayOpenRequested ? requested : views.summary;
   const CurrentView = current.content;
 
