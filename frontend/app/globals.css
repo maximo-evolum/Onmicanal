@@ -17278,3 +17278,156 @@ textarea:focus {
   background: linear-gradient(110deg, #8a2eff, #2e8bff) !important;
   box-shadow: 0 10px 24px rgba(96, 68, 236, .32) !important;
 }
+
+/* Componentes internos de Broker OS. Algunos nacieron con la superficie Lumen
+   propia, por lo que requieren una capa explícita al cambiar a modo oscuro. */
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-dashboard-shortcuts a, .realty-ws-shortcuts a, .realty-ws-service-strip article,
+  .realty-ws-service-strip a, .realty-import-assistant, .realty-dropzone,
+  .realty-import-history, .realty-import-history article, .realty-activity-map,
+  .realty-team-panel, .realty-training-summary, .realty-training-catalog,
+  .realty-training-catalog article, .realty-training-checklist li,
+  .realty-property-chip, .realty-status-pill, .realty-stage-chip,
+  .property-buyer-match, .property-buyer-match-card, .realty-buyer-match-card,
+  .realty-match-card, .broker-kpi-card, .broker-os-notice, .broker-type-picker,
+  .broker-os-tabs button, .broker-type-picker button
+) {
+  border-color: rgba(195, 171, 255, .32) !important;
+  color: #f7f5ff !important;
+  background: linear-gradient(145deg, rgba(27, 22, 54, .98), rgba(14, 16, 35, .98)) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-dashboard-shortcuts a, .realty-ws-shortcuts a, .realty-ws-service-strip article,
+  .realty-ws-service-strip a, .realty-import-assistant, .realty-dropzone,
+  .realty-import-history, .realty-import-history article, .realty-activity-map,
+  .realty-team-panel, .realty-training-summary, .realty-training-catalog,
+  .realty-training-catalog article, .realty-training-checklist li,
+  .property-buyer-match, .property-buyer-match-card, .realty-buyer-match-card,
+  .realty-match-card, .broker-kpi-card, .broker-os-notice, .broker-type-picker,
+  .broker-os-tabs button, .broker-type-picker button
+) :is(h1, h2, h3, h4, strong, b) { color: #fff !important; }
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-dashboard-shortcuts a, .realty-ws-shortcuts a, .realty-ws-service-strip article,
+  .realty-ws-service-strip a, .realty-import-assistant, .realty-dropzone,
+  .realty-import-history, .realty-import-history article, .realty-activity-map,
+  .realty-team-panel, .realty-training-summary, .realty-training-catalog,
+  .realty-training-catalog article, .realty-training-checklist li,
+  .property-buyer-match, .property-buyer-match-card, .realty-buyer-match-card,
+  .realty-match-card, .broker-kpi-card, .broker-os-notice, .broker-type-picker,
+  .broker-os-tabs button, .broker-type-picker button
+) :is(p, small, span, li) { color: #d1cddd !important; }
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  [class*="status"], [class*="badge"], [class*="chip"], [class*="tag"]
+) {
+  border-color: rgba(80, 221, 207, .38) !important;
+  color: #e4fffb !important;
+  background: rgba(27, 105, 108, .36) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-dropzone, .realty-activity-map, .broker-os-notice
+) {
+  background:
+    radial-gradient(circle at 88% 12%, rgba(46, 139, 255, .25), transparent 40%),
+    linear-gradient(135deg, rgba(16, 53, 76, .94), rgba(27, 18, 55, .96)) !important;
+}
+
+/* Centro de notificaciones: se comparte entre las vistas de Broker y Core. */
+:root[data-design-system="dark"] .notification-center-trigger {
+  border-color: rgba(126, 218, 211, .48) !important;
+  color: #e8e3ff !important;
+  background: #17132a !important;
+}
+:root[data-design-system="dark"] .notification-center-count { border-color: #17132a !important; }
+:root[data-design-system="dark"] .notification-center-panel {
+  border-color: rgba(195, 171, 255, .42) !important;
+  color: #f7f5ff !important;
+  background: #17132a !important;
+  box-shadow: 0 22px 52px rgba(0, 0, 0, .48) !important;
+}
+:root[data-design-system="dark"] :is(.notification-center-panel-head, .notification-center-list a) { border-color: rgba(255, 255, 255, .1) !important; }
+:root[data-design-system="dark"] .notification-center-panel :is(strong, span) { color: #f7f5ff !important; }
+:root[data-design-system="dark"] .notification-center-list :is(small, time) { color: #c7c1d6 !important; }
+:root[data-design-system="dark"] .notification-center-list a:is(:hover, .is-unread) { background: #211b40 !important; }
+
+/* Documentos no pertenece a realty-product-workspace, por eso recibe su propia
+   superficie Nexo. El modo claro conserva las reglas originales superiores. */
+:root[data-design-system="dark"] .documents-page {
+  min-height: 100dvh;
+  color: #f7f5ff !important;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(46, 139, 255, .15), transparent 29%),
+    radial-gradient(circle at 44% -10%, rgba(138, 46, 255, .17), transparent 32%),
+    #05070d !important;
+}
+:root[data-design-system="dark"] :is(.documents-header, .documents-upload-card, .documents-list-card, .documents-row) {
+  border-color: rgba(195, 171, 255, .30) !important;
+  color: #f7f5ff !important;
+  background: linear-gradient(145deg, rgba(22, 18, 45, .98), rgba(10, 13, 29, .98)) !important;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .22) !important;
+}
+:root[data-design-system="dark"] :is(.documents-header, .documents-upload-card, .documents-list-card, .documents-row) :is(h1, h2, h3, strong, b) { color: #fff !important; }
+:root[data-design-system="dark"] :is(.documents-header, .documents-upload-card, .documents-list-card, .documents-row) :is(p, span, small, label) { color: #d1cddd !important; }
+:root[data-design-system="dark"] .documents-message {
+  border-color: rgba(80, 221, 207, .40) !important;
+  color: #dffcf7 !important;
+  background: rgba(19, 99, 103, .35) !important;
+}
+:root[data-design-system="dark"] .documents-upload-card :is(input, select, textarea) {
+  border-color: rgba(185, 149, 255, .48) !important;
+  color: #fff !important;
+  background: rgba(5, 7, 18, .90) !important;
+}
+:root[data-design-system="dark"] .documents-upload-card :is(input, select, textarea)::placeholder { color: #aaa5bd !important; }
+:root[data-design-system="dark"] .documents-file-input {
+  border-color: rgba(80, 221, 207, .56) !important;
+  color: #71f1e7 !important;
+  background: linear-gradient(135deg, rgba(14, 70, 78, .78), rgba(27, 20, 57, .92)) !important;
+}
+:root[data-design-system="dark"] .documents-file-input small { color: #d1cddd !important; }
+:root[data-design-system="dark"] .documents-row { border-color: rgba(255,255,255,.10) !important; background: rgba(12, 12, 28, .72) !important; }
+:root[data-design-system="dark"] .documents-empty { color: #d1cddd !important; }
+:root[data-design-system="dark"] .documents-page .ghost-btn {
+  border-color: rgba(196, 165, 255, .62) !important;
+  color: #f3efff !important;
+  background: rgba(28, 22, 58, .92) !important;
+}
+
+/* Las tarjetas hijas de estos paneles tenían fondos propios claros. */
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-team-panel, .realty-training-summary, .realty-training-catalog,
+  .realty-buyer-results, .property-buyer-matches, .broker-kpis,
+  .realty-dashboard-shortcuts, .realty-ws-shortcuts, .realty-ws-service-strip,
+  .realty-import-history
+) :is(article, li, a) {
+  border-color: rgba(195, 171, 255, .30) !important;
+  color: #f7f5ff !important;
+  background: linear-gradient(145deg, rgba(28, 23, 56, .98), rgba(15, 16, 36, .98)) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-team-panel, .realty-training-summary, .realty-training-catalog,
+  .realty-buyer-results, .property-buyer-matches, .broker-kpis,
+  .realty-dashboard-shortcuts, .realty-ws-shortcuts, .realty-ws-service-strip,
+  .realty-import-history
+) :is(article, li, a) :is(h1, h2, h3, h4, strong, b) { color: #fff !important; }
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-team-panel, .realty-training-summary, .realty-training-catalog,
+  .realty-buyer-results, .property-buyer-matches, .broker-kpis,
+  .realty-dashboard-shortcuts, .realty-ws-shortcuts, .realty-ws-service-strip,
+  .realty-import-history
+) :is(article, li, a) :is(p, small, span) { color: #d1cddd !important; }
+
+/* Botones secundarios y acciones neutrales no deben volver a blanco en Nexo. */
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-ws-card-head a, .realty-dashboard-heading a, .realty-import-assistant .secondary-btn,
+  .realty-ws-hero .secondary-btn, .realty-training-checklist button, .realty-team-panel button
+) {
+  border-color: rgba(196, 165, 255, .62) !important;
+  color: #f3efff !important;
+  background: rgba(28, 22, 58, .94) !important;
+}
