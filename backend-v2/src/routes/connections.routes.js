@@ -9,6 +9,7 @@ import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { decryptSecret, encryptSecret, hasSecret } from "../lib/credential-crypto.js";
 import { syncNuboxForTenant } from "../services/finance-sync.service.js";
 import { createTenantNotification } from "../lib/notifications.js";
+import { CHILEAN_FINANCIAL_INSTITUTIONS, normalizeChileanBankAccounts } from "../lib/finance-integrations.js";
 
 export const connectionsPublicRouter = Router();
 export const connectionsRouter = Router();
@@ -239,9 +240,21 @@ const PROVIDERS = [
     icon: "SI",
     type: "credentials",
     module: MODULES.FINANCE_INVOICES,
-    description: "Próxima conexión para documentos tributarios electrónicos y DTE autorizados.",
-    availability: "COMING_SOON",
-    requiredFields: []
+    description: "Prepara la empresa emisora y su certificado para consultar y gestionar DTE autorizados. Las acciones tributarias sensibles requieren revisión humana.",
+    requiredFields: ["companyRut", "environment", "certificateReference"],
+    publicFields: ["companyRut", "environment", "certificateReference"]
+  },
+  {
+    key: "finance_open_banking",
+    label: "Banca abierta",
+    group: "Finanzas",
+    groupKey: "finance",
+    icon: "BA",
+    type: "credentials",
+    module: MODULES.FINANCE_BANK_SYNC,
+    description: "Conecta cuentas bancarias con consentimiento explícito de su titular. Mientras no exista autorización, conserva la carga segura por cartola.",
+    requiredFields: ["companyRut", "bankAccounts"],
+    publicFields: ["companyRut", "bankAccounts"]
   },
   {
     key: "backup_provider",
@@ -344,20 +357,7 @@ function configMetadata(config) {
 }
 
 function normalizeBankAccounts(value) {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 20).map((item) => {
-    const source = normalizeMetadata(item, {});
-    const bank = cleanText(source.bank).slice(0, 100);
-    if (!bank) return null;
-    const last4 = String(source.accountLast4 || "").replace(/\D/g, "").slice(-4);
-    return {
-      bank,
-      alias: cleanText(source.alias).slice(0, 100) || "Cuenta sin nombre",
-      accountType: cleanText(source.accountType).slice(0, 60) || "Cuenta corriente",
-      ...(last4 ? { accountLast4: last4 } : {}),
-      syncMode: "CSV"
-    };
-  }).filter(Boolean);
+  return normalizeChileanBankAccounts(value);
 }
 
 function hasField(config, field) {
@@ -384,6 +384,7 @@ function providerStatus(provider, config) {
   // Errores de validación previos no deben dejar bloqueada una conexión que
   // ahora ya contiene todos sus identificadores operativos.
   if (lastTestStatus === "ERROR" && !/^Faltan campos:/i.test(lastTestMessage)) return "ERROR";
+  if (lastTestStatus === "PENDING") return "PENDING";
   // Las variables OAuth se requieren para crear o renovar una autorización,
   // no para reconocer una conexión ya configurada con token válido.
   if (fieldMissing.length) return "PENDING";

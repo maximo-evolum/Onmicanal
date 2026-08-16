@@ -120,6 +120,15 @@ export const env = {
   // mantiene solo en el servidor para no exponer detalles del proveedor a los
   // usuarios del Centro de Conexiones.
   nuboxApiBaseUrl: normalizeUrl(firstEnv("NUBOX_API_BASE_URL")),
+  siiApiBaseUrl: normalizeUrl(firstEnv("SII_API_BASE_URL")),
+  siiEnvironment: (firstEnv("SII_ENVIRONMENT") || "certification").toLowerCase(),
+  financeSiiSyncEnabled: firstEnv("FINANCE_SII_SYNC_ENABLED") === "true",
+  floidApiBaseUrl: normalizeUrl(firstEnv("FLOID_API_BASE_URL")),
+  floidClientId: firstEnv("FLOID_CLIENT_ID"),
+  floidClientSecret: firstEnv("FLOID_CLIENT_SECRET"),
+  floidWebhookSecret: firstEnv("FLOID_WEBHOOK_SECRET"),
+  floidRedirectUri: normalizeUrl(firstEnv("FLOID_REDIRECT_URI")),
+  financeFloidSyncEnabled: firstEnv("FINANCE_FLOID_SYNC_ENABLED") === "true",
 
   // Lanzamientos nativos de la app. Se publican por variable de entorno para
   // no acoplar el backend a un proveedor particular de archivos (S3, R2,
