@@ -17431,3 +17431,36 @@ textarea:focus {
   color: #f3efff !important;
   background: rgba(28, 22, 58, .94) !important;
 }
+
+/* Fichas de propiedad y matching: sus cápsulas y el panel padre no pueden
+   heredar las superficies Lumen cuando el usuario activa Nexo. */
+:root[data-design-system="dark"] .realty-product-workspace .property-buyer-matches {
+  border-color: rgba(195, 171, 255, .42) !important;
+  color: #f7f5ff !important;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(46, 139, 255, .18), transparent 34%),
+    linear-gradient(145deg, rgba(28, 23, 56, .99), rgba(13, 15, 33, .99)) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace .property-buyer-matches > div:first-child :is(span, h1, h2, h3, p) {
+  color: #f7f5ff !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace .property-buyer-matches > div:first-child span {
+  color: #cda8ff !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .property-portal-specs span, .property-card-actions > span,
+  .property-portal-card .property-assignment-row small
+) {
+  border-color: rgba(120, 236, 221, .42) !important;
+  color: #e5fffb !important;
+  background: rgba(21, 99, 104, .48) !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace .property-card-actions select {
+  border-color: rgba(196, 165, 255, .54) !important;
+  color: #f7f5ff !important;
+  background: rgba(10, 11, 29, .94) !important;
+}
