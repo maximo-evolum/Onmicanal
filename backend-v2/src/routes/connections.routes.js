@@ -360,6 +360,45 @@ function normalizeBankAccounts(value) {
   return normalizeChileanBankAccounts(value);
 }
 
+function requiresExternalAuthorization(provider) {
+  return ["finance_sii", "finance_open_banking"].includes(provider?.key);
+}
+
+function normalizeSiiConfiguration(value) {
+  const metadata = normalizeMetadata(value, {});
+  const environment = cleanText(metadata.environment, env.siiEnvironment || "certification").toLowerCase();
+  return {
+    ...metadata,
+    companyRut: cleanText(metadata.companyRut).replace(/[.\s]/g, ""),
+    environment: environment === "production" ? "production" : "certification",
+    certificateReference: cleanText(metadata.certificateReference)
+  };
+}
+
+function pendingExternalAuthorizationMessage(provider) {
+  if (provider.key === "finance_sii") {
+    return "Configuración tributaria guardada. Pendiente de autorización, certificado vigente y validación con SII.";
+  }
+  if (provider.key === "finance_open_banking") {
+    return "Cuentas bancarias registradas. Pendiente de consentimiento explícito y autorización del proveedor de banca abierta.";
+  }
+  return "Configuración guardada. Pendiente de autorización externa.";
+}
+
+// SII y banca abierta requieren una autorización verificable fuera de EVOLUM.
+// Tener los campos completos no equivale a que el proveedor haya autorizado
+// acceso a datos tributarios o bancarios.
+export function connectionVerificationResult(provider, { missing = [], testError = null } = {}) {
+  const pending = missing.length === 0 && !testError && requiresExternalAuthorization(provider);
+  const ok = missing.length === 0 && !testError && !pending;
+  return {
+    ok,
+    pending,
+    status: pending ? "PENDING" : ok ? "OK" : "ERROR",
+    message: pending ? pendingExternalAuthorizationMessage(provider) : null
+  };
+}
+
 function hasField(config, field) {
   const metadata = configMetadata(config);
   if (field === "accessToken") return hasSecret(config?.accessToken);
@@ -1468,6 +1507,25 @@ connectionsRouter.post("/connections/meta/reconcile", requireRole(ROLE_GROUPS.MA
   }
 });
 
+connectionsRouter.get("/connections/finance/catalog", requireRole(ROLE_GROUPS.MANAGERS), (_req, res) => {
+  res.json({
+    banks: CHILEAN_FINANCIAL_INSTITUTIONS.map(({ key, name, cmfCode }) => ({ key, name, cmfCode })),
+    sii: {
+      provider: "finance_sii",
+      environments: ["certification", "production"],
+      requiredFields: ["companyRut", "environment", "certificateReference"],
+      requiresExternalAuthorization: true,
+      message: "La conexión se confirma solo después de la autorización y validación de SII."
+    },
+    openBanking: {
+      provider: "finance_open_banking",
+      supportsMultipleAccounts: true,
+      requiresExplicitConsent: true,
+      fallback: "Carga manual de cartolas"
+    }
+  });
+});
+
 connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), async (req, res, next) => {
   try {
     const key = String(req.params.key || "").trim().toLowerCase();
@@ -1477,15 +1535,23 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
 
     const existing = await findTenantProviderConfig(req.tenantId, provider);
     const incomingMetadata = normalizeMetadata(req.body?.metadata, {});
-    if (provider.key === "finance_bank_statements" && Object.prototype.hasOwnProperty.call(incomingMetadata, "bankAccounts")) {
+    if (["finance_bank_statements", "finance_open_banking"].includes(provider.key)
+      && Object.prototype.hasOwnProperty.call(incomingMetadata, "bankAccounts")) {
       incomingMetadata.bankAccounts = normalizeBankAccounts(incomingMetadata.bankAccounts);
+    }
+    if (provider.key === "finance_sii") {
+      Object.assign(incomingMetadata, normalizeSiiConfiguration({
+        ...configMetadata(existing),
+        ...incomingMetadata
+      }));
     }
     // Una credencial recién guardada no hereda un error de una credencial
     // anterior. Queda pendiente hasta que la prueba manual o el verificador
     // programado confirme que el proveedor realmente la acepta.
-    const supportsRemoteVerification = Boolean(provider.oauthProvider || provider.key === "finance_nubox");
+    const supportsRemoteVerification = Boolean(provider.oauthProvider || provider.key === "finance_nubox" || requiresExternalAuthorization(provider));
     const verificationInputChanged = ["accessToken", "verifyToken", ...(provider.requiredFields || [])]
-      .some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field));
+      .some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field)
+        || Object.prototype.hasOwnProperty.call(incomingMetadata, field));
     const metadata = normalizeMetadata({
       ...configMetadata(existing),
       ...incomingMetadata,
@@ -1495,7 +1561,9 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
       ...(supportsRemoteVerification && verificationInputChanged
         ? {
           lastTestStatus: "PENDING",
-          lastTestMessage: "Configuración guardada. Pendiente de verificación automática.",
+          lastTestMessage: requiresExternalAuthorization(provider)
+            ? pendingExternalAuthorizationMessage(provider)
+            : "Configuración guardada. Pendiente de verificación automática.",
           lastTestedAt: null,
           connectionReadyNotifiedAt: null
         }
@@ -1563,12 +1631,15 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
         testError = error instanceof Error ? error.message : "La prueba con Nubox fallo";
       }
     }
-    const ok = missing.length === 0 && !testError;
+    const verification = connectionVerificationResult(provider, { missing, testError });
+    const { ok, pending } = verification;
     const metadata = normalizeMetadata({
       ...configMetadata(testedConfig),
       lastTestedAt: new Date().toISOString(),
-      lastTestStatus: ok ? "OK" : "ERROR",
-      lastTestMessage: ok
+      lastTestStatus: verification.status,
+      lastTestMessage: pending
+        ? verification.message
+        : ok
         ? (provider.oauthProvider
           ? "Token y cuenta OAuth validados"
           : provider.key === "finance_nubox"
@@ -1592,11 +1663,13 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
     await recordAuditLog(req, "CONNECTION_TESTED", "tenant_channel_config", config.id, {
       provider: key,
       ok,
+      pending,
       missing
     });
 
-    res.status(ok ? 200 : 400).json({
+    res.status(pending ? 202 : ok ? 200 : 400).json({
       ok,
+      pending,
       missing,
       provider: publicProvider(provider, updated)
     });

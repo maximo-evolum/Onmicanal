@@ -80,7 +80,7 @@ export default function DocumentsPage() {
   return (
     <ModuleGate moduleKey="documents">
       <div className={`module-with-menu-shell documents-workspace ${sidebarOpen ? "" : "nav-collapsed"}`}>
-        <EvolumSidebar active="Documentos" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} showNotificationCenter={false} />
+        <EvolumSidebar active="Documentos" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} showNotificationCenter />
         <main className="documents-page">
           <header className="documents-header">
             <div><span className="documents-eyebrow">ARCHIVOS DEL EQUIPO</span><h1>Documentos</h1><p>Centraliza archivos de operación, respaldo y conocimiento del equipo.</p></div>

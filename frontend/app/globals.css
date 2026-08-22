@@ -17464,3 +17464,97 @@ textarea:focus {
   color: #f7f5ff !important;
   background: rgba(10, 11, 29, .94) !important;
 }
+
+/* Broker OS / Nexo: cierre de contraste para superficies que todavía podían
+   heredar el tema claro. Se limita a Broker y Documentos para no alterar
+   Finanzas ni otras verticales. */
+:root[data-design-system="dark"] :is(.realty-product-workspace, .broker-os-workspace, .documents-workspace) {
+  color-scheme: dark;
+  color: #f8f7ff !important;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .realty-ws-hero, .realty-ws-card, .realty-kpi-card, .vertical-card,
+  .realty-predictive-panel, .realty-market-signals, .realty-ws-ia-card,
+  .realty-ws-suggestions, .realty-ws-shortcuts, .realty-buyer-workspace,
+  .realty-buyer-form, .realty-buyer-results, .realty-match-panel,
+  .property-detail-modal, .property-detail-aside, .property-detail-description,
+  .property-detail-features, .property-portal-card, .broker-profile-card,
+  .realty-import-history, .realty-import-assistant, .realty-team-panel,
+  .realty-training-summary, .realty-training-catalog, .realty-dashboard-shortcuts,
+  .realty-ws-service-strip
+),
+:root[data-design-system="dark"] .broker-os-workspace :is(
+  .broker-os-header, .broker-recommendations, .broker-recommendation,
+  .broker-expedient-panel, .broker-reporting, .broker-os-form, .broker-os-list,
+  .broker-operation-card, .broker-record-card, .broker-agents-panel,
+  .broker-agent-card, .broker-training-panel, .broker-training-scenarios,
+  .broker-training-review, .broker-human-note, .broker-automation-rules
+) {
+  border-color: rgba(151, 91, 255, .54) !important;
+  color: #f8f7ff !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(50, 120, 255, .12), transparent 33%),
+    linear-gradient(145deg, #17122f 0%, #0b0c1b 100%) !important;
+}
+
+:root[data-design-system="dark"] .broker-os-workspace .broker-kpis > *,
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .property-buyer-match, .realty-property-match, .realty-buyer-item,
+  .realty-ws-table, .realty-ws-row, .realty-ws-row-head,
+  .property-assignment-row, .property-card-actions
+) {
+  border-color: rgba(151, 91, 255, .42) !important;
+  color: #f8f7ff !important;
+  background: linear-gradient(145deg, #1b1735, #0f1023) !important;
+}
+
+:root[data-design-system="dark"] :is(.realty-product-workspace, .broker-os-workspace, .documents-workspace) :is(
+  h1, h2, h3, h4, strong, b, th, label
+) { color: #fff !important; }
+
+:root[data-design-system="dark"] :is(.realty-product-workspace, .broker-os-workspace, .documents-workspace) :is(
+  p, small, td, li, .muted, .helper-text, .eyebrow
+) { color: #d6d0e5 !important; }
+
+:root[data-design-system="dark"] :is(.realty-product-workspace, .broker-os-workspace, .documents-workspace) :is(
+  input, select, textarea
+) {
+  border-color: rgba(185, 149, 255, .56) !important;
+  color: #fff !important;
+  background: #0a0b18 !important;
+}
+
+:root[data-design-system="dark"] :is(.realty-product-workspace, .broker-os-workspace, .documents-workspace) :is(
+  input, textarea
+)::placeholder { color: #aaa5bd !important; }
+
+:root[data-design-system="dark"] .realty-product-workspace :is(
+  .property-portal-specs span, .property-card-actions > span,
+  .property-portal-card .property-assignment-row small, .property-buyer-match,
+  .property-buyer-match-action, .property-open-btn, .realty-card-link-button
+),
+:root[data-design-system="dark"] .broker-os-workspace :is(.broker-record-state, .broker-stage) {
+  border-color: rgba(120, 236, 221, .42) !important;
+  color: #e5fffb !important;
+  background: rgba(21, 99, 104, .54) !important;
+}
+
+:root[data-design-system="dark"] :is(.realty-product-workspace, .broker-os-workspace, .documents-workspace) :is(
+  .secondary-btn, .realty-secondary-action, .realty-card-link-button,
+  .property-open-btn, .property-buyer-match-action, .property-detail-close,
+  .property-thumbnail-remove, .ghost-btn
+) {
+  border-color: rgba(196, 165, 255, .66) !important;
+  color: #f8f7ff !important;
+  background: #1b1735 !important;
+}
+
+:root[data-design-system="dark"] .documents-workspace :is(
+  .documents-header, .documents-upload-card, .documents-list-card,
+  .documents-row, .documents-empty
+) {
+  border-color: rgba(151, 91, 255, .54) !important;
+  color: #f8f7ff !important;
+  background: linear-gradient(145deg, #17122f 0%, #0b0c1b 100%) !important;
+}

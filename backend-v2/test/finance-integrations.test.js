@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CHILEAN_FINANCIAL_INSTITUTIONS, normalizeChileanBankAccounts } from "../src/lib/finance-integrations.js";
+import { connectionVerificationResult } from "../src/routes/connections.routes.js";
 
 test("incluye instituciones bancarias establecidas en Chile", () => {
   assert.ok(CHILEAN_FINANCIAL_INSTITUTIONS.length >= 18);
@@ -26,4 +27,19 @@ test("normaliza cuentas sin conservar el número completo", () => {
     syncMode: "OPEN_BANKING",
     consentStatus: "PENDIENTE"
   });
+});
+
+test("SII y banca abierta quedan pendientes hasta confirmar autorización externa", () => {
+  const sii = connectionVerificationResult({ key: "finance_sii" });
+  const openBanking = connectionVerificationResult({ key: "finance_open_banking" });
+  const incomplete = connectionVerificationResult({ key: "finance_sii" }, { missing: ["companyRut"] });
+
+  assert.deepEqual(
+    { ok: sii.ok, pending: sii.pending, status: sii.status },
+    { ok: false, pending: true, status: "PENDING" }
+  );
+  assert.match(sii.message, /validación con SII/i);
+  assert.equal(openBanking.pending, true);
+  assert.equal(incomplete.status, "ERROR");
+  assert.equal(incomplete.pending, false);
 });
