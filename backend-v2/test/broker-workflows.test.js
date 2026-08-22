@@ -5,8 +5,10 @@ import {
   BROKER_AGENT_SCENARIOS,
   BROKER_AUTOMATION_RULES,
   BROKER_RECORD_AREAS,
+  BROKER_RECORD_TYPES,
   RENTAL_STAGES,
   SALE_STAGES,
+  brokerRecordDefinition,
   isBrokerRecordArea,
   stagesForBrokerOperation,
   validateBrokerRecord,
@@ -35,6 +37,19 @@ test("Broker OS conoce las areas de expediente operativas", () => {
   assert.equal(isBrokerRecordArea("anything_else"), false);
   assert.equal(BROKER_RECORD_AREAS.documents.includes("property_document"), true);
   assert.equal(BROKER_RECORD_AREAS.financing.includes("operation_financing"), true);
+});
+
+test("Broker OS mantiene completo y sin duplicados su catálogo técnico", () => {
+  const typesByArea = Object.values(BROKER_RECORD_AREAS).flat();
+  assert.equal(new Set(typesByArea).size, typesByArea.length);
+  assert.deepEqual([...BROKER_RECORD_TYPES].sort(), [...typesByArea].sort());
+
+  for (const recordType of BROKER_RECORD_TYPES) {
+    const definition = brokerRecordDefinition(recordType);
+    assert.ok(definition, `Falta definición para ${recordType}`);
+    assert.equal(Array.isArray(definition.required), true);
+    assert.equal(definition.required.length > 0, true);
+  }
 });
 
 test("Broker OS valida las fichas segun el proceso que representan", () => {

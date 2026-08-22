@@ -821,6 +821,58 @@ async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
   return records;
 }
 
+const BROKER_DEMO_AREAS = [
+  { area: "Propiedades y cartera", recordTypes: ["property"] },
+  { area: "Captacion, tasacion y cierre", recordTypes: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_settlement"] },
+  { area: "Arriendos y administracion", recordTypes: ["rental_application", "rental_contract", "rental_payment", "administration_liquidation"] },
+  { area: "Mantenciones y proveedores", recordTypes: ["maintenance_ticket", "service_provider", "provider_quote", "material_purchase"] },
+  { area: "Proyectos y publicacion", recordTypes: ["remodeling_project", "project_budget", "project_milestone", "marketing_publication"] },
+  { area: "Postventa y garantias", recordTypes: ["property_inspection", "property_handover", "post_sale_case", "warranty_case"] },
+  { area: "Expediente y financiamiento", recordTypes: ["property_document", "legal_document", "digital_signature", "operation_financing", "operation_financing_expense"] },
+  { area: "Actividad, alertas y entrenamiento IA", recordTypes: ["visit", "realty_alert", "broker_agent_evaluation"] },
+];
+
+async function verifyBrokerDemo() {
+  const tenant = await findTenant();
+  if (!tenant) {
+    throw new Error("No se encontro el tenant de demostracion de Broker OS.");
+  }
+
+  const records = await prisma.industryRecord.findMany({
+    where: { tenantId: tenant.id },
+    select: { recordType: true },
+  });
+  const counts = records.reduce((accumulator, record) => {
+    accumulator[record.recordType] = (accumulator[record.recordType] || 0) + 1;
+    return accumulator;
+  }, {});
+  const areas = BROKER_DEMO_AREAS.map(({ area, recordTypes }) => ({
+    area,
+    total: recordTypes.reduce((total, recordType) => total + (counts[recordType] || 0), 0),
+    registros: recordTypes.map((recordType) => ({
+      tipo: recordType,
+      total: counts[recordType] || 0,
+    })),
+  }));
+  const faltantes = areas
+    .filter((area) => area.total === 0)
+    .map((area) => area.area);
+
+  console.log(JSON.stringify({
+    tenant: tenant.name,
+    tenantId: tenant.id,
+    totalRegistros: records.length,
+    propiedades: counts.property || 0,
+    areas,
+    demostracionLista: faltantes.length === 0,
+    faltantes,
+  }, null, 2));
+
+  if (faltantes.length > 0) {
+    process.exitCode = 1;
+  }
+}
+
 async function main() {
   const tenant = await findTenant();
   if (!tenant) {
@@ -857,7 +909,7 @@ async function main() {
   }, null, 2));
 }
 
-main()
+(process.argv.includes("--verify") ? verifyBrokerDemo() : main())
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
