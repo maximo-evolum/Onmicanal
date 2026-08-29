@@ -12,6 +12,7 @@ import {
   getBrokerPropertyExpedient,
   getBrokerRecords,
   getIndustryRecords,
+  previewBrokerCommission,
   saveBrokerAiEvaluation,
   updateBrokerRecord,
   type BrokerCatalog,
@@ -21,16 +22,17 @@ import {
   type BrokerPropertyExpedient,
   type BrokerRecordArea,
   type BrokerRecordDefinition,
+  type BrokerCommissionPreview,
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | "training" | BrokerRecordArea;
+type Tab = "operations" | "agents" | "training" | "commissions" | "guides" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
   SALE: "Venta",
   RENTAL: "Arriendo",
-  ADMINISTRATION: "Administracion"
+  ADMINISTRATION: "Administración"
 };
 
 const AREA_CONFIG: Record<BrokerRecordArea, { label: string; description: string }> = {
@@ -48,11 +50,37 @@ const FIELD_CONFIG: Record<string, FieldConfig> = {
   ownerName: { label: "Propietario o mandante", placeholder: "Nombre o razon social" },
   startDate: { label: "Fecha de inicio", type: "date" },
   estimatedValue: { label: "Valor estimado", type: "number", placeholder: "Ej.: 185000000" },
+  currency: { label: "Moneda", placeholder: "Ej.: CLP" },
+  endDate: { label: "Fecha de término", type: "date" },
+  exclusivityMonths: { label: "Meses de exclusividad", type: "number", placeholder: "Ej.: 6" },
+  commissionRatePct: { label: "Comisión (%)", type: "number", placeholder: "Ej.: 2" },
   buyerName: { label: "Comprador o interesado", placeholder: "Nombre o empresa" },
+  offerDate: { label: "Fecha de oferta", type: "date" },
+  financingType: { label: "Tipo de financiamiento", placeholder: "Ej.: Crédito hipotecario" },
+  agreedAmount: { label: "Monto acordado", type: "number", placeholder: "Ej.: 180000000" },
+  penaltyRatePct: { label: "Multa acordada (%)", type: "number", placeholder: "Ej.: 10" },
+  baseAmount: { label: "Base de cálculo", type: "number", placeholder: "Ej.: 180000000" },
+  brokerSplitPct: { label: "Parte del corredor (%)", type: "number", placeholder: "Ej.: 50" },
+  companySplitPct: { label: "Parte de la empresa (%)", type: "number", placeholder: "Ej.: 50" },
+  brokerAmount: { label: "Monto corredor", type: "number", placeholder: "Ej.: 1800000" },
+  companyAmount: { label: "Monto empresa", type: "number", placeholder: "Ej.: 1800000" },
+  settlementDate: { label: "Fecha de liquidación", type: "date" },
   amount: { label: "Monto", type: "number", placeholder: "Ej.: 2500000" },
   signingDate: { label: "Fecha de firma", type: "date" },
   tenantName: { label: "Arrendatario", placeholder: "Nombre o razon social" },
   monthlyRent: { label: "Arriendo mensual", type: "number", placeholder: "Ej.: 750000" },
+  taxEvaluation: { label: "Evaluación tributaria", placeholder: "Ej.: Aprobada / pendiente" },
+  commercialEvaluation: { label: "Evaluación comercial", placeholder: "Ej.: Aprobada / pendiente" },
+  paymentDay: { label: "Día de pago", type: "number", placeholder: "Ej.: 5" },
+  depositAmount: { label: "Garantía", type: "number", placeholder: "Ej.: 750000" },
+  managementRatePct: { label: "Administración (%)", type: "number", placeholder: "Ej.: 8" },
+  ownerPaymentDay: { label: "Día de pago al propietario", type: "number", placeholder: "Ej.: 10" },
+  ownerBankAccount: { label: "Cuenta del propietario", placeholder: "Banco y cuenta informada" },
+  utilityType: { label: "Tipo de servicio", placeholder: "Ej.: Gastos comunes, agua, electricidad" },
+  accountNumber: { label: "Número de cuenta", placeholder: "Número de cliente o cuenta" },
+  managementFee: { label: "Honorario de administración", type: "number", placeholder: "Ej.: 60000" },
+  ownerTransferAmount: { label: "Monto a transferir al propietario", type: "number", placeholder: "Ej.: 690000" },
+  transferDate: { label: "Fecha estimada de transferencia", type: "date" },
   dueDate: { label: "Fecha de vencimiento", type: "date" },
   period: { label: "Periodo", placeholder: "Ej.: Agosto 2026" },
   category: { label: "Categoria", placeholder: "Ej.: Electricidad, gasfiteria" },
@@ -155,6 +183,7 @@ const VISIBLE_STATUS_LABELS: Record<string, string> = {
   DISBURSED: "Desembolsado",
   SETTLED: "Liquidado",
   RECONCILED: "Conciliado"
+  ,EVALUACION_COMERCIAL: "Evaluación comercial", MANDATO_Y_PUBLICACION: "Mandato y publicación", CALIFICACION_Y_VISITAS: "Calificación y visitas", OFERTA_Y_NEGOCIACION: "Oferta y negociación", ESTUDIO_DE_TITULO: "Estudio de título", INSCRIPCION_CBR: "Inscripción en CBR", ENTREGA_Y_POSTVENTA: "Entrega y postventa", DEFINICION_DE_PRECIO: "Definición de precio", EXCLUSIVIDAD: "Exclusividad", PREPARACION_INMUEBLE: "Preparación del inmueble", GENERACION_DE_LEADS: "Generación de interesados", EVALUACION_ARRENDATARIO: "Evaluación de arrendatario", RESERVA: "Reserva", PAGO_INICIAL: "Pago inicial", ENTREGA_LLAVES: "Entrega de llaves", REVISION_MENSUAL: "Revisión mensual", COBRO_Y_CONCILIACION: "Cobro y conciliación", LIQUIDACION_Y_TRANSFERENCIA: "Liquidación y transferencia", MANTENCIONES_Y_SERVICIOS: "Mantenciones y servicios", LISTA_PARA_OPERAR: "Lista para operar", EN_PREPARACION: "En preparación", INCOMPLETA: "Incompleta"
 };
 
 function readable(value: unknown) {
@@ -193,6 +222,7 @@ export function BrokerOperationsPageContent() {
   const [recordType, setRecordType] = useState("");
   const [selectedScenarioKey, setSelectedScenarioKey] = useState("");
   const [evaluationNote, setEvaluationNote] = useState("");
+  const [commissionPreview, setCommissionPreview] = useState<BrokerCommissionPreview | null>(null);
 
   const load = useCallback(async () => {
     const [nextOverview, nextOperations, nextProperties, nextCatalog] = await Promise.all([
@@ -218,19 +248,19 @@ export function BrokerOperationsPageContent() {
       setTab(requestedArea as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "guides") {
       setTab(requestedTab);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    if (tab === "operations" || tab === "agents" || tab === "training") return;
+    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab]);
 
   useEffect(() => {
-    if (!catalog || tab === "operations" || tab === "agents" || tab === "training") return;
+    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -240,7 +270,7 @@ export function BrokerOperationsPageContent() {
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
   const recommendations = overview?.recommendations || [];
-  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" ? tab : null;
+  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "guides" ? tab : null;
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
   const operationStages = catalog?.operationStages[operationType] || [];
@@ -346,6 +376,21 @@ export function BrokerOperationsPageContent() {
     } finally { setBusy(false); }
   }
 
+  async function calculateCommission(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true); setNotice("");
+    try {
+      const preview = await previewBrokerCommission({
+        baseAmount: Number(form.get("baseAmount") || 0), commissionRatePct: Number(form.get("commissionRatePct") || 0),
+        brokerSplitPct: Number(form.get("brokerSplitPct") || 0), companySplitPct: Number(form.get("companySplitPct") || 0)
+      });
+      setCommissionPreview(preview);
+      setNotice("Vista previa calculada. No se creó ninguna liquidación ni pago.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo calcular la comisión."); }
+    finally { setBusy(false); }
+  }
+
   return <main className="broker-os-workspace">
     <header className="broker-os-header">
       <div>
@@ -363,6 +408,8 @@ export function BrokerOperationsPageContent() {
     <nav className="broker-os-tabs" aria-label="Areas de Broker OS">
       <button className={tab === "operations" ? "active" : ""} onClick={() => setTab("operations")}>Operaciones</button>
       {Object.entries(AREA_CONFIG).map(([key, value]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as BrokerRecordArea)}>{value.label}</button>)}
+      <button className={tab === "commissions" ? "active" : ""} onClick={() => setTab("commissions")}>Comisiones</button>
+      <button className={tab === "guides" ? "active" : ""} onClick={() => setTab("guides")}>Guías operativas</button>
       <button className={tab === "agents" ? "active" : ""} onClick={() => setTab("agents")}>Agentes IA</button>
       <button className={tab === "training" ? "active" : ""} onClick={() => setTab("training")}>Entrenamiento IA</button>
     </nav>
@@ -376,12 +423,13 @@ export function BrokerOperationsPageContent() {
       <section className="broker-expedient-panel" aria-label="Expediente por propiedad">
         <div className="broker-list-heading"><span>Expediente digital</span><h2>Revisa una propiedad completa</h2><p>Consulta documentos, contratos, mantenciones, postventa y antecedentes sin cambiar de pantalla.</p></div>
         <div className="broker-expedient-controls"><select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select><button type="button" className="primary-btn" disabled={busy || !selectedPropertyId} onClick={openExpedient}>Abrir expediente</button></div>
-        {expedient ? <div className="broker-expedient-summary"><div><b>{expedient.property.title}</b><p>{expedient.completion.complete ? "Ficha completa para operación y publicación." : `Falta completar: ${expedient.completion.missing.join(", ")}.`}</p></div><div className="broker-expedient-counts">{Object.entries(expedient.grouped).filter(([, items]) => items?.length).map(([area, items]) => <span key={area}><b>{items?.length}</b>{AREA_CONFIG[area as BrokerRecordArea]?.label || readable(area)}</span>)}</div></div> : null}
+        {expedient ? <><div className="broker-expedient-summary"><div><b>{expedient.property.title}</b><p>{expedient.completion.complete ? "Ficha completa para operación y publicación." : `Falta completar: ${expedient.completion.missing.join(", ")}.`}</p><p><strong>Salud del expediente: {expedient.health.score}% · {readable(expedient.health.status)}</strong></p></div><div className="broker-expedient-counts">{Object.entries(expedient.grouped).filter(([, items]) => items?.length).map(([area, items]) => <span key={area}><b>{items?.length}</b>{AREA_CONFIG[area as BrokerRecordArea]?.label || readable(area)}</span>)}</div></div><div className="broker-expedient-timeline"><b>Últimos movimientos</b>{expedient.timeline.slice(0, 5).map((item, index) => <p key={`${item.at}-${index}`}><span>{item.at ? new Date(item.at).toLocaleDateString("es-CL") : "Sin fecha"}</span>{item.title} · {readable(item.status)}{item.note ? ` — ${item.note}` : ""}</p>)}</div></> : null}
       </section>
       {reporting ? <section className="broker-reporting" aria-label="Indicadores y aprendizaje de Broker OS">
         <article><span>Valor de cartera</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(reporting.portfolioValue)}</b><small>Inventario de propiedades</small></article>
         <article><span>Comisión proyectada</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(reporting.projectedCommission)}</b><small>Según operaciones activas</small></article>
         <article><span>Fichas completas</span><b>{reporting.propertyCompleteness}%</b><small>Datos listos para publicar</small></article>
+        <article><span>Salud de cartera</span><b>{reporting.portfolioHealth}%</b><small>{reporting.propertiesReady} propiedades listas para operar</small></article>
         <article><span>Aprendizajes IA</span><b>{reporting.aiEvaluations.confirmed}/{reporting.aiEvaluations.total}</b><small>Confirmados por el equipo</small></article>
       </section> : null}
       <section className="broker-os-grid">
@@ -426,6 +474,20 @@ export function BrokerOperationsPageContent() {
         })}
       </section>
     </section> : null}
+
+    {tab === "commissions" ? <section className="broker-os-grid broker-area-grid">
+      <form className="broker-os-form" onSubmit={calculateCommission}>
+        <span>Simulador interno</span><h2>Comisiones</h2><p>Calcula una proyección para revisar el reparto. Este simulador no crea pagos, liquidaciones ni transferencias.</p>
+        <label>Base de cálculo<input name="baseAmount" type="number" min="0" placeholder="Ej.: 180000000" required /></label>
+        <label>Comisión total (%)<input name="commissionRatePct" type="number" min="0" step="0.01" placeholder="Ej.: 2" required /></label>
+        <label>Parte corredor (%)<input name="brokerSplitPct" type="number" min="0" max="100" defaultValue="50" required /></label>
+        <label>Parte empresa (%)<input name="companySplitPct" type="number" min="0" max="100" defaultValue="50" required /></label>
+        <button className="primary-btn" disabled={busy}>Calcular proyección</button>
+      </form>
+      <section className="broker-os-list broker-commission-result"><div className="broker-list-heading"><span>Resultado estimado</span><h2>Distribución para revisión</h2><p>Confirma las condiciones comerciales antes de registrar una regla o liquidación en el expediente.</p></div>{commissionPreview?.ok ? <div className="broker-reporting"><article><span>Comisión total</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.totalCommission || 0)}</b><small>Sobre la base informada</small></article><article><span>Corredor</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.brokerAmount || 0)}</b><small>{commissionPreview.brokerSplitPct}% de distribución</small></article><article><span>Empresa</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.companyAmount || 0)}</b><small>{commissionPreview.companySplitPct}% de distribución</small></article></div> : <p className="broker-empty">Ingresa los valores para obtener una proyección. El cálculo es informativo y requiere validación humana.</p>}</section>
+    </section> : null}
+
+    {tab === "guides" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Guías operativas</span><h2>Qué revisar en cada etapa</h2><p>Lista interna de verificación para trabajar con orden. Las revisiones jurídicas, firmas, pagos y comunicaciones externas siempre requieren una persona responsable.</p></div><div className="broker-guide-grid">{(Object.keys(OPERATION_LABELS) as BrokerOperationType[]).map((type) => <article key={type}><h3>{OPERATION_LABELS[type]}</h3>{(catalog?.operationStages[type] || []).map((stage) => <section key={stage}><b>{readable(stage)}</b><ul>{(catalog?.operationChecklists?.[type]?.[stage] || []).map((item) => <li key={item}>{item}</li>)}</ul></section>)}</article>)}</div></section> : null}
 
     {tab === "agents" ? <section className="broker-agents-panel"><div className="broker-list-heading"><span>Agentes de IA</span><h2>Asistentes especializados del Broker</h2><p>Los agentes disponibles preparan análisis y borradores; ninguna acción legal, pago, firma o comunicación externa se ejecuta sin aprobación humana.</p></div><div className="broker-agent-grid">{(overview?.agents || catalog?.agents || []).map((agent) => <article key={agent.key} className={`broker-agent-card ${agent.status === "AVAILABLE" ? "available" : "planned"}`}><span>{agent.status === "AVAILABLE" ? "Disponible" : "Próxima etapa"}</span><h3>{agent.name}</h3><p>{agent.description}</p><small>Módulo: {readable(agent.module)}</small></article>)}</div></section> : null}
 

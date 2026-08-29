@@ -1169,6 +1169,8 @@ export type BrokerReporting = {
   portfolioValue: number;
   projectedCommission: number;
   propertyCompleteness: number;
+  portfolioHealth: number;
+  propertiesReady: number;
   byOperationType: Array<{ type: BrokerOperationType; count: number }>;
   aiEvaluations: { total: number; confirmed: number; needsAdjustment: number; pending: number };
 };
@@ -1189,6 +1191,8 @@ export type BrokerPropertyExpedient = {
   records: IndustryRecord[];
   grouped: Partial<Record<BrokerRecordArea, IndustryRecord[]>>;
   completion: { missing: string[]; complete: boolean };
+  health: { score: number; status: string; completed: string[]; missing: string[] };
+  timeline: Array<{ at: string; title: string; type: string; note: string; recordType: string; status: string }>;
 };
 
 export type BrokerCatalog = {
@@ -1198,6 +1202,7 @@ export type BrokerCatalog = {
   aiScenarios: BrokerAiScenario[];
   automationRules: BrokerAutomationRule[];
   operationStages: Record<BrokerOperationType, string[]>;
+  operationChecklists: Record<BrokerOperationType, Record<string, string[]>>;
 };
 
 export function getBrokerOverview(): Promise<BrokerOverview> {
@@ -1206,6 +1211,22 @@ export function getBrokerOverview(): Promise<BrokerOverview> {
 
 export function getBrokerCatalog(): Promise<BrokerCatalog> {
   return request<BrokerCatalog>("/broker/catalog");
+}
+
+export type BrokerCommissionPreview = {
+  ok: boolean;
+  error?: string;
+  baseAmount?: number;
+  commissionRatePct?: number;
+  totalCommission?: number;
+  brokerSplitPct?: number;
+  companySplitPct?: number;
+  brokerAmount?: number;
+  companyAmount?: number;
+};
+
+export function previewBrokerCommission(input: { baseAmount: number; commissionRatePct: number; brokerSplitPct?: number; companySplitPct?: number }): Promise<BrokerCommissionPreview> {
+  return request<BrokerCommissionPreview>("/broker/commission-preview", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function getBrokerAiEvaluations(): Promise<{ scenarios: BrokerAiScenario[]; evaluations: BrokerAiEvaluation[]; automationRules: BrokerAutomationRule[] }> {

@@ -11,52 +11,87 @@ export const BROKER_OPERATION_TYPES = Object.freeze({
   ADMINISTRATION: "ADMINISTRATION"
 });
 
+// Flujo canónico de Venta acordado para Broker OS. Las etapas antiguas se
+// normalizan mediante LEGACY_STAGE_MAP para no perder operaciones demo o
+// históricas que fueron creadas antes de esta versión.
 export const SALE_STAGES = Object.freeze([
-  "CAPTACION",
-  "TASACION",
-  "MANDATO",
-  "PUBLICACION",
-  "CALIFICACION",
-  "VISITA",
-  "OFERTA",
-  "NEGOCIACION",
+  "EVALUACION_COMERCIAL",
+  "MANDATO_Y_PUBLICACION",
+  "CALIFICACION_Y_VISITAS",
+  "OFERTA_Y_NEGOCIACION",
   "PROMESA",
+  "ESTUDIO_DE_TITULO",
   "ESCRITURA",
-  "CIERRE",
-  "POSTVENTA"
+  "INSCRIPCION_CBR",
+  "ENTREGA_Y_POSTVENTA"
 ]);
 
 export const RENTAL_STAGES = Object.freeze([
   "CAPTACION",
-  "TASACION",
-  "MANDATO",
+  "EVALUACION_COMERCIAL",
+  "DEFINICION_DE_PRECIO",
+  "EXCLUSIVIDAD",
+  "PREPARACION_INMUEBLE",
   "PUBLICACION",
-  "CALIFICACION",
-  "VISITA",
-  "POSTULACION",
-  "EVALUACION",
-  "APROBACION",
+  "GENERACION_DE_LEADS",
+  "EVALUACION_ARRENDATARIO",
+  "VISITAS",
+  "RESERVA",
   "CONTRATO",
-  "ENTREGA",
-  "ARRENDADO",
-  "RENOVACION"
+  "PAGO_INICIAL",
+  "ENTREGA_LLAVES"
 ]);
 
 export const ADMINISTRATION_STAGES = Object.freeze([
   "INCORPORACION",
   "CONTRATO",
-  "COBRO",
-  "LIQUIDACION",
-  "MANTENIMIENTO",
+  "REVISION_MENSUAL",
+  "COBRO_Y_CONCILIACION",
+  "LIQUIDACION_Y_TRANSFERENCIA",
+  "MANTENCIONES_Y_SERVICIOS",
   "RENOVACION",
   "CIERRE"
 ]);
 
-export const TERMINAL_STAGES = new Set(["CERRADA", "CANCELADA", "PERDIDA", "CIERRE", "POSTVENTA", "ARRENDADO"]);
+export const TERMINAL_STAGES = new Set(["CERRADA", "CANCELADA", "PERDIDA", "CIERRE", "ENTREGA_Y_POSTVENTA", "ENTREGA_LLAVES"]);
+
+export const LEGACY_STAGE_MAP = Object.freeze({
+  SALE: {
+    CAPTACION: "EVALUACION_COMERCIAL",
+    TASACION: "EVALUACION_COMERCIAL",
+    MANDATO: "MANDATO_Y_PUBLICACION",
+    PUBLICACION: "MANDATO_Y_PUBLICACION",
+    CALIFICACION: "CALIFICACION_Y_VISITAS",
+    VISITA: "CALIFICACION_Y_VISITAS",
+    OFERTA: "OFERTA_Y_NEGOCIACION",
+    NEGOCIACION: "OFERTA_Y_NEGOCIACION",
+    PROMESA: "PROMESA",
+    ESCRITURA: "ESCRITURA",
+    CIERRE: "INSCRIPCION_CBR",
+    POSTVENTA: "ENTREGA_Y_POSTVENTA"
+  },
+  RENTAL: {
+    TASACION: "EVALUACION_COMERCIAL",
+    MANDATO: "EXCLUSIVIDAD",
+    CALIFICACION: "EVALUACION_ARRENDATARIO",
+    VISITA: "VISITAS",
+    POSTULACION: "EVALUACION_ARRENDATARIO",
+    EVALUACION: "EVALUACION_ARRENDATARIO",
+    APROBACION: "RESERVA",
+    ENTREGA: "ENTREGA_LLAVES",
+    ARRENDADO: "ENTREGA_LLAVES",
+    RENOVACION: "ENTREGA_LLAVES"
+  },
+  ADMINISTRATION: {
+    COBRO: "COBRO_Y_CONCILIACION",
+    LIQUIDACION: "LIQUIDACION_Y_TRANSFERENCIA",
+    MANTENIMIENTO: "MANTENCIONES_Y_SERVICIOS"
+  }
+});
 
 export const BROKER_RECORD_AREAS = Object.freeze({
-  commercial: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_settlement"],
-  rentals: ["rental_application", "rental_contract", "rental_payment", "administration_liquidation"],
+  commercial: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_policy", "commission_settlement"],
+  rentals: ["rental_application", "rental_contract", "rental_payment", "administration_profile", "utility_monitoring", "administration_liquidation"],
   maintenance: ["maintenance_ticket", "service_provider", "provider_quote", "material_purchase"],
   projects: ["remodeling_project", "project_budget", "project_milestone", "marketing_publication"],
   post_sale: ["property_inspection", "property_handover", "post_sale_case", "warranty_case"],
@@ -71,15 +106,18 @@ export const BROKER_RECORD_TYPES = Object.freeze(Object.values(BROKER_RECORD_ARE
 // Así evitamos el problema de un formulario que pide algo distinto de lo que
 // luego muestra el expediente.
 export const BROKER_RECORD_DEFINITIONS = Object.freeze({
-  property_appraisal: { label: "Tasación", area: "commercial", required: ["propertyId", "estimatedValue"], statuses: ["DRAFT", "REVIEW", "APPROVED"] },
-  property_mandate: { label: "Mandato", area: "commercial", required: ["propertyId", "ownerName", "startDate"], statuses: ["DRAFT", "PENDING_SIGNATURE", "SIGNED", "EXPIRED"] },
-  property_offer: { label: "Oferta de compra", area: "commercial", required: ["propertyId", "buyerName", "amount"], statuses: ["DRAFT", "SUBMITTED", "ACCEPTED", "REJECTED", "WITHDRAWN"] },
-  property_promise: { label: "Promesa de compraventa", area: "commercial", required: ["propertyId", "buyerName", "signingDate"], statuses: ["DRAFT", "PENDING_SIGNATURE", "SIGNED", "CANCELLED"] },
-  commission_settlement: { label: "Liquidación de comisión", area: "commercial", required: ["propertyId", "amount"], statuses: ["DRAFT", "PENDING", "PAID"] },
-  rental_application: { label: "Postulación de arriendo", area: "rentals", required: ["propertyId", "tenantName"], statuses: ["RECEIVED", "UNDER_REVIEW", "APPROVED", "REJECTED"] },
-  rental_contract: { label: "Contrato de arriendo", area: "rentals", required: ["propertyId", "tenantName", "startDate", "monthlyRent"], statuses: ["DRAFT", "PENDING_SIGNATURE", "ACTIVE", "ENDING", "ENDED"] },
-  rental_payment: { label: "Cobro de arriendo", area: "rentals", required: ["propertyId", "amount", "dueDate"], statuses: ["PENDING", "PAID", "OVERDUE", "WAIVED"] },
-  administration_liquidation: { label: "Liquidación de administración", area: "rentals", required: ["propertyId", "period", "amount"], statuses: ["DRAFT", "PENDING_APPROVAL", "ISSUED", "PAID"] },
+  property_appraisal: { label: "Tasación", area: "commercial", required: ["propertyId", "estimatedValue", "currency", "appraisalDate"], statuses: ["DRAFT", "REVIEW", "APPROVED"] },
+  property_mandate: { label: "Mandato", area: "commercial", required: ["propertyId", "ownerName", "startDate", "endDate", "exclusivityMonths", "commissionRatePct"], statuses: ["DRAFT", "PENDING_SIGNATURE", "SIGNED", "EXPIRED"] },
+  property_offer: { label: "Oferta de compra", area: "commercial", required: ["propertyId", "buyerName", "amount", "currency", "offerDate", "financingType"], statuses: ["DRAFT", "SUBMITTED", "ACCEPTED", "REJECTED", "WITHDRAWN"] },
+  property_promise: { label: "Promesa de compraventa", area: "commercial", required: ["propertyId", "buyerName", "signingDate", "agreedAmount", "penaltyRatePct"], statuses: ["DRAFT", "PENDING_SIGNATURE", "SIGNED", "CANCELLED"] },
+  commission_policy: { label: "Regla de comisión", area: "commercial", required: ["propertyId", "baseAmount", "commissionRatePct", "brokerSplitPct", "companySplitPct"], statuses: ["DRAFT", "ACTIVE", "REPLACED"] },
+  commission_settlement: { label: "Liquidación de comisión", area: "commercial", required: ["propertyId", "amount", "brokerAmount", "companyAmount", "settlementDate"], statuses: ["DRAFT", "PENDING", "PAID"] },
+  rental_application: { label: "Postulación de arriendo", area: "rentals", required: ["propertyId", "tenantName", "taxEvaluation", "commercialEvaluation"], statuses: ["RECEIVED", "UNDER_REVIEW", "APPROVED", "REJECTED"] },
+  rental_contract: { label: "Contrato de arriendo", area: "rentals", required: ["propertyId", "tenantName", "startDate", "monthlyRent", "paymentDay", "depositAmount"], statuses: ["DRAFT", "PENDING_SIGNATURE", "ACTIVE", "ENDING", "ENDED"] },
+  rental_payment: { label: "Cobro de arriendo", area: "rentals", required: ["propertyId", "amount", "dueDate", "period"], statuses: ["PENDING", "PAID", "OVERDUE", "WAIVED"] },
+  administration_profile: { label: "Ficha de administración", area: "rentals", required: ["propertyId", "ownerName", "tenantName", "managementRatePct", "ownerPaymentDay", "ownerBankAccount"], statuses: ["DRAFT", "ACTIVE", "SUSPENDED", "CLOSED"] },
+  utility_monitoring: { label: "Servicio básico o gasto común", area: "rentals", required: ["propertyId", "utilityType", "accountNumber", "dueDate", "amount"], statuses: ["PENDING", "PAID", "OVERDUE", "UNDER_REVIEW"] },
+  administration_liquidation: { label: "Liquidación de administración", area: "rentals", required: ["propertyId", "period", "amount", "managementFee", "ownerTransferAmount", "transferDate"], statuses: ["DRAFT", "PENDING_APPROVAL", "ISSUED", "PAID"] },
   maintenance_ticket: { label: "Solicitud de mantención", area: "maintenance", required: ["propertyId", "category", "description"], statuses: ["REPORTED", "QUOTING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
   service_provider: { label: "Proveedor", area: "maintenance", required: ["providerName", "specialty"], statuses: ["ACTIVE", "SUSPENDED", "ARCHIVED"] },
   provider_quote: { label: "Cotización de proveedor", area: "maintenance", required: ["propertyId", "providerName", "amount"], statuses: ["DRAFT", "RECEIVED", "APPROVED", "REJECTED", "EXPIRED"] },
@@ -139,6 +177,47 @@ export const BROKER_AUTOMATION_RULES = Object.freeze([
   { key: "mantencion_cotizada", title: "Revisión de mantención", trigger: "Se recibe una cotización para una incidencia abierta.", action: "Consolidar monto, proveedor y alcance en una solicitud de revisión.", approval: "No crea órdenes de compra ni confirma trabajos." }
 ]);
 
+// Guías operativas visibles para el equipo. Son instrucciones internas y no
+// sustituyen asesoría legal, bancaria ni la revisión de un corredor responsable.
+export const BROKER_OPERATION_CHECKLISTS = Object.freeze({
+  SALE: Object.freeze({
+    EVALUACION_COMERCIAL: ["Confirmar datos mínimos del inmueble y propietario.", "Registrar precio de referencia y objetivo de la operación."],
+    MANDATO_Y_PUBLICACION: ["Revisar vigencia del mandato.", "Validar ficha, fotografías y textos antes de publicar."],
+    CALIFICACION_Y_VISITAS: ["Registrar contraparte, presupuesto y fecha de visita.", "Dejar próximo paso después de cada visita."],
+    OFERTA_Y_NEGOCIACION: ["Comparar oferta, tasación y condiciones.", "Solicitar confirmación humana antes de aceptar, rechazar o comunicar."],
+    PROMESA: ["Reunir antecedentes y condiciones acordadas.", "Derivar a revisión jurídica antes de firmar."],
+    ESTUDIO_DE_TITULO: ["Registrar documentos recibidos y observaciones.", "No declarar el estudio aprobado sin responsable jurídico."],
+    ESCRITURA: ["Confirmar borrador, comparecientes y fecha.", "Registrar hitos sin ejecutar firma externa desde EVOLUM."],
+    INSCRIPCION_CBR: ["Registrar ingreso y estado informado por el Conservador.", "Mantener evidencia en el expediente."],
+    ENTREGA_Y_POSTVENTA: ["Completar acta de entrega e inventario.", "Abrir caso de postventa o garantía si corresponde."]
+  }),
+  RENTAL: Object.freeze({
+    CAPTACION: ["Registrar inmueble, propietario y disponibilidad."],
+    EVALUACION_COMERCIAL: ["Revisar precio, competencia y condición comercial."],
+    DEFINICION_DE_PRECIO: ["Registrar renta objetivo y condiciones."],
+    EXCLUSIVIDAD: ["Confirmar mandato y vigencia."],
+    PREPARACION_INMUEBLE: ["Completar fotografías, inventario y reparaciones previas."],
+    PUBLICACION: ["Revisar piezas antes de publicar."],
+    GENERACION_DE_LEADS: ["Calificar consultas y registrar origen."],
+    EVALUACION_ARRENDATARIO: ["Reunir antecedentes con consentimiento y revisión humana."],
+    VISITAS: ["Registrar visita, resultado y siguiente acción."],
+    RESERVA: ["Registrar condiciones acordadas antes de comprometer el inmueble."],
+    CONTRATO: ["Preparar antecedente para revisión y firma externa."],
+    PAGO_INICIAL: ["Registrar comprobante y validación humana."],
+    ENTREGA_LLAVES: ["Completar acta, inventario y fecha de próxima revisión."]
+  }),
+  ADMINISTRATION: Object.freeze({
+    INCORPORACION: ["Validar propiedad, propietario y contrato vigente."],
+    CONTRATO: ["Registrar partes, renta, día de pago y garantías."],
+    REVISION_MENSUAL: ["Revisar cobros, gastos comunes y servicios básicos."],
+    COBRO_Y_CONCILIACION: ["Comparar pago informado con el registro; no realizar cobros automáticos."],
+    LIQUIDACION_Y_TRANSFERENCIA: ["Preparar liquidación y dejarla pendiente de aprobación."],
+    MANTENCIONES_Y_SERVICIOS: ["Registrar incidencia, cotización y autorización."],
+    RENOVACION: ["Revisar vigencia y condiciones antes de proponer renovación."],
+    CIERRE: ["Guardar liquidación final, entrega y cierre de servicios."]
+  })
+});
+
 export function brokerAgentScenario(key) {
   return BROKER_AGENT_SCENARIOS.find((scenario) => scenario.key === String(key || "").trim()) || null;
 }
@@ -146,6 +225,70 @@ export function brokerAgentScenario(key) {
 export function normalizeBrokerOperationType(value) {
   const normalized = String(value || "SALE").trim().toUpperCase();
   return Object.values(BROKER_OPERATION_TYPES).includes(normalized) ? normalized : null;
+}
+
+export function normalizeBrokerStage(operationType, value) {
+  const type = normalizeBrokerOperationType(operationType) || BROKER_OPERATION_TYPES.SALE;
+  const raw = String(value || "").trim().toUpperCase();
+  const stages = stagesForBrokerOperation(type);
+  if (stages.includes(raw)) return raw;
+  return LEGACY_STAGE_MAP[type]?.[raw] || stages[0] || raw;
+}
+
+export function brokerStageChecklist(operationType, stage) {
+  const type = normalizeBrokerOperationType(operationType) || BROKER_OPERATION_TYPES.SALE;
+  const normalizedStage = normalizeBrokerStage(type, stage);
+  return BROKER_OPERATION_CHECKLISTS[type]?.[normalizedStage] || [];
+}
+
+function numberValue(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export function calculateBrokerCommission({ baseAmount, commissionRatePct, brokerSplitPct = 50, companySplitPct = 50 } = {}) {
+  const base = Math.max(0, numberValue(baseAmount));
+  const rate = Math.max(0, numberValue(commissionRatePct));
+  const brokerSplit = Math.max(0, numberValue(brokerSplitPct));
+  const companySplit = Math.max(0, numberValue(companySplitPct));
+  if (Math.round((brokerSplit + companySplit) * 100) !== 10000) {
+    return { ok: false, error: "La distribución entre corredor y empresa debe sumar 100%." };
+  }
+  const total = Math.round(base * (rate / 100));
+  const brokerAmount = Math.round(total * (brokerSplit / 100));
+  return {
+    ok: true,
+    baseAmount: base,
+    commissionRatePct: rate,
+    totalCommission: total,
+    brokerSplitPct: brokerSplit,
+    companySplitPct: companySplit,
+    brokerAmount,
+    companyAmount: total - brokerAmount
+  };
+}
+
+export function propertyHealthSnapshot(property, relatedRecords = []) {
+  const data = property?.data && typeof property.data === "object" && !Array.isArray(property.data) ? property.data : {};
+  const has = (value) => value !== undefined && value !== null && String(value).trim() !== "";
+  const checks = [
+    ["Ubicación", has(data.address) && has(data.comuna || data.commune)],
+    ["Precio", has(data.price)],
+    ["Ficha técnica", has(data.propertyType || data.type) && has(data.meters || data.m2_totales || data.m2Total)],
+    ["Fotografía principal", has(data.photoUrl) || (Array.isArray(data.gallery) && data.gallery.length > 0)],
+    ["Propietario", has(data.ownerName) || relatedRecords.some((record) => record.recordType === "property_mandate")],
+    ["Mandato", relatedRecords.some((record) => record.recordType === "property_mandate" && record.status === "SIGNED")],
+    ["Documentación", relatedRecords.some((record) => ["property_document", "legal_document"].includes(record.recordType) && ["AVAILABLE", "APPROVED"].includes(record.status))],
+    ["Seguimiento", relatedRecords.some((record) => ["visit", "broker_operation", "property_offer"].includes(record.recordType))]
+  ];
+  const complete = checks.filter(([, ok]) => ok).length;
+  const score = Math.round((complete / checks.length) * 100);
+  return {
+    score,
+    status: score >= 85 ? "LISTA_PARA_OPERAR" : score >= 60 ? "EN_PREPARACION" : "INCOMPLETA",
+    completed: checks.filter(([, ok]) => ok).map(([label]) => label),
+    missing: checks.filter(([, ok]) => !ok).map(([label]) => label)
+  };
 }
 
 export function stagesForBrokerOperation(operationType) {
@@ -163,8 +306,9 @@ export function stagesForBrokerOperation(operationType) {
 
 export function validateBrokerStageTransition({ operationType, currentStage, nextStage }) {
   const stages = stagesForBrokerOperation(operationType);
-  const current = String(currentStage || stages[0] || "").trim().toUpperCase();
-  const next = String(nextStage || "").trim().toUpperCase();
+  if (!String(nextStage || "").trim()) return { ok: false, error: "La etapa destino es requerida." };
+  const current = normalizeBrokerStage(operationType, currentStage || stages[0]);
+  const next = normalizeBrokerStage(operationType, nextStage);
   if (!stages.includes(next) && !["CANCELADA", "PERDIDA"].includes(next)) {
     return { ok: false, error: "La etapa indicada no pertenece al flujo de esta operación." };
   }

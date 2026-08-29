@@ -10,10 +10,16 @@ import {
   BROKER_AGENT_CATALOG,
   BROKER_AGENT_SCENARIOS,
   BROKER_AUTOMATION_RULES,
+  BROKER_OPERATION_CHECKLISTS,
   SALE_STAGES,
+  TERMINAL_STAGES,
   brokerAgentScenario,
+  brokerStageChecklist,
+  calculateBrokerCommission,
   isBrokerRecordArea,
   normalizeBrokerOperationType,
+  normalizeBrokerStage,
+  propertyHealthSnapshot,
   stagesForBrokerOperation,
   validateBrokerStageTransition,
   validateBrokerRecord
@@ -43,7 +49,8 @@ function operationPayload(record) {
     data: {
       ...data,
       operationType,
-      stage: text(data.stage, stages[0]),
+      stage: normalizeBrokerStage(operationType, text(data.stage, stages[0])),
+      checklist: brokerStageChecklist(operationType, data.stage || stages[0]),
       timeline: Array.isArray(data.timeline) ? data.timeline : []
     }
   };
@@ -89,22 +96,31 @@ function evaluationPayload(record) {
   };
 }
 
-function brokerReporting({ properties, operations, evaluations }) {
+function brokerReporting({ properties, operations, evaluations, brokerRecords = [] }) {
   const portfolioValue = properties.reduce((sum, property) => sum + Number(dataOf(property).price || 0), 0);
-  const projectedCommission = operations.reduce((sum, operation) => {
+  const projectedFromOperations = operations.reduce((sum, operation) => {
     const data = dataOf(operation);
     return sum + Number(data.estimatedCommission || data.monthlyManagementFee || 0);
   }, 0);
+  const projectedFromPolicies = brokerRecords
+    .filter((record) => record.recordType === "commission_policy" && ["ACTIVE", "DRAFT"].includes(String(record.status).toUpperCase()))
+    .reduce((sum, record) => {
+      const preview = calculateBrokerCommission(dataOf(record));
+      return sum + (preview.ok ? preview.totalCommission : 0);
+    }, 0);
   const byOperationType = Object.values(BROKER_OPERATION_TYPES).map((type) => ({
     type,
     count: operations.filter((operation) => (normalizeBrokerOperationType(dataOf(operation).operationType) || "SALE") === type).length
   }));
-  const completeProperties = properties.filter((property) => missingPropertyData(property).length === 0).length;
+  const propertyHealth = properties.map((property) => propertyHealthSnapshot(property, brokerRecords.filter((record) => String(dataOf(record).propertyId || "") === property.id)));
+  const completeProperties = propertyHealth.filter((item) => item.score >= 85).length;
   const confirmedEvaluations = evaluations.filter((item) => text(dataOf(item).decision) === "CONFIRMED").length;
   return {
     portfolioValue,
-    projectedCommission,
+    projectedCommission: projectedFromPolicies || projectedFromOperations,
     propertyCompleteness: properties.length ? Math.round((completeProperties / properties.length) * 100) : 0,
+    portfolioHealth: properties.length ? Math.round(propertyHealth.reduce((sum, item) => sum + item.score, 0) / properties.length) : 0,
+    propertiesReady: completeProperties,
     byOperationType,
     aiEvaluations: {
       total: evaluations.length,
@@ -125,7 +141,7 @@ function missingPropertyData(property) {
   return missing;
 }
 
-function brokerRecommendations({ properties, operations, maintenance, postSale, financing }) {
+function brokerRecommendations({ properties, operations, maintenance, postSale, financing, brokerRecords = [] }) {
   const recommendations = [];
   for (const property of properties) {
     const missing = missingPropertyData(property);
@@ -161,6 +177,28 @@ function brokerRecommendations({ properties, operations, maintenance, postSale, 
   if (maintenance > 0) recommendations.push({ id: "maintenance-open", priority: "HIGH", area: "maintenance", title: "Mantenciones pendientes", detail: `${maintenance} caso(s) requiere(n) revisión, proveedor o confirmación de cierre.`, requiresApproval: true });
   if (postSale > 0) recommendations.push({ id: "post-sale-open", priority: "HIGH", area: "post_sale", title: "Casos de postventa abiertos", detail: `${postSale} caso(s) mantiene(n) una decisión o seguimiento pendiente.`, requiresApproval: true });
   if (financing > 0) recommendations.push({ id: "financing-open", priority: "MEDIUM", area: "financing", title: "Financiamientos en seguimiento", detail: `${financing} solicitud(es) requiere(n) antecedentes o una revisión humana.`, requiresApproval: true });
+  const today = new Date();
+  const soon = new Date(today);
+  soon.setDate(soon.getDate() + 30);
+  for (const record of brokerRecords) {
+    const data = dataOf(record);
+    const dueDate = text(data.dueDate || data.warrantyUntil || data.endDate || data.expiresAt);
+    const date = dueDate ? new Date(dueDate) : null;
+    if (!date || Number.isNaN(date.getTime())) continue;
+    if (["PAID", "CLOSED", "RESOLVED", "ENDED", "REPLACED"].includes(String(record.status).toUpperCase())) continue;
+    const isOverdue = date < today;
+    const isRelevantSoon = date <= soon;
+    if (!isOverdue && !isRelevantSoon) continue;
+    recommendations.push({
+      id: `due-${record.id}`,
+      priority: isOverdue ? "HIGH" : "MEDIUM",
+      area: BROKER_RECORD_DEFINITIONS[record.recordType]?.area || "documents",
+      title: `${isOverdue ? "Vencido" : "Próximo a vencer"}: ${record.title}`,
+      detail: `${BROKER_RECORD_DEFINITIONS[record.recordType]?.label || record.recordType} con fecha ${date.toLocaleDateString("es-CL")}. Revisa y confirma la acción antes de comunicar o ejecutar cambios externos.`,
+      propertyId: text(data.propertyId) || undefined,
+      requiresApproval: true
+    });
+  }
   return recommendations.slice(0, 12);
 }
 
@@ -186,7 +224,7 @@ async function assertAssignedUser(req, assignedToId) {
 
 brokerRouter.get("/broker/overview", async (req, res) => {
   try {
-    const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations] = await Promise.all([
+    const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations, brokerRecords] = await Promise.all([
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "property" }) }),
       prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), orderBy: { updatedAt: "desc" }, take: 12 }),
       prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 50 }),
@@ -196,12 +234,13 @@ brokerRouter.get("/broker/overview", async (req, res) => {
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "maintenance_ticket", status: { notIn: ["CLOSED", "CANCELLED"] } }) }),
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "post_sale_case", status: { notIn: ["CLOSED", "RESOLVED"] } }) }),
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "operation_financing", status: { in: ["REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED"] } }) }),
-      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 100 })
+      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 100 }),
+      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: { in: BROKER_RECORD_TYPES } }), orderBy: { updatedAt: "desc" }, take: 500 })
     ]);
     const normalizedOperations = operations.map(operationPayload);
     const kpis = {
       properties: propertyCount,
-      activeOperations: normalizedOperations.filter((item) => !["CIERRE", "POSTVENTA", "ARRENDADO", "CANCELADA", "PERDIDA"].includes(String(item.data.stage))).length,
+      activeOperations: normalizedOperations.filter((item) => !TERMINAL_STAGES.has(String(item.data.stage))).length,
       scheduledVisits: visits,
       openAlerts: alerts,
       activeRentals: rentals,
@@ -213,9 +252,9 @@ brokerRouter.get("/broker/overview", async (req, res) => {
       kpis,
       properties,
       operations: normalizedOperations,
-      recommendations: brokerRecommendations({ properties, operations, maintenance, postSale, financing }),
+      recommendations: brokerRecommendations({ properties, operations, maintenance, postSale, financing, brokerRecords }),
       agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload),
-      reporting: brokerReporting({ properties, operations, evaluations }),
+      reporting: brokerReporting({ properties, operations, evaluations, brokerRecords }),
       aiTraining: {
         scenarios: BROKER_AGENT_SCENARIOS,
         evaluations: evaluations.map(evaluationPayload),
@@ -235,12 +274,21 @@ brokerRouter.get("/broker/catalog", (_req, res) => {
     agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload),
     aiScenarios: BROKER_AGENT_SCENARIOS,
     automationRules: BROKER_AUTOMATION_RULES,
+    operationChecklists: BROKER_OPERATION_CHECKLISTS,
     operationStages: {
       SALE: SALE_STAGES,
       RENTAL: stagesForBrokerOperation("RENTAL"),
       ADMINISTRATION: stagesForBrokerOperation("ADMINISTRATION")
     }
   });
+});
+
+// Vista previa puramente informativa. Nunca crea una liquidación, pago,
+// transferencia ni modifica una operación.
+brokerRouter.post("/broker/commission-preview", requireRole(ROLE_GROUPS.STAFF), (req, res) => {
+  const preview = calculateBrokerCommission(req.body || {});
+  if (!preview.ok) return res.status(422).json(preview);
+  res.json(preview);
 });
 
 brokerRouter.get("/broker/ai-evaluations", async (req, res) => {
@@ -320,7 +368,7 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), async (r
     await assertRelatedProperty(req, propertyId);
     await assertAssignedUser(req, text(req.body?.assignedToId));
     const stages = stagesForBrokerOperation(operationType);
-    const stage = text(req.body?.stage, stages[0]).toUpperCase();
+    const stage = normalizeBrokerStage(operationType, text(req.body?.stage, stages[0]));
     if (!stages.includes(stage)) return res.status(400).json({ error: "La etapa inicial no pertenece a este flujo." });
     const now = new Date().toISOString();
     const record = await prisma.industryRecord.create({
@@ -336,6 +384,7 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), async (r
           propertyId: propertyId || null,
           buyerId: text(req.body?.buyerId) || null,
           stage,
+          checklist: brokerStageChecklist(operationType, stage),
           timeline: [{ at: now, type: "OPERATION_CREATED", stage, note: "Operación creada" }]
         }
       },
@@ -361,7 +410,7 @@ brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF
     const timeline = [...current.data.timeline, { at: now, type: "STAGE_CHANGED", from: transition.current, stage: transition.next, note: text(req.body?.note, `Etapa cambiada a ${transition.next}`) }];
     const record = await prisma.industryRecord.update({
       where: { id: existing.id },
-      data: { status: transition.terminal ? "COMPLETED" : "ACTIVE", data: { ...current.data, stage: transition.next, timeline } }
+      data: { status: transition.terminal ? "COMPLETED" : "ACTIVE", data: { ...current.data, stage: transition.next, checklist: brokerStageChecklist(current.data.operationType, transition.next), timeline } }
     });
     await recordAuditLog(req, "BROKER_OPERATION_STAGE_CHANGED", "broker_operation", record.id, { from: transition.current, to: transition.next });
     res.json(operationPayload(record));
@@ -474,11 +523,24 @@ brokerRouter.get("/broker/properties/:propertyId/expedient", async (req, res) =>
     });
     const related = records.filter((record) => String(dataOf(record).propertyId || "") === property.id);
     const grouped = Object.fromEntries(Object.keys(BROKER_RECORD_AREAS).map((area) => [area, related.filter((record) => BROKER_RECORD_AREAS[area].includes(record.recordType))]));
+    const health = propertyHealthSnapshot(property, related);
+    const timeline = related
+      .flatMap((record) => {
+        const data = dataOf(record);
+        const events = record.recordType === "broker_operation" && Array.isArray(data.timeline)
+          ? data.timeline.map((event) => ({ at: text(event?.at, record.updatedAt?.toISOString?.() || ""), title: record.title, type: text(event?.type, "EVENT"), note: text(event?.note), recordType: record.recordType, status: text(event?.stage || record.status) }))
+          : [{ at: record.updatedAt?.toISOString?.() || "", title: record.title, type: record.recordType, note: "Registro actualizado en expediente.", recordType: record.recordType, status: record.status }];
+        return events;
+      })
+      .sort((a, b) => String(b.at).localeCompare(String(a.at)))
+      .slice(0, 50);
     res.json({
       property,
       records: related,
       grouped,
-      completion: { missing: missingPropertyData(property), complete: missingPropertyData(property).length === 0 }
+      completion: { missing: missingPropertyData(property), complete: missingPropertyData(property).length === 0 },
+      health,
+      timeline
     });
   } catch (error) {
     if (error?.message?.includes("propiedad relacionada")) return res.status(404).json({ error: "Propiedad no encontrada." });
