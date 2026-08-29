@@ -12,6 +12,7 @@ import {
   BROKER_AUTOMATION_RULES,
   BROKER_OPERATION_CHECKLISTS,
   BROKER_DEFAULT_OPERATING_POLICY,
+  BROKER_EXTERNAL_READINESS,
   SALE_STAGES,
   TERMINAL_STAGES,
   brokerAgentScenario,
@@ -303,6 +304,25 @@ brokerRouter.get("/broker/configuration", async (req, res) => {
   } catch (error) {
     console.error("Broker configuration error:", error);
     res.status(500).json({ error: "No se pudo obtener la configuración comercial." });
+  }
+});
+
+// Estado de preparación; no equivale a una aprobación legal ni activa un
+// proveedor externo. Sirve para que el equipo sepa qué evidencia falta antes
+// de proponer una firma, publicación o intercambio de datos.
+brokerRouter.get("/broker/legal-readiness", async (req, res) => {
+  try {
+    const consentTypes = ["data_processing_consent", "communication_consent", "external_authorization"];
+    const consents = await prisma.industryRecord.findMany({
+      where: brokerWhere(req, { recordType: { in: consentTypes } }),
+      orderBy: { updatedAt: "desc" },
+      take: 500
+    });
+    const summary = Object.fromEntries(["PENDING", "GRANTED", "REVOKED", "EXPIRED"].map((status) => [status, consents.filter((item) => String(item.status).toUpperCase() === status).length]));
+    res.json({ providers: BROKER_EXTERNAL_READINESS, consents, summary });
+  } catch (error) {
+    console.error("Broker legal readiness error:", error);
+    res.status(500).json({ error: "No se pudo obtener el estado de cumplimiento y proveedores." });
   }
 });
 

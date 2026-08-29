@@ -7,6 +7,7 @@ import {
   createBrokerOperation,
   createBrokerRecord,
   getBrokerCatalog,
+  getBrokerLegalReadiness,
   getBrokerOperatingConfiguration,
   getBrokerOperations,
   getBrokerOverview,
@@ -26,10 +27,11 @@ import {
   type BrokerRecordDefinition,
   type BrokerCommissionPreview,
   type BrokerOperatingConfiguration,
+  type BrokerLegalReadiness,
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | "training" | "commissions" | "guides" | "configuration" | BrokerRecordArea;
+type Tab = "operations" | "agents" | "training" | "commissions" | "guides" | "configuration" | "compliance" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -103,6 +105,12 @@ const FIELD_CONFIG: Record<string, FieldConfig> = {
   warrantyUntil: { label: "Garantia vigente hasta", type: "date" },
   documentType: { label: "Tipo de documento", placeholder: "Ej.: Escritura, cedula, certificado, acta" },
   signerName: { label: "Persona que firma", placeholder: "Nombre de firmante" },
+  subjectName: { label: "Titular o persona autorizante", placeholder: "Nombre completo o razón social" },
+  subjectRole: { label: "Rol de la persona", placeholder: "Ej.: Propietario, comprador, arrendatario" },
+  consentPurpose: { label: "Finalidad autorizada", type: "textarea", placeholder: "Ej.: Evaluación comercial y gestión de la propiedad" },
+  acceptedAt: { label: "Fecha de aceptación", type: "date" },
+  evidenceReference: { label: "Referencia de evidencia", placeholder: "ID de documento, correo o respaldo verificable" },
+  channels: { label: "Canales autorizados", placeholder: "Ej.: Correo, WhatsApp" },
   purpose: { label: "Destino del financiamiento", placeholder: "Ej.: Pie, remodelacion, credito hipotecario" },
   requestedAmount: { label: "Monto solicitado", type: "number", placeholder: "Ej.: 50000000" },
   financingId: { label: "ID de financiamiento", placeholder: "Copia el identificador de la solicitud" },
@@ -227,16 +235,18 @@ export function BrokerOperationsPageContent() {
   const [evaluationNote, setEvaluationNote] = useState("");
   const [commissionPreview, setCommissionPreview] = useState<BrokerCommissionPreview | null>(null);
   const [operatingConfiguration, setOperatingConfiguration] = useState<BrokerOperatingConfiguration | null>(null);
+  const [legalReadiness, setLegalReadiness] = useState<BrokerLegalReadiness | null>(null);
 
   const load = useCallback(async () => {
-    const [nextOverview, nextOperations, nextProperties, nextCatalog, nextConfiguration] = await Promise.all([
-      getBrokerOverview(), getBrokerOperations(), getIndustryRecords("property"), getBrokerCatalog(), getBrokerOperatingConfiguration()
+    const [nextOverview, nextOperations, nextProperties, nextCatalog, nextConfiguration, nextLegalReadiness] = await Promise.all([
+      getBrokerOverview(), getBrokerOperations(), getIndustryRecords("property"), getBrokerCatalog(), getBrokerOperatingConfiguration(), getBrokerLegalReadiness()
     ]);
     setOverview(nextOverview);
     setOperations(nextOperations);
     setProperties(nextProperties);
     setCatalog(nextCatalog);
     setOperatingConfiguration(nextConfiguration);
+    setLegalReadiness(nextLegalReadiness);
   }, []);
 
   useEffect(() => {
@@ -253,19 +263,19 @@ export function BrokerOperationsPageContent() {
       setTab(requestedArea as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "guides" || requestedTab === "configuration") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance") {
       setTab(requestedTab);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration") return;
+    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab]);
 
   useEffect(() => {
-    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration") return;
+    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -275,7 +285,7 @@ export function BrokerOperationsPageContent() {
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
   const recommendations = overview?.recommendations || [];
-  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "guides" && tab !== "configuration" ? tab : null;
+  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" ? tab : null;
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
   const operationStages = catalog?.operationStages[operationType] || [];
@@ -437,6 +447,7 @@ export function BrokerOperationsPageContent() {
       <button className={tab === "commissions" ? "active" : ""} onClick={() => setTab("commissions")}>Comisiones</button>
       <button className={tab === "guides" ? "active" : ""} onClick={() => setTab("guides")}>Guías operativas</button>
       <button className={tab === "configuration" ? "active" : ""} onClick={() => setTab("configuration")}>Parámetros</button>
+      <button className={tab === "compliance" ? "active" : ""} onClick={() => setTab("compliance")}>Cumplimiento</button>
       <button className={tab === "agents" ? "active" : ""} onClick={() => setTab("agents")}>Agentes IA</button>
       <button className={tab === "training" ? "active" : ""} onClick={() => setTab("training")}>Entrenamiento IA</button>
     </nav>
@@ -522,6 +533,8 @@ export function BrokerOperationsPageContent() {
       <section><h3>SLA y financiamiento</h3><label>Primer contacto (minutos)<input name="firstLeadContactMinutes" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.firstLeadContactMinutes} required /></label><label>Publicación (horas)<input name="propertyPublicationHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.propertyPublicationHours} required /></label><label>Revisión legal (horas)<input name="legalReviewHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.legalReviewHours} required /></label><label>Incidencia crítica (horas)<input name="criticalIncidentHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.criticalIncidentHours} required /></label><label>Interés de financiamiento (%)<input name="interestRatePct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.financing.interestRatePct ?? ""} placeholder="Pendiente de definir" /></label><label>Umbral de riesgo (%)<input name="riskThreshold" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.financing.riskThreshold ?? ""} placeholder="Pendiente de definir" /></label></section>
       <p className="broker-human-note">Financiamiento, desembolsos, pagos, firmas y comunicaciones se mantienen con aprobación humana obligatoria. Los campos vacíos quedan pendientes de definición comercial, tributaria o jurídica.</p><button className="primary-btn" disabled={busy}>Guardar parámetros</button>
     </form> : <p className="broker-empty">Cargando parámetros comerciales...</p>}</section> : null}
+
+    {tab === "compliance" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Preparación legal y externa</span><h2>Qué está listo y qué requiere validación</h2><p>Este panel organiza evidencia y dependencias. No sustituye asesoría legal, tributaria ni la habilitación formal de un proveedor.</p></div>{legalReadiness ? <><section className="broker-reporting"><article><span>Consentimientos otorgados</span><b>{legalReadiness.summary.GRANTED}</b><small>Con evidencia registrada</small></article><article><span>Pendientes</span><b>{legalReadiness.summary.PENDING}</b><small>Antes de proponer uso externo</small></article><article><span>Revocados o vencidos</span><b>{legalReadiness.summary.REVOKED + legalReadiness.summary.EXPIRED}</b><small>Requieren bloqueo o renovación</small></article><article><span>Proveedores externos</span><b>{legalReadiness.providers.length}</b><small>Todos desactivados hasta su validación</small></article></section><div className="broker-compliance-grid"><section><h3>Proveedores y dependencias</h3>{legalReadiness.providers.map((item) => <article key={item.key}><b>{item.label}</b><span>{item.category} · {item.status === "HUMAN_REVIEW" ? "Revisión humana" : "Pendiente de proveedor"}</span><p>{item.description}</p></article>)}</section><section><h3>Consentimientos registrados</h3>{legalReadiness.consents.length ? legalReadiness.consents.map((item) => <article key={item.id}><b>{item.title}</b><span>{readable(item.status)}</span><p>{recordSummary(item, catalog?.recordDefinitions[item.recordType])}</p></article>) : <p className="broker-empty">Aún no hay consentimientos registrados. Puedes crearlos desde “Expediente y documentos”.</p>}</section></div><p className="broker-human-note">Para registrar una autorización utiliza el área “Expediente y documentos”. El sistema exige titular, finalidad, fecha y referencia de evidencia; una autorización registrada no activa por sí misma ningún envío, firma, publicación, acceso bancario ni integración.</p></> : <p className="broker-empty">Cargando estado de cumplimiento...</p>}</section> : null}
 
     {tab === "agents" ? <section className="broker-agents-panel"><div className="broker-list-heading"><span>Agentes de IA</span><h2>Asistentes especializados del Broker</h2><p>Los agentes disponibles preparan análisis y borradores; ninguna acción legal, pago, firma o comunicación externa se ejecuta sin aprobación humana.</p></div><div className="broker-agent-grid">{(overview?.agents || catalog?.agents || []).map((agent) => <article key={agent.key} className={`broker-agent-card ${agent.status === "AVAILABLE" ? "available" : "planned"}`}><span>{agent.status === "AVAILABLE" ? "Disponible" : "Próxima etapa"}</span><h3>{agent.name}</h3><p>{agent.description}</p><small>Módulo: {readable(agent.module)}</small></article>)}</div></section> : null}
 

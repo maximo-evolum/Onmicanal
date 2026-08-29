@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   BROKER_AGENT_CATALOG,
+  BROKER_EXTERNAL_READINESS,
   BROKER_AGENT_SCENARIOS,
   BROKER_AUTOMATION_RULES,
   BROKER_RECORD_AREAS,
@@ -83,6 +84,17 @@ test("Broker OS conoce las areas de expediente operativas", () => {
   assert.equal(isBrokerRecordArea("anything_else"), false);
   assert.equal(BROKER_RECORD_AREAS.documents.includes("property_document"), true);
   assert.equal(BROKER_RECORD_AREAS.financing.includes("operation_financing"), true);
+  assert.equal(BROKER_RECORD_AREAS.documents.includes("data_processing_consent"), true);
+});
+
+test("Broker OS separa consentimiento interno de la habilitación de terceros", () => {
+  assert.equal(BROKER_EXTERNAL_READINESS.some((item) => item.key === "electronic_signature" && item.status === "PENDING_PROVIDER"), true);
+  const consent = validateBrokerRecord({
+    recordType: "data_processing_consent",
+    status: "GRANTED",
+    data: { propertyId: "property-1", subjectName: "Carolina Fuentes", subjectRole: "Compradora", consentPurpose: "Evaluación comercial", acceptedAt: "2026-08-28", evidenceReference: "Consentimiento demo 001" }
+  });
+  assert.equal(consent.ok, true);
 });
 
 test("Broker OS mantiene completo y sin duplicados su catálogo técnico", () => {

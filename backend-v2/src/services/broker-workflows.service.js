@@ -95,7 +95,7 @@ export const BROKER_RECORD_AREAS = Object.freeze({
   maintenance: ["maintenance_ticket", "service_provider", "provider_quote", "material_purchase"],
   projects: ["remodeling_project", "project_budget", "project_milestone", "marketing_publication"],
   post_sale: ["property_inspection", "property_handover", "post_sale_case", "warranty_case"],
-  documents: ["property_document", "legal_document", "digital_signature"],
+  documents: ["property_document", "legal_document", "digital_signature", "data_processing_consent", "communication_consent", "external_authorization"],
   financing: ["operation_financing", "operation_financing_expense"]
 });
 
@@ -133,6 +133,9 @@ export const BROKER_RECORD_DEFINITIONS = Object.freeze({
   property_document: { label: "Documento de propiedad", area: "documents", required: ["propertyId", "documentType"], statuses: ["PENDING", "AVAILABLE", "EXPIRED", "REPLACED"] },
   legal_document: { label: "Documento legal", area: "documents", required: ["propertyId", "documentType"], statuses: ["PENDING", "UNDER_REVIEW", "APPROVED", "OBSERVED", "EXPIRED"] },
   digital_signature: { label: "Firma electrónica", area: "documents", required: ["propertyId", "documentType", "signerName"], statuses: ["DRAFT", "SENT", "SIGNED", "REJECTED", "EXPIRED"] },
+  data_processing_consent: { label: "Consentimiento de tratamiento de datos", area: "documents", required: ["propertyId", "subjectName", "subjectRole", "consentPurpose", "acceptedAt", "evidenceReference"], statuses: ["PENDING", "GRANTED", "REVOKED", "EXPIRED"] },
+  communication_consent: { label: "Consentimiento de comunicaciones", area: "documents", required: ["propertyId", "subjectName", "channels", "acceptedAt", "evidenceReference"], statuses: ["PENDING", "GRANTED", "REVOKED", "EXPIRED"] },
+  external_authorization: { label: "Autorización de integración externa", area: "documents", required: ["propertyId", "subjectName", "providerName", "consentPurpose", "acceptedAt", "evidenceReference"], statuses: ["PENDING", "GRANTED", "REVOKED", "EXPIRED"] },
   operation_financing: { label: "Financiamiento operativo", area: "financing", required: ["propertyId", "purpose", "requestedAmount"], statuses: ["DIAGNOSIS", "LEGAL_CHECK", "ESTIMATING", "REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED", "SETTLED", "REJECTED"] },
   operation_financing_expense: { label: "Gasto financiado", area: "financing", required: ["financingId", "concept", "amount"], statuses: ["PLANNED", "APPROVED", "PAID", "RECONCILED", "REJECTED"] }
 });
@@ -236,6 +239,15 @@ export const BROKER_DEFAULT_OPERATING_POLICY = Object.freeze({
   slas: Object.freeze({ firstLeadContactMinutes: 15, propertyPublicationHours: 24, legalReviewHours: 48, criticalIncidentHours: 4 }),
   financing: Object.freeze({ interestRatePct: null, riskThreshold: null, requiresHumanApproval: true, automaticDisbursement: false })
 });
+
+export const BROKER_EXTERNAL_READINESS = Object.freeze([
+  { key: "electronic_signature", label: "Firma electrónica", category: "Legal", status: "PENDING_PROVIDER", description: "Requiere proveedor homologado, contrato, condiciones de uso y validación jurídica del flujo de firma." },
+  { key: "legal_review", label: "Revisión jurídica", category: "Legal", status: "HUMAN_REVIEW", description: "Broker OS ordena el expediente y checklist; la revisión o certificación jurídica la realiza un profesional responsable." },
+  { key: "cbr", label: "Conservador de Bienes Raíces", category: "Registro", status: "PENDING_PROVIDER", description: "Requiere acceso y condiciones del Conservador aplicable. El sistema no declara inscripciones ni certificados por sí solo." },
+  { key: "public_portals", label: "Portales de publicación", category: "Comercial", status: "PENDING_PROVIDER", description: "Requiere contrato, API o mecanismo autorizado de cada portal antes de publicar contenido real." },
+  { key: "whatsapp_meta", label: "WhatsApp y Meta", category: "Comunicación", status: "PENDING_PROVIDER", description: "Requiere cuenta aprobada, canal configurado, consentimiento cuando aplique y revisión humana antes de envíos automáticos." },
+  { key: "financial_institutions", label: "Bancos y financiamiento", category: "Finanzas", status: "PENDING_PROVIDER", description: "Requiere acuerdos con la institución y definición jurídica/tributaria. No hay desembolsos automáticos." }
+]);
 
 export function brokerAgentScenario(key) {
   return BROKER_AGENT_SCENARIOS.find((scenario) => scenario.key === String(key || "").trim()) || null;

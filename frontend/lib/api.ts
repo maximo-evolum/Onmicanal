@@ -1234,6 +1234,11 @@ export type BrokerOperatingPolicy = {
 };
 
 export type BrokerOperatingConfiguration = { policy: BrokerOperatingPolicy; configured: boolean; updatedAt: string | null };
+export type BrokerLegalReadiness = {
+  providers: Array<{ key: string; label: string; category: string; status: "PENDING_PROVIDER" | "HUMAN_REVIEW" | string; description: string }>;
+  consents: IndustryRecord[];
+  summary: Record<"PENDING" | "GRANTED" | "REVOKED" | "EXPIRED", number>;
+};
 
 export function getBrokerOperatingConfiguration(): Promise<BrokerOperatingConfiguration> {
   return request<BrokerOperatingConfiguration>("/broker/configuration");
@@ -1241,6 +1246,10 @@ export function getBrokerOperatingConfiguration(): Promise<BrokerOperatingConfig
 
 export function saveBrokerOperatingConfiguration(policy: BrokerOperatingPolicy): Promise<BrokerOperatingConfiguration> {
   return request<BrokerOperatingConfiguration>("/broker/configuration", { method: "PUT", body: JSON.stringify({ policy }) });
+}
+
+export function getBrokerLegalReadiness(): Promise<BrokerLegalReadiness> {
+  return request<BrokerLegalReadiness>("/broker/legal-readiness");
 }
 
 export function previewBrokerCommission(input: { baseAmount: number; commissionRatePct: number; brokerSplitPct?: number; companySplitPct?: number }): Promise<BrokerCommissionPreview> {
