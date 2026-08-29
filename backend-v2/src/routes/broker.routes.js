@@ -13,18 +13,25 @@ import {
   BROKER_OPERATION_CHECKLISTS,
   BROKER_DEFAULT_OPERATING_POLICY,
   BROKER_EXTERNAL_READINESS,
+  BROKER_ROLE_TEMPLATES,
+  BROKER_SOP_LIBRARY,
+  FINANCING_STAGES,
   SALE_STAGES,
   TERMINAL_STAGES,
   brokerAgentScenario,
   brokerStageChecklist,
+  brokerFinancingChecklist,
+  calculateBrokerAdministrationLiquidation,
   calculateBrokerCommission,
   normalizeBrokerOperatingPolicy,
+  normalizeBrokerFinancingStage,
   isBrokerRecordArea,
   normalizeBrokerOperationType,
   normalizeBrokerStage,
   propertyHealthSnapshot,
   stagesForBrokerOperation,
   validateBrokerStageTransition,
+  validateBrokerFinancingTransition,
   validateBrokerRecord
 } from "../services/broker-workflows.service.js";
 
@@ -277,6 +284,9 @@ brokerRouter.get("/broker/catalog", (_req, res) => {
     agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload),
     aiScenarios: BROKER_AGENT_SCENARIOS,
     automationRules: BROKER_AUTOMATION_RULES,
+    roleTemplates: BROKER_ROLE_TEMPLATES,
+    sopLibrary: BROKER_SOP_LIBRARY,
+    financingStages: FINANCING_STAGES,
     operationChecklists: BROKER_OPERATION_CHECKLISTS,
     operationStages: {
       SALE: SALE_STAGES,
@@ -353,6 +363,52 @@ brokerRouter.post("/broker/commission-preview", requireRole(ROLE_GROUPS.STAFF), 
   res.json(preview);
 });
 
+// Simulación interna de liquidación mensual. No crea pagos, no transfiere
+// dinero y exige aprobación humana antes de registrar una liquidación real.
+brokerRouter.post("/broker/administration-preview", requireRole(ROLE_GROUPS.STAFF), (req, res) => {
+  res.json(calculateBrokerAdministrationLiquidation(req.body || {}));
+});
+
+brokerRouter.get("/broker/financing", async (req, res) => {
+  try {
+    const records = await prisma.industryRecord.findMany({
+      where: brokerWhere(req, { recordType: "operation_financing" }),
+      include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } },
+      orderBy: { updatedAt: "desc" },
+      take: 300
+    });
+    res.json(records.map((record) => {
+      const data = dataOf(record);
+      const stage = normalizeBrokerFinancingStage(record.status || data.stage);
+      return { ...record, status: stage, data: { ...data, stage, checklist: brokerFinancingChecklist(stage), timeline: Array.isArray(data.timeline) ? data.timeline : [] } };
+    }));
+  } catch (error) {
+    console.error("List broker financing error:", error);
+    res.status(500).json({ error: "No se pudieron obtener los financiamientos." });
+  }
+});
+
+brokerRouter.patch("/broker/financing/:id/stage", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "operation_financing" }) });
+    if (!existing) return res.status(404).json({ error: "Financiamiento no encontrado." });
+    const currentData = dataOf(existing);
+    const transition = validateBrokerFinancingTransition({ currentStage: existing.status || currentData.stage, nextStage: req.body?.stage });
+    if (!transition.ok) return res.status(422).json({ error: transition.error });
+    const timeline = Array.isArray(currentData.timeline) ? currentData.timeline : [];
+    timeline.push({ at: new Date().toISOString(), type: "FINANCING_STAGE", stage: transition.next, note: text(req.body?.note, "Etapa actualizada por usuario autorizado."), by: req.user?.name || req.user?.email || "Usuario autorizado" });
+    const record = await prisma.industryRecord.update({
+      where: { id: existing.id },
+      data: { status: transition.next, data: { ...currentData, stage: transition.next, checklist: brokerFinancingChecklist(transition.next), timeline, requiresHumanApproval: true, automaticDisbursement: false } }
+    });
+    await recordAuditLog(req, "BROKER_FINANCING_STAGE_CHANGED", "operation_financing", record.id, { from: transition.current, to: transition.next });
+    res.json(record);
+  } catch (error) {
+    console.error("Update broker financing stage error:", error);
+    res.status(500).json({ error: "No se pudo actualizar la etapa de financiamiento." });
+  }
+});
+
 brokerRouter.get("/broker/ai-evaluations", async (req, res) => {
   try {
     const records = await prisma.industryRecord.findMany({
@@ -365,6 +421,45 @@ brokerRouter.get("/broker/ai-evaluations", async (req, res) => {
   } catch (error) {
     console.error("List broker AI evaluations error:", error);
     res.status(500).json({ error: "No se pudieron obtener las evaluaciones de los agentes." });
+  }
+});
+
+// Genera alertas internas, idempotentes y revisables. No envía mensajes, no
+// publica inmuebles y no ejecuta acciones externas. La ejecución puede ser
+// invocada desde la interfaz o por un trabajo programado autorizado.
+brokerRouter.post("/broker/automation-scan", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const [properties, operations, maintenance, postSale, financing, brokerRecords, existingAlerts] = await Promise.all([
+      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), take: 500 }),
+      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_operation" }), take: 500 }),
+      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "maintenance_ticket", status: { notIn: ["CLOSED", "CANCELLED", "COMPLETED"] } }) }),
+      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "post_sale_case", status: { notIn: ["CLOSED", "RESOLVED"] } }) }),
+      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "operation_financing", status: { notIn: ["CIERRE", "RECHAZADO", "CANCELADO"] } }) }),
+      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: { in: BROKER_RECORD_TYPES } }), take: 1000 }),
+      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "realty_alert", status: { not: "RESOLVED" } }), take: 500 })
+    ]);
+    const recommendations = brokerRecommendations({ properties, operations, maintenance, postSale, financing, brokerRecords });
+    const fingerprints = new Set(existingAlerts.map((item) => text(dataOf(item).automationKey)));
+    const created = [];
+    for (const recommendation of recommendations) {
+      const automationKey = `broker:${recommendation.id}:${recommendation.propertyId || recommendation.operationId || "tenant"}`;
+      if (fingerprints.has(automationKey)) continue;
+      const record = await prisma.industryRecord.create({
+        data: {
+          tenantId: req.tenantId,
+          recordType: "realty_alert",
+          title: recommendation.title,
+          status: "OPEN",
+          data: { ...recommendation, automationKey, source: "broker_automation_scan", requiresHumanApproval: Boolean(recommendation.requiresApproval), externalActionExecuted: false }
+        }
+      });
+      created.push(record);
+    }
+    await recordAuditLog(req, "BROKER_AUTOMATION_SCAN", "realty_alert", req.tenantId, { recommendations: recommendations.length, created: created.length });
+    res.json({ recommendations, created, message: created.length ? "Se crearon alertas internas para revisión." : "No se detectaron alertas nuevas." });
+  } catch (error) {
+    console.error("Broker automation scan error:", error);
+    res.status(500).json({ error: "No se pudo ejecutar la revisión automática interna." });
   }
 });
 
@@ -529,6 +624,16 @@ brokerRouter.post("/broker/records", requireRole(ROLE_GROUPS.STAFF), async (req,
     if (!validation.ok) return res.status(422).json({ error: validation.error });
     await assertRelatedProperty(req, propertyId);
     await assertAssignedUser(req, text(req.body?.assignedToId));
+    const normalizedRecordData = recordType === "operation_financing"
+      ? {
+          ...recordData,
+          stage: validation.status,
+          checklist: brokerFinancingChecklist(validation.status),
+          timeline: [{ at: new Date().toISOString(), type: "FINANCING_CREATED", stage: validation.status, note: "Solicitud registrada en Broker OS.", by: req.user?.name || req.user?.email || "Usuario autorizado" }],
+          requiresHumanApproval: true,
+          automaticDisbursement: false
+        }
+      : recordData;
     const record = await prisma.industryRecord.create({
       data: {
         tenantId: req.tenantId,
@@ -536,7 +641,7 @@ brokerRouter.post("/broker/records", requireRole(ROLE_GROUPS.STAFF), async (req,
         title,
         status: validation.status,
         assignedToId: text(req.body?.assignedToId) || null,
-        data: { ...recordData, propertyId: propertyId || null, createdFrom: "broker_os" }
+        data: { ...normalizedRecordData, propertyId: propertyId || null, createdFrom: "broker_os" }
       },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
@@ -558,6 +663,16 @@ brokerRouter.patch("/broker/records/:id", requireRole(ROLE_GROUPS.STAFF), async 
       : { ...dataOf(existing), ...dataOf({ data: req.body.data }) };
     const propertyId = text(nextData.propertyId);
     const nextStatus = req.body?.status === undefined ? existing.status : text(req.body.status, existing.status).toUpperCase();
+    if (existing.recordType === "operation_financing" && req.body?.status !== undefined) {
+      const transition = validateBrokerFinancingTransition({ currentStage: existing.status || dataOf(existing).stage, nextStage: nextStatus });
+      if (!transition.ok) return res.status(422).json({ error: transition.error });
+      const timeline = Array.isArray(nextData.timeline) ? nextData.timeline : [];
+      nextData.stage = transition.next;
+      nextData.checklist = brokerFinancingChecklist(transition.next);
+      nextData.timeline = [...timeline, { at: new Date().toISOString(), type: "FINANCING_STAGE", stage: transition.next, note: "Etapa actualizada desde la ficha operativa.", by: req.user?.name || req.user?.email || "Usuario autorizado" }];
+      nextData.requiresHumanApproval = true;
+      nextData.automaticDisbursement = false;
+    }
     const validation = validateBrokerRecord({ recordType: existing.recordType, data: nextData, status: nextStatus });
     if (!validation.ok) return res.status(422).json({ error: validation.error });
     await assertRelatedProperty(req, propertyId);
@@ -596,13 +711,38 @@ brokerRouter.get("/broker/properties/:propertyId/expedient", async (req, res) =>
       })
       .sort((a, b) => String(b.at).localeCompare(String(a.at)))
       .slice(0, 50);
+    const propertyData = dataOf(property);
+    const journey = {
+      property: {
+        title: property.title,
+        comuna: text(propertyData.comuna || propertyData.commune),
+        precio: propertyData.price ?? null,
+        estado: property.status
+      },
+      people: {
+        propietarios: [...new Set(related.filter((item) => item.recordType === "property_mandate").map((item) => text(dataOf(item).ownerName)).filter(Boolean))],
+        interesados: [...new Set(related.filter((item) => ["property_offer", "rental_application", "property_promise"].includes(item.recordType)).map((item) => text(dataOf(item).buyerName || dataOf(item).tenantName)).filter(Boolean))]
+      },
+      control: {
+        operaciones: related.filter((item) => item.recordType === "broker_operation").length,
+        visitas: related.filter((item) => item.recordType === "visit").length,
+        documentos: grouped.documents.length,
+        consentimientos: grouped.documents.filter((item) => ["data_processing_consent", "communication_consent", "external_authorization"].includes(item.recordType)).length,
+        ofertas: grouped.commercial.filter((item) => item.recordType === "property_offer").length,
+        financiamientos: grouped.financing.filter((item) => item.recordType === "operation_financing").length,
+        incidencias: grouped.maintenance.filter((item) => item.recordType === "maintenance_ticket").length,
+        postventa: grouped.post_sale.filter((item) => ["post_sale_case", "warranty_case"].includes(item.recordType)).length,
+        alertasAbiertas: related.filter((item) => item.recordType === "realty_alert" && item.status !== "RESOLVED").length
+      }
+    };
     res.json({
       property,
       records: related,
       grouped,
       completion: { missing: missingPropertyData(property), complete: missingPropertyData(property).length === 0 },
       health,
-      timeline
+      timeline,
+      journey
     });
   } catch (error) {
     if (error?.message?.includes("propiedad relacionada")) return res.status(404).json({ error: "Propiedad no encontrada." });

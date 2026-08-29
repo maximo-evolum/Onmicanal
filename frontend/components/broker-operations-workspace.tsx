@@ -15,6 +15,8 @@ import {
   getBrokerRecords,
   getIndustryRecords,
   previewBrokerCommission,
+  previewBrokerAdministration,
+  runBrokerAutomationScan,
   saveBrokerAiEvaluation,
   saveBrokerOperatingConfiguration,
   updateBrokerRecord,
@@ -26,12 +28,13 @@ import {
   type BrokerRecordArea,
   type BrokerRecordDefinition,
   type BrokerCommissionPreview,
+  type BrokerAdministrationPreview,
   type BrokerOperatingConfiguration,
   type BrokerLegalReadiness,
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | "training" | "commissions" | "guides" | "configuration" | "compliance" | BrokerRecordArea;
+type Tab = "operations" | "agents" | "training" | "commissions" | "administration_preview" | "guides" | "configuration" | "compliance" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -234,6 +237,7 @@ export function BrokerOperationsPageContent() {
   const [selectedScenarioKey, setSelectedScenarioKey] = useState("");
   const [evaluationNote, setEvaluationNote] = useState("");
   const [commissionPreview, setCommissionPreview] = useState<BrokerCommissionPreview | null>(null);
+  const [administrationPreview, setAdministrationPreview] = useState<BrokerAdministrationPreview | null>(null);
   const [operatingConfiguration, setOperatingConfiguration] = useState<BrokerOperatingConfiguration | null>(null);
   const [legalReadiness, setLegalReadiness] = useState<BrokerLegalReadiness | null>(null);
 
@@ -263,19 +267,19 @@ export function BrokerOperationsPageContent() {
       setTab(requestedArea as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance") {
       setTab(requestedTab);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance") return;
+    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab]);
 
   useEffect(() => {
-    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance") return;
+    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -285,7 +289,7 @@ export function BrokerOperationsPageContent() {
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
   const recommendations = overview?.recommendations || [];
-  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" ? tab : null;
+  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" ? tab : null;
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
   const operationStages = catalog?.operationStages[operationType] || [];
@@ -406,6 +410,32 @@ export function BrokerOperationsPageContent() {
     finally { setBusy(false); }
   }
 
+  async function calculateAdministration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true); setNotice("");
+    try {
+      const preview = await previewBrokerAdministration({
+        monthlyRent: Number(form.get("monthlyRent") || 0), paidAmount: Number(form.get("paidAmount") || 0),
+        commonExpenses: Number(form.get("commonExpenses") || 0), utilities: Number(form.get("utilities") || 0),
+        maintenanceCost: Number(form.get("maintenanceCost") || 0), managementRatePct: Number(form.get("managementRatePct") || 0)
+      });
+      setAdministrationPreview(preview);
+      setNotice("Liquidación estimada. No se creó ningún pago ni transferencia.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo calcular la liquidación."); }
+    finally { setBusy(false); }
+  }
+
+  async function executeAutomationScan() {
+    setBusy(true); setNotice("");
+    try {
+      const result = await runBrokerAutomationScan();
+      await load();
+      setNotice(result.message);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo ejecutar la revisión automática."); }
+    finally { setBusy(false); }
+  }
+
   async function saveOperatingConfiguration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -445,6 +475,7 @@ export function BrokerOperationsPageContent() {
       <button className={tab === "operations" ? "active" : ""} onClick={() => setTab("operations")}>Operaciones</button>
       {Object.entries(AREA_CONFIG).map(([key, value]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as BrokerRecordArea)}>{value.label}</button>)}
       <button className={tab === "commissions" ? "active" : ""} onClick={() => setTab("commissions")}>Comisiones</button>
+      <button className={tab === "administration_preview" ? "active" : ""} onClick={() => setTab("administration_preview")}>Liquidación mensual</button>
       <button className={tab === "guides" ? "active" : ""} onClick={() => setTab("guides")}>Guías operativas</button>
       <button className={tab === "configuration" ? "active" : ""} onClick={() => setTab("configuration")}>Parámetros</button>
       <button className={tab === "compliance" ? "active" : ""} onClick={() => setTab("compliance")}>Cumplimiento</button>
@@ -456,12 +487,13 @@ export function BrokerOperationsPageContent() {
     {tab === "operations" ? <>
       <section className="broker-recommendations" aria-label="Prioridades operativas">
         <div className="broker-list-heading"><span>Prioridades operativas</span><h2>Qué revisar a continuación</h2><p>Son sugerencias internas basadas en la cartera. EVOLUM no cambia estados, publica ni contacta personas por su cuenta.</p></div>
+        <div className="broker-list-heading"><button type="button" className="secondary-btn" disabled={busy} onClick={executeAutomationScan}>Revisar cartera y crear alertas internas</button><p>La revisión detecta pendientes y crea alertas internas; no publica, envía mensajes ni modifica operaciones.</p></div>
         {recommendations.length ? <div className="broker-recommendation-grid">{recommendations.map((recommendation) => <article key={recommendation.id} className={`broker-recommendation ${recommendation.priority.toLowerCase()}`}><b>{recommendation.priority === "HIGH" ? "Prioridad alta" : recommendation.priority === "MEDIUM" ? "Prioridad media" : "Informativa"}</b><h3>{recommendation.title}</h3><p>{recommendation.detail}</p><button type="button" className="secondary-btn" onClick={() => setTab(recommendation.area)}>{recommendation.requiresApproval ? "Revisar y confirmar" : "Completar ficha"}</button></article>)}</div> : <p className="broker-empty">La cartera no tiene prioridades pendientes por ahora.</p>}
       </section>
       <section className="broker-expedient-panel" aria-label="Expediente por propiedad">
         <div className="broker-list-heading"><span>Expediente digital</span><h2>Revisa una propiedad completa</h2><p>Consulta documentos, contratos, mantenciones, postventa y antecedentes sin cambiar de pantalla.</p></div>
         <div className="broker-expedient-controls"><select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select><button type="button" className="primary-btn" disabled={busy || !selectedPropertyId} onClick={openExpedient}>Abrir expediente</button></div>
-        {expedient ? <><div className="broker-expedient-summary"><div><b>{expedient.property.title}</b><p>{expedient.completion.complete ? "Ficha completa para operación y publicación." : `Falta completar: ${expedient.completion.missing.join(", ")}.`}</p><p><strong>Salud del expediente: {expedient.health.score}% · {readable(expedient.health.status)}</strong></p></div><div className="broker-expedient-counts">{Object.entries(expedient.grouped).filter(([, items]) => items?.length).map(([area, items]) => <span key={area}><b>{items?.length}</b>{AREA_CONFIG[area as BrokerRecordArea]?.label || readable(area)}</span>)}</div></div><div className="broker-expedient-timeline"><b>Últimos movimientos</b>{expedient.timeline.slice(0, 5).map((item, index) => <p key={`${item.at}-${index}`}><span>{item.at ? new Date(item.at).toLocaleDateString("es-CL") : "Sin fecha"}</span>{item.title} · {readable(item.status)}{item.note ? ` — ${item.note}` : ""}</p>)}</div></> : null}
+        {expedient ? <><div className="broker-expedient-summary"><div><b>{expedient.property.title}</b><p>{expedient.completion.complete ? "Ficha completa para operación y publicación." : `Falta completar: ${expedient.completion.missing.join(", ")}.`}</p><p><strong>Salud del expediente: {expedient.health.score}% · {readable(expedient.health.status)}</strong></p></div><div className="broker-expedient-counts">{Object.entries(expedient.grouped).filter(([, items]) => items?.length).map(([area, items]) => <span key={area}><b>{items?.length}</b>{AREA_CONFIG[area as BrokerRecordArea]?.label || readable(area)}</span>)}</div></div>{expedient.journey ? <div className="broker-expedient-timeline"><b>Journey de la propiedad</b><p>Propietarios: {expedient.journey.people.propietarios.join(", ") || "Sin registrar"} · Interesados: {expedient.journey.people.interesados.join(", ") || "Sin registrar"}</p><p>{Object.entries(expedient.journey.control).map(([key, value]) => `${readable(key)}: ${value}`).join(" · ")}</p></div> : null}<div className="broker-expedient-timeline"><b>Últimos movimientos</b>{expedient.timeline.slice(0, 5).map((item, index) => <p key={`${item.at}-${index}`}><span>{item.at ? new Date(item.at).toLocaleDateString("es-CL") : "Sin fecha"}</span>{item.title} · {readable(item.status)}{item.note ? ` — ${item.note}` : ""}</p>)}</div></> : null}
       </section>
       {reporting ? <section className="broker-reporting" aria-label="Indicadores y aprendizaje de Broker OS">
         <article><span>Valor de cartera</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(reporting.portfolioValue)}</b><small>Inventario de propiedades</small></article>
@@ -525,7 +557,21 @@ export function BrokerOperationsPageContent() {
       <section className="broker-os-list broker-commission-result"><div className="broker-list-heading"><span>Resultado estimado</span><h2>Distribución para revisión</h2><p>Confirma las condiciones comerciales antes de registrar una regla o liquidación en el expediente.</p></div>{commissionPreview?.ok ? <div className="broker-reporting"><article><span>Comisión total</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.totalCommission || 0)}</b><small>Sobre la base informada</small></article><article><span>Corredor</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.brokerAmount || 0)}</b><small>{commissionPreview.brokerSplitPct}% de distribución</small></article><article><span>Empresa</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.companyAmount || 0)}</b><small>{commissionPreview.companySplitPct}% de distribución</small></article></div> : <p className="broker-empty">Ingresa los valores para obtener una proyección. El cálculo es informativo y requiere validación humana.</p>}</section>
     </section> : null}
 
-    {tab === "guides" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Guías operativas</span><h2>Qué revisar en cada etapa</h2><p>Lista interna de verificación para trabajar con orden. Las revisiones jurídicas, firmas, pagos y comunicaciones externas siempre requieren una persona responsable.</p></div><div className="broker-guide-grid">{(Object.keys(OPERATION_LABELS) as BrokerOperationType[]).map((type) => <article key={type}><h3>{OPERATION_LABELS[type]}</h3>{(catalog?.operationStages[type] || []).map((stage) => <section key={stage}><b>{readable(stage)}</b><ul>{(catalog?.operationChecklists?.[type]?.[stage] || []).map((item) => <li key={item}>{item}</li>)}</ul></section>)}</article>)}</div></section> : null}
+    {tab === "administration_preview" ? <section className="broker-os-grid broker-area-grid">
+      <form className="broker-os-form" onSubmit={calculateAdministration}>
+        <span>Simulación con aprobación</span><h2>Liquidación mensual</h2><p>Prepara el cálculo de administración. Revisa los respaldos y aprueba la liquidación antes de registrar o transferir cualquier monto.</p>
+        <label>Renta mensual<input name="monthlyRent" type="number" min="0" required placeholder="Ej.: 850000" /></label>
+        <label>Monto efectivamente pagado<input name="paidAmount" type="number" min="0" placeholder="Ej.: 850000" /></label>
+        <label>Gastos comunes<input name="commonExpenses" type="number" min="0" defaultValue="0" /></label>
+        <label>Servicios básicos<input name="utilities" type="number" min="0" defaultValue="0" /></label>
+        <label>Mantenciones imputadas<input name="maintenanceCost" type="number" min="0" defaultValue="0" /></label>
+        <label>Honorario de administración (%)<input name="managementRatePct" type="number" min="0" max="100" step="0.01" defaultValue={operatingConfiguration?.policy.administration.tiers[0]?.ratePct ?? ""} required /></label>
+        <button className="primary-btn" disabled={busy}>Calcular liquidación</button>
+      </form>
+      <section className="broker-os-list broker-commission-result"><div className="broker-list-heading"><span>Resultado estimado</span><h2>Liquidación para revisión</h2><p>No se realizan transferencias ni cobros desde esta vista.</p></div>{administrationPreview ? <div className="broker-reporting"><article><span>Pago registrado</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(administrationPreview.paidAmount)}</b><small>Dato informado por el equipo</small></article><article><span>Gastos imputados</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(administrationPreview.totalExpenses)}</b><small>Comunes, servicios y mantenciones</small></article><article><span>Honorario</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(administrationPreview.managementFee)}</b><small>{administrationPreview.managementRatePct}% aplicado</small></article><article><span>Transferencia propuesta</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(administrationPreview.ownerTransferAmount)}</b><small>Requiere aprobación humana</small></article></div> : <p className="broker-empty">Ingresa los antecedentes del período para obtener una propuesta de liquidación.</p>}</section>
+    </section> : null}
+
+    {tab === "guides" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Guías operativas</span><h2>Qué revisar en cada etapa</h2><p>Lista interna de verificación para trabajar con orden. Las revisiones jurídicas, firmas, pagos y comunicaciones externas siempre requieren una persona responsable.</p></div><div className="broker-guide-grid">{(Object.keys(OPERATION_LABELS) as BrokerOperationType[]).map((type) => <article key={type}><h3>{OPERATION_LABELS[type]}</h3>{(catalog?.operationStages[type] || []).map((stage) => <section key={stage}><b>{readable(stage)}</b><ul>{(catalog?.operationChecklists?.[type]?.[stage] || []).map((item) => <li key={item}>{item}</li>)}</ul></section>)}</article>)}</div><div className="broker-guide-grid">{(catalog?.sopLibrary || []).map((sop) => <article key={sop.key}><h3>{sop.title}</h3><ul>{sop.steps.map((step) => <li key={step}>{step}</li>)}</ul></article>)}</div><div className="broker-guide-grid">{(catalog?.roleTemplates || []).map((role) => <article key={role.key}><h3>{role.label}</h3><p>{role.scope}</p><ul>{role.permissions.map((permission) => <li key={permission}>{permission}</li>)}</ul></article>)}</div></section> : null}
 
     {tab === "configuration" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Parámetros comerciales</span><h2>Configura sin dejar condiciones rígidas en el código</h2><p>Valores de operación por empresa. Deben ser revisados y aprobados por la administración antes de utilizarse con clientes reales.</p></div>{operatingConfiguration ? <form className="broker-policy-form" onSubmit={saveOperatingConfiguration}>
       <section><h3>Venta y reparto</h3><label>Comisión vendedor (%)<input name="sellerCommissionPct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.sales.sellerCommissionPct} required /></label><label>Comisión comprador (%)<input name="buyerCommissionPct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.sales.buyerCommissionPct} required /></label><label>Parte corredor (%)<input name="brokerSplitPct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.sales.brokerSplitPct} required /></label><label>Parte empresa (%)<input name="companySplitPct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.sales.companySplitPct} required /></label></section>

@@ -7,9 +7,12 @@ import {
   BROKER_AUTOMATION_RULES,
   BROKER_RECORD_AREAS,
   BROKER_RECORD_TYPES,
+  FINANCING_STAGES,
   RENTAL_STAGES,
   SALE_STAGES,
   calculateBrokerCommission,
+  calculateBrokerAdministrationLiquidation,
+  brokerFinancingChecklist,
   brokerStageChecklist,
   brokerAdministrationRate,
   normalizeBrokerOperatingPolicy,
@@ -21,6 +24,7 @@ import {
   validateBrokerRecord,
   brokerAgentScenario,
   validateBrokerStageTransition
+  ,validateBrokerFinancingTransition
 } from "../src/services/broker-workflows.service.js";
 
 test("Broker OS expone los flujos oficiales de venta y arriendo", () => {
@@ -133,4 +137,20 @@ test("Broker OS mantiene escenarios evaluables y automatizaciones con control hu
   assert.equal(brokerAgentScenario("comprador-providencia")?.agentKey, "commercial");
   assert.equal(BROKER_AUTOMATION_RULES.every((rule) => typeof rule.approval === "string" && rule.approval.length > 0), true);
   assert.equal(BROKER_AUTOMATION_RULES.some((rule) => rule.key === "visita_sin_seguimiento"), true);
+});
+
+test("Broker OS prepara una liquidación mensual sin transferir dinero", () => {
+  const preview = calculateBrokerAdministrationLiquidation({ monthlyRent: 850000, paidAmount: 850000, commonExpenses: 120000, utilities: 30000, maintenanceCost: 20000, managementRatePct: 10 });
+  assert.equal(preview.managementFee, 85000);
+  assert.equal(preview.ownerTransferAmount, 595000);
+  assert.equal(preview.requiresHumanApproval, true);
+  assert.equal(preview.automaticTransfer, false);
+});
+
+test("Broker OS valida el ciclo completo de financiamiento sin saltar etapas", () => {
+  assert.equal(FINANCING_STAGES.length, 12);
+  assert.equal(brokerFinancingChecklist("SOLICITUD").length > 0, true);
+  assert.equal(validateBrokerFinancingTransition({ currentStage: "SOLICITUD", nextStage: "APROBACION" }).ok, false);
+  assert.equal(validateBrokerFinancingTransition({ currentStage: "SOLICITUD", nextStage: "EVALUACION" }).ok, true);
+  assert.equal(validateBrokerFinancingTransition({ currentStage: "EVALUACION", nextStage: "RECHAZADO" }).terminal, true);
 });

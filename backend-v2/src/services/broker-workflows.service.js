@@ -53,6 +53,24 @@ export const ADMINISTRATION_STAGES = Object.freeze([
   "CIERRE"
 ]);
 
+// Ciclo interno de financiamiento. Representa el seguimiento comercial y
+// documental de una solicitud; no sustituye a un banco, ni concede créditos,
+// ni realiza desembolsos.
+export const FINANCING_STAGES = Object.freeze([
+  "DIAGNOSTICO_FINANCIERO",
+  "CHECKLIST_LEGAL",
+  "ESTIMACION_GASTOS",
+  "SOLICITUD",
+  "EVALUACION",
+  "APROBACION",
+  "DESEMBOLSO",
+  "EJECUCION",
+  "SEGUIMIENTO",
+  "RECUPERACION",
+  "LIQUIDACION",
+  "CIERRE"
+]);
+
 export const TERMINAL_STAGES = new Set(["CERRADA", "CANCELADA", "PERDIDA", "CIERRE", "ENTREGA_Y_POSTVENTA", "ENTREGA_LLAVES"]);
 
 export const LEGACY_STAGE_MAP = Object.freeze({
@@ -87,6 +105,17 @@ export const LEGACY_STAGE_MAP = Object.freeze({
     LIQUIDACION: "LIQUIDACION_Y_TRANSFERENCIA",
     MANTENIMIENTO: "MANTENCIONES_Y_SERVICIOS"
   }
+});
+
+export const LEGACY_FINANCING_STAGE_MAP = Object.freeze({
+  DIAGNOSIS: "DIAGNOSTICO_FINANCIERO",
+  LEGAL_CHECK: "CHECKLIST_LEGAL",
+  ESTIMATING: "ESTIMACION_GASTOS",
+  REQUESTED: "SOLICITUD",
+  UNDER_REVIEW: "EVALUACION",
+  APPROVED: "APROBACION",
+  DISBURSED: "DESEMBOLSO",
+  SETTLED: "LIQUIDACION"
 });
 
 export const BROKER_RECORD_AREAS = Object.freeze({
@@ -136,7 +165,7 @@ export const BROKER_RECORD_DEFINITIONS = Object.freeze({
   data_processing_consent: { label: "Consentimiento de tratamiento de datos", area: "documents", required: ["propertyId", "subjectName", "subjectRole", "consentPurpose", "acceptedAt", "evidenceReference"], statuses: ["PENDING", "GRANTED", "REVOKED", "EXPIRED"] },
   communication_consent: { label: "Consentimiento de comunicaciones", area: "documents", required: ["propertyId", "subjectName", "channels", "acceptedAt", "evidenceReference"], statuses: ["PENDING", "GRANTED", "REVOKED", "EXPIRED"] },
   external_authorization: { label: "Autorización de integración externa", area: "documents", required: ["propertyId", "subjectName", "providerName", "consentPurpose", "acceptedAt", "evidenceReference"], statuses: ["PENDING", "GRANTED", "REVOKED", "EXPIRED"] },
-  operation_financing: { label: "Financiamiento operativo", area: "financing", required: ["propertyId", "purpose", "requestedAmount"], statuses: ["DIAGNOSIS", "LEGAL_CHECK", "ESTIMATING", "REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED", "SETTLED", "REJECTED"] },
+  operation_financing: { label: "Financiamiento operativo", area: "financing", required: ["propertyId", "purpose", "requestedAmount"], statuses: [...FINANCING_STAGES, "RECHAZADO", "CANCELADO"] },
   operation_financing_expense: { label: "Gasto financiado", area: "financing", required: ["financingId", "concept", "amount"], statuses: ["PLANNED", "APPROVED", "PAID", "RECONCILED", "REJECTED"] }
 });
 
@@ -249,6 +278,27 @@ export const BROKER_EXTERNAL_READINESS = Object.freeze([
   { key: "financial_institutions", label: "Bancos y financiamiento", category: "Finanzas", status: "PENDING_PROVIDER", description: "Requiere acuerdos con la institución y definición jurídica/tributaria. No hay desembolsos automáticos." }
 ]);
 
+// Perfiles guía para configurar el equipo. Son una matriz explícita de
+// responsabilidades del portal; la asignación de roles de plataforma sigue
+// siendo administrada por la cuenta propietaria del tenant.
+export const BROKER_ROLE_TEMPLATES = Object.freeze([
+  { key: "owner", label: "Dirección / propietario", scope: "Todo el portafolio", permissions: ["Configurar políticas", "Ver reportes", "Aprobar decisiones sensibles"] },
+  { key: "commercial", label: "Equipo comercial", scope: "Propiedades y operaciones asignadas", permissions: ["Gestionar cartera", "Registrar visitas", "Preparar ofertas y promesas"] },
+  { key: "marketing", label: "Marketing", scope: "Fichas autorizadas", permissions: ["Preparar publicaciones", "Mantener material comercial", "Revisar rendimiento"] },
+  { key: "operations", label: "Operaciones y postventa", scope: "Casos y propiedades asignadas", permissions: ["Coordinar mantenciones", "Gestionar entregas", "Registrar garantías"] },
+  { key: "administration", label: "Administración de arriendos", scope: "Contratos administrados", permissions: ["Registrar cobros", "Preparar liquidaciones", "Controlar renovaciones"] },
+  { key: "finance", label: "Finanzas operativas", scope: "Financiamientos y liquidaciones", permissions: ["Preparar antecedentes", "Registrar gastos", "Solicitar revisión humana"] }
+]);
+
+export const BROKER_SOP_LIBRARY = Object.freeze([
+  { key: "captacion", title: "Captación y mandato", area: "commercial", steps: ["Validar propietario y datos del inmueble.", "Registrar tasación, mandato y vigencia.", "Completar ficha, imágenes y antecedentes antes de publicar."] },
+  { key: "venta", title: "Venta y cierre", area: "commercial", steps: ["Calificar interesado y registrar visitas.", "Comparar oferta, tasación y condiciones.", "Derivar promesa, títulos, escritura e inscripción a revisión responsable."] },
+  { key: "arriendo", title: "Arriendo y administración", area: "rentals", steps: ["Revisar antecedentes con autorización.", "Registrar contrato, garantía y vencimientos.", "Conciliar cobros y preparar liquidación para aprobación."] },
+  { key: "mantencion", title: "Mantenciones y proveedores", area: "maintenance", steps: ["Abrir incidencia con evidencia.", "Solicitar y comparar cotizaciones.", "Esperar aprobación antes de ordenar o confirmar trabajos."] },
+  { key: "postventa", title: "Entrega, postventa y garantía", area: "post_sale", steps: ["Completar inspección y acta de entrega.", "Registrar caso y evidencia.", "Dar seguimiento hasta la resolución documentada."] },
+  { key: "financiamiento", title: "Financiamiento de operación", area: "financing", steps: ["Registrar destino y monto solicitado.", "Completar antecedentes y estimación de gastos.", "Avanzar una etapa a la vez con aprobación humana donde corresponda."] }
+]);
+
 export function brokerAgentScenario(key) {
   return BROKER_AGENT_SCENARIOS.find((scenario) => scenario.key === String(key || "").trim()) || null;
 }
@@ -352,6 +402,70 @@ export function calculateBrokerCommission({ baseAmount, commissionRatePct, broke
   };
 }
 
+export function calculateBrokerAdministrationLiquidation({
+  monthlyRent,
+  paidAmount,
+  commonExpenses = 0,
+  utilities = 0,
+  maintenanceCost = 0,
+  managementRatePct = 0
+} = {}) {
+  const rent = Math.max(0, numberValue(monthlyRent));
+  const collected = Math.max(0, numberValue(paidAmount, rent));
+  const expenses = Math.max(0, numberValue(commonExpenses)) + Math.max(0, numberValue(utilities)) + Math.max(0, numberValue(maintenanceCost));
+  const rate = Math.max(0, numberValue(managementRatePct));
+  const managementFee = Math.round(collected * (rate / 100));
+  const ownerTransferAmount = Math.max(0, Math.round(collected - expenses - managementFee));
+  return {
+    ok: true,
+    monthlyRent: rent,
+    paidAmount: collected,
+    totalExpenses: expenses,
+    managementRatePct: rate,
+    managementFee,
+    ownerTransferAmount,
+    requiresHumanApproval: true,
+    automaticTransfer: false
+  };
+}
+
+export function normalizeBrokerFinancingStage(value) {
+  const raw = String(value || "").trim().toUpperCase();
+  if (FINANCING_STAGES.includes(raw) || ["RECHAZADO", "CANCELADO"].includes(raw)) return raw;
+  return LEGACY_FINANCING_STAGE_MAP[raw] || FINANCING_STAGES[0];
+}
+
+export function brokerFinancingChecklist(stage) {
+  const normalized = normalizeBrokerFinancingStage(stage);
+  const checklists = {
+    DIAGNOSTICO_FINANCIERO: ["Confirmar objetivo, monto y capacidad preliminar."],
+    CHECKLIST_LEGAL: ["Reunir antecedentes y derivar lo jurídico a revisión responsable."],
+    ESTIMACION_GASTOS: ["Registrar gastos estimados, supuestos y vigencias."],
+    SOLICITUD: ["Dejar la solicitud preparada para envío por canal autorizado."],
+    EVALUACION: ["Registrar antecedentes solicitados y riesgos identificados."],
+    APROBACION: ["Guardar la resolución informada por la institución; no aprobar internamente."],
+    DESEMBOLSO: ["Registrar comprobante informado; Broker OS no desembolsa fondos."],
+    EJECUCION: ["Vincular gastos y hitos autorizados."],
+    SEGUIMIENTO: ["Controlar próximos vencimientos y antecedentes pendientes."],
+    RECUPERACION: ["Registrar pagos, refinanciamientos o gestiones informadas."],
+    LIQUIDACION: ["Preparar liquidación y respaldo para revisión humana."],
+    CIERRE: ["Confirmar expediente completo y cierre responsable."]
+  };
+  return checklists[normalized] || [];
+}
+
+export function validateBrokerFinancingTransition({ currentStage, nextStage }) {
+  const current = normalizeBrokerFinancingStage(currentStage || FINANCING_STAGES[0]);
+  const next = normalizeBrokerFinancingStage(nextStage);
+  if (["RECHAZADO", "CANCELADO"].includes(next)) return { ok: true, current, next, terminal: true };
+  const currentIndex = FINANCING_STAGES.indexOf(current);
+  const nextIndex = FINANCING_STAGES.indexOf(next);
+  if (currentIndex === -1 || nextIndex === -1) return { ok: false, error: "La etapa de financiamiento no es válida." };
+  if (current === "CIERRE" && current !== next) return { ok: false, error: "El financiamiento ya está cerrado." };
+  if (nextIndex > currentIndex + 1) return { ok: false, error: "No se puede saltar etapas del financiamiento." };
+  return { ok: true, current, next, terminal: next === "CIERRE" };
+}
+
 export function propertyHealthSnapshot(property, relatedRecords = []) {
   const data = property?.data && typeof property.data === "object" && !Array.isArray(property.data) ? property.data : {};
   const has = (value) => value !== undefined && value !== null && String(value).trim() !== "";
@@ -426,7 +540,9 @@ export function validateBrokerRecord({ recordType, data, status }) {
     return value === undefined || value === null || String(value).trim() === "";
   });
   if (missing.length) return { ok: false, error: `Faltan datos requeridos: ${missing.join(", ")}.` };
-  const normalizedStatus = String(status || definition.statuses[0]).trim().toUpperCase();
+  const normalizedStatus = String(recordType) === "operation_financing"
+    ? normalizeBrokerFinancingStage(status || definition.statuses[0])
+    : String(status || definition.statuses[0]).trim().toUpperCase();
   if (!definition.statuses.includes(normalizedStatus)) {
     return { ok: false, error: `El estado ${normalizedStatus} no corresponde a ${definition.label}.` };
   }

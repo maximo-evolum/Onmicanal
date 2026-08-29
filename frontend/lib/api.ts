@@ -1193,6 +1193,7 @@ export type BrokerPropertyExpedient = {
   completion: { missing: string[]; complete: boolean };
   health: { score: number; status: string; completed: string[]; missing: string[] };
   timeline: Array<{ at: string; title: string; type: string; note: string; recordType: string; status: string }>;
+  journey?: { property: { title: string; comuna: string; precio: unknown; estado: string }; people: { propietarios: string[]; interesados: string[] }; control: Record<string, number> };
 };
 
 export type BrokerCatalog = {
@@ -1201,6 +1202,9 @@ export type BrokerCatalog = {
   agents: BrokerAgent[];
   aiScenarios: BrokerAiScenario[];
   automationRules: BrokerAutomationRule[];
+  roleTemplates: Array<{ key: string; label: string; scope: string; permissions: string[] }>;
+  sopLibrary: Array<{ key: string; title: string; area: BrokerRecordArea; steps: string[] }>;
+  financingStages: string[];
   operationStages: Record<BrokerOperationType, string[]>;
   operationChecklists: Record<BrokerOperationType, Record<string, string[]>>;
 };
@@ -1254,6 +1258,34 @@ export function getBrokerLegalReadiness(): Promise<BrokerLegalReadiness> {
 
 export function previewBrokerCommission(input: { baseAmount: number; commissionRatePct: number; brokerSplitPct?: number; companySplitPct?: number }): Promise<BrokerCommissionPreview> {
   return request<BrokerCommissionPreview>("/broker/commission-preview", { method: "POST", body: JSON.stringify(input) });
+}
+
+export type BrokerAdministrationPreview = {
+  ok: boolean;
+  monthlyRent: number;
+  paidAmount: number;
+  totalExpenses: number;
+  managementRatePct: number;
+  managementFee: number;
+  ownerTransferAmount: number;
+  requiresHumanApproval: true;
+  automaticTransfer: false;
+};
+
+export function previewBrokerAdministration(input: { monthlyRent: number; paidAmount?: number; commonExpenses?: number; utilities?: number; maintenanceCost?: number; managementRatePct?: number }): Promise<BrokerAdministrationPreview> {
+  return request<BrokerAdministrationPreview>("/broker/administration-preview", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function runBrokerAutomationScan(): Promise<{ recommendations: BrokerRecommendation[]; created: IndustryRecord[]; message: string }> {
+  return request("/broker/automation-scan", { method: "POST" });
+}
+
+export function getBrokerFinancing(): Promise<IndustryRecord[]> {
+  return request<IndustryRecord[]>("/broker/financing");
+}
+
+export function advanceBrokerFinancing(id: string, stage: string, note?: string): Promise<IndustryRecord> {
+  return request<IndustryRecord>(`/broker/financing/${encodeURIComponent(id)}/stage`, { method: "PATCH", body: JSON.stringify({ stage, note }) });
 }
 
 export function getBrokerAiEvaluations(): Promise<{ scenarios: BrokerAiScenario[]; evaluations: BrokerAiEvaluation[]; automationRules: BrokerAutomationRule[] }> {
