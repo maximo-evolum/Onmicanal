@@ -7,6 +7,7 @@ import {
   createBrokerOperation,
   createBrokerRecord,
   getBrokerCatalog,
+  getBrokerOperatingConfiguration,
   getBrokerOperations,
   getBrokerOverview,
   getBrokerPropertyExpedient,
@@ -14,6 +15,7 @@ import {
   getIndustryRecords,
   previewBrokerCommission,
   saveBrokerAiEvaluation,
+  saveBrokerOperatingConfiguration,
   updateBrokerRecord,
   type BrokerCatalog,
   type BrokerAiScenario,
@@ -23,10 +25,11 @@ import {
   type BrokerRecordArea,
   type BrokerRecordDefinition,
   type BrokerCommissionPreview,
+  type BrokerOperatingConfiguration,
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | "training" | "commissions" | "guides" | BrokerRecordArea;
+type Tab = "operations" | "agents" | "training" | "commissions" | "guides" | "configuration" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -223,15 +226,17 @@ export function BrokerOperationsPageContent() {
   const [selectedScenarioKey, setSelectedScenarioKey] = useState("");
   const [evaluationNote, setEvaluationNote] = useState("");
   const [commissionPreview, setCommissionPreview] = useState<BrokerCommissionPreview | null>(null);
+  const [operatingConfiguration, setOperatingConfiguration] = useState<BrokerOperatingConfiguration | null>(null);
 
   const load = useCallback(async () => {
-    const [nextOverview, nextOperations, nextProperties, nextCatalog] = await Promise.all([
-      getBrokerOverview(), getBrokerOperations(), getIndustryRecords("property"), getBrokerCatalog()
+    const [nextOverview, nextOperations, nextProperties, nextCatalog, nextConfiguration] = await Promise.all([
+      getBrokerOverview(), getBrokerOperations(), getIndustryRecords("property"), getBrokerCatalog(), getBrokerOperatingConfiguration()
     ]);
     setOverview(nextOverview);
     setOperations(nextOperations);
     setProperties(nextProperties);
     setCatalog(nextCatalog);
+    setOperatingConfiguration(nextConfiguration);
   }, []);
 
   useEffect(() => {
@@ -248,19 +253,19 @@ export function BrokerOperationsPageContent() {
       setTab(requestedArea as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "guides") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "guides" || requestedTab === "configuration") {
       setTab(requestedTab);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides") return;
+    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab]);
 
   useEffect(() => {
-    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides") return;
+    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -270,7 +275,7 @@ export function BrokerOperationsPageContent() {
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
   const recommendations = overview?.recommendations || [];
-  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "guides" ? tab : null;
+  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "guides" && tab !== "configuration" ? tab : null;
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
   const operationStages = catalog?.operationStages[operationType] || [];
@@ -391,6 +396,27 @@ export function BrokerOperationsPageContent() {
     finally { setBusy(false); }
   }
 
+  async function saveOperatingConfiguration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const current = operatingConfiguration?.policy;
+    if (!current) return;
+    setBusy(true); setNotice("");
+    try {
+      const saved = await saveBrokerOperatingConfiguration({
+        ...current,
+        sales: { sellerCommissionPct: Number(form.get("sellerCommissionPct")), buyerCommissionPct: Number(form.get("buyerCommissionPct")), brokerSplitPct: Number(form.get("brokerSplitPct")), companySplitPct: Number(form.get("companySplitPct")) },
+        rentalPlacement: { landlordMonths: Number(form.get("landlordMonths")), tenantMonths: Number(form.get("tenantMonths")), withholdingRatePct: String(form.get("withholdingRatePct") || "").trim() ? Number(form.get("withholdingRatePct")) : null },
+        administration: { ownerPaymentDay: Number(form.get("ownerPaymentDay")), tiers: current.administration.tiers.map((tier, index) => index === 0 ? { ...tier, ratePct: Number(form.get("adminRate1")) } : index === 1 ? { ...tier, ratePct: Number(form.get("adminRate2")) } : tier) },
+        slas: { firstLeadContactMinutes: Number(form.get("firstLeadContactMinutes")), propertyPublicationHours: Number(form.get("propertyPublicationHours")), legalReviewHours: Number(form.get("legalReviewHours")), criticalIncidentHours: Number(form.get("criticalIncidentHours")) },
+        financing: { ...current.financing, interestRatePct: String(form.get("interestRatePct") || "").trim() ? Number(form.get("interestRatePct")) : null, riskThreshold: String(form.get("riskThreshold") || "").trim() ? Number(form.get("riskThreshold")) : null, requiresHumanApproval: true, automaticDisbursement: false }
+      });
+      setOperatingConfiguration(saved);
+      setNotice("Configuración guardada. Los parámetros no ejecutan cobros, pagos, financiamiento ni comunicaciones de manera automática.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo guardar la configuración."); }
+    finally { setBusy(false); }
+  }
+
   return <main className="broker-os-workspace">
     <header className="broker-os-header">
       <div>
@@ -410,6 +436,7 @@ export function BrokerOperationsPageContent() {
       {Object.entries(AREA_CONFIG).map(([key, value]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as BrokerRecordArea)}>{value.label}</button>)}
       <button className={tab === "commissions" ? "active" : ""} onClick={() => setTab("commissions")}>Comisiones</button>
       <button className={tab === "guides" ? "active" : ""} onClick={() => setTab("guides")}>Guías operativas</button>
+      <button className={tab === "configuration" ? "active" : ""} onClick={() => setTab("configuration")}>Parámetros</button>
       <button className={tab === "agents" ? "active" : ""} onClick={() => setTab("agents")}>Agentes IA</button>
       <button className={tab === "training" ? "active" : ""} onClick={() => setTab("training")}>Entrenamiento IA</button>
     </nav>
@@ -488,6 +515,13 @@ export function BrokerOperationsPageContent() {
     </section> : null}
 
     {tab === "guides" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Guías operativas</span><h2>Qué revisar en cada etapa</h2><p>Lista interna de verificación para trabajar con orden. Las revisiones jurídicas, firmas, pagos y comunicaciones externas siempre requieren una persona responsable.</p></div><div className="broker-guide-grid">{(Object.keys(OPERATION_LABELS) as BrokerOperationType[]).map((type) => <article key={type}><h3>{OPERATION_LABELS[type]}</h3>{(catalog?.operationStages[type] || []).map((stage) => <section key={stage}><b>{readable(stage)}</b><ul>{(catalog?.operationChecklists?.[type]?.[stage] || []).map((item) => <li key={item}>{item}</li>)}</ul></section>)}</article>)}</div></section> : null}
+
+    {tab === "configuration" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Parámetros comerciales</span><h2>Configura sin dejar condiciones rígidas en el código</h2><p>Valores de operación por empresa. Deben ser revisados y aprobados por la administración antes de utilizarse con clientes reales.</p></div>{operatingConfiguration ? <form className="broker-policy-form" onSubmit={saveOperatingConfiguration}>
+      <section><h3>Venta y reparto</h3><label>Comisión vendedor (%)<input name="sellerCommissionPct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.sales.sellerCommissionPct} required /></label><label>Comisión comprador (%)<input name="buyerCommissionPct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.sales.buyerCommissionPct} required /></label><label>Parte corredor (%)<input name="brokerSplitPct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.sales.brokerSplitPct} required /></label><label>Parte empresa (%)<input name="companySplitPct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.sales.companySplitPct} required /></label></section>
+      <section><h3>Arriendo y administración</h3><label>Honorario propietario (meses de renta)<input name="landlordMonths" type="number" step="0.01" min="0" defaultValue={operatingConfiguration.policy.rentalPlacement.landlordMonths} required /></label><label>Honorario arrendatario (meses de renta)<input name="tenantMonths" type="number" step="0.01" min="0" defaultValue={operatingConfiguration.policy.rentalPlacement.tenantMonths} required /></label><label>Retención referencial (%)<input name="withholdingRatePct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.rentalPlacement.withholdingRatePct ?? ""} placeholder="Debe confirmar contador" /></label><label>Administración 1ª propiedad (%)<input name="adminRate1" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.administration.tiers[0]?.ratePct ?? ""} required /></label><label>Administración desde 2ª (%)<input name="adminRate2" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.administration.tiers[1]?.ratePct ?? ""} required /></label><label>Día de liquidación al propietario<input name="ownerPaymentDay" type="number" min="1" max="28" defaultValue={operatingConfiguration.policy.administration.ownerPaymentDay} required /></label></section>
+      <section><h3>SLA y financiamiento</h3><label>Primer contacto (minutos)<input name="firstLeadContactMinutes" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.firstLeadContactMinutes} required /></label><label>Publicación (horas)<input name="propertyPublicationHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.propertyPublicationHours} required /></label><label>Revisión legal (horas)<input name="legalReviewHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.legalReviewHours} required /></label><label>Incidencia crítica (horas)<input name="criticalIncidentHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.criticalIncidentHours} required /></label><label>Interés de financiamiento (%)<input name="interestRatePct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.financing.interestRatePct ?? ""} placeholder="Pendiente de definir" /></label><label>Umbral de riesgo (%)<input name="riskThreshold" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.financing.riskThreshold ?? ""} placeholder="Pendiente de definir" /></label></section>
+      <p className="broker-human-note">Financiamiento, desembolsos, pagos, firmas y comunicaciones se mantienen con aprobación humana obligatoria. Los campos vacíos quedan pendientes de definición comercial, tributaria o jurídica.</p><button className="primary-btn" disabled={busy}>Guardar parámetros</button>
+    </form> : <p className="broker-empty">Cargando parámetros comerciales...</p>}</section> : null}
 
     {tab === "agents" ? <section className="broker-agents-panel"><div className="broker-list-heading"><span>Agentes de IA</span><h2>Asistentes especializados del Broker</h2><p>Los agentes disponibles preparan análisis y borradores; ninguna acción legal, pago, firma o comunicación externa se ejecuta sin aprobación humana.</p></div><div className="broker-agent-grid">{(overview?.agents || catalog?.agents || []).map((agent) => <article key={agent.key} className={`broker-agent-card ${agent.status === "AVAILABLE" ? "available" : "planned"}`}><span>{agent.status === "AVAILABLE" ? "Disponible" : "Próxima etapa"}</span><h3>{agent.name}</h3><p>{agent.description}</p><small>Módulo: {readable(agent.module)}</small></article>)}</div></section> : null}
 

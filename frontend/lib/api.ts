@@ -1225,6 +1225,24 @@ export type BrokerCommissionPreview = {
   companyAmount?: number;
 };
 
+export type BrokerOperatingPolicy = {
+  sales: { sellerCommissionPct: number; buyerCommissionPct: number; brokerSplitPct: number; companySplitPct: number };
+  rentalPlacement: { landlordMonths: number; tenantMonths: number; withholdingRatePct: number | null };
+  administration: { tiers: Array<{ fromProperties: number; ratePct: number | null; enabled: boolean }>; ownerPaymentDay: number };
+  slas: { firstLeadContactMinutes: number; propertyPublicationHours: number; legalReviewHours: number; criticalIncidentHours: number };
+  financing: { interestRatePct: number | null; riskThreshold: number | null; requiresHumanApproval: boolean; automaticDisbursement: false };
+};
+
+export type BrokerOperatingConfiguration = { policy: BrokerOperatingPolicy; configured: boolean; updatedAt: string | null };
+
+export function getBrokerOperatingConfiguration(): Promise<BrokerOperatingConfiguration> {
+  return request<BrokerOperatingConfiguration>("/broker/configuration");
+}
+
+export function saveBrokerOperatingConfiguration(policy: BrokerOperatingPolicy): Promise<BrokerOperatingConfiguration> {
+  return request<BrokerOperatingConfiguration>("/broker/configuration", { method: "PUT", body: JSON.stringify({ policy }) });
+}
+
 export function previewBrokerCommission(input: { baseAmount: number; commissionRatePct: number; brokerSplitPct?: number; companySplitPct?: number }): Promise<BrokerCommissionPreview> {
   return request<BrokerCommissionPreview>("/broker/commission-preview", { method: "POST", body: JSON.stringify(input) });
 }

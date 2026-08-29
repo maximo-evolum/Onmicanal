@@ -218,6 +218,25 @@ export const BROKER_OPERATION_CHECKLISTS = Object.freeze({
   })
 });
 
+// Parámetros comerciales por tenant. Los valores son referencias operativas
+// iniciales, no condiciones contractuales ni tributarias. Cada empresa debe
+// confirmarlos con su responsable comercial, tributario y jurídico antes de
+// utilizarlos en una liquidación real.
+export const BROKER_DEFAULT_OPERATING_POLICY = Object.freeze({
+  sales: Object.freeze({ sellerCommissionPct: 2, buyerCommissionPct: 2, brokerSplitPct: 50, companySplitPct: 50 }),
+  rentalPlacement: Object.freeze({ landlordMonths: 0.5, tenantMonths: 0.5, withholdingRatePct: null }),
+  administration: Object.freeze({
+    tiers: Object.freeze([
+      { fromProperties: 1, ratePct: 10, enabled: true },
+      { fromProperties: 2, ratePct: 7, enabled: true },
+      { fromProperties: 3, ratePct: null, enabled: false }
+    ]),
+    ownerPaymentDay: 5
+  }),
+  slas: Object.freeze({ firstLeadContactMinutes: 15, propertyPublicationHours: 24, legalReviewHours: 48, criticalIncidentHours: 4 }),
+  financing: Object.freeze({ interestRatePct: null, riskThreshold: null, requiresHumanApproval: true, automaticDisbursement: false })
+});
+
 export function brokerAgentScenario(key) {
   return BROKER_AGENT_SCENARIOS.find((scenario) => scenario.key === String(key || "").trim()) || null;
 }
@@ -244,6 +263,59 @@ export function brokerStageChecklist(operationType, stage) {
 function numberValue(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function nullablePercent(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = numberValue(value, NaN);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed : null;
+}
+
+export function normalizeBrokerOperatingPolicy(value = {}) {
+  const input = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const sales = input.sales || {};
+  const rentalPlacement = input.rentalPlacement || {};
+  const administration = input.administration || {};
+  const slas = input.slas || {};
+  const financing = input.financing || {};
+  const incomingTiers = Array.isArray(administration.tiers) ? administration.tiers : BROKER_DEFAULT_OPERATING_POLICY.administration.tiers;
+  const tiers = incomingTiers
+    .map((tier) => ({ fromProperties: Math.max(1, Math.round(numberValue(tier?.fromProperties, 1))), ratePct: nullablePercent(tier?.ratePct), enabled: tier?.enabled !== false && nullablePercent(tier?.ratePct) !== null }))
+    .sort((a, b) => a.fromProperties - b.fromProperties)
+    .slice(0, 6);
+  return {
+    sales: {
+      sellerCommissionPct: nullablePercent(sales.sellerCommissionPct) ?? BROKER_DEFAULT_OPERATING_POLICY.sales.sellerCommissionPct,
+      buyerCommissionPct: nullablePercent(sales.buyerCommissionPct) ?? BROKER_DEFAULT_OPERATING_POLICY.sales.buyerCommissionPct,
+      brokerSplitPct: nullablePercent(sales.brokerSplitPct) ?? BROKER_DEFAULT_OPERATING_POLICY.sales.brokerSplitPct,
+      companySplitPct: nullablePercent(sales.companySplitPct) ?? BROKER_DEFAULT_OPERATING_POLICY.sales.companySplitPct
+    },
+    rentalPlacement: {
+      landlordMonths: Math.max(0, numberValue(rentalPlacement.landlordMonths, BROKER_DEFAULT_OPERATING_POLICY.rentalPlacement.landlordMonths)),
+      tenantMonths: Math.max(0, numberValue(rentalPlacement.tenantMonths, BROKER_DEFAULT_OPERATING_POLICY.rentalPlacement.tenantMonths)),
+      withholdingRatePct: nullablePercent(rentalPlacement.withholdingRatePct)
+    },
+    administration: { tiers: tiers.length ? tiers : [...BROKER_DEFAULT_OPERATING_POLICY.administration.tiers], ownerPaymentDay: Math.min(28, Math.max(1, Math.round(numberValue(administration.ownerPaymentDay, BROKER_DEFAULT_OPERATING_POLICY.administration.ownerPaymentDay)))) },
+    slas: {
+      firstLeadContactMinutes: Math.max(1, Math.round(numberValue(slas.firstLeadContactMinutes, BROKER_DEFAULT_OPERATING_POLICY.slas.firstLeadContactMinutes))),
+      propertyPublicationHours: Math.max(1, Math.round(numberValue(slas.propertyPublicationHours, BROKER_DEFAULT_OPERATING_POLICY.slas.propertyPublicationHours))),
+      legalReviewHours: Math.max(1, Math.round(numberValue(slas.legalReviewHours, BROKER_DEFAULT_OPERATING_POLICY.slas.legalReviewHours))),
+      criticalIncidentHours: Math.max(1, Math.round(numberValue(slas.criticalIncidentHours, BROKER_DEFAULT_OPERATING_POLICY.slas.criticalIncidentHours)))
+    },
+    financing: {
+      interestRatePct: nullablePercent(financing.interestRatePct),
+      riskThreshold: nullablePercent(financing.riskThreshold),
+      requiresHumanApproval: financing.requiresHumanApproval !== false,
+      automaticDisbursement: false
+    }
+  };
+}
+
+export function brokerAdministrationRate(policy, propertyCount) {
+  const normalized = normalizeBrokerOperatingPolicy(policy);
+  const count = Math.max(1, Math.round(numberValue(propertyCount, 1)));
+  const tier = normalized.administration.tiers.filter((item) => item.enabled && item.fromProperties <= count).at(-1);
+  return tier?.ratePct ?? null;
 }
 
 export function calculateBrokerCommission({ baseAmount, commissionRatePct, brokerSplitPct = 50, companySplitPct = 50 } = {}) {

@@ -11,11 +11,13 @@ import {
   BROKER_AGENT_SCENARIOS,
   BROKER_AUTOMATION_RULES,
   BROKER_OPERATION_CHECKLISTS,
+  BROKER_DEFAULT_OPERATING_POLICY,
   SALE_STAGES,
   TERMINAL_STAGES,
   brokerAgentScenario,
   brokerStageChecklist,
   calculateBrokerCommission,
+  normalizeBrokerOperatingPolicy,
   isBrokerRecordArea,
   normalizeBrokerOperationType,
   normalizeBrokerStage,
@@ -281,6 +283,46 @@ brokerRouter.get("/broker/catalog", (_req, res) => {
       ADMINISTRATION: stagesForBrokerOperation("ADMINISTRATION")
     }
   });
+});
+
+function policyPayload(record) {
+  return {
+    policy: normalizeBrokerOperatingPolicy(dataOf(record).policy || BROKER_DEFAULT_OPERATING_POLICY),
+    updatedAt: record?.updatedAt || null,
+    configured: Boolean(record)
+  };
+}
+
+brokerRouter.get("/broker/configuration", async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({
+      where: brokerWhere(req, { recordType: "broker_operating_policy" }),
+      orderBy: { updatedAt: "desc" }
+    });
+    res.json(policyPayload(record));
+  } catch (error) {
+    console.error("Broker configuration error:", error);
+    res.status(500).json({ error: "No se pudo obtener la configuración comercial." });
+  }
+});
+
+brokerRouter.put("/broker/configuration", requireRole("OWNER", "ADMIN"), async (req, res) => {
+  try {
+    const policy = normalizeBrokerOperatingPolicy(req.body?.policy);
+    if (Math.round((policy.sales.brokerSplitPct + policy.sales.companySplitPct) * 100) !== 10000) {
+      return res.status(422).json({ error: "La distribución de comisión entre corredor y empresa debe sumar 100%." });
+    }
+    const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { recordType: "broker_operating_policy" }), orderBy: { updatedAt: "desc" } });
+    const data = { policy, updatedBy: req.user?.name || req.user?.email || "Usuario autorizado", source: "broker_os" };
+    const record = existing
+      ? await prisma.industryRecord.update({ where: { id: existing.id }, data: { title: "Configuración comercial Broker OS", status: "ACTIVE", data } })
+      : await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "broker_operating_policy", title: "Configuración comercial Broker OS", status: "ACTIVE", data } });
+    await recordAuditLog(req, "BROKER_OPERATING_POLICY_UPDATED", "broker_operating_policy", record.id, { policy });
+    res.json(policyPayload(record));
+  } catch (error) {
+    console.error("Update broker configuration error:", error);
+    res.status(500).json({ error: "No se pudo guardar la configuración comercial." });
+  }
 });
 
 // Vista previa puramente informativa. Nunca crea una liquidación, pago,

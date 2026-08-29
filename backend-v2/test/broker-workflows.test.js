@@ -10,6 +10,8 @@ import {
   SALE_STAGES,
   calculateBrokerCommission,
   brokerStageChecklist,
+  brokerAdministrationRate,
+  normalizeBrokerOperatingPolicy,
   normalizeBrokerStage,
   propertyHealthSnapshot,
   brokerRecordDefinition,
@@ -48,6 +50,17 @@ test("Broker OS calcula comisión sin modificar pagos ni liquidaciones", () => {
   assert.equal(preview.brokerAmount, 1000000);
   assert.equal(preview.companyAmount, 1000000);
   assert.equal(calculateBrokerCommission({ baseAmount: 1, commissionRatePct: 1, brokerSplitPct: 60, companySplitPct: 30 }).ok, false);
+});
+
+test("Broker OS parametriza honorarios y SLA sin habilitar desembolsos automáticos", () => {
+  const policy = normalizeBrokerOperatingPolicy({
+    sales: { sellerCommissionPct: 2, buyerCommissionPct: 2, brokerSplitPct: 50, companySplitPct: 50 },
+    administration: { tiers: [{ fromProperties: 1, ratePct: 10 }, { fromProperties: 2, ratePct: 7 }, { fromProperties: 3, ratePct: 5 }] },
+    financing: { interestRatePct: 1.5, riskThreshold: 65, automaticDisbursement: true }
+  });
+  assert.equal(brokerAdministrationRate(policy, 3), 5);
+  assert.equal(policy.financing.automaticDisbursement, false);
+  assert.equal(policy.financing.requiresHumanApproval, true);
 });
 
 test("Broker OS calcula salud de la propiedad desde ficha y expediente", () => {
