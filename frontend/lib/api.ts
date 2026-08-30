@@ -1209,6 +1209,32 @@ export type BrokerCatalog = {
   operationChecklists: Record<BrokerOperationType, Record<string, string[]>>;
 };
 
+export type BrokerAccessProfile = {
+  businessRole: string;
+  profileLabel: string;
+  accessScope: "ASSIGNED" | "TEAM" | "BRANCH" | "COMPANY" | "HOLDING";
+  requestedScope: string;
+  teamKey: string | null;
+  branchKey: string | null;
+  technicalRole: string;
+  scopeDescription: string;
+  policy: { label: string; defaultScope: string; actions: Record<string, string[]> };
+};
+
+export function getBrokerAccess(): Promise<BrokerAccessProfile> {
+  return request<BrokerAccessProfile>("/broker/access/me");
+}
+
+export type BrokerAccessTeamMember = { id: string; name: string; email: string; role: string; jobTitle: string | null; isActive: boolean; profile: { businessRole: string; accessScope: string; teamKey: string | null; branchKey: string | null } };
+
+export function getBrokerAccessTeam(): Promise<{ users: BrokerAccessTeamMember[] }> {
+  return request<{ users: BrokerAccessTeamMember[] }>("/broker/access/team");
+}
+
+export function updateBrokerAccessProfile(userId: string, input: { businessRole: string; accessScope: string; teamKey?: string; branchKey?: string }): Promise<{ profile: BrokerAccessTeamMember["profile"] }> {
+  return request(`/broker/access/users/${encodeURIComponent(userId)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
 export function getBrokerOverview(): Promise<BrokerOverview> {
   return request<BrokerOverview>("/broker/overview");
 }

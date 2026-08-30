@@ -7,19 +7,21 @@ import {
   createBrokerOperation,
   createBrokerRecord,
   getBrokerCatalog,
+  getBrokerAccess,
+  getBrokerAccessTeam,
   getBrokerLegalReadiness,
   getBrokerOperatingConfiguration,
   getBrokerOperations,
   getBrokerOverview,
   getBrokerPropertyExpedient,
   getBrokerRecords,
-  getIndustryRecords,
   previewBrokerCommission,
   previewBrokerAdministration,
   runBrokerAutomationScan,
   saveBrokerAiEvaluation,
   saveBrokerOperatingConfiguration,
   updateBrokerRecord,
+  updateBrokerAccessProfile,
   type BrokerCatalog,
   type BrokerAiScenario,
   type BrokerOperation,
@@ -31,10 +33,12 @@ import {
   type BrokerAdministrationPreview,
   type BrokerOperatingConfiguration,
   type BrokerLegalReadiness,
+  type BrokerAccessProfile,
+  type BrokerAccessTeamMember,
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | "training" | "commissions" | "administration_preview" | "guides" | "configuration" | "compliance" | BrokerRecordArea;
+type Tab = "operations" | "agents" | "training" | "commissions" | "administration_preview" | "guides" | "configuration" | "compliance" | "access" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -42,6 +46,11 @@ const OPERATION_LABELS: Record<BrokerOperationType, string> = {
   RENTAL: "Arriendo",
   ADMINISTRATION: "Administración"
 };
+
+const BROKER_BUSINESS_ROLE_OPTIONS = [
+  ["CEO", "Dirección general"], ["GERENTE_COMERCIAL", "Gerencia comercial"], ["COORDINADOR_COMERCIAL", "Coordinación comercial"], ["CORREDOR", "Corredor"], ["CAPTADOR", "Captador"], ["MARKETING", "Marketing"], ["TASADOR", "Tasador"], ["JURIDICO", "Jurídico"], ["ADMINISTRACION", "Administración"], ["FINANZAS", "Finanzas"], ["POSTVENTA", "Postventa"], ["LECTURA", "Solo lectura"],
+] as const;
+const BROKER_SCOPE_OPTIONS = [["ASSIGNED", "Solo registros asignados"], ["TEAM", "Mi equipo"], ["BRANCH", "Mi sucursal"], ["COMPANY", "Toda la empresa"]] as const;
 
 const AREA_CONFIG: Record<BrokerRecordArea, { label: string; description: string }> = {
   commercial: { label: "Comercial y cierre", description: "Tasaciones, mandatos, ofertas, promesas y liquidaciones de comision." },
@@ -240,17 +249,21 @@ export function BrokerOperationsPageContent() {
   const [administrationPreview, setAdministrationPreview] = useState<BrokerAdministrationPreview | null>(null);
   const [operatingConfiguration, setOperatingConfiguration] = useState<BrokerOperatingConfiguration | null>(null);
   const [legalReadiness, setLegalReadiness] = useState<BrokerLegalReadiness | null>(null);
+  const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
+  const [accessTeam, setAccessTeam] = useState<BrokerAccessTeamMember[]>([]);
 
   const load = useCallback(async () => {
-    const [nextOverview, nextOperations, nextProperties, nextCatalog, nextConfiguration, nextLegalReadiness] = await Promise.all([
-      getBrokerOverview(), getBrokerOperations(), getIndustryRecords("property"), getBrokerCatalog(), getBrokerOperatingConfiguration(), getBrokerLegalReadiness()
+    const [nextOverview, nextOperations, nextCatalog, nextConfiguration, nextLegalReadiness, nextAccess, nextAccessTeam] = await Promise.all([
+      getBrokerOverview(), getBrokerOperations(), getBrokerCatalog(), getBrokerOperatingConfiguration().catch(() => null), getBrokerLegalReadiness().catch(() => null), getBrokerAccess(), getBrokerAccessTeam().catch(() => ({ users: [] }))
     ]);
     setOverview(nextOverview);
     setOperations(nextOperations);
-    setProperties(nextProperties);
+    setProperties(nextOverview.properties);
     setCatalog(nextCatalog);
     setOperatingConfiguration(nextConfiguration);
     setLegalReadiness(nextLegalReadiness);
+    setAccess(nextAccess);
+    setAccessTeam(nextAccessTeam.users);
   }, []);
 
   useEffect(() => {
@@ -267,19 +280,19 @@ export function BrokerOperationsPageContent() {
       setTab(requestedArea as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "access") {
       setTab(requestedTab);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance") return;
+    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab]);
 
   useEffect(() => {
-    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance") return;
+    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -289,7 +302,7 @@ export function BrokerOperationsPageContent() {
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
   const recommendations = overview?.recommendations || [];
-  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" ? tab : null;
+  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "access" ? tab : null;
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
   const operationStages = catalog?.operationStages[operationType] || [];
@@ -457,12 +470,31 @@ export function BrokerOperationsPageContent() {
     finally { setBusy(false); }
   }
 
+  async function saveAccessProfile(user: BrokerAccessTeamMember, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true); setNotice("");
+    try {
+      await updateBrokerAccessProfile(user.id, {
+        businessRole: String(form.get("businessRole") || user.profile.businessRole),
+        accessScope: String(form.get("accessScope") || user.profile.accessScope),
+        teamKey: String(form.get("teamKey") || "").trim(),
+        branchKey: String(form.get("branchKey") || "").trim(),
+      });
+      const next = await getBrokerAccessTeam();
+      setAccessTeam(next.users);
+      setNotice(`Acceso actualizado para ${user.name}.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo actualizar el acceso."); }
+    finally { setBusy(false); }
+  }
+
   return <main className="broker-os-workspace">
     <header className="broker-os-header">
       <div>
         <span>Broker OS</span><h1>Centro operativo inmobiliario</h1>
         <p>Controla venta, arriendo, administracion, documentos, mantenciones y postventa desde expedientes separados por propiedad.</p>
       </div>
+      {access ? <aside className="broker-access-summary" aria-label="Alcance de tu acceso"><span>Tu acceso</span><b>{access.profileLabel}</b><p>{access.scopeDescription}</p></aside> : null}
       <div className="broker-kpis">
         <b>{summary.properties}<small>propiedades</small></b>
         <b>{summary.activeOperations}<small>operaciones activas</small></b>
@@ -478,6 +510,7 @@ export function BrokerOperationsPageContent() {
       <button className={tab === "administration_preview" ? "active" : ""} onClick={() => setTab("administration_preview")}>Liquidación mensual</button>
       <button className={tab === "guides" ? "active" : ""} onClick={() => setTab("guides")}>Guías operativas</button>
       <button className={tab === "configuration" ? "active" : ""} onClick={() => setTab("configuration")}>Parámetros</button>
+      {accessTeam.length ? <button className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}>Roles y accesos</button> : null}
       <button className={tab === "compliance" ? "active" : ""} onClick={() => setTab("compliance")}>Cumplimiento</button>
       <button className={tab === "agents" ? "active" : ""} onClick={() => setTab("agents")}>Agentes IA</button>
       <button className={tab === "training" ? "active" : ""} onClick={() => setTab("training")}>Entrenamiento IA</button>
@@ -579,6 +612,8 @@ export function BrokerOperationsPageContent() {
       <section><h3>SLA y financiamiento</h3><label>Primer contacto (minutos)<input name="firstLeadContactMinutes" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.firstLeadContactMinutes} required /></label><label>Publicación (horas)<input name="propertyPublicationHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.propertyPublicationHours} required /></label><label>Revisión legal (horas)<input name="legalReviewHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.legalReviewHours} required /></label><label>Incidencia crítica (horas)<input name="criticalIncidentHours" type="number" min="1" defaultValue={operatingConfiguration.policy.slas.criticalIncidentHours} required /></label><label>Interés de financiamiento (%)<input name="interestRatePct" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.financing.interestRatePct ?? ""} placeholder="Pendiente de definir" /></label><label>Umbral de riesgo (%)<input name="riskThreshold" type="number" step="0.01" min="0" max="100" defaultValue={operatingConfiguration.policy.financing.riskThreshold ?? ""} placeholder="Pendiente de definir" /></label></section>
       <p className="broker-human-note">Financiamiento, desembolsos, pagos, firmas y comunicaciones se mantienen con aprobación humana obligatoria. Los campos vacíos quedan pendientes de definición comercial, tributaria o jurídica.</p><button className="primary-btn" disabled={busy}>Guardar parámetros</button>
     </form> : <p className="broker-empty">Cargando parámetros comerciales...</p>}</section> : null}
+
+    {tab === "access" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Roles, permisos y alcance</span><h2>Define qué puede hacer cada persona</h2><p>El rol de negocio determina las acciones; el alcance limita los registros visibles. Los cambios quedan auditados y no modifican el rol global de EVOLUM OS.</p></div><div className="broker-access-grid">{accessTeam.map((user) => <form key={user.id} className="broker-access-card" onSubmit={(event) => saveAccessProfile(user, event)}><div><b>{user.name}</b><span>{user.email} · {user.jobTitle || user.role}</span></div><label>Rol de negocio<select name="businessRole" defaultValue={user.profile.businessRole}>{BROKER_BUSINESS_ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Alcance<select name="accessScope" defaultValue={user.profile.accessScope}>{BROKER_SCOPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Equipo<input name="teamKey" defaultValue={user.profile.teamKey || ""} placeholder="Ej.: ventas-norte" /></label><label>Sucursal<input name="branchKey" defaultValue={user.profile.branchKey || ""} placeholder="Ej.: santiago" /></label><button type="submit" className="secondary-btn" disabled={busy}>Guardar acceso</button></form>)}</div></section> : null}
 
     {tab === "compliance" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Preparación legal y externa</span><h2>Qué está listo y qué requiere validación</h2><p>Este panel organiza evidencia y dependencias. No sustituye asesoría legal, tributaria ni la habilitación formal de un proveedor.</p></div>{legalReadiness ? <><section className="broker-reporting"><article><span>Consentimientos otorgados</span><b>{legalReadiness.summary.GRANTED}</b><small>Con evidencia registrada</small></article><article><span>Pendientes</span><b>{legalReadiness.summary.PENDING}</b><small>Antes de proponer uso externo</small></article><article><span>Revocados o vencidos</span><b>{legalReadiness.summary.REVOKED + legalReadiness.summary.EXPIRED}</b><small>Requieren bloqueo o renovación</small></article><article><span>Proveedores externos</span><b>{legalReadiness.providers.length}</b><small>Todos desactivados hasta su validación</small></article></section><div className="broker-compliance-grid"><section><h3>Proveedores y dependencias</h3>{legalReadiness.providers.map((item) => <article key={item.key}><b>{item.label}</b><span>{item.category} · {item.status === "HUMAN_REVIEW" ? "Revisión humana" : "Pendiente de proveedor"}</span><p>{item.description}</p></article>)}</section><section><h3>Consentimientos registrados</h3>{legalReadiness.consents.length ? legalReadiness.consents.map((item) => <article key={item.id}><b>{item.title}</b><span>{readable(item.status)}</span><p>{recordSummary(item, catalog?.recordDefinitions[item.recordType])}</p></article>) : <p className="broker-empty">Aún no hay consentimientos registrados. Puedes crearlos desde “Expediente y documentos”.</p>}</section></div><p className="broker-human-note">Para registrar una autorización utiliza el área “Expediente y documentos”. El sistema exige titular, finalidad, fecha y referencia de evidencia; una autorización registrada no activa por sí misma ningún envío, firma, publicación, acceso bancario ni integración.</p></> : <p className="broker-empty">Cargando estado de cumplimiento...</p>}</section> : null}
 

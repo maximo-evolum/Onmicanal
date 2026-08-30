@@ -35,16 +35,26 @@ import {
   validateBrokerRecord
 } from "../services/broker-workflows.service.js";
 import { brokerRelationalCoverage } from "../services/broker-relational-data.service.js";
+import { brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
 
 export const brokerRouter = Router();
 
+brokerRouter.use(async (req, res, next) => {
+  try {
+    req.brokerAccess = await loadBrokerAccessContext({ prisma, tenantId: req.tenantId, user: req.user });
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Expone el avance del traspaso sin ocultar que IndustryRecord sigue siendo
 // la fuente histórica mientras cada tenant migra de forma controlada.
-brokerRouter.get("/broker/data-model/coverage", async (req, res) => {
+brokerRouter.get("/broker/data-model/coverage", requireBrokerAction("configuration", "VIEW"), async (req, res) => {
   const [legacyProperties, strictProperties, owners] = await Promise.all([
-    prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "property" }) }),
-    prisma.brokerProperty.count({ where: brokerWhere(req) }),
-    prisma.brokerOwner.count({ where: brokerWhere(req) }),
+    prisma.industryRecord.count({ where: { tenantId: req.tenantId, recordType: "property" } }),
+    prisma.brokerProperty.count({ where: { tenantId: req.tenantId } }),
+    prisma.brokerOwner.count({ where: { tenantId: req.tenantId } }),
   ]);
   res.json({
     model: "BROKER_RELATIONAL_CORE_V1",
@@ -63,7 +73,13 @@ function dataOf(record) {
 }
 
 function brokerWhere(req, extra = {}) {
-  return { tenantId: req.tenantId, ...extra };
+  return brokerRecordWhere(req, extra);
+}
+
+function allowBrokerAreaAction(req, res, area, action) {
+  if (canBrokerAction(req.brokerAccess, area, action)) return true;
+  res.status(403).json({ error: "No tienes permiso para esta acción en el área de Broker OS.", area, action, scope: req.brokerAccess?.accessScope || "ASSIGNED" });
+  return false;
 }
 
 function operationPayload(record) {
@@ -248,7 +264,7 @@ async function assertAssignedUser(req, assignedToId) {
   return user;
 }
 
-brokerRouter.get("/broker/overview", async (req, res) => {
+brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), async (req, res) => {
   try {
     const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations, brokerRecords] = await Promise.all([
       prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "property" }) }),
@@ -293,7 +309,7 @@ brokerRouter.get("/broker/overview", async (req, res) => {
   }
 });
 
-brokerRouter.get("/broker/catalog", (_req, res) => {
+brokerRouter.get("/broker/catalog", requireBrokerAction("overview", "VIEW"), (_req, res) => {
   res.json({
     areas: BROKER_RECORD_AREAS,
     recordDefinitions: BROKER_RECORD_DEFINITIONS,
@@ -312,6 +328,49 @@ brokerRouter.get("/broker/catalog", (_req, res) => {
   });
 });
 
+brokerRouter.get("/broker/access/me", (req, res) => {
+  const access = req.brokerAccess;
+  res.json({
+    businessRole: access.businessRole,
+    profileLabel: access.profileLabel,
+    accessScope: access.accessScope,
+    requestedScope: access.requestedScope,
+    teamKey: access.teamKey,
+    branchKey: access.branchKey,
+    technicalRole: access.technicalRole,
+    policy: access.policy,
+    scopeDescription: access.accessScope === "ASSIGNED" ? "Solo registros asignados a tu usuario" : access.accessScope === "TEAM" ? "Registros asignados a tu equipo" : access.accessScope === "BRANCH" ? "Registros asignados a tu sucursal" : "Registros de toda la empresa",
+  });
+});
+
+brokerRouter.get("/broker/access/team", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const [users, profiles] = await Promise.all([
+      prisma.workspaceUser.findMany({ where: { tenantId: req.tenantId }, select: { id: true, name: true, email: true, role: true, jobTitle: true, isActive: true }, orderBy: { name: "asc" } }),
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", status: "ACTIVE" }, select: { data: true, updatedAt: true } }),
+    ]);
+    const profileByUser = new Map(profiles.map((record) => [String(dataOf(record).userId || ""), { ...dataOf(record), updatedAt: record.updatedAt }]));
+    res.json({ users: users.map((user) => ({ ...user, profile: profileByUser.get(user.id) || profileRecordData(user.id, {}, user) })) });
+  } catch (error) { next(error); }
+});
+
+brokerRouter.put("/broker/access/users/:userId", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const user = await prisma.workspaceUser.findFirst({ where: { id: req.params.userId, tenantId: req.tenantId }, select: { id: true, name: true, email: true, role: true, jobTitle: true } });
+    if (!user) return res.status(404).json({ error: "Usuario no encontrado en esta empresa." });
+    if (String(req.body?.accessScope || "").toUpperCase() === "HOLDING" && req.user?.role !== "SUPER_ADMIN") {
+      return res.status(422).json({ error: "El alcance holding requiere una estructura multiempresa y solo puede ser asignado por un superadministrador." });
+    }
+    const profile = profileRecordData(user.id, req.body || {}, user);
+    const existing = await prisma.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", data: { path: ["userId"], equals: user.id } } });
+    const record = existing
+      ? await prisma.industryRecord.update({ where: { id: existing.id }, data: { title: `Acceso Broker: ${user.name}`, status: "ACTIVE", data: profile } })
+      : await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "broker_access_profile", title: `Acceso Broker: ${user.name}`, status: "ACTIVE", assignedToId: user.id, data: profile } });
+    await recordAuditLog(req, "BROKER_ACCESS_PROFILE_UPDATED", "broker_access_profile", record.id, { targetUserId: user.id, businessRole: profile.businessRole, accessScope: profile.accessScope, teamKey: profile.teamKey, branchKey: profile.branchKey });
+    res.json({ user, profile, updatedAt: record.updatedAt });
+  } catch (error) { next(error); }
+});
+
 function policyPayload(record) {
   return {
     policy: normalizeBrokerOperatingPolicy(dataOf(record).policy || BROKER_DEFAULT_OPERATING_POLICY),
@@ -320,7 +379,7 @@ function policyPayload(record) {
   };
 }
 
-brokerRouter.get("/broker/configuration", async (req, res) => {
+brokerRouter.get("/broker/configuration", requireBrokerAction("configuration", "VIEW"), async (req, res) => {
   try {
     const record = await prisma.industryRecord.findFirst({
       where: brokerWhere(req, { recordType: "broker_operating_policy" }),
@@ -336,7 +395,7 @@ brokerRouter.get("/broker/configuration", async (req, res) => {
 // Estado de preparación; no equivale a una aprobación legal ni activa un
 // proveedor externo. Sirve para que el equipo sepa qué evidencia falta antes
 // de proponer una firma, publicación o intercambio de datos.
-brokerRouter.get("/broker/legal-readiness", async (req, res) => {
+brokerRouter.get("/broker/legal-readiness", requireBrokerAction("documents", "VIEW"), async (req, res) => {
   try {
     const consentTypes = ["data_processing_consent", "communication_consent", "external_authorization"];
     const consents = await prisma.industryRecord.findMany({
@@ -352,7 +411,7 @@ brokerRouter.get("/broker/legal-readiness", async (req, res) => {
   }
 });
 
-brokerRouter.put("/broker/configuration", requireRole("OWNER", "ADMIN"), async (req, res) => {
+brokerRouter.put("/broker/configuration", requireRole("OWNER", "ADMIN"), requireBrokerAction("configuration", "CONFIGURE"), async (req, res) => {
   try {
     const policy = normalizeBrokerOperatingPolicy(req.body?.policy);
     if (Math.round((policy.sales.brokerSplitPct + policy.sales.companySplitPct) * 100) !== 10000) {
@@ -373,7 +432,7 @@ brokerRouter.put("/broker/configuration", requireRole("OWNER", "ADMIN"), async (
 
 // Vista previa puramente informativa. Nunca crea una liquidación, pago,
 // transferencia ni modifica una operación.
-brokerRouter.post("/broker/commission-preview", requireRole(ROLE_GROUPS.STAFF), (req, res) => {
+brokerRouter.post("/broker/commission-preview", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commissions", "VIEW"), (req, res) => {
   const preview = calculateBrokerCommission(req.body || {});
   if (!preview.ok) return res.status(422).json(preview);
   res.json(preview);
@@ -381,11 +440,11 @@ brokerRouter.post("/broker/commission-preview", requireRole(ROLE_GROUPS.STAFF), 
 
 // Simulación interna de liquidación mensual. No crea pagos, no transfiere
 // dinero y exige aprobación humana antes de registrar una liquidación real.
-brokerRouter.post("/broker/administration-preview", requireRole(ROLE_GROUPS.STAFF), (req, res) => {
+brokerRouter.post("/broker/administration-preview", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("administration", "VIEW"), (req, res) => {
   res.json(calculateBrokerAdministrationLiquidation(req.body || {}));
 });
 
-brokerRouter.get("/broker/financing", async (req, res) => {
+brokerRouter.get("/broker/financing", requireBrokerAction("financing", "VIEW"), async (req, res) => {
   try {
     const records = await prisma.industryRecord.findMany({
       where: brokerWhere(req, { recordType: "operation_financing" }),
@@ -404,7 +463,7 @@ brokerRouter.get("/broker/financing", async (req, res) => {
   }
 });
 
-brokerRouter.patch("/broker/financing/:id/stage", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+brokerRouter.patch("/broker/financing/:id/stage", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("financing", "EDIT"), async (req, res) => {
   try {
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "operation_financing" }) });
     if (!existing) return res.status(404).json({ error: "Financiamiento no encontrado." });
@@ -425,7 +484,7 @@ brokerRouter.patch("/broker/financing/:id/stage", requireRole(ROLE_GROUPS.STAFF)
   }
 });
 
-brokerRouter.get("/broker/ai-evaluations", async (req, res) => {
+brokerRouter.get("/broker/ai-evaluations", requireBrokerAction("ai", "VIEW"), async (req, res) => {
   try {
     const records = await prisma.industryRecord.findMany({
       where: brokerWhere(req, { recordType: "broker_agent_evaluation" }),
@@ -443,7 +502,7 @@ brokerRouter.get("/broker/ai-evaluations", async (req, res) => {
 // Genera alertas internas, idempotentes y revisables. No envía mensajes, no
 // publica inmuebles y no ejecuta acciones externas. La ejecución puede ser
 // invocada desde la interfaz o por un trabajo programado autorizado.
-brokerRouter.post("/broker/automation-scan", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+brokerRouter.post("/broker/automation-scan", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("ai", "APPROVE"), async (req, res) => {
   try {
     const [properties, operations, maintenance, postSale, financing, brokerRecords, existingAlerts] = await Promise.all([
       prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), take: 500 }),
@@ -479,7 +538,7 @@ brokerRouter.post("/broker/automation-scan", requireRole(ROLE_GROUPS.STAFF), asy
   }
 });
 
-brokerRouter.post("/broker/ai-evaluations", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+brokerRouter.post("/broker/ai-evaluations", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("ai", "APPROVE"), async (req, res) => {
   try {
     const scenario = brokerAgentScenario(req.body?.scenarioKey);
     if (!scenario) return res.status(400).json({ error: "El escenario de evaluación no existe." });
@@ -514,7 +573,7 @@ brokerRouter.post("/broker/ai-evaluations", requireRole(ROLE_GROUPS.STAFF), asyn
   }
 });
 
-brokerRouter.get("/broker/operations", async (req, res) => {
+brokerRouter.get("/broker/operations", requireBrokerAction("operations", "VIEW"), async (req, res) => {
   try {
     const type = req.query.type ? normalizeBrokerOperationType(req.query.type) : null;
     if (req.query.type && !type) return res.status(400).json({ error: "Tipo de operación inválido." });
@@ -532,14 +591,17 @@ brokerRouter.get("/broker/operations", async (req, res) => {
   }
 });
 
-brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "CREATE"), async (req, res) => {
   try {
     const title = text(req.body?.title);
     const operationType = normalizeBrokerOperationType(req.body?.operationType);
     if (!title || !operationType) return res.status(400).json({ error: "Nombre y tipo de operación son requeridos." });
     const propertyId = text(req.body?.propertyId);
     await assertRelatedProperty(req, propertyId);
-    await assertAssignedUser(req, text(req.body?.assignedToId));
+    const requestedAssignment = text(req.body?.assignedToId);
+    const assignedToId = requestedAssignment || (Array.isArray(req.brokerAccess?.scopeUserIds) ? req.user?.id : null);
+    if (requestedAssignment && requestedAssignment !== req.user?.id && !canBrokerAction(req.brokerAccess, "operations", "ASSIGN")) return res.status(403).json({ error: "No puedes asignar esta operación a otro usuario." });
+    await assertAssignedUser(req, assignedToId);
     const stages = stagesForBrokerOperation(operationType);
     const stage = normalizeBrokerStage(operationType, text(req.body?.stage, stages[0]));
     if (!stages.includes(stage)) return res.status(400).json({ error: "La etapa inicial no pertenece a este flujo." });
@@ -550,7 +612,7 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), async (r
         recordType: "broker_operation",
         title,
         status: "ACTIVE",
-        assignedToId: text(req.body?.assignedToId) || null,
+        assignedToId: assignedToId || null,
         data: {
           ...(dataOf({ data: req.body?.data })),
           operationType,
@@ -572,7 +634,7 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), async (r
   }
 });
 
-brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
   try {
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "broker_operation" }) });
     if (!existing) return res.status(404).json({ error: "Operación no encontrada." });
@@ -593,7 +655,7 @@ brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF
   }
 });
 
-brokerRouter.post("/broker/operations/:id/timeline", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+brokerRouter.post("/broker/operations/:id/timeline", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
   try {
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "broker_operation" }) });
     if (!existing) return res.status(404).json({ error: "Operación no encontrada." });
@@ -614,6 +676,7 @@ brokerRouter.get("/broker/records/:area", async (req, res) => {
   try {
     const area = String(req.params.area || "");
     if (!isBrokerRecordArea(area)) return res.status(404).json({ error: "Área operativa no encontrada." });
+    if (!allowBrokerAreaAction(req, res, area, "VIEW")) return;
     const records = await prisma.industryRecord.findMany({
       where: brokerWhere(req, { recordType: { in: BROKER_RECORD_AREAS[area] } }),
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } },
@@ -633,13 +696,18 @@ brokerRouter.post("/broker/records", requireRole(ROLE_GROUPS.STAFF), async (req,
     const title = text(req.body?.title);
     if (!BROKER_RECORD_TYPES.includes(recordType)) return res.status(400).json({ error: "Tipo de registro Broker no válido." });
     if (!title) return res.status(400).json({ error: "El nombre del registro es requerido." });
+    const area = BROKER_RECORD_DEFINITIONS[recordType]?.area;
+    if (!area || !allowBrokerAreaAction(req, res, area, "CREATE")) return;
+    const requestedAssignment = text(req.body?.assignedToId);
+    const assignedToId = requestedAssignment || (Array.isArray(req.brokerAccess?.scopeUserIds) ? req.user?.id : null);
+    if (requestedAssignment && requestedAssignment !== req.user?.id && !canBrokerAction(req.brokerAccess, area, "ASSIGN")) return res.status(403).json({ error: "No puedes asignar este registro a otro usuario." });
     const recordData = { ...dataOf({ data: req.body?.data }) };
     const propertyId = text(recordData.propertyId || req.body?.propertyId);
     if (propertyId) recordData.propertyId = propertyId;
     const validation = validateBrokerRecord({ recordType, data: recordData, status: req.body?.status });
     if (!validation.ok) return res.status(422).json({ error: validation.error });
     await assertRelatedProperty(req, propertyId);
-    await assertAssignedUser(req, text(req.body?.assignedToId));
+    await assertAssignedUser(req, assignedToId);
     const normalizedRecordData = recordType === "operation_financing"
       ? {
           ...recordData,
@@ -656,7 +724,7 @@ brokerRouter.post("/broker/records", requireRole(ROLE_GROUPS.STAFF), async (req,
         recordType,
         title,
         status: validation.status,
-        assignedToId: text(req.body?.assignedToId) || null,
+        assignedToId: assignedToId || null,
         data: { ...normalizedRecordData, propertyId: propertyId || null, createdFrom: "broker_os" }
       },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
@@ -674,6 +742,9 @@ brokerRouter.patch("/broker/records/:id", requireRole(ROLE_GROUPS.STAFF), async 
   try {
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: { in: BROKER_RECORD_TYPES } }) });
     if (!existing) return res.status(404).json({ error: "Registro operativo no encontrado." });
+    const area = BROKER_RECORD_DEFINITIONS[existing.recordType]?.area;
+    if (!area || !allowBrokerAreaAction(req, res, area, "EDIT")) return;
+    if (req.body?.assignedToId !== undefined && text(req.body.assignedToId) !== req.user?.id && !canBrokerAction(req.brokerAccess, area, "ASSIGN")) return res.status(403).json({ error: "No puedes reasignar este registro." });
     const nextData = req.body?.data === undefined
       ? dataOf(existing)
       : { ...dataOf(existing), ...dataOf({ data: req.body.data }) };
@@ -706,7 +777,7 @@ brokerRouter.patch("/broker/records/:id", requireRole(ROLE_GROUPS.STAFF), async 
   }
 });
 
-brokerRouter.get("/broker/properties/:propertyId/expedient", async (req, res) => {
+brokerRouter.get("/broker/properties/:propertyId/expedient", requireBrokerAction("documents", "VIEW"), async (req, res) => {
   try {
     const property = await assertRelatedProperty(req, req.params.propertyId);
     const records = await prisma.industryRecord.findMany({
