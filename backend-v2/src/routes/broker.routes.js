@@ -34,8 +34,24 @@ import {
   validateBrokerFinancingTransition,
   validateBrokerRecord
 } from "../services/broker-workflows.service.js";
+import { brokerRelationalCoverage } from "../services/broker-relational-data.service.js";
 
 export const brokerRouter = Router();
+
+// Expone el avance del traspaso sin ocultar que IndustryRecord sigue siendo
+// la fuente histórica mientras cada tenant migra de forma controlada.
+brokerRouter.get("/broker/data-model/coverage", async (req, res) => {
+  const [legacyProperties, strictProperties, owners] = await Promise.all([
+    prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "property" }) }),
+    prisma.brokerProperty.count({ where: brokerWhere(req) }),
+    prisma.brokerOwner.count({ where: brokerWhere(req) }),
+  ]);
+  res.json({
+    model: "BROKER_RELATIONAL_CORE_V1",
+    compatibilityMode: strictProperties < legacyProperties,
+    ...brokerRelationalCoverage({ legacyProperties, strictProperties, owners }),
+  });
+});
 
 function text(value, fallback = "") {
   const result = String(value ?? "").trim();

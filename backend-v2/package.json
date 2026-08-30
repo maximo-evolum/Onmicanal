@@ -17,6 +17,7 @@
     "seed:realty-demo": "node scripts/seed-realty-demo-properties.mjs",
     "seed:broker-demo": "node scripts/seed-realty-demo-properties.mjs",
     "verify:broker-demo": "node scripts/seed-realty-demo-properties.mjs --verify",
+    "migrate:broker-relational": "node scripts/migrate-broker-relational-core.mjs",
     "prisma:deploy": "prisma migrate deploy",
     "audit:production": "npm audit --omit=dev --json",
     "load:test": "node scripts/load-test.mjs"
