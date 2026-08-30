@@ -16,7 +16,7 @@ const PROFILE_POLICIES = Object.freeze({
   TASADOR: { label: "Tasador", defaultScope: "ASSIGNED", actions: { overview: ["VIEW"], commercial: ["VIEW", "CREATE", "EDIT"], documents: ["VIEW", "CREATE", "EDIT"] } },
   JURIDICO: { label: "Jurídico", defaultScope: "COMPANY", actions: { overview: ["VIEW"], commercial: ["VIEW"], documents: ["VIEW", "CREATE", "EDIT", "APPROVE", "REJECT", "EXPORT"], operations: ["VIEW"] } },
   ADMINISTRACION: { label: "Administración", defaultScope: "COMPANY", actions: { overview: ["VIEW"], rentals: ["VIEW", "CREATE", "EDIT", "EXPORT"], maintenance: ["VIEW", "CREATE", "EDIT"], post_sale: ["VIEW", "CREATE", "EDIT"], administration: ["VIEW", "CREATE", "EDIT"], documents: ["VIEW", "CREATE", "EDIT"] } },
-  FINANZAS: { label: "Finanzas", defaultScope: "COMPANY", actions: { overview: ["VIEW", "EXPORT"], financing: ["VIEW", "CREATE", "EDIT", "APPROVE", "REJECT", "EXPORT"], commissions: ["VIEW", "CREATE", "EDIT", "APPROVE", "EXPORT"], administration: ["VIEW", "CREATE", "EDIT", "EXPORT"], documents: ["VIEW", "EXPORT"] } },
+  FINANZAS: { label: "Finanzas", defaultScope: "COMPANY", actions: { overview: ["VIEW", "EXPORT"], financing: ["VIEW", "CREATE", "EDIT", "APPROVE", "REJECT", "EXPORT"], commissions: ["VIEW", "CREATE", "EDIT", "APPROVE", "EXPORT"], administration: ["VIEW", "CREATE", "EDIT", "APPROVE", "EXPORT"], documents: ["VIEW", "EXPORT"] } },
   POSTVENTA: { label: "Postventa", defaultScope: "ASSIGNED", actions: { overview: ["VIEW"], post_sale: ["VIEW", "CREATE", "EDIT"], maintenance: ["VIEW", "CREATE", "EDIT"], documents: ["VIEW", "CREATE", "EDIT"] } },
   LECTURA: { label: "Solo lectura", defaultScope: "ASSIGNED", actions: Object.fromEntries(ALL_AREAS.map((area) => [area, ["VIEW"]])) },
 });

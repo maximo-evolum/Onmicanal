@@ -1302,6 +1302,46 @@ export function previewBrokerAdministration(input: { monthlyRent: number; paidAm
   return request<BrokerAdministrationPreview>("/broker/administration-preview", { method: "POST", body: JSON.stringify(input) });
 }
 
+export type BrokerMonthlyAdministrationRow = {
+  propertyId: string;
+  propertyTitle: string;
+  profileId: string;
+  ownerName: string;
+  tenantName: string;
+  monthlyRent: number;
+  paidAmount: number;
+  commonExpenses: number;
+  utilities: number;
+  maintenanceCost: number;
+  managementRatePct: number;
+  ownerPaymentDay: number;
+  contractStatus: string;
+  paymentCount: number;
+  utilityCount: number;
+  maintenanceCount: number;
+  preview: BrokerAdministrationPreview;
+  liquidation: { id: string; title: string; status: "DRAFT" | "PENDING_APPROVAL" | "ISSUED" | "PAID"; data: Record<string, unknown>; updatedAt: string } | null;
+  readyToPrepare: boolean;
+};
+
+export type BrokerMonthlyAdministration = {
+  period: string;
+  rows: BrokerMonthlyAdministrationRow[];
+  summary: { managedProperties: number; readyToPrepare: number; pendingApproval: number; issued: number; paid: number; expectedRent: number; paidRent: number; proposedOwnerAmount: number };
+};
+
+export function getBrokerMonthlyAdministration(period: string): Promise<BrokerMonthlyAdministration> {
+  return request<BrokerMonthlyAdministration>(`/broker/administration/monthly?period=${encodeURIComponent(period)}`);
+}
+
+export function prepareBrokerMonthlyLiquidation(input: { propertyId: string; period: string; monthlyRent?: number; paidAmount?: number; commonExpenses?: number; utilities?: number; maintenanceCost?: number; managementRatePct?: number }): Promise<IndustryRecord> {
+  return request<IndustryRecord>("/broker/administration/monthly/liquidations", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBrokerMonthlyLiquidationStatus(id: string, input: { status: "PENDING_APPROVAL" | "ISSUED" | "PAID"; note?: string }): Promise<IndustryRecord> {
+  return request<IndustryRecord>(`/broker/administration/monthly/liquidations/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
 export function runBrokerAutomationScan(): Promise<{ recommendations: BrokerRecommendation[]; created: IndustryRecord[]; message: string }> {
   return request("/broker/automation-scan", { method: "POST" });
 }

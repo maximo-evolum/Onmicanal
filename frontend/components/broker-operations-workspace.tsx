@@ -11,6 +11,7 @@ import {
   getBrokerAccessTeam,
   getBrokerFinancing,
   getBrokerLegalReadiness,
+  getBrokerMonthlyAdministration,
   getBrokerOperatingConfiguration,
   getBrokerOperations,
   getBrokerOverview,
@@ -18,12 +19,13 @@ import {
   getBrokerRecords,
   advanceBrokerFinancing,
   previewBrokerCommission,
-  previewBrokerAdministration,
+  prepareBrokerMonthlyLiquidation,
   runBrokerAutomationScan,
   saveBrokerAiEvaluation,
   saveBrokerOperatingConfiguration,
   updateBrokerRecord,
   updateBrokerAccessProfile,
+  updateBrokerMonthlyLiquidationStatus,
   type BrokerCatalog,
   type BrokerAiScenario,
   type BrokerOperation,
@@ -32,7 +34,8 @@ import {
   type BrokerRecordArea,
   type BrokerRecordDefinition,
   type BrokerCommissionPreview,
-  type BrokerAdministrationPreview,
+  type BrokerMonthlyAdministration,
+  type BrokerMonthlyAdministrationRow,
   type BrokerOperatingConfiguration,
   type BrokerLegalReadiness,
   type BrokerAccessProfile,
@@ -54,12 +57,18 @@ const BROKER_BUSINESS_ROLE_OPTIONS = [
 ] as const;
 const BROKER_SCOPE_OPTIONS = [["ASSIGNED", "Solo registros asignados"], ["TEAM", "Mi equipo"], ["BRANCH", "Mi sucursal"], ["COMPANY", "Toda la empresa"]] as const;
 const FINANCING_TERMINAL_STAGES = new Set(["CIERRE", "RECHAZADO", "CANCELADO"]);
+const ADMINISTRATION_LIQUIDATION_STAGES = ["DRAFT", "PENDING_APPROVAL", "ISSUED", "PAID"] as const;
 
 function financingActionForStage(stage: string) {
   const normalized = String(stage || "").trim().toUpperCase();
   if (["RECHAZADO", "CANCELADO"].includes(normalized)) return "REJECT";
   if (["APROBACION", "DESEMBOLSO", "LIQUIDACION", "CIERRE"].includes(normalized)) return "APPROVE";
   return "EDIT";
+}
+
+function administrationActionForStage(stage: string) {
+  const normalized = String(stage || "").trim().toUpperCase();
+  return ["ISSUED", "PAID"].includes(normalized) ? "APPROVE" : "EDIT";
 }
 
 const AREA_CONFIG: Record<BrokerRecordArea, { label: string; description: string }> = {
@@ -259,7 +268,9 @@ export function BrokerOperationsPageContent() {
   const [selectedScenarioKey, setSelectedScenarioKey] = useState("");
   const [evaluationNote, setEvaluationNote] = useState("");
   const [commissionPreview, setCommissionPreview] = useState<BrokerCommissionPreview | null>(null);
-  const [administrationPreview, setAdministrationPreview] = useState<BrokerAdministrationPreview | null>(null);
+  const [monthlyAdministration, setMonthlyAdministration] = useState<BrokerMonthlyAdministration | null>(null);
+  const [administrationPeriod, setAdministrationPeriod] = useState(() => new Date().toISOString().slice(0, 7));
+  const [administrationNotes, setAdministrationNotes] = useState<Record<string, string>>({});
   const [operatingConfiguration, setOperatingConfiguration] = useState<BrokerOperatingConfiguration | null>(null);
   const [legalReadiness, setLegalReadiness] = useState<BrokerLegalReadiness | null>(null);
   const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
@@ -306,10 +317,14 @@ export function BrokerOperationsPageContent() {
       }).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el financiamiento."));
       return;
     }
-    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
+    if (tab === "administration_preview") {
+      getBrokerMonthlyAdministration(administrationPeriod).then(setMonthlyAdministration).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar la administración mensual."));
+      return;
+    }
+    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
-  }, [tab]);
+  }, [tab, administrationPeriod]);
 
   useEffect(() => {
     if (!catalog || tab === "financing" || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
@@ -337,6 +352,12 @@ export function BrokerOperationsPageContent() {
     if (!access) return false;
     if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(access.technicalRole)) return true;
     const allowed = access.policy.actions.financing || access.policy.actions["*"] || [];
+    return allowed.includes(action);
+  };
+  const canAdministrationAction = (action: string) => {
+    if (!access) return false;
+    if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(access.technicalRole)) return true;
+    const allowed = access.policy.actions.administration || access.policy.actions["*"] || [];
     return allowed.includes(action);
   };
   const selectedScenario = scenarios.find((scenario) => scenario.key === selectedScenarioKey) || scenarios[0];
@@ -453,19 +474,43 @@ export function BrokerOperationsPageContent() {
     finally { setBusy(false); }
   }
 
-  async function calculateAdministration(event: FormEvent<HTMLFormElement>) {
+  async function refreshMonthlyAdministration() {
+    const snapshot = await getBrokerMonthlyAdministration(administrationPeriod);
+    setMonthlyAdministration(snapshot);
+    await load();
+  }
+
+  async function prepareMonthlyLiquidation(row: BrokerMonthlyAdministrationRow, event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     setBusy(true); setNotice("");
     try {
-      const preview = await previewBrokerAdministration({
-        monthlyRent: Number(form.get("monthlyRent") || 0), paidAmount: Number(form.get("paidAmount") || 0),
-        commonExpenses: Number(form.get("commonExpenses") || 0), utilities: Number(form.get("utilities") || 0),
-        maintenanceCost: Number(form.get("maintenanceCost") || 0), managementRatePct: Number(form.get("managementRatePct") || 0)
+      await prepareBrokerMonthlyLiquidation({
+        propertyId: row.propertyId,
+        period: administrationPeriod,
+        monthlyRent: Number(form.get("monthlyRent") || row.monthlyRent),
+        paidAmount: Number(form.get("paidAmount") || row.paidAmount),
+        commonExpenses: Number(form.get("commonExpenses") || row.commonExpenses),
+        utilities: Number(form.get("utilities") || row.utilities),
+        maintenanceCost: Number(form.get("maintenanceCost") || row.maintenanceCost),
+        managementRatePct: Number(form.get("managementRatePct") || row.managementRatePct),
       });
-      setAdministrationPreview(preview);
-      setNotice("Liquidación estimada. No se creó ningún pago ni transferencia.");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo calcular la liquidación."); }
+      await refreshMonthlyAdministration();
+      setNotice(`Liquidación de ${row.propertyTitle} preparada para revisión humana.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo preparar la liquidación mensual."); }
+    finally { setBusy(false); }
+  }
+
+  async function moveMonthlyLiquidation(row: BrokerMonthlyAdministrationRow, status: "PENDING_APPROVAL" | "ISSUED" | "PAID") {
+    if (!row.liquidation) return;
+    setBusy(true); setNotice("");
+    try {
+      const note = administrationNotes[row.liquidation.id]?.trim() || `Estado confirmado: ${readable(status)}.`;
+      await updateBrokerMonthlyLiquidationStatus(row.liquidation.id, { status, note });
+      setAdministrationNotes((current) => ({ ...current, [row.liquidation!.id]: "" }));
+      await refreshMonthlyAdministration();
+      setNotice(`Liquidación actualizada a ${readable(status)}. No se ejecutó ninguna transferencia.`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo actualizar la liquidación mensual."); }
     finally { setBusy(false); }
   }
 
@@ -749,18 +794,9 @@ export function BrokerOperationsPageContent() {
       <section className="broker-os-list broker-commission-result"><div className="broker-list-heading"><span>Resultado estimado</span><h2>Distribución para revisión</h2><p>Confirma las condiciones comerciales antes de registrar una regla o liquidación en el expediente.</p></div>{commissionPreview?.ok ? <div className="broker-reporting"><article><span>Comisión total</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.totalCommission || 0)}</b><small>Sobre la base informada</small></article><article><span>Corredor</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.brokerAmount || 0)}</b><small>{commissionPreview.brokerSplitPct}% de distribución</small></article><article><span>Empresa</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(commissionPreview.companyAmount || 0)}</b><small>{commissionPreview.companySplitPct}% de distribución</small></article></div> : <p className="broker-empty">Ingresa los valores para obtener una proyección. El cálculo es informativo y requiere validación humana.</p>}</section>
     </section> : null}
 
-    {tab === "administration_preview" ? <section className="broker-os-grid broker-area-grid">
-      <form className="broker-os-form" onSubmit={calculateAdministration}>
-        <span>Simulación con aprobación</span><h2>Liquidación mensual</h2><p>Prepara el cálculo de administración. Revisa los respaldos y aprueba la liquidación antes de registrar o transferir cualquier monto.</p>
-        <label>Renta mensual<input name="monthlyRent" type="number" min="0" required placeholder="Ej.: 850000" /></label>
-        <label>Monto efectivamente pagado<input name="paidAmount" type="number" min="0" placeholder="Ej.: 850000" /></label>
-        <label>Gastos comunes<input name="commonExpenses" type="number" min="0" defaultValue="0" /></label>
-        <label>Servicios básicos<input name="utilities" type="number" min="0" defaultValue="0" /></label>
-        <label>Mantenciones imputadas<input name="maintenanceCost" type="number" min="0" defaultValue="0" /></label>
-        <label>Honorario de administración (%)<input name="managementRatePct" type="number" min="0" max="100" step="0.01" defaultValue={operatingConfiguration?.policy.administration.tiers[0]?.ratePct ?? ""} required /></label>
-        <button className="primary-btn" disabled={busy}>Calcular liquidación</button>
-      </form>
-      <section className="broker-os-list broker-commission-result"><div className="broker-list-heading"><span>Resultado estimado</span><h2>Liquidación para revisión</h2><p>No se realizan transferencias ni cobros desde esta vista.</p></div>{administrationPreview ? <div className="broker-reporting"><article><span>Pago registrado</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(administrationPreview.paidAmount)}</b><small>Dato informado por el equipo</small></article><article><span>Gastos imputados</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(administrationPreview.totalExpenses)}</b><small>Comunes, servicios y mantenciones</small></article><article><span>Honorario</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(administrationPreview.managementFee)}</b><small>{administrationPreview.managementRatePct}% aplicado</small></article><article><span>Transferencia propuesta</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(administrationPreview.ownerTransferAmount)}</b><small>Requiere aprobación humana</small></article></div> : <p className="broker-empty">Ingresa los antecedentes del período para obtener una propuesta de liquidación.</p>}</section>
+    {tab === "administration_preview" ? <section className="broker-monthly-administration" aria-label="Administración mensual recurrente">
+      <header className="broker-monthly-header"><div><span>Administración recurrente</span><h2>Liquidaciones mensuales por propiedad</h2><p>Consolida contratos, cobros y gastos registrados para preparar cada liquidación. El sistema no transfiere dinero ni emite cobros por su cuenta.</p></div><label>Período de trabajo<input type="month" value={administrationPeriod} onChange={(event) => setAdministrationPeriod(event.target.value)} /></label><button type="button" className="secondary-btn" disabled={busy} onClick={() => refreshMonthlyAdministration().catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo actualizar el período."))}>Actualizar período</button></header>
+      {monthlyAdministration ? <><section className="broker-reporting broker-monthly-kpis"><article><span>Propiedades administradas</span><b>{monthlyAdministration.summary.managedProperties}</b><small>Con ficha activa de administración</small></article><article><span>Listas para preparar</span><b>{monthlyAdministration.summary.readyToPrepare}</b><small>Con contrato y renta mensual vigentes</small></article><article><span>Pendientes de aprobación</span><b>{monthlyAdministration.summary.pendingApproval}</b><small>Requieren una persona autorizada</small></article><article><span>Pagos registrados</span><b>{monthlyAdministration.summary.paid}</b><small>Solo estado informado, sin transferencias</small></article></section><section className="broker-monthly-summary"><span>Resumen del período {monthlyAdministration.period}</span><p>Renta esperada: <b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(monthlyAdministration.summary.expectedRent)}</b> · Cobros registrados: <b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(monthlyAdministration.summary.paidRent)}</b> · Monto propuesto a propietarios: <b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(monthlyAdministration.summary.proposedOwnerAmount)}</b></p></section><section className="broker-monthly-list">{monthlyAdministration.rows.length ? monthlyAdministration.rows.map((row) => { const status = row.liquidation?.status || "DRAFT"; const stageIndex = ADMINISTRATION_LIQUIDATION_STAGES.indexOf(status); const nextStatus = (row.liquidation ? ADMINISTRATION_LIQUIDATION_STAGES[stageIndex + 1] : null) as "PENDING_APPROVAL" | "ISSUED" | "PAID" | null; const liquidationId = row.liquidation?.id || ""; return <article key={row.propertyId} className="broker-monthly-card"><header><div><span>{row.liquidation ? "Liquidación preparada" : "Pendiente de preparar"}</span><h3>{row.propertyTitle}</h3><p>{row.ownerName} · Arrendatario: {row.tenantName}</p></div><b>{row.liquidation ? readable(status) : row.readyToPrepare ? "Lista para preparar" : "Faltan antecedentes"}</b></header><div className="broker-monthly-data"><span><b>Renta:</b> {new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(row.monthlyRent)}</span><span><b>Cobrado:</b> {new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(row.paidAmount)}</span><span><b>Gastos:</b> {new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(row.preview.totalExpenses)}</span><span><b>Honorario:</b> {new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(row.preview.managementFee)}</span><span><b>Propuesta propietario:</b> {new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(row.preview.ownerTransferAmount)}</span></div><div className="broker-monthly-context"><p><b>Contrato:</b> {readable(row.contractStatus)} · <b>Cobros:</b> {row.paymentCount} · <b>Servicios:</b> {row.utilityCount} · <b>Mantenciones:</b> {row.maintenanceCount}</p><p>Fecha referencial de pago al propietario: día {row.ownerPaymentDay || "pendiente"}. Requiere revisión humana.</p></div>{(!row.liquidation || row.liquidation.status === "DRAFT") && row.readyToPrepare ? <form className="broker-monthly-form" onSubmit={(event) => prepareMonthlyLiquidation(row, event)}><label>Renta mensual<input name="monthlyRent" type="number" min="0" defaultValue={row.monthlyRent} required /></label><label>Cobro informado<input name="paidAmount" type="number" min="0" defaultValue={row.paidAmount} required /></label><label>Gastos comunes<input name="commonExpenses" type="number" min="0" defaultValue={row.commonExpenses} required /></label><label>Servicios<input name="utilities" type="number" min="0" defaultValue={row.utilities} required /></label><label>Mantenciones<input name="maintenanceCost" type="number" min="0" defaultValue={row.maintenanceCost} required /></label><label>Honorario (%)<input name="managementRatePct" type="number" min="0" max="100" step="0.01" defaultValue={row.managementRatePct} required /></label>{!canAdministrationAction("CREATE") ? <p className="broker-human-note">Tu perfil puede revisar el período, pero no preparar liquidaciones.</p> : null}<button className="primary-btn" disabled={busy || !canAdministrationAction("CREATE")}>{row.liquidation ? "Actualizar borrador" : "Preparar liquidación"}</button></form> : null}{row.liquidation ? <footer><label>Comentario del responsable<textarea value={administrationNotes[liquidationId] || ""} onChange={(event) => setAdministrationNotes((current) => ({ ...current, [liquidationId]: event.target.value }))} rows={2} placeholder="Respaldo, observación o confirmación del período" /></label><div>{nextStatus ? <button type="button" className="primary-btn" disabled={busy || !canAdministrationAction(administrationActionForStage(nextStatus))} onClick={() => moveMonthlyLiquidation(row, nextStatus)}>{nextStatus === "PENDING_APPROVAL" ? "Enviar a aprobación" : nextStatus === "ISSUED" ? "Confirmar emisión" : "Registrar pago informado"}</button> : <span className="broker-monthly-complete">Período finalizado</span>}</div></footer> : null}{!row.readyToPrepare ? <p className="broker-human-note">Para preparar esta liquidación necesitas una ficha de administración activa y un contrato vigente con renta mensual.</p> : null}</article>; }) : <p className="broker-empty">No hay propiedades con administración activa para este período.</p>}</section><p className="broker-human-note">“Emitida” y “pagada” son estados documentales dentro de Broker OS. No activan transferencias bancarias, pagos, cobros, boletas ni comunicaciones externas.</p></> : <p className="broker-empty">Cargando administración mensual...</p>}
     </section> : null}
 
     {tab === "guides" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Guías operativas</span><h2>Qué revisar en cada etapa</h2><p>Lista interna de verificación para trabajar con orden. Las revisiones jurídicas, firmas, pagos y comunicaciones externas siempre requieren una persona responsable.</p></div><div className="broker-guide-grid">{(Object.keys(OPERATION_LABELS) as BrokerOperationType[]).map((type) => <article key={type}><h3>{OPERATION_LABELS[type]}</h3>{(catalog?.operationStages[type] || []).map((stage) => <section key={stage}><b>{readable(stage)}</b><ul>{(catalog?.operationChecklists?.[type]?.[stage] || []).map((item) => <li key={item}>{item}</li>)}</ul></section>)}</article>)}</div><div className="broker-guide-grid">{(catalog?.sopLibrary || []).map((sop) => <article key={sop.key}><h3>{sop.title}</h3><ul>{sop.steps.map((step) => <li key={step}>{step}</li>)}</ul></article>)}</div><div className="broker-guide-grid">{(catalog?.roleTemplates || []).map((role) => <article key={role.key}><h3>{role.label}</h3><p>{role.scope}</p><ul>{role.permissions.map((permission) => <li key={permission}>{permission}</li>)}</ul></article>)}</div></section> : null}

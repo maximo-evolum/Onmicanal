@@ -36,6 +36,7 @@ import {
 } from "../services/broker-workflows.service.js";
 import { brokerRelationalCoverage } from "../services/broker-relational-data.service.js";
 import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
+import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 
 export const brokerRouter = Router();
 
@@ -80,6 +81,25 @@ function allowBrokerAreaAction(req, res, area, action) {
   if (canBrokerAction(req.brokerAccess, area, action)) return true;
   res.status(403).json({ error: "No tienes permiso para esta acción en el área de Broker OS.", area, action, scope: req.brokerAccess?.accessScope || "ASSIGNED" });
   return false;
+}
+
+async function monthlyAdministrationSnapshot(req, period) {
+  const recordTypes = ["administration_profile", "rental_contract", "rental_payment", "utility_monitoring", "maintenance_ticket", "administration_liquidation"];
+  const [properties, records] = await Promise.all([
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), select: { id: true, title: true } }),
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: { in: recordTypes } }), orderBy: { updatedAt: "desc" }, take: 1200 }),
+  ]);
+  const byType = (type) => records.filter((record) => record.recordType === type);
+  return buildMonthlyAdministration({
+    period,
+    properties,
+    profiles: byType("administration_profile"),
+    contracts: byType("rental_contract"),
+    payments: byType("rental_payment"),
+    utilities: byType("utility_monitoring"),
+    maintenance: byType("maintenance_ticket"),
+    liquidations: byType("administration_liquidation"),
+  });
 }
 
 function operationPayload(record) {
@@ -442,6 +462,89 @@ brokerRouter.post("/broker/commission-preview", requireRole(ROLE_GROUPS.STAFF), 
 // dinero y exige aprobación humana antes de registrar una liquidación real.
 brokerRouter.post("/broker/administration-preview", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("administration", "VIEW"), (req, res) => {
   res.json(calculateBrokerAdministrationLiquidation(req.body || {}));
+});
+
+// Administración recurrente por período. Consolida solo registros existentes
+// de contratos, cobros y gastos; nunca ordena ni ejecuta transferencias.
+brokerRouter.get("/broker/administration/monthly", requireBrokerAction("administration", "VIEW"), async (req, res) => {
+  try {
+    res.json(await monthlyAdministrationSnapshot(req, normalizeAdministrationPeriod(req.query?.period)));
+  } catch (error) {
+    console.error("Broker monthly administration error:", error);
+    res.status(500).json({ error: "No se pudo preparar la administración mensual." });
+  }
+});
+
+brokerRouter.post("/broker/administration/monthly/liquidations", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("administration", "CREATE"), async (req, res) => {
+  try {
+    const period = normalizeAdministrationPeriod(req.body?.period);
+    const propertyId = text(req.body?.propertyId);
+    if (!propertyId) return res.status(422).json({ error: "Selecciona la propiedad para preparar la liquidación." });
+    const snapshot = await monthlyAdministrationSnapshot(req, period);
+    const row = snapshot.rows.find((item) => item.propertyId === propertyId);
+    if (!row?.readyToPrepare) return res.status(422).json({ error: "La propiedad requiere una ficha de administración activa y un contrato vigente con renta mensual." });
+    if (row.liquidation && row.liquidation.status !== "DRAFT") return res.status(409).json({ error: "La liquidación ya fue enviada a revisión o emitida; no puede reemplazarse sin una revisión responsable." });
+    const valueOrDefault = (value, fallback) => value === undefined || value === null || String(value).trim() === "" ? fallback : Number(value);
+    const monthlyRent = valueOrDefault(req.body?.monthlyRent, row.monthlyRent);
+    const paidAmount = valueOrDefault(req.body?.paidAmount, row.paidAmount);
+    const commonExpenses = valueOrDefault(req.body?.commonExpenses, row.commonExpenses);
+    const utilities = valueOrDefault(req.body?.utilities, row.utilities);
+    const maintenanceCost = valueOrDefault(req.body?.maintenanceCost, row.maintenanceCost);
+    const managementRatePct = valueOrDefault(req.body?.managementRatePct, row.managementRatePct);
+    const preview = calculateBrokerAdministrationLiquidation({ monthlyRent, paidAmount, commonExpenses, utilities, maintenanceCost, managementRatePct });
+    const transferDate = `${period}-${String(Math.min(28, Math.max(1, Number(row.ownerPaymentDay) || 10))).padStart(2, "0")}`;
+    const previousTimeline = Array.isArray(row.liquidation?.data?.timeline) ? row.liquidation.data.timeline : [];
+    const data = {
+      propertyId,
+      period,
+      ownerName: row.ownerName,
+      tenantName: row.tenantName,
+      monthlyRent,
+      paidAmount,
+      commonExpenses,
+      utilities,
+      maintenanceCost,
+      managementRatePct,
+      amount: preview.paidAmount,
+      managementFee: preview.managementFee,
+      ownerTransferAmount: preview.ownerTransferAmount,
+      transferDate,
+      requiresHumanApproval: true,
+      automaticTransfer: false,
+      timeline: [...previousTimeline, { at: new Date().toISOString(), type: row.liquidation ? "MONTHLY_LIQUIDATION_RECALCULATED" : "MONTHLY_LIQUIDATION_PREPARED", stage: "DRAFT", note: "Liquidación mensual preparada para revisión humana.", by: req.user?.name || req.user?.email || "Usuario autorizado" }],
+    };
+    const title = `Liquidación ${period} · ${row.propertyTitle}`;
+    const record = row.liquidation
+      ? await prisma.industryRecord.update({ where: { id: row.liquidation.id }, data: { title, data } })
+      : await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "administration_liquidation", title, status: "DRAFT", data } });
+    await recordAuditLog(req, row.liquidation ? "BROKER_MONTHLY_LIQUIDATION_RECALCULATED" : "BROKER_MONTHLY_LIQUIDATION_PREPARED", "administration_liquidation", record.id, { period, propertyId, ownerTransferAmount: preview.ownerTransferAmount });
+    res.status(row.liquidation ? 200 : 201).json(record);
+  } catch (error) {
+    console.error("Prepare broker monthly liquidation error:", error);
+    res.status(500).json({ error: "No se pudo preparar la liquidación mensual." });
+  }
+});
+
+brokerRouter.patch("/broker/administration/monthly/liquidations/:id/status", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("administration", "EDIT"), async (req, res) => {
+  try {
+    const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "administration_liquidation" }) });
+    if (!existing) return res.status(404).json({ error: "Liquidación mensual no encontrada." });
+    const transition = validateAdministrationLiquidationTransition({ currentStatus: existing.status, nextStatus: req.body?.status });
+    if (!transition.ok) return res.status(422).json({ error: transition.error });
+    const action = administrationActionForLiquidationStage(transition.next);
+    if (!canBrokerAction(req.brokerAccess, "administration", action)) return res.status(403).json({ error: "No tienes permiso para confirmar este estado de liquidación.", action, status: transition.next });
+    const currentData = dataOf(existing);
+    const timeline = Array.isArray(currentData.timeline) ? currentData.timeline : [];
+    const record = await prisma.industryRecord.update({
+      where: { id: existing.id },
+      data: { status: transition.next, data: { ...currentData, timeline: [...timeline, { at: new Date().toISOString(), type: "MONTHLY_LIQUIDATION_STATUS", stage: transition.next, note: text(req.body?.note, `Estado actualizado a ${transition.next}.`), by: req.user?.name || req.user?.email || "Usuario autorizado" }], requiresHumanApproval: true, automaticTransfer: false } }
+    });
+    await recordAuditLog(req, "BROKER_MONTHLY_LIQUIDATION_STATUS_CHANGED", "administration_liquidation", record.id, { from: transition.current, to: transition.next });
+    res.json(record);
+  } catch (error) {
+    console.error("Update broker monthly liquidation error:", error);
+    res.status(500).json({ error: "No se pudo actualizar el estado de la liquidación mensual." });
+  }
 });
 
 brokerRouter.get("/broker/financing", requireBrokerAction("financing", "VIEW"), async (req, res) => {
