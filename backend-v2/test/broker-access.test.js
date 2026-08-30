@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { brokerRecordWhere, canBrokerAction, defaultBrokerBusinessRole, normalizeBrokerAccessProfile, profileRecordData } from "../src/services/broker-access.service.js";
+import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, defaultBrokerBusinessRole, normalizeBrokerAccessProfile, profileRecordData } from "../src/services/broker-access.service.js";
 
 test("Broker OS separa el rol de negocio del rol técnico", () => {
   assert.equal(defaultBrokerBusinessRole({ role: "SELLER", jobTitle: "Corredor inmobiliario" }), "CORREDOR");
@@ -20,6 +20,14 @@ test("Finanzas puede aprobar su flujo, pero no configurar Broker OS", () => {
   const access = normalizeBrokerAccessProfile({ businessRole: "FINANZAS", accessScope: "COMPANY" }, { role: "AGENT" });
   assert.equal(canBrokerAction(access, "financing", "APPROVE"), true);
   assert.equal(canBrokerAction(access, "configuration", "CONFIGURE"), false);
+});
+
+test("Las etapas financieras sensibles exigen aprobación o rechazo explícito", () => {
+  assert.equal(brokerFinancingActionForStage("EVALUACION"), "EDIT");
+  assert.equal(brokerFinancingActionForStage("APROBACION"), "APPROVE");
+  assert.equal(brokerFinancingActionForStage("DESEMBOLSO"), "APPROVE");
+  assert.equal(brokerFinancingActionForStage("RECHAZADO"), "REJECT");
+  assert.equal(brokerFinancingActionForStage("CANCELADO"), "REJECT");
 });
 
 test("Holding no se concede a un usuario de tenant sin gobierno multiempresa", () => {

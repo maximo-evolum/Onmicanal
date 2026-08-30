@@ -35,7 +35,7 @@ import {
   validateBrokerRecord
 } from "../services/broker-workflows.service.js";
 import { brokerRelationalCoverage } from "../services/broker-relational-data.service.js";
-import { brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
+import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
 
 export const brokerRouter = Router();
 
@@ -470,6 +470,8 @@ brokerRouter.patch("/broker/financing/:id/stage", requireRole(ROLE_GROUPS.STAFF)
     const currentData = dataOf(existing);
     const transition = validateBrokerFinancingTransition({ currentStage: existing.status || currentData.stage, nextStage: req.body?.stage });
     if (!transition.ok) return res.status(422).json({ error: transition.error });
+    const requiredAction = brokerFinancingActionForStage(transition.next);
+    if (!canBrokerAction(req.brokerAccess, "financing", requiredAction)) return res.status(403).json({ error: "No tienes permiso para confirmar esta etapa de financiamiento.", action: requiredAction, stage: transition.next });
     const timeline = Array.isArray(currentData.timeline) ? currentData.timeline : [];
     timeline.push({ at: new Date().toISOString(), type: "FINANCING_STAGE", stage: transition.next, note: text(req.body?.note, "Etapa actualizada por usuario autorizado."), by: req.user?.name || req.user?.email || "Usuario autorizado" });
     const record = await prisma.industryRecord.update({
@@ -753,6 +755,8 @@ brokerRouter.patch("/broker/records/:id", requireRole(ROLE_GROUPS.STAFF), async 
     if (existing.recordType === "operation_financing" && req.body?.status !== undefined) {
       const transition = validateBrokerFinancingTransition({ currentStage: existing.status || dataOf(existing).stage, nextStage: nextStatus });
       if (!transition.ok) return res.status(422).json({ error: transition.error });
+      const requiredAction = brokerFinancingActionForStage(transition.next);
+      if (!canBrokerAction(req.brokerAccess, "financing", requiredAction)) return res.status(403).json({ error: "No tienes permiso para confirmar esta etapa de financiamiento.", action: requiredAction, stage: transition.next });
       const timeline = Array.isArray(nextData.timeline) ? nextData.timeline : [];
       nextData.stage = transition.next;
       nextData.checklist = brokerFinancingChecklist(transition.next);

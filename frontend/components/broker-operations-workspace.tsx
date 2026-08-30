@@ -9,12 +9,14 @@ import {
   getBrokerCatalog,
   getBrokerAccess,
   getBrokerAccessTeam,
+  getBrokerFinancing,
   getBrokerLegalReadiness,
   getBrokerOperatingConfiguration,
   getBrokerOperations,
   getBrokerOverview,
   getBrokerPropertyExpedient,
   getBrokerRecords,
+  advanceBrokerFinancing,
   previewBrokerCommission,
   previewBrokerAdministration,
   runBrokerAutomationScan,
@@ -51,6 +53,14 @@ const BROKER_BUSINESS_ROLE_OPTIONS = [
   ["CEO", "Dirección general"], ["GERENTE_COMERCIAL", "Gerencia comercial"], ["COORDINADOR_COMERCIAL", "Coordinación comercial"], ["CORREDOR", "Corredor"], ["CAPTADOR", "Captador"], ["MARKETING", "Marketing"], ["TASADOR", "Tasador"], ["JURIDICO", "Jurídico"], ["ADMINISTRACION", "Administración"], ["FINANZAS", "Finanzas"], ["POSTVENTA", "Postventa"], ["LECTURA", "Solo lectura"],
 ] as const;
 const BROKER_SCOPE_OPTIONS = [["ASSIGNED", "Solo registros asignados"], ["TEAM", "Mi equipo"], ["BRANCH", "Mi sucursal"], ["COMPANY", "Toda la empresa"]] as const;
+const FINANCING_TERMINAL_STAGES = new Set(["CIERRE", "RECHAZADO", "CANCELADO"]);
+
+function financingActionForStage(stage: string) {
+  const normalized = String(stage || "").trim().toUpperCase();
+  if (["RECHAZADO", "CANCELADO"].includes(normalized)) return "REJECT";
+  if (["APROBACION", "DESEMBOLSO", "LIQUIDACION", "CIERRE"].includes(normalized)) return "APPROVE";
+  return "EDIT";
+}
 
 const AREA_CONFIG: Record<BrokerRecordArea, { label: string; description: string }> = {
   commercial: { label: "Comercial y cierre", description: "Tasaciones, mandatos, ofertas, promesas y liquidaciones de comision." },
@@ -236,6 +246,9 @@ export function BrokerOperationsPageContent() {
   const [catalog, setCatalog] = useState<BrokerCatalog | null>(null);
   const [operations, setOperations] = useState<BrokerOperation[]>([]);
   const [records, setRecords] = useState<IndustryRecord[]>([]);
+  const [financingRecords, setFinancingRecords] = useState<IndustryRecord[]>([]);
+  const [financingExpenses, setFinancingExpenses] = useState<IndustryRecord[]>([]);
+  const [financingNotes, setFinancingNotes] = useState<Record<string, string>>({});
   const [properties, setProperties] = useState<IndustryRecord[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [expedient, setExpedient] = useState<BrokerPropertyExpedient | null>(null);
@@ -286,13 +299,20 @@ export function BrokerOperationsPageContent() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (tab === "financing") {
+      Promise.all([getBrokerFinancing(), getBrokerRecords("financing")]).then(([requests, allRecords]) => {
+        setFinancingRecords(requests);
+        setFinancingExpenses(allRecords.filter((record) => record.recordType === "operation_financing_expense"));
+      }).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el financiamiento."));
+      return;
+    }
     if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab]);
 
   useEffect(() => {
-    if (!catalog || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
+    if (!catalog || tab === "financing" || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -302,13 +322,23 @@ export function BrokerOperationsPageContent() {
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
   const recommendations = overview?.recommendations || [];
-  const currentArea = tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "access" ? tab : null;
+  const currentArea = tab !== "financing" && tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "access" ? tab : null;
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
   const operationStages = catalog?.operationStages[operationType] || [];
   const scenarios = overview?.aiTraining?.scenarios || catalog?.aiScenarios || [];
   const evaluations = overview?.aiTraining?.evaluations || [];
   const automationRules = overview?.aiTraining?.automationRules || catalog?.automationRules || [];
+  const financingStages = catalog?.financingStages || [];
+  const financingRequestedTotal = financingRecords.reduce((sum, record) => sum + Number((record.data as Record<string, unknown>).requestedAmount || 0), 0);
+  const financingInReview = financingRecords.filter((record) => !FINANCING_TERMINAL_STAGES.has(String(record.status || (record.data as Record<string, unknown>).stage || "").toUpperCase())).length;
+  const financingExpensesTotal = financingExpenses.reduce((sum, record) => sum + Number((record.data as Record<string, unknown>).amount || 0), 0);
+  const canFinanceAction = (action: string) => {
+    if (!access) return false;
+    if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(access.technicalRole)) return true;
+    const allowed = access.policy.actions.financing || access.policy.actions["*"] || [];
+    return allowed.includes(action);
+  };
   const selectedScenario = scenarios.find((scenario) => scenario.key === selectedScenarioKey) || scenarios[0];
   const reporting = overview?.reporting;
 
@@ -488,6 +518,80 @@ export function BrokerOperationsPageContent() {
     finally { setBusy(false); }
   }
 
+  async function refreshFinancing() {
+    const [requests, allRecords] = await Promise.all([getBrokerFinancing(), getBrokerRecords("financing")]);
+    setFinancingRecords(requests);
+    setFinancingExpenses(allRecords.filter((record) => record.recordType === "operation_financing_expense"));
+    await load();
+  }
+
+  async function createFinancing(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get("title") || "").trim();
+    const propertyId = String(form.get("propertyId") || "").trim();
+    const purpose = String(form.get("purpose") || "").trim();
+    const requestedAmount = String(form.get("requestedAmount") || "").trim();
+    if (!title || !propertyId || !purpose || !requestedAmount) return;
+    setBusy(true); setNotice("");
+    try {
+      await createBrokerRecord({
+        recordType: "operation_financing",
+        title,
+        propertyId,
+        data: {
+          propertyId,
+          purpose,
+          requestedAmount,
+          buyerName: String(form.get("buyerName") || "").trim(),
+          financingType: String(form.get("financingType") || "").trim(),
+          institution: String(form.get("institution") || "").trim(),
+          estimatedExpenses: String(form.get("estimatedExpenses") || "").trim(),
+        }
+      });
+      event.currentTarget.reset();
+      await refreshFinancing();
+      setNotice("Solicitud registrada en diagnóstico financiero. No se realizó ninguna evaluación crediticia, aprobación ni desembolso.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo registrar la solicitud de financiamiento.");
+    } finally { setBusy(false); }
+  }
+
+  async function createFinancingExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const financingId = String(form.get("financingId") || "").trim();
+    const concept = String(form.get("concept") || "").trim();
+    const amount = String(form.get("amount") || "").trim();
+    if (!financingId || !concept || !amount) return;
+    setBusy(true); setNotice("");
+    try {
+      await createBrokerRecord({
+        recordType: "operation_financing_expense",
+        title: String(form.get("title") || concept).trim(),
+        data: { financingId, concept, amount, dueDate: String(form.get("dueDate") || "").trim(), notes: String(form.get("notes") || "").trim() }
+      });
+      event.currentTarget.reset();
+      await refreshFinancing();
+      setNotice("Gasto asociado registrado. Requiere revisión humana antes de aprobar o pagar.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo registrar el gasto asociado.");
+    } finally { setBusy(false); }
+  }
+
+  async function moveFinancingStage(record: IndustryRecord, stage: string) {
+    setBusy(true); setNotice("");
+    try {
+      const note = financingNotes[record.id]?.trim() || `Etapa confirmada: ${readable(stage)}.`;
+      await advanceBrokerFinancing(record.id, stage, note);
+      setFinancingNotes((current) => ({ ...current, [record.id]: "" }));
+      await refreshFinancing();
+      setNotice(`Financiamiento actualizado a ${readable(stage)}. La trazabilidad quedó registrada.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo actualizar la etapa del financiamiento.");
+    } finally { setBusy(false); }
+  }
+
   return <main className="broker-os-workspace">
     <header className="broker-os-header">
       <div>
@@ -555,6 +659,61 @@ export function BrokerOperationsPageContent() {
       </section>
       </section>
     </> : null}
+
+    {tab === "financing" ? <section className="broker-financing-workspace" aria-label="Financiamiento operativo">
+      <div className="broker-list-heading"><span>Financiamiento operativo</span><h2>Controla antecedentes, etapas y gastos</h2><p>Broker OS organiza el seguimiento de cada solicitud. Las decisiones de entidades financieras, desembolsos y pagos siempre se registran con respaldo y revisión humana.</p></div>
+      <section className="broker-reporting broker-financing-kpis">
+        <article><span>Solicitudes activas</span><b>{financingInReview}</b><small>Con una etapa pendiente de confirmar</small></article>
+        <article><span>Monto solicitado</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(financingRequestedTotal)}</b><small>Según lo informado por el equipo</small></article>
+        <article><span>Gastos asociados</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(financingExpensesTotal)}</b><small>No representa pagos ejecutados</small></article>
+        <article><span>Revisión humana</span><b>Obligatoria</b><small>No se conceden créditos ni se desembolsan fondos</small></article>
+      </section>
+      <section className="broker-financing-create">
+        <form className="broker-os-form" onSubmit={createFinancing}>
+          <span>Nueva solicitud</span><h2>Registrar financiamiento</h2><p>Inicia en diagnóstico financiero y avanza con antecedentes verificables.</p>
+          <label>Nombre de la solicitud<input name="title" required placeholder="Ej.: Crédito hipotecario · depto Providencia" /></label>
+          <label>Propiedad asociada<select name="propertyId" required><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select></label>
+          <label>Destino del financiamiento<input name="purpose" required placeholder="Ej.: Crédito hipotecario para compra" /></label>
+          <label>Monto solicitado<input name="requestedAmount" type="number" min="0" required placeholder="Ej.: 120000000" /></label>
+          <label>Comprador o solicitante<input name="buyerName" placeholder="Nombre o razón social" /></label>
+          <label>Tipo de financiamiento<input name="financingType" placeholder="Ej.: Hipotecario, mutuo o capital de trabajo" /></label>
+          <label>Institución o canal<input name="institution" placeholder="Ej.: Banco informado por cliente" /></label>
+          <label>Gastos estimados<input name="estimatedExpenses" type="number" min="0" placeholder="Ej.: 2500000" /></label>
+          {!canFinanceAction("CREATE") ? <p className="broker-human-note">Tu perfil puede revisar las solicitudes, pero no crear nuevas. Solicita la gestión a Finanzas o a un administrador.</p> : null}
+          <button className="primary-btn" disabled={busy || !canFinanceAction("CREATE")}>Registrar solicitud</button>
+        </form>
+        <form className="broker-os-form broker-financing-expense-form" onSubmit={createFinancingExpense}>
+          <span>Gasto asociado</span><h2>Registrar antecedente de gasto</h2><p>Relaciona tasación, estudio, seguros u otros costos a una solicitud existente.</p>
+          <label>Solicitud de financiamiento<select name="financingId" required><option value="">Selecciona una solicitud</option>{financingRecords.map((record) => <option key={record.id} value={record.id}>{record.title}</option>)}</select></label>
+          <label>Concepto<input name="concept" required placeholder="Ej.: Tasación bancaria" /></label>
+          <label>Monto informado<input name="amount" type="number" min="0" required placeholder="Ej.: 180000" /></label>
+          <label>Fecha de vencimiento<input name="dueDate" type="date" /></label>
+          <label>Nombre o referencia<input name="title" placeholder="Ej.: Tasación Banco · Providencia" /></label>
+          <label>Observación<textarea name="notes" rows={3} placeholder="Respaldo, proveedor o condición informada" /></label>
+          {!canFinanceAction("CREATE") ? <p className="broker-human-note">Solo perfiles autorizados pueden registrar gastos asociados.</p> : null}
+          <button className="secondary-btn" disabled={busy || !financingRecords.length || !canFinanceAction("CREATE")}>Guardar gasto asociado</button>
+        </form>
+      </section>
+      <section className="broker-financing-list">
+        <div className="broker-list-heading"><span>Seguimiento</span><h2>Solicitudes y etapas</h2><p>Avanza solo la etapa que haya sido confirmada. El historial conserva quién registró cada cambio y cuándo lo hizo.</p></div>
+        {!financingRecords.length ? <p className="broker-empty">Aún no hay solicitudes de financiamiento. Registra la primera desde el panel superior.</p> : financingRecords.map((record) => {
+          const data = record.data as Record<string, unknown>;
+          const stage = String(record.status || data.stage || financingStages[0] || "DIAGNOSTICO_FINANCIERO").toUpperCase();
+          const index = Math.max(0, financingStages.indexOf(stage));
+          const next = financingStages[index + 1];
+          const relatedExpenses = financingExpenses.filter((expense) => String((expense.data as Record<string, unknown>).financingId || "") === record.id);
+          const timeline = Array.isArray(data.timeline) ? data.timeline as Array<{ at?: string; stage?: string; note?: string; by?: string }> : [];
+          const terminal = FINANCING_TERMINAL_STAGES.has(stage);
+          return <article key={record.id} className="broker-financing-card">
+            <header><div><span>{terminal ? "Proceso finalizado" : "En seguimiento"}</span><h3>{record.title}</h3><p>{String(data.purpose || "Sin destino informado")} · {String(data.buyerName || "Solicitante pendiente")}</p></div><b>{readable(stage)}</b></header>
+            <div className="broker-financing-details"><span><b>Monto:</b> {new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(Number(data.requestedAmount || 0))}</span><span><b>Tipo:</b> {String(data.financingType || "Pendiente")}</span><span><b>Institución:</b> {String(data.institution || "Pendiente")}</span><span><b>Gastos estimados:</b> {new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(Number(data.estimatedExpenses || 0))}</span></div>
+            <div className="broker-financing-progress" aria-label={`Etapa ${index + 1} de ${financingStages.length}`}><div><i style={{ width: `${financingStages.length ? ((index + 1) / financingStages.length) * 100 : 0}%` }} /></div><small>{terminal ? "Flujo finalizado" : `Etapa ${index + 1} de ${financingStages.length}: ${readable(stage)}`}</small></div>
+            <div className="broker-financing-body"><section><h4>Checklist de esta etapa</h4><ul>{(Array.isArray(data.checklist) ? data.checklist : []).map((item) => <li key={String(item)}>{String(item)}</li>)}</ul></section><section><h4>Gastos asociados ({relatedExpenses.length})</h4>{relatedExpenses.length ? <ul>{relatedExpenses.map((expense) => { const expenseData = expense.data as Record<string, unknown>; return <li key={expense.id}>{String(expenseData.concept || expense.title)} · {new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(Number(expenseData.amount || 0))} · {readable(expense.status)}</li>; })}</ul> : <p>Sin gastos vinculados.</p>}</section><section><h4>Últimos movimientos</h4>{timeline.length ? <ul>{timeline.slice(-3).reverse().map((item, itemIndex) => <li key={`${item.at || "sin-fecha"}-${itemIndex}`}><b>{item.at ? new Date(item.at).toLocaleDateString("es-CL") : "Sin fecha"}</b> · {readable(item.stage || stage)}{item.note ? `: ${item.note}` : ""}</li>)}</ul> : <p>Sin movimientos registrados.</p>}</section></div>
+            {!terminal ? <footer><label>Comentario del responsable<textarea value={financingNotes[record.id] || ""} onChange={(event) => setFinancingNotes((current) => ({ ...current, [record.id]: event.target.value }))} rows={2} placeholder="Indica el respaldo o motivo del avance" /></label><div><button type="button" className="primary-btn" disabled={busy || !next || !canFinanceAction(financingActionForStage(next || ""))} onClick={() => next && moveFinancingStage(record, next)}>{next ? `Confirmar ${readable(next)}` : "Sin etapa siguiente"}</button><button type="button" className="secondary-btn" disabled={busy || !canFinanceAction("REJECT")} onClick={() => moveFinancingStage(record, "RECHAZADO")}>Registrar rechazo</button><button type="button" className="secondary-btn" disabled={busy || !canFinanceAction("REJECT")} onClick={() => moveFinancingStage(record, "CANCELADO")}>Cancelar solicitud</button></div></footer> : <p className="broker-human-note">Proceso cerrado. Broker OS conserva el historial, pero no ejecuta pagos, desembolsos ni comunicaciones externas.</p>}
+          </article>;
+        })}
+      </section>
+    </section> : null}
 
     {currentArea ? <section className="broker-os-grid broker-area-grid">
       <form className="broker-os-form" onSubmit={createRecord}>

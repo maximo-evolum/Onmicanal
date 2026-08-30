@@ -64,6 +64,16 @@ export function canBrokerAction(access, resource, action) {
   return allowed.includes(upper(action));
 }
 
+// Registrar una etapa preparatoria no equivale a aprobar una operación. Las
+// resoluciones, desembolsos informados, liquidaciones y cierres requieren un
+// perfil con capacidad de aprobación; rechazo o cancelación requieren rechazo.
+export function brokerFinancingActionForStage(stage) {
+  const normalized = upper(stage);
+  if (["RECHAZADO", "CANCELADO"].includes(normalized)) return "REJECT";
+  if (["APROBACION", "DESEMBOLSO", "LIQUIDACION", "CIERRE"].includes(normalized)) return "APPROVE";
+  return "EDIT";
+}
+
 export function profileRecordData(userId, input, user) {
   const normalized = normalizeBrokerAccessProfile(input, user);
   return { userId, businessRole: normalized.businessRole, accessScope: normalized.requestedScope, teamKey: normalized.teamKey, branchKey: normalized.branchKey, version: 1 };
