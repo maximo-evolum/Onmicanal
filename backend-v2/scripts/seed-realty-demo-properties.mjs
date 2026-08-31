@@ -985,6 +985,52 @@ async function seedBrokerSaleCases(tenantId, properties) {
   return 2;
 }
 
+// Expedientes de arriendo que permiten recorrer la evaluación, reserva,
+// contrato, pago inicial y entrega sin datos de clientes reales.
+async function seedBrokerRentalCases(tenantId, properties) {
+  const propertyByTitle = new Map(properties.map((property) => [property.title, property]));
+  const santiago = propertyByTitle.get("Departamento Inversion Santiago Centro");
+  const quilicura = propertyByTitle.get("Bodega Industrial Quilicura");
+  if (!santiago || !quilicura) return 0;
+  const rentalOperation = await upsertDemoRecord(tenantId, {
+    recordType: "broker_operation", title: "Arriendo Departamento Inversión Santiago Centro", status: "ACTIVE", assignedToId: santiago.assignedToId,
+    data: { operationType: "RENTAL", propertyId: santiago.id, clientName: "Camila Soto", stage: "PAGO_INICIAL", monthlyRent: 590000, timeline: [
+      { at: "2026-07-30T14:00:00.000Z", type: "CAPTACION", stage: "CAPTACION", note: "Unidad preparada para arriendo de inversión." },
+      { at: "2026-08-06T18:00:00.000Z", type: "EVALUACION", stage: "EVALUACION_ARRENDATARIO", note: "Antecedentes del postulante revisados por el equipo." },
+      { at: "2026-08-13T12:00:00.000Z", type: "RESERVA", stage: "RESERVA", note: "Reserva confirmada con condiciones informadas." },
+      { at: "2026-08-20T12:00:00.000Z", type: "CONTRATO", stage: "CONTRATO", note: "Contrato firmado y pago inicial pendiente de verificar." },
+      { at: "2026-08-22T12:00:00.000Z", type: "PAGO_INICIAL", stage: "PAGO_INICIAL", note: "Pago inicial informado; requiere verificación humana." },
+    ] },
+  });
+  const closedOperation = await upsertDemoRecord(tenantId, {
+    recordType: "broker_operation", title: "Arriendo cerrado Bodega Industrial Quilicura", status: "COMPLETED", assignedToId: quilicura.assignedToId,
+    data: { operationType: "RENTAL", propertyId: quilicura.id, clientName: "Logística Andes SpA", stage: "ENTREGA_LLAVES", monthlyRent: 2800000, timeline: [
+      { at: "2026-06-10T10:00:00.000Z", type: "EVALUACION", stage: "EVALUACION_ARRENDATARIO", note: "Postulante comercial aprobado con antecedentes revisados." },
+      { at: "2026-06-18T10:00:00.000Z", type: "RESERVA", stage: "RESERVA", note: "Reserva confirmada por responsable." },
+      { at: "2026-06-28T10:00:00.000Z", type: "CONTRATO", stage: "CONTRATO", note: "Contrato de arriendo firmado." },
+      { at: "2026-07-01T10:00:00.000Z", type: "PAGO", stage: "PAGO_INICIAL", note: "Pago inicial verificado por el equipo." },
+      { at: "2026-07-02T16:00:00.000Z", type: "ENTREGA", stage: "ENTREGA_LLAVES", note: "Entrega de llaves documentada con inventario." },
+    ] },
+  });
+  const strict = await prisma.brokerProperty.findMany({ where: { tenantId, legacyRecordId: { in: [santiago.id, quilicura.id] } }, select: { id: true, legacyRecordId: true } });
+  const strictByLegacy = new Map(strict.map((property) => [property.legacyRecordId, property.id]));
+  if (!strictByLegacy.get(santiago.id) || !strictByLegacy.get(quilicura.id)) return 0;
+  const camila = await prisma.brokerLeaseTenant.upsert({ where: { tenantId_rut: { tenantId, rut: "18.333.003-3" } }, create: { tenantId, name: "Camila Soto", rut: "18.333.003-3", phone: "+56971110003", email: "camila.soto@arrendatario.demo", taxEvaluationStatus: "APROBADA", declaredIncome: 2100000, guarantorName: "Javiera Soto" }, update: { name: "Camila Soto", taxEvaluationStatus: "APROBADA", declaredIncome: 2100000, guarantorName: "Javiera Soto" } });
+  const andes = await prisma.brokerLeaseTenant.upsert({ where: { tenantId_rut: { tenantId, rut: "76.555.444-2" } }, create: { tenantId, name: "Logística Andes SpA", rut: "76.555.444-2", phone: "+56224550010", email: "operaciones@andes.demo", taxEvaluationStatus: "APROBADA", declaredIncome: 12500000, guarantorName: "No requiere" }, update: { name: "Logística Andes SpA", taxEvaluationStatus: "APROBADA", declaredIncome: 12500000, guarantorName: "No requiere" } });
+  const checkpoints = (keys) => Object.fromEntries(keys.map((key) => [key, { confirmedAt: "2026-08-20T12:00:00.000Z", confirmedBy: "Equipo de demostración Broker OS", note: "Control humano registrado para demostración." }]));
+  await prisma.brokerRentalCase.upsert({
+    where: { operationId: rentalOperation.id },
+    create: { tenantId, operationId: rentalOperation.id, propertyId: strictByLegacy.get(santiago.id), leaseTenantId: camila.id, tenantName: camila.name, currentStage: "PAGO_INICIAL", applicantTaxStatus: "APROBADA", applicantCommercialStatus: "APROBADA", declaredIncome: 2100000, guarantorName: "Javiera Soto", guarantorEvaluationStatus: "APROBADO", applicationReceivedAt: new Date("2026-08-03T00:00:00.000Z"), applicationReviewedAt: new Date("2026-08-06T00:00:00.000Z"), reservationStatus: "CONFIRMADA", reservationAmount: 250000, reservationExpiresAt: new Date("2026-08-23T00:00:00.000Z"), contractStatus: "FIRMADO", monthlyRent: 590000, contractStartAt: new Date("2026-09-01T00:00:00.000Z"), contractEndAt: new Date("2027-08-31T00:00:00.000Z"), paymentDay: 5, depositAmount: 590000, contractSignedAt: new Date("2026-08-20T00:00:00.000Z"), initialPaymentStatus: "INFORMADO", initialPaymentAmount: 1180000, initialPaymentReceivedAt: new Date("2026-08-22T00:00:00.000Z"), handoverStatus: "AGENDADA", handoverAt: new Date("2026-09-01T10:00:00.000Z"), handoverRecipient: "Camila Soto", checkpoints: checkpoints(["evaluacion", "reserva", "contrato"]), metadata: { source: DEMO_SOURCE, demo: true } },
+    update: { propertyId: strictByLegacy.get(santiago.id), leaseTenantId: camila.id, tenantName: camila.name, currentStage: "PAGO_INICIAL", applicantTaxStatus: "APROBADA", applicantCommercialStatus: "APROBADA", declaredIncome: 2100000, guarantorName: "Javiera Soto", guarantorEvaluationStatus: "APROBADO", applicationReceivedAt: new Date("2026-08-03T00:00:00.000Z"), applicationReviewedAt: new Date("2026-08-06T00:00:00.000Z"), reservationStatus: "CONFIRMADA", reservationAmount: 250000, reservationExpiresAt: new Date("2026-08-23T00:00:00.000Z"), contractStatus: "FIRMADO", monthlyRent: 590000, contractStartAt: new Date("2026-09-01T00:00:00.000Z"), contractEndAt: new Date("2027-08-31T00:00:00.000Z"), paymentDay: 5, depositAmount: 590000, contractSignedAt: new Date("2026-08-20T00:00:00.000Z"), initialPaymentStatus: "INFORMADO", initialPaymentAmount: 1180000, initialPaymentReceivedAt: new Date("2026-08-22T00:00:00.000Z"), handoverStatus: "AGENDADA", handoverAt: new Date("2026-09-01T10:00:00.000Z"), handoverRecipient: "Camila Soto", checkpoints: checkpoints(["evaluacion", "reserva", "contrato"]) },
+  });
+  await prisma.brokerRentalCase.upsert({
+    where: { operationId: closedOperation.id },
+    create: { tenantId, operationId: closedOperation.id, propertyId: strictByLegacy.get(quilicura.id), leaseTenantId: andes.id, tenantName: andes.name, status: "CERRADA", currentStage: "ENTREGA_LLAVES", applicantTaxStatus: "APROBADA", applicantCommercialStatus: "APROBADA", declaredIncome: 12500000, guarantorName: "No requiere", guarantorEvaluationStatus: "NO_REQUIERE", applicationReceivedAt: new Date("2026-06-03T00:00:00.000Z"), applicationReviewedAt: new Date("2026-06-10T00:00:00.000Z"), reservationStatus: "CONFIRMADA", reservationAmount: 1400000, reservationExpiresAt: new Date("2026-06-22T00:00:00.000Z"), contractStatus: "FIRMADO", monthlyRent: 2800000, contractStartAt: new Date("2026-07-02T00:00:00.000Z"), contractEndAt: new Date("2029-07-01T00:00:00.000Z"), paymentDay: 5, depositAmount: 5600000, contractSignedAt: new Date("2026-06-28T00:00:00.000Z"), initialPaymentStatus: "VERIFICADO", initialPaymentAmount: 8400000, initialPaymentReceivedAt: new Date("2026-07-01T00:00:00.000Z"), handoverStatus: "COMPLETADA", handoverAt: new Date("2026-07-02T00:00:00.000Z"), handoverRecipient: "Logística Andes SpA", checkpoints: checkpoints(["evaluacion", "reserva", "contrato", "pago_inicial", "entrega"]), metadata: { source: DEMO_SOURCE, demo: true } },
+    update: { propertyId: strictByLegacy.get(quilicura.id), leaseTenantId: andes.id, tenantName: andes.name, status: "CERRADA", currentStage: "ENTREGA_LLAVES", applicantTaxStatus: "APROBADA", applicantCommercialStatus: "APROBADA", declaredIncome: 12500000, guarantorName: "No requiere", guarantorEvaluationStatus: "NO_REQUIERE", applicationReceivedAt: new Date("2026-06-03T00:00:00.000Z"), applicationReviewedAt: new Date("2026-06-10T00:00:00.000Z"), reservationStatus: "CONFIRMADA", reservationAmount: 1400000, reservationExpiresAt: new Date("2026-06-22T00:00:00.000Z"), contractStatus: "FIRMADO", monthlyRent: 2800000, contractStartAt: new Date("2026-07-02T00:00:00.000Z"), contractEndAt: new Date("2029-07-01T00:00:00.000Z"), paymentDay: 5, depositAmount: 5600000, contractSignedAt: new Date("2026-06-28T00:00:00.000Z"), initialPaymentStatus: "VERIFICADO", initialPaymentAmount: 8400000, initialPaymentReceivedAt: new Date("2026-07-01T00:00:00.000Z"), handoverStatus: "COMPLETADA", handoverAt: new Date("2026-07-02T00:00:00.000Z"), handoverRecipient: "Logística Andes SpA", checkpoints: checkpoints(["evaluacion", "reserva", "contrato", "pago_inicial", "entrega"]) },
+  });
+  return 2;
+}
+
 const BROKER_DEMO_AREAS = [
   { area: "Propiedades y cartera", recordTypes: ["property"] },
   { area: "Captacion, tasacion y cierre", recordTypes: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_settlement"] },
@@ -1008,6 +1054,7 @@ async function verifyBrokerDemo() {
     select: { recordType: true },
   });
   const saleCases = await prisma.brokerSaleCase.findMany({ where: { tenantId: tenant.id }, select: { status: true, currentStage: true } });
+  const rentalCases = await prisma.brokerRentalCase.findMany({ where: { tenantId: tenant.id }, select: { status: true, currentStage: true } });
   const counts = records.reduce((accumulator, record) => {
     accumulator[record.recordType] = (accumulator[record.recordType] || 0) + 1;
     return accumulator;
@@ -1025,6 +1072,8 @@ async function verifyBrokerDemo() {
     .map((area) => area.area);
   if (!saleCases.some((item) => item.currentStage === "OFERTA_Y_NEGOCIACION")) faltantes.push("Venta en negociación con oferta controlada");
   if (!saleCases.some((item) => item.currentStage === "ENTREGA_Y_POSTVENTA" && item.status === "CERRADA")) faltantes.push("Venta cerrada con inscripción y entrega");
+  if (!rentalCases.some((item) => item.currentStage === "PAGO_INICIAL")) faltantes.push("Arriendo con pago inicial en revisión");
+  if (!rentalCases.some((item) => item.currentStage === "ENTREGA_LLAVES" && item.status === "CERRADA")) faltantes.push("Arriendo cerrado con entrega de llaves");
 
   console.log(JSON.stringify({
     tenant: tenant.name,
@@ -1032,6 +1081,7 @@ async function verifyBrokerDemo() {
     totalRegistros: records.length,
     propiedades: counts.property || 0,
     expedientesVenta: saleCases.length,
+    expedientesArriendo: rentalCases.length,
     areas,
     demostracionLista: faltantes.length === 0,
     faltantes,
@@ -1063,6 +1113,7 @@ async function main() {
   const agentEvaluations = await seedAgentEvaluations(realtyTenant.id);
   const captures = await seedBrokerCaptures(realtyTenant.id, properties, brokers);
   const saleCases = await seedBrokerSaleCases(realtyTenant.id, properties);
+  const rentalCases = await seedBrokerRentalCases(realtyTenant.id, properties);
 
   console.log(JSON.stringify({
     tenant: realtyTenant.name,
@@ -1076,6 +1127,7 @@ async function main() {
     agentEvaluations: agentEvaluations.length,
     captureRecords: captures,
     saleCases,
+    rentalCases,
     legacyPropertyNormalized: Boolean(normalizedLegacy),
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,

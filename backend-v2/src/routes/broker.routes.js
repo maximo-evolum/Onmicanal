@@ -16,6 +16,7 @@ import {
   BROKER_ROLE_TEMPLATES,
   BROKER_SOP_LIBRARY,
   FINANCING_STAGES,
+  RENTAL_STAGES,
   SALE_STAGES,
   TERMINAL_STAGES,
   brokerAgentScenario,
@@ -37,6 +38,7 @@ import {
 import { brokerRelationalCoverage, normalizeLegacyBrokerProperty } from "../services/broker-relational-data.service.js";
 import { BROKER_CAPTURE_OPTIONS, captureReadiness, normalizeBrokerCapture, validateBrokerCapture } from "../services/broker-capture.service.js";
 import { BROKER_SALE_OPTIONS, brokerSaleReadiness, normalizeBrokerSaleCase } from "../services/broker-sale.service.js";
+import { BROKER_RENTAL_OPTIONS, brokerRentalReadiness, normalizeBrokerRentalCase } from "../services/broker-rental.service.js";
 import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 
@@ -472,6 +474,57 @@ async function ensureBrokerSaleCase(db, { tenantId, operation, property, buyerId
   });
 }
 
+async function ensureBrokerLeaseTenant(db, { tenantId, leaseTenantId, tenantName, input = {} }) {
+  const requestedId = text(leaseTenantId);
+  if (requestedId) {
+    const existingById = await db.brokerLeaseTenant.findFirst({ where: { id: requestedId, tenantId } });
+    if (existingById) return existingById;
+  }
+  const name = text(tenantName);
+  if (!name) return null;
+  const existingByName = await db.brokerLeaseTenant.findFirst({ where: { tenantId, name }, orderBy: { updatedAt: "desc" } });
+  if (existingByName) return existingByName;
+  return db.brokerLeaseTenant.create({
+    data: {
+      tenantId,
+      name,
+      rut: text(input.rut) || null,
+      phone: text(input.phone) || null,
+      email: text(input.email) || null,
+      taxEvaluationStatus: text(input.applicantTaxStatus || input.taxEvaluationStatus, "PENDIENTE").toUpperCase(),
+      declaredIncome: input.declaredIncome === "" || input.declaredIncome === undefined ? null : Number(input.declaredIncome) || null,
+      guarantorName: text(input.guarantorName) || null,
+    }
+  });
+}
+
+async function ensureBrokerRentalCase(db, { tenantId, operation, property, leaseTenantId, tenantName, input = {} }) {
+  const propertyData = dataOf(property);
+  const strictProperty = await ensureBrokerCaptureProperty(db, { tenantId, property, propertyData });
+  const leaseTenant = await ensureBrokerLeaseTenant(db, { tenantId, leaseTenantId, tenantName, input });
+  const operationData = dataOf(operation);
+  const stage = normalizeBrokerStage("RENTAL", operationData.stage || RENTAL_STAGES[0]);
+  return db.brokerRentalCase.upsert({
+    where: { operationId: operation.id },
+    create: {
+      tenantId,
+      operationId: operation.id,
+      propertyId: strictProperty.id,
+      leaseTenantId: leaseTenant?.id || null,
+      tenantName: text(tenantName || operationData.clientName) || null,
+      currentStage: stage,
+      currency: text(operationData.currency, "CLP").toUpperCase(),
+      metadata: { source: "broker_operation", createdFrom: "broker_os" },
+    },
+    update: {
+      propertyId: strictProperty.id,
+      ...(leaseTenant ? { leaseTenantId: leaseTenant.id } : {}),
+      ...(text(tenantName || operationData.clientName) ? { tenantName: text(tenantName || operationData.clientName) } : {}),
+      currentStage: stage,
+    },
+  });
+}
+
 async function brokerSaleContext(req, operation) {
   const operationData = dataOf(operation);
   const propertyId = text(operationData.propertyId);
@@ -515,6 +568,52 @@ function brokerSalePayload(context) {
     nextStage: context.nextStage,
     readiness: context.readiness,
     options: BROKER_SALE_OPTIONS,
+  };
+}
+
+async function brokerRentalContext(req, operation) {
+  const operationData = dataOf(operation);
+  const propertyId = text(operationData.propertyId);
+  if (!propertyId) throw new Error("La operación de arriendo debe tener una propiedad asociada.");
+  const property = await assertRelatedProperty(req, propertyId);
+  const rentalCase = await prisma.$transaction((db) => ensureBrokerRentalCase(db, {
+    tenantId: req.tenantId,
+    operation,
+    property,
+    leaseTenantId: operationData.leaseTenantId,
+    tenantName: operationData.clientName,
+  }));
+  const [strictProperty, relatedRecords] = await Promise.all([
+    prisma.brokerProperty.findUnique({ where: { id: rentalCase.propertyId }, include: { capture: true } }),
+    prisma.industryRecord.findMany({
+      where: brokerWhere(req, { recordType: { in: [...BROKER_RECORD_TYPES, "visit"] } }),
+      orderBy: { updatedAt: "desc" },
+      take: 500,
+    }),
+  ]);
+  const related = relatedRecords.filter((record) => String(dataOf(record).propertyId || "") === property.id);
+  const currentIndex = RENTAL_STAGES.indexOf(normalizeBrokerStage("RENTAL", operationData.stage || RENTAL_STAGES[0]));
+  const nextStage = RENTAL_STAGES[currentIndex + 1] || null;
+  return {
+    operation: operationPayload(operation),
+    property,
+    rentalCase,
+    capture: strictProperty?.capture || null,
+    relatedRecords: related,
+    nextStage,
+    readiness: nextStage ? brokerRentalReadiness({ targetStage: nextStage, rentalCase, capture: strictProperty?.capture || null, relatedRecords: related }) : { requirements: [], ready: true, missing: [] },
+  };
+}
+
+function brokerRentalPayload(context) {
+  return {
+    operation: context.operation,
+    property: context.property,
+    rentalCase: context.rentalCase,
+    capture: context.capture,
+    nextStage: context.nextStage,
+    readiness: context.readiness,
+    options: BROKER_RENTAL_OPTIONS,
   };
 }
 
@@ -1031,7 +1130,7 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), requireB
     const operationType = normalizeBrokerOperationType(req.body?.operationType);
     if (!title || !operationType) return res.status(400).json({ error: "Nombre y tipo de operación son requeridos." });
     const propertyId = text(req.body?.propertyId);
-    if (operationType === "SALE" && !propertyId) return res.status(400).json({ error: "Para iniciar una venta asocia la propiedad que se comercializará." });
+    if (["SALE", "RENTAL"].includes(operationType) && !propertyId) return res.status(400).json({ error: `Para iniciar un${operationType === "SALE" ? "a venta" : " arriendo"} asocia la propiedad que se comercializará.` });
     await assertRelatedProperty(req, propertyId);
     const requestedAssignment = text(req.body?.assignedToId);
     const assignedToId = requestedAssignment || (Array.isArray(req.brokerAccess?.scopeUserIds) ? req.user?.id : null);
@@ -1064,6 +1163,10 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), requireB
       if (operationType === "SALE") {
         const property = await db.industryRecord.findUnique({ where: { id: propertyId } });
         await ensureBrokerSaleCase(db, { tenantId: req.tenantId, operation: created, property, buyerId: text(req.body?.buyerId), buyerName: text(dataOf({ data: req.body?.data }).clientName) });
+      }
+      if (operationType === "RENTAL") {
+        const property = await db.industryRecord.findUnique({ where: { id: propertyId } });
+        await ensureBrokerRentalCase(db, { tenantId: req.tenantId, operation: created, property, leaseTenantId: text(req.body?.leaseTenantId), tenantName: text(dataOf({ data: req.body?.data }).clientName), input: dataOf({ data: req.body?.data }) });
       }
       return created;
     });
@@ -1143,6 +1246,72 @@ brokerRouter.post("/broker/sales/:operationId/confirmations", requireRole(ROLE_G
   }
 });
 
+brokerRouter.get("/broker/rentals/:operationId", requireBrokerAction("operations", "VIEW"), async (req, res) => {
+  try {
+    const operation = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.operationId, recordType: "broker_operation" }) });
+    if (!operation) return res.status(404).json({ error: "Operación no encontrada." });
+    if ((normalizeBrokerOperationType(dataOf(operation).operationType) || "SALE") !== "RENTAL") return res.status(422).json({ error: "La operación seleccionada no corresponde a un arriendo." });
+    res.json(brokerRentalPayload(await brokerRentalContext(req, operation)));
+  } catch (error) {
+    if (error?.message?.includes("propiedad asociada") || error?.message?.includes("propiedad relacionada")) return res.status(422).json({ error: error.message });
+    console.error("Get broker rental case error:", error);
+    res.status(500).json({ error: "No se pudo abrir el expediente de arriendo." });
+  }
+});
+
+brokerRouter.put("/broker/rentals/:operationId", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
+  try {
+    const operation = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.operationId, recordType: "broker_operation" }) });
+    if (!operation) return res.status(404).json({ error: "Operación no encontrada." });
+    if ((normalizeBrokerOperationType(dataOf(operation).operationType) || "SALE") !== "RENTAL") return res.status(422).json({ error: "La operación seleccionada no corresponde a un arriendo." });
+    const context = await brokerRentalContext(req, operation);
+    const incoming = dataOf({ data: req.body });
+    const normalized = normalizeBrokerRentalCase({ ...context.rentalCase, ...incoming });
+    const leaseTenant = await ensureBrokerLeaseTenant(prisma, { tenantId: req.tenantId, leaseTenantId: normalized.leaseTenantId, tenantName: normalized.tenantName, input: normalized });
+    const saved = await prisma.brokerRentalCase.update({
+      where: { id: context.rentalCase.id },
+      data: { ...normalized, leaseTenantId: leaseTenant?.id || null, reviewedById: context.rentalCase.reviewedById || null, metadata: { ...(context.rentalCase.metadata && typeof context.rentalCase.metadata === "object" ? context.rentalCase.metadata : {}), lastUpdatedBy: req.user?.id || null } },
+    });
+    await prisma.industryRecord.update({
+      where: { id: operation.id },
+      data: { data: { ...dataOf(operation), clientName: saved.tenantName || dataOf(operation).clientName || "", leaseTenantId: saved.leaseTenantId || dataOf(operation).leaseTenantId || null } },
+    });
+    await recordAuditLog(req, "BROKER_RENTAL_CASE_UPDATED", "broker_rental_case", saved.id, { operationId: operation.id, stage: saved.currentStage });
+    const refreshed = await brokerRentalContext(req, await prisma.industryRecord.findUnique({ where: { id: operation.id } }));
+    res.json(brokerRentalPayload(refreshed));
+  } catch (error) {
+    console.error("Update broker rental case error:", error);
+    res.status(500).json({ error: "No se pudo actualizar el expediente de arriendo." });
+  }
+});
+
+brokerRouter.post("/broker/rentals/:operationId/confirmations", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
+  try {
+    const operation = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.operationId, recordType: "broker_operation" }) });
+    if (!operation) return res.status(404).json({ error: "Operación no encontrada." });
+    if ((normalizeBrokerOperationType(dataOf(operation).operationType) || "SALE") !== "RENTAL") return res.status(422).json({ error: "La operación seleccionada no corresponde a un arriendo." });
+    const context = await brokerRentalContext(req, operation);
+    const checkpoint = text(req.body?.checkpoint).toLowerCase();
+    const allowedCheckpoints = new Set(["evaluacion", "reserva", "contrato", "pago_inicial", "entrega"]);
+    if (!allowedCheckpoints.has(checkpoint)) return res.status(400).json({ error: "Hito de confirmación inválido." });
+    const note = text(req.body?.note);
+    const checkpoints = context.rentalCase.checkpoints && typeof context.rentalCase.checkpoints === "object" && !Array.isArray(context.rentalCase.checkpoints) ? context.rentalCase.checkpoints : {};
+    const updated = await prisma.brokerRentalCase.update({
+      where: { id: context.rentalCase.id },
+      data: {
+        checkpoints: { ...checkpoints, [checkpoint]: { confirmedAt: new Date().toISOString(), confirmedBy: req.user?.name || req.user?.email || "Usuario autorizado", note } },
+        reviewedById: req.user?.id || null,
+        ...(checkpoint === "evaluacion" ? { applicationReviewedAt: new Date() } : {}),
+      }
+    });
+    await recordAuditLog(req, "BROKER_RENTAL_CHECKPOINT_CONFIRMED", "broker_rental_case", updated.id, { operationId: operation.id, checkpoint, note });
+    res.json(brokerRentalPayload(await brokerRentalContext(req, operation)));
+  } catch (error) {
+    console.error("Confirm broker rental checkpoint error:", error);
+    res.status(500).json({ error: "No se pudo confirmar el hito de arriendo." });
+  }
+});
+
 brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
   try {
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "broker_operation" }) });
@@ -1155,6 +1324,11 @@ brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF
       const readiness = brokerSaleReadiness({ targetStage: transition.next, saleCase: context.saleCase, capture: context.capture, relatedRecords: context.relatedRecords });
       if (!readiness.ready) return res.status(422).json({ error: `Antes de avanzar debes completar: ${readiness.missing.join(", ")}.`, missing: readiness.missing, requirements: readiness.requirements });
     }
+    if (current.data.operationType === "RENTAL" && transition.next !== transition.current && !["CANCELADA", "PERDIDA"].includes(transition.next)) {
+      const context = await brokerRentalContext(req, existing);
+      const readiness = brokerRentalReadiness({ targetStage: transition.next, rentalCase: context.rentalCase, capture: context.capture, relatedRecords: context.relatedRecords });
+      if (!readiness.ready) return res.status(422).json({ error: `Antes de avanzar debes completar: ${readiness.missing.join(", ")}.`, missing: readiness.missing, requirements: readiness.requirements });
+    }
     const now = new Date().toISOString();
     const timeline = [...current.data.timeline, { at: now, type: "STAGE_CHANGED", from: transition.current, stage: transition.next, note: text(req.body?.note, `Etapa cambiada a ${transition.next}`) }];
     const record = await prisma.industryRecord.update({
@@ -1164,6 +1338,10 @@ brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF
     if (current.data.operationType === "SALE") {
       const saleCase = await prisma.brokerSaleCase.findUnique({ where: { operationId: existing.id } });
       if (saleCase) await prisma.brokerSaleCase.update({ where: { id: saleCase.id }, data: { currentStage: transition.next, status: transition.terminal ? (transition.next === "ENTREGA_Y_POSTVENTA" ? "CERRADA" : "CANCELADA") : "ACTIVA" } });
+    }
+    if (current.data.operationType === "RENTAL") {
+      const rentalCase = await prisma.brokerRentalCase.findUnique({ where: { operationId: existing.id } });
+      if (rentalCase) await prisma.brokerRentalCase.update({ where: { id: rentalCase.id }, data: { currentStage: transition.next, status: transition.terminal ? (transition.next === "ENTREGA_LLAVES" ? "CERRADA" : "CANCELADA") : "ACTIVA" } });
     }
     await recordAuditLog(req, "BROKER_OPERATION_STAGE_CHANGED", "broker_operation", record.id, { from: transition.current, to: transition.next });
     res.json(operationPayload(record));

@@ -7,6 +7,7 @@ import {
   createBrokerOperation,
   createBrokerRecord,
   confirmBrokerSaleCheckpoint,
+  confirmBrokerRentalCheckpoint,
   getBrokerCatalog,
   getBrokerAccess,
   getBrokerAccessTeam,
@@ -19,6 +20,7 @@ import {
   getBrokerOverview,
   getBrokerPropertyExpedient,
   getBrokerSaleWorkspace,
+  getBrokerRentalWorkspace,
   getBrokerRecords,
   advanceBrokerFinancing,
   previewBrokerCommission,
@@ -26,6 +28,7 @@ import {
   runBrokerAutomationScan,
   saveBrokerAiEvaluation,
   saveBrokerSaleWorkspace,
+  saveBrokerRentalWorkspace,
   saveBrokerOperatingConfiguration,
   saveBrokerHoldingConfig,
   updateBrokerRecord,
@@ -36,6 +39,7 @@ import {
   type BrokerOperation,
   type BrokerOperationType,
   type BrokerSaleWorkspace,
+  type BrokerRentalWorkspace,
   type BrokerPropertyExpedient,
   type BrokerRecordArea,
   type BrokerRecordDefinition,
@@ -269,6 +273,7 @@ export function BrokerOperationsPageContent() {
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [expedient, setExpedient] = useState<BrokerPropertyExpedient | null>(null);
   const [saleWorkspace, setSaleWorkspace] = useState<BrokerSaleWorkspace | null>(null);
+  const [rentalWorkspace, setRentalWorkspace] = useState<BrokerRentalWorkspace | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [operationType, setOperationType] = useState<BrokerOperationType>("SALE");
@@ -438,6 +443,15 @@ export function BrokerOperationsPageContent() {
     } finally { setBusy(false); }
   }
 
+  async function openRentalWorkspace(operation: BrokerOperation) {
+    setBusy(true); setNotice("");
+    try {
+      setRentalWorkspace(await getBrokerRentalWorkspace(operation.id));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo abrir el expediente de arriendo.");
+    } finally { setBusy(false); }
+  }
+
   async function saveSaleWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!saleWorkspace) return;
@@ -490,6 +504,44 @@ export function BrokerOperationsPageContent() {
       const updated = await confirmBrokerSaleCheckpoint(saleWorkspace.operation.id, { checkpoint, note: "Revisión humana confirmada desde el expediente de venta." });
       setSaleWorkspace(updated);
       setNotice("Revisión humana registrada en la trazabilidad de la venta.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo confirmar la revisión humana.");
+    } finally { setBusy(false); }
+  }
+
+  async function saveRentalWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!rentalWorkspace) return;
+    const form = new FormData(event.currentTarget);
+    const value = (name: string) => String(form.get(name) || "").trim();
+    const number = (name: string) => value(name) === "" ? null : Number(value(name));
+    setBusy(true); setNotice("");
+    try {
+      const updated = await saveBrokerRentalWorkspace(rentalWorkspace.operation.id, {
+        tenantName: value("tenantName"), applicantTaxStatus: value("applicantTaxStatus"), applicantCommercialStatus: value("applicantCommercialStatus"),
+        declaredIncome: number("declaredIncome"), guarantorName: value("guarantorName"), guarantorEvaluationStatus: value("guarantorEvaluationStatus"),
+        applicationReceivedAt: value("applicationReceivedAt") || null,
+        reservationStatus: value("reservationStatus"), reservationAmount: number("reservationAmount"), reservationExpiresAt: value("reservationExpiresAt") || null,
+        contractStatus: value("contractStatus"), monthlyRent: number("monthlyRent"), contractStartAt: value("contractStartAt") || null, contractEndAt: value("contractEndAt") || null,
+        paymentDay: number("paymentDay"), depositAmount: number("depositAmount"), contractSignedAt: value("contractSignedAt") || null,
+        initialPaymentStatus: value("initialPaymentStatus"), initialPaymentAmount: number("initialPaymentAmount"), initialPaymentReceivedAt: value("initialPaymentReceivedAt") || null,
+        handoverStatus: value("handoverStatus"), handoverAt: value("handoverAt") || null, handoverRecipient: value("handoverRecipient"),
+      });
+      setRentalWorkspace(updated);
+      await load();
+      setNotice("Expediente de arriendo guardado. No se ejecutaron cobros, firmas ni validaciones externas.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo guardar el expediente de arriendo.");
+    } finally { setBusy(false); }
+  }
+
+  async function confirmRentalCheckpoint(checkpoint: "evaluacion" | "reserva" | "contrato" | "pago_inicial" | "entrega") {
+    if (!rentalWorkspace) return;
+    setBusy(true); setNotice("");
+    try {
+      const updated = await confirmBrokerRentalCheckpoint(rentalWorkspace.operation.id, { checkpoint, note: "Revisión humana confirmada desde el expediente de arriendo." });
+      setRentalWorkspace(updated);
+      setNotice("Revisión humana registrada en la trazabilidad del arriendo.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo confirmar la revisión humana.");
     } finally { setBusy(false); }
@@ -790,7 +842,7 @@ export function BrokerOperationsPageContent() {
           const stages = catalog?.operationStages[operation.data.operationType] || [];
           const index = stageIndex(operation, catalog);
           const next = stages[index + 1];
-          return <article key={operation.id} className="broker-operation-card"><div><span>{OPERATION_LABELS[operation.data.operationType]}</span><h3>{operation.title}</h3><p>{readable(operation.data.stage)} · {String(operation.data.clientName || "Sin contraparte registrada")}</p></div><div className="broker-stage"><div><i style={{ width: `${stages.length ? ((index + 1) / stages.length) * 100 : 0}%` }} /></div><small>Etapa {index + 1} de {stages.length}: {readable(stages[index])}</small></div><div className="broker-operation-actions">{operation.data.operationType === "SALE" ? <button className="secondary-btn" type="button" disabled={busy} onClick={() => openSaleWorkspace(operation)}>Abrir expediente</button> : null}<button className="primary-btn" type="button" disabled={busy || !next} onClick={() => nextStage(operation)}>{next ? `Avanzar a ${readable(next)}` : "Flujo completado"}</button></div></article>;
+          return <article key={operation.id} className="broker-operation-card"><div><span>{OPERATION_LABELS[operation.data.operationType]}</span><h3>{operation.title}</h3><p>{readable(operation.data.stage)} · {String(operation.data.clientName || "Sin contraparte registrada")}</p></div><div className="broker-stage"><div><i style={{ width: `${stages.length ? ((index + 1) / stages.length) * 100 : 0}%` }} /></div><small>Etapa {index + 1} de {stages.length}: {readable(stages[index])}</small></div><div className="broker-operation-actions">{operation.data.operationType === "SALE" ? <button className="secondary-btn" type="button" disabled={busy} onClick={() => openSaleWorkspace(operation)}>Abrir expediente</button> : null}{operation.data.operationType === "RENTAL" ? <button className="secondary-btn" type="button" disabled={busy} onClick={() => openRentalWorkspace(operation)}>Abrir expediente</button> : null}<button className="primary-btn" type="button" disabled={busy || !next} onClick={() => nextStage(operation)}>{next ? `Avanzar a ${readable(next)}` : "Flujo completado"}</button></div></article>;
         })}
       </section>
       </section>
@@ -805,6 +857,18 @@ export function BrokerOperationsPageContent() {
           <footer><p className="broker-human-note">Este expediente ordena evidencia y controles internos. No firma documentos, aprueba créditos, inscribe ante CBR ni ejecuta pagos por cuenta propia.</p><button className="primary-btn" disabled={busy}>Guardar controles de venta</button></footer>
         </form>
         <div className="broker-sale-confirmations"><h3>Confirmaciones humanas obligatorias</h3><p>Registra la revisión responsable una vez que el antecedente haya sido comprobado fuera de EVOLUM OS.</p><div>{(["oferta", "promesa", "titulos", "escritura", "inscripcion", "entrega"] as const).map((checkpoint) => <button type="button" key={checkpoint} className={saleWorkspace.saleCase.checkpoints?.[checkpoint] ? "secondary-btn confirmed" : "secondary-btn"} disabled={busy} onClick={() => confirmSaleCheckpoint(checkpoint)}>{saleWorkspace.saleCase.checkpoints?.[checkpoint] ? `✓ ${readable(checkpoint)} confirmado` : `Confirmar ${readable(checkpoint)}`}</button>)}</div></div>
+      </section> : null}
+      {rentalWorkspace ? <section className="broker-sale-case-panel broker-rental-case-panel" aria-label="Expediente completo de arriendo">
+        <header><div><span>Arriendo de punta a punta</span><h2>{rentalWorkspace.operation.title}</h2><p>{rentalWorkspace.property.title} · Etapa actual: <b>{readable(rentalWorkspace.rentalCase.currentStage)}</b></p></div><button type="button" className="secondary-btn" onClick={() => setRentalWorkspace(null)}>Cerrar expediente</button></header>
+        <div className="broker-sale-readiness"><div><b>{rentalWorkspace.nextStage ? `Siguiente hito: ${readable(rentalWorkspace.nextStage)}` : "Arriendo finalizado"}</b><p>{rentalWorkspace.readiness.ready ? "Los antecedentes mínimos están completos para el siguiente hito." : "Completa los puntos pendientes antes de avanzar."}</p></div>{rentalWorkspace.readiness.requirements.length ? <ul>{rentalWorkspace.readiness.requirements.map((item) => <li key={item.key} className={item.ready ? "ready" : "pending"}>{item.ready ? "✓" : "○"} {item.label}</li>)}</ul> : <p>El flujo no tiene más etapas pendientes.</p>}</div>
+        <form key={rentalWorkspace.rentalCase.updatedAt || rentalWorkspace.rentalCase.id} className="broker-sale-case-form" onSubmit={saveRentalWorkspace}>
+          <section><h3>Postulante y evaluación</h3><label>Arrendatario o postulante<input name="tenantName" defaultValue={rentalWorkspace.rentalCase.tenantName || ""} placeholder="Nombre de la persona o empresa" /></label><label>Evaluación tributaria<select name="applicantTaxStatus" defaultValue={rentalWorkspace.rentalCase.applicantTaxStatus}>{rentalWorkspace.options.applicantStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Evaluación comercial<select name="applicantCommercialStatus" defaultValue={rentalWorkspace.rentalCase.applicantCommercialStatus}>{rentalWorkspace.options.applicantStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Ingreso declarado<input name="declaredIncome" type="number" min="0" defaultValue={rentalWorkspace.rentalCase.declaredIncome ?? ""} /></label><label>Aval o codeudor<input name="guarantorName" defaultValue={rentalWorkspace.rentalCase.guarantorName || ""} /></label><label>Estado del aval<select name="guarantorEvaluationStatus" defaultValue={rentalWorkspace.rentalCase.guarantorEvaluationStatus}>{rentalWorkspace.options.guarantorStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Postulación recibida<input name="applicationReceivedAt" type="date" defaultValue={rentalWorkspace.rentalCase.applicationReceivedAt?.slice(0, 10) || ""} /></label></section>
+          <section><h3>Reserva del inmueble</h3><label>Estado de reserva<select name="reservationStatus" defaultValue={rentalWorkspace.rentalCase.reservationStatus}>{rentalWorkspace.options.reservationStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Monto de reserva<input name="reservationAmount" type="number" min="0" defaultValue={rentalWorkspace.rentalCase.reservationAmount ?? ""} /></label><label>Reserva vigente hasta<input name="reservationExpiresAt" type="date" defaultValue={rentalWorkspace.rentalCase.reservationExpiresAt?.slice(0, 10) || ""} /></label><p className="broker-human-note">La reserva se registra como antecedente interno. La confirmación requiere la revisión de una persona autorizada.</p></section>
+          <section><h3>Contrato de arriendo</h3><label>Estado del contrato<select name="contractStatus" defaultValue={rentalWorkspace.rentalCase.contractStatus}>{rentalWorkspace.options.contractStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Renta mensual<input name="monthlyRent" type="number" min="0" defaultValue={rentalWorkspace.rentalCase.monthlyRent ?? ""} /></label><label>Inicio del contrato<input name="contractStartAt" type="date" defaultValue={rentalWorkspace.rentalCase.contractStartAt?.slice(0, 10) || ""} /></label><label>Fin del contrato<input name="contractEndAt" type="date" defaultValue={rentalWorkspace.rentalCase.contractEndAt?.slice(0, 10) || ""} /></label><label>Día de pago<input name="paymentDay" type="number" min="1" max="31" defaultValue={rentalWorkspace.rentalCase.paymentDay ?? ""} /></label><label>Garantía<input name="depositAmount" type="number" min="0" defaultValue={rentalWorkspace.rentalCase.depositAmount ?? ""} /></label><label>Fecha de firma<input name="contractSignedAt" type="date" defaultValue={rentalWorkspace.rentalCase.contractSignedAt?.slice(0, 10) || ""} /></label></section>
+          <section><h3>Pago inicial y entrega</h3><label>Estado del pago inicial<select name="initialPaymentStatus" defaultValue={rentalWorkspace.rentalCase.initialPaymentStatus}>{rentalWorkspace.options.initialPaymentStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Monto recibido<input name="initialPaymentAmount" type="number" min="0" defaultValue={rentalWorkspace.rentalCase.initialPaymentAmount ?? ""} /></label><label>Fecha de pago<input name="initialPaymentReceivedAt" type="date" defaultValue={rentalWorkspace.rentalCase.initialPaymentReceivedAt?.slice(0, 10) || ""} /></label><label>Estado de entrega<select name="handoverStatus" defaultValue={rentalWorkspace.rentalCase.handoverStatus}>{rentalWorkspace.options.handoverStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Fecha de entrega<input name="handoverAt" type="date" defaultValue={rentalWorkspace.rentalCase.handoverAt?.slice(0, 10) || ""} /></label><label>Quién recibe<input name="handoverRecipient" defaultValue={rentalWorkspace.rentalCase.handoverRecipient || ""} /></label></section>
+          <footer><p className="broker-human-note">Este expediente organiza evidencia y controles internos. No firma contratos, no valida pagos bancarios ni entrega llaves de forma automática.</p><button className="primary-btn" disabled={busy}>Guardar controles de arriendo</button></footer>
+        </form>
+        <div className="broker-sale-confirmations"><h3>Confirmaciones humanas obligatorias</h3><p>Confirma cada hito solo después de validar los antecedentes y acciones fuera de EVOLUM OS.</p><div>{(["evaluacion", "reserva", "contrato", "pago_inicial", "entrega"] as const).map((checkpoint) => <button type="button" key={checkpoint} className={rentalWorkspace.rentalCase.checkpoints?.[checkpoint] ? "secondary-btn confirmed" : "secondary-btn"} disabled={busy} onClick={() => confirmRentalCheckpoint(checkpoint)}>{rentalWorkspace.rentalCase.checkpoints?.[checkpoint] ? `✓ ${readable(checkpoint)} confirmado` : `Confirmar ${readable(checkpoint)}`}</button>)}</div></div>
       </section> : null}
     </> : null}
 

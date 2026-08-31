@@ -1157,6 +1157,52 @@ export type BrokerSaleWorkspace = {
   };
 };
 
+export type BrokerRentalCase = {
+  id: string;
+  updatedAt?: string;
+  operationId: string;
+  propertyId: string;
+  leaseTenantId?: string | null;
+  tenantName?: string | null;
+  status: string;
+  currentStage: string;
+  applicantTaxStatus: string;
+  applicantCommercialStatus: string;
+  declaredIncome?: number | null;
+  guarantorName?: string | null;
+  guarantorEvaluationStatus: string;
+  applicationReceivedAt?: string | null;
+  applicationReviewedAt?: string | null;
+  reservationStatus: string;
+  reservationAmount?: number | null;
+  reservationExpiresAt?: string | null;
+  contractStatus: string;
+  monthlyRent?: number | null;
+  currency: string;
+  contractStartAt?: string | null;
+  contractEndAt?: string | null;
+  paymentDay?: number | null;
+  depositAmount?: number | null;
+  contractSignedAt?: string | null;
+  initialPaymentStatus: string;
+  initialPaymentAmount?: number | null;
+  initialPaymentReceivedAt?: string | null;
+  handoverStatus: string;
+  handoverAt?: string | null;
+  handoverRecipient?: string | null;
+  checkpoints?: Record<string, { confirmedAt?: string; confirmedBy?: string; note?: string }>;
+};
+
+export type BrokerRentalWorkspace = {
+  operation: BrokerOperation;
+  property: IndustryRecord;
+  rentalCase: BrokerRentalCase;
+  capture: BrokerCapture | null;
+  nextStage: string | null;
+  readiness: { ready: boolean; missing: string[]; requirements: Array<{ key: string; label: string; ready: boolean }> };
+  options: { applicantStatuses: string[]; guarantorStatuses: string[]; reservationStatuses: string[]; contractStatuses: string[]; initialPaymentStatuses: string[]; handoverStatuses: string[]; };
+};
+
 export type BrokerOverview = {
   kpis: {
     properties: number;
@@ -1542,6 +1588,18 @@ export function saveBrokerSaleWorkspace(operationId: string, input: Partial<Brok
 
 export function confirmBrokerSaleCheckpoint(operationId: string, input: { checkpoint: "oferta" | "promesa" | "titulos" | "escritura" | "inscripcion" | "entrega"; note?: string }): Promise<BrokerSaleWorkspace> {
   return request<BrokerSaleWorkspace>(`/broker/sales/${encodeURIComponent(operationId)}/confirmations`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getBrokerRentalWorkspace(operationId: string): Promise<BrokerRentalWorkspace> {
+  return request<BrokerRentalWorkspace>(`/broker/rentals/${encodeURIComponent(operationId)}`);
+}
+
+export function saveBrokerRentalWorkspace(operationId: string, input: Partial<BrokerRentalCase>): Promise<BrokerRentalWorkspace> {
+  return request<BrokerRentalWorkspace>(`/broker/rentals/${encodeURIComponent(operationId)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function confirmBrokerRentalCheckpoint(operationId: string, input: { checkpoint: "evaluacion" | "reserva" | "contrato" | "pago_inicial" | "entrega"; note?: string }): Promise<BrokerRentalWorkspace> {
+  return request<BrokerRentalWorkspace>(`/broker/rentals/${encodeURIComponent(operationId)}/confirmations`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function addBrokerOperationEvent(id: string, input: { note: string; type?: string }): Promise<BrokerOperation> {

@@ -112,6 +112,7 @@ model Tenant {
   brokerProviders         BrokerProvider[]
   brokerFinancings        BrokerFinancing[]
   brokerSaleCases         BrokerSaleCase[]
+  brokerRentalCases       BrokerRentalCase[]
   brokerHoldingMembership BrokerHoldingTenant?
 }
 
@@ -234,6 +235,7 @@ model WorkspaceUser {
   brokerVisitsAssigned           BrokerVisit[]           @relation("BrokerVisitAssigned")
   brokerFinancingsAssigned       BrokerFinancing[]       @relation("BrokerFinancingAssigned")
   brokerSaleCasesReviewed        BrokerSaleCase[]         @relation("BrokerSaleCaseReviewed")
+  brokerRentalCasesReviewed      BrokerRentalCase[]       @relation("BrokerRentalCaseReviewed")
   brokerCommissionsAssigned      BrokerCommission[]      @relation("BrokerCommissionAssigned")
   brokerHoldingAccesses          BrokerHoldingAccess[]
 }
@@ -431,6 +433,7 @@ model BrokerProperty {
   financings     BrokerFinancing[]
   capture        BrokerPropertyCapture?
   saleCases      BrokerSaleCase[]
+  rentalCases    BrokerRentalCase[]
 
   @@index([tenantId, operationalStatus, isActive])
   @@index([tenantId, comuna, propertyType])
@@ -533,6 +536,7 @@ model BrokerLeaseTenant {
   tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contracts BrokerContract[] @relation("BrokerLeaseTenantContracts")
   visits    BrokerVisit[]    @relation("BrokerLeaseTenantVisits")
+  rentalCases BrokerRentalCase[]
 
   @@unique([tenantId, rut])
   @@index([tenantId, taxEvaluationStatus])
@@ -794,6 +798,59 @@ model BrokerSaleCase {
   @@index([tenantId, status, currentStage])
   @@index([propertyId, status])
   @@index([buyerId, status])
+  @@index([reviewedById, status])
+}
+
+// Expediente controlado de arriendo. Centraliza la evaluación del
+// arrendatario, reserva, contrato, pago inicial y entrega. Ningún estado
+// reemplaza la revisión humana, la firma externa o la validación de pagos.
+model BrokerRentalCase {
+  id                          String    @id @default(cuid())
+  tenantId                    String
+  operationId                 String    @unique
+  propertyId                  String
+  leaseTenantId               String?
+  tenantName                  String?
+  reviewedById                String?
+  status                      String    @default("ACTIVA")
+  currentStage                String    @default("CAPTACION")
+  applicantTaxStatus          String    @default("PENDIENTE")
+  applicantCommercialStatus   String    @default("PENDIENTE")
+  declaredIncome              Decimal?  @db.Decimal(18, 2)
+  guarantorName               String?
+  guarantorEvaluationStatus   String    @default("PENDIENTE")
+  applicationReceivedAt       DateTime?
+  applicationReviewedAt       DateTime?
+  reservationStatus           String    @default("PENDIENTE")
+  reservationAmount           Decimal?  @db.Decimal(18, 2)
+  reservationExpiresAt        DateTime?
+  contractStatus              String    @default("PENDIENTE")
+  monthlyRent                 Decimal?  @db.Decimal(18, 2)
+  currency                    String    @default("CLP")
+  contractStartAt             DateTime?
+  contractEndAt               DateTime?
+  paymentDay                  Int?
+  depositAmount               Decimal?  @db.Decimal(18, 2)
+  contractSignedAt            DateTime?
+  initialPaymentStatus        String    @default("PENDIENTE")
+  initialPaymentAmount        Decimal?  @db.Decimal(18, 2)
+  initialPaymentReceivedAt    DateTime?
+  handoverStatus              String    @default("PENDIENTE")
+  handoverAt                  DateTime?
+  handoverRecipient           String?
+  checkpoints                 Json?
+  metadata                    Json?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property     BrokerProperty    @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  leaseTenant  BrokerLeaseTenant? @relation(fields: [leaseTenantId], references: [id], onDelete: SetNull)
+  reviewedBy   WorkspaceUser?    @relation("BrokerRentalCaseReviewed", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, currentStage])
+  @@index([propertyId, status])
+  @@index([leaseTenantId, status])
   @@index([reviewedById, status])
 }
 
