@@ -110,6 +110,7 @@ model Tenant {
   brokerCommunities  BrokerCommunity[]
   brokerProviders    BrokerProvider[]
   brokerFinancings   BrokerFinancing[]
+  brokerHoldingMembership BrokerHoldingTenant?
 }
 
 model MetadataSchema {
@@ -230,6 +231,7 @@ model WorkspaceUser {
   brokerVisitsAssigned      BrokerVisit[]      @relation("BrokerVisitAssigned")
   brokerFinancingsAssigned  BrokerFinancing[]  @relation("BrokerFinancingAssigned")
   brokerCommissionsAssigned BrokerCommission[] @relation("BrokerCommissionAssigned")
+  brokerHoldingAccesses     BrokerHoldingAccess[]
 }
 
 model MobilePushDevice {
@@ -711,6 +713,49 @@ model BrokerFinancing {
   @@index([propertyId, status])
   @@index([assignedToId, status])
   @@index([tenantId, businessReference])
+}
+
+// Gobierno multiempresa de Broker OS. Un tenant puede pertenecer a un solo
+// holding y el acceso entre empresas se concede explícitamente por usuario.
+model BrokerHolding {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenants  BrokerHoldingTenant[]
+  accesses BrokerHoldingAccess[]
+}
+
+model BrokerHoldingTenant {
+  id        String   @id @default(cuid())
+  holdingId String
+  tenantId  String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  holding BrokerHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  tenant  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([holdingId, tenantId])
+  @@index([holdingId])
+}
+
+model BrokerHoldingAccess {
+  id        String   @id @default(cuid())
+  holdingId String
+  userId    String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  holding BrokerHolding  @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  user    WorkspaceUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([holdingId, userId])
+  @@index([userId, isActive])
 }
 
 model Contact {

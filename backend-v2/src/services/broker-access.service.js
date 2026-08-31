@@ -49,7 +49,9 @@ export function normalizeBrokerAccessProfile(input = {}, user = {}) {
   return {
     businessRole,
     profileLabel: policy.label,
-    accessScope: accessScope === "HOLDING" && upper(user.role) !== "SUPER_ADMIN" ? "COMPANY" : accessScope,
+    // HOLDING se valida contra una relación explícita de gobierno en
+    // loadBrokerAccessContext. No se concede solo por seleccionar la opción.
+    accessScope,
     requestedScope: accessScope,
     teamKey: text(input.teamKey) || null,
     branchKey: text(input.branchKey) || null,
@@ -91,12 +93,39 @@ export async function loadBrokerAccessContext({ prisma, tenantId, user }) {
     if (access.accessScope === "BRANCH") return access.branchKey && String(profile.branchKey || "") === access.branchKey;
     return false;
   }).map((profile) => String(profile.userId));
-  const scopeUserIds = access.accessScope === "COMPANY" || access.accessScope === "HOLDING" ? null : [...new Set([String(user?.id || ""), ...sameScopeUsers].filter(Boolean))];
-  return { ...access, technicalRole: upper(user?.role), userId: user?.id || null, scopeUserIds };
+  let effectiveScope = access.accessScope;
+  let scopeTenantIds = [tenantId];
+  let holding = null;
+
+  if (access.accessScope === "HOLDING") {
+    const membership = await prisma.brokerHoldingTenant.findUnique({
+      where: { tenantId },
+      include: { holding: { include: { tenants: { select: { tenantId: true } } } } },
+    });
+    const technicalRole = upper(user?.role);
+    const granted = technicalRole === "SUPER_ADMIN" || (membership
+      ? await prisma.brokerHoldingAccess.findFirst({ where: { holdingId: membership.holdingId, userId: user?.id, isActive: true }, select: { id: true } })
+      : null);
+
+    if (membership?.holding?.isActive && granted) {
+      scopeTenantIds = membership.holding.tenants.map((item) => item.tenantId);
+      holding = { id: membership.holding.id, code: membership.holding.code, name: membership.holding.name, tenantCount: scopeTenantIds.length };
+    } else {
+      // Si no existe gobierno multiempresa o el usuario no fue autorizado,
+      // preservar la sesión dentro de su propia empresa es la opción segura.
+      effectiveScope = "COMPANY";
+    }
+  }
+
+  const scopeUserIds = effectiveScope === "COMPANY" || effectiveScope === "HOLDING" ? null : [...new Set([String(user?.id || ""), ...sameScopeUsers].filter(Boolean))];
+  return { ...access, accessScope: effectiveScope, technicalRole: upper(user?.role), userId: user?.id || null, scopeUserIds, scopeTenantIds, holding };
 }
 
 export function brokerRecordWhere(req, extra = {}) {
-  const where = { tenantId: req.tenantId, ...extra };
+  const tenantIds = Array.isArray(req.brokerAccess?.scopeTenantIds) && req.brokerAccess.scopeTenantIds.length
+    ? req.brokerAccess.scopeTenantIds
+    : [req.tenantId];
+  const where = { tenantId: tenantIds.length === 1 ? tenantIds[0] : { in: tenantIds }, ...extra };
   const ids = req.brokerAccess?.scopeUserIds;
   if (Array.isArray(ids)) where.assignedToId = { in: ids };
   return where;

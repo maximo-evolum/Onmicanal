@@ -738,6 +738,31 @@ async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
     return result;
   };
 
+  // Perfiles persistentes: el demo deja de depender del cálculo por defecto y
+  // permite comprobar de forma visible los alcances por usuario.
+  const workspaceUsers = await prisma.workspaceUser.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true, name: true, role: true },
+    orderBy: { name: "asc" },
+  });
+  for (const user of workspaceUsers) {
+    const isAdministrator = ["ADMIN", "OWNER", "SUPER_ADMIN"].includes(user.role);
+    await put({
+      recordType: "broker_access_profile",
+      title: `Acceso Broker: ${user.name}`,
+      status: "ACTIVE",
+      assignedToId: user.id,
+      data: {
+        userId: user.id,
+        businessRole: isAdministrator ? "CEO" : "CORREDOR",
+        accessScope: isAdministrator ? "COMPANY" : "ASSIGNED",
+        teamKey: "corretaje-demo",
+        branchKey: "santiago",
+        version: 1,
+      },
+    });
+  }
+
   // Operaciones principales: muestran venta, arriendo y administración en etapas reales.
   await put({
     recordType: "broker_operation", title: "Venta Departamento Vista Parque Pocuro", status: "ACTIVE", assignedToId: assigned.maria,
@@ -785,9 +810,13 @@ async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
 
   // Arriendos y administración.
   await put({ recordType: "rental_application", title: "Postulación de arriendo - Camila Soto", status: "APPROVED", assignedToId: assigned.carlos, data: { propertyId: property.santiago, tenantName: "Camila Soto", tenantId: buyersByName.camila, incomeVerified: true, guarantor: "Javiera Soto" } });
-  await put({ recordType: "rental_contract", title: "Contrato activo - Departamento Inversión Santiago Centro", status: "ACTIVE", assignedToId: assigned.carlos, data: { propertyId: property.santiago, tenantName: "Camila Soto", startDate: "2026-09-01", monthlyRent: 590000, endDate: "2027-08-31", paymentDay: 5 } });
-  await put({ recordType: "rental_payment", title: "Cobro de arriendo - Agosto 2026", status: "PENDING", assignedToId: assigned.carlos, data: { propertyId: property.santiago, amount: 590000, dueDate: "2026-08-20", period: "Agosto 2026", tenantName: "Camila Soto" } });
-  await put({ recordType: "administration_liquidation", title: "Liquidación administración - Local Vitacura", status: "PENDING_APPROVAL", assignedToId: assigned.laura, data: { propertyId: property.vitacura, period: "Agosto 2026", amount: 174000, income: 5800000, expenses: 420000 } });
+  await put({ recordType: "administration_profile", title: "Ficha de administración - Departamento Inversión Santiago Centro", status: "ACTIVE", assignedToId: assigned.carlos, data: { propertyId: property.santiago, ownerName: "Inversiones Santiago Centro SpA", tenantName: "Camila Soto", managementRatePct: 8, ownerPaymentDay: 10, contractReference: "ARR-2026-081" } });
+  await put({ recordType: "rental_contract", title: "Contrato activo - Departamento Inversión Santiago Centro", status: "ACTIVE", assignedToId: assigned.carlos, data: { propertyId: property.santiago, tenantName: "Camila Soto", startDate: "2026-08-01", monthlyRent: 590000, endDate: "2027-08-31", paymentDay: 5 } });
+  await put({ recordType: "rental_payment", title: "Cobro de arriendo - Agosto 2026", status: "PAID", assignedToId: assigned.carlos, data: { propertyId: property.santiago, amount: 590000, dueDate: "2026-08-05", paidAt: "2026-08-05", period: "2026-08", tenantName: "Camila Soto" } });
+  await put({ recordType: "utility_monitoring", title: "Servicios comunes - Agosto 2026", status: "RECORDED", assignedToId: assigned.carlos, data: { propertyId: property.santiago, amount: 42000, dueDate: "2026-08-12", period: "2026-08", description: "Gasto común y servicios básicos informados por administración." } });
+  await put({ recordType: "maintenance_ticket", title: "Reparación menor - Departamento Inversión Santiago Centro", status: "RESOLVED", assignedToId: assigned.carlos, data: { propertyId: property.santiago, category: "Gasfitería", description: "Reparación de llave de lavaplatos con evidencia de cierre.", amount: 28000, completedAt: "2026-08-16", period: "2026-08" } });
+  await put({ recordType: "administration_liquidation", title: "Liquidación administración - Departamento Inversión Santiago Centro", status: "PENDING_APPROVAL", assignedToId: assigned.carlos, data: { propertyId: property.santiago, period: "2026-08", monthlyRent: 590000, paidAmount: 590000, commonExpenses: 42000, maintenanceCost: 28000, managementRatePct: 8, amount: 472800, requiresHumanApproval: true, automaticTransfer: false } });
+  await put({ recordType: "administration_liquidation", title: "Liquidación administración - Local Vitacura", status: "PENDING_APPROVAL", assignedToId: assigned.laura, data: { propertyId: property.vitacura, period: "2026-08", amount: 174000, income: 5800000, expenses: 420000, requiresHumanApproval: true, automaticTransfer: false } });
 
   // Mantenciones y proveedores.
   await put({ recordType: "maintenance_ticket", title: "Mantención climatización - Oficina Premium Apoquindo", status: "QUOTING", assignedToId: assigned.diego, data: { propertyId: property.apoquindo, category: "Climatización", description: "Revisión preventiva de equipos de aire acondicionado antes de nueva visita comercial.", priority: "MEDIA", reportedAt: "2026-08-11" } });
@@ -824,12 +853,13 @@ async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
 const BROKER_DEMO_AREAS = [
   { area: "Propiedades y cartera", recordTypes: ["property"] },
   { area: "Captacion, tasacion y cierre", recordTypes: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_settlement"] },
-  { area: "Arriendos y administracion", recordTypes: ["rental_application", "rental_contract", "rental_payment", "administration_liquidation"] },
+  { area: "Arriendos y administracion", recordTypes: ["administration_profile", "rental_application", "rental_contract", "rental_payment", "utility_monitoring", "administration_liquidation"] },
   { area: "Mantenciones y proveedores", recordTypes: ["maintenance_ticket", "service_provider", "provider_quote", "material_purchase"] },
   { area: "Proyectos y publicacion", recordTypes: ["remodeling_project", "project_budget", "project_milestone", "marketing_publication"] },
   { area: "Postventa y garantias", recordTypes: ["property_inspection", "property_handover", "post_sale_case", "warranty_case"] },
   { area: "Expediente y financiamiento", recordTypes: ["property_document", "legal_document", "digital_signature", "operation_financing", "operation_financing_expense"] },
   { area: "Actividad, alertas y entrenamiento IA", recordTypes: ["visit", "realty_alert", "broker_agent_evaluation"] },
+  { area: "Gobierno y accesos", recordTypes: ["broker_access_profile"] },
 ];
 
 async function verifyBrokerDemo() {

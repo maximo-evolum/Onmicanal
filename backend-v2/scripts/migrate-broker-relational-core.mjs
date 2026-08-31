@@ -28,9 +28,9 @@ if (!tenantSlug) {
       summary.skipped.push({ id: legacy.id, title: legacy.title, errors: normalized.errors });
       continue;
     }
-    if (!apply) { summary.migrated += 1; continue; }
     const existing = await prisma.brokerProperty.findUnique({ where: { legacyRecordId: legacy.id }, select: { id: true } });
     if (existing) { summary.existing += 1; continue; }
+    if (!apply) { summary.migrated += 1; continue; }
 
     const ownerData = normalized.owner;
     let owner = ownerData.rut

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, defaultBrokerBusinessRole, normalizeBrokerAccessProfile, profileRecordData } from "../src/services/broker-access.service.js";
+import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, defaultBrokerBusinessRole, loadBrokerAccessContext, normalizeBrokerAccessProfile, profileRecordData } from "../src/services/broker-access.service.js";
 
 test("Broker OS separa el rol de negocio del rol técnico", () => {
   assert.equal(defaultBrokerBusinessRole({ role: "SELLER", jobTitle: "Corredor inmobiliario" }), "CORREDOR");
@@ -30,10 +30,33 @@ test("Las etapas financieras sensibles exigen aprobación o rechazo explícito",
   assert.equal(brokerFinancingActionForStage("CANCELADO"), "REJECT");
 });
 
-test("Holding no se concede a un usuario de tenant sin gobierno multiempresa", () => {
+test("Holding queda solicitado hasta que exista gobierno multiempresa", () => {
   const access = normalizeBrokerAccessProfile({ businessRole: "GERENTE_COMERCIAL", accessScope: "HOLDING" }, { role: "AGENT" });
   assert.equal(access.requestedScope, "HOLDING");
+  assert.equal(access.accessScope, "HOLDING");
+});
+
+test("Holding autorizado extiende la consulta solo a empresas vinculadas", async () => {
+  const prisma = {
+    industryRecord: { findMany: async () => [{ data: { userId: "u-1", businessRole: "CEO", accessScope: "HOLDING" } }] },
+    brokerHoldingTenant: { findUnique: async () => ({ holdingId: "h-1", holding: { id: "h-1", code: "grupo-demo", name: "Grupo Demo", isActive: true, tenants: [{ tenantId: "tenant-1" }, { tenantId: "tenant-2" }] } }) },
+    brokerHoldingAccess: { findFirst: async () => ({ id: "grant-1" }) },
+  };
+  const access = await loadBrokerAccessContext({ prisma, tenantId: "tenant-1", user: { id: "u-1", role: "ADMIN" } });
+  assert.equal(access.accessScope, "HOLDING");
+  assert.deepEqual(access.scopeTenantIds, ["tenant-1", "tenant-2"]);
+  assert.deepEqual(brokerRecordWhere({ tenantId: "tenant-1", brokerAccess: access }, { recordType: "property" }), { tenantId: { in: ["tenant-1", "tenant-2"] }, recordType: "property" });
+});
+
+test("Holding sin autorización conserva los datos dentro de la empresa", async () => {
+  const prisma = {
+    industryRecord: { findMany: async () => [{ data: { userId: "u-1", businessRole: "CEO", accessScope: "HOLDING" } }] },
+    brokerHoldingTenant: { findUnique: async () => ({ holdingId: "h-1", holding: { id: "h-1", code: "grupo-demo", name: "Grupo Demo", isActive: true, tenants: [{ tenantId: "tenant-1" }, { tenantId: "tenant-2" }] } }) },
+    brokerHoldingAccess: { findFirst: async () => null },
+  };
+  const access = await loadBrokerAccessContext({ prisma, tenantId: "tenant-1", user: { id: "u-1", role: "ADMIN" } });
   assert.equal(access.accessScope, "COMPANY");
+  assert.deepEqual(access.scopeTenantIds, ["tenant-1"]);
 });
 
 test("El perfil persistido conserva negocio, scope y agrupación", () => {

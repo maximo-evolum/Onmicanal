@@ -358,9 +358,63 @@ brokerRouter.get("/broker/access/me", (req, res) => {
     teamKey: access.teamKey,
     branchKey: access.branchKey,
     technicalRole: access.technicalRole,
+    holding: access.holding,
     policy: access.policy,
-    scopeDescription: access.accessScope === "ASSIGNED" ? "Solo registros asignados a tu usuario" : access.accessScope === "TEAM" ? "Registros asignados a tu equipo" : access.accessScope === "BRANCH" ? "Registros asignados a tu sucursal" : "Registros de toda la empresa",
+    scopeDescription: access.accessScope === "ASSIGNED" ? "Solo registros asignados a tu usuario" : access.accessScope === "TEAM" ? "Registros asignados a tu equipo" : access.accessScope === "BRANCH" ? "Registros asignados a tu sucursal" : access.accessScope === "HOLDING" ? `Registros de ${access.holding?.tenantCount || 0} empresas autorizadas del holding` : "Registros de toda la empresa",
   });
+});
+
+brokerRouter.get("/broker/access/holding", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const membership = await prisma.brokerHoldingTenant.findUnique({
+      where: { tenantId: req.tenantId },
+      include: {
+        holding: {
+          include: {
+            tenants: { include: { tenant: { select: { id: true, slug: true, name: true, industry: true } } }, orderBy: { tenant: { name: "asc" } } },
+            accesses: { where: { isActive: true }, include: { user: { select: { id: true, name: true, email: true } } }, orderBy: { user: { name: "asc" } } },
+          },
+        },
+      },
+    });
+    const availableTenants = await prisma.tenant.findMany({ where: { industry: "REAL_ESTATE" }, select: { id: true, slug: true, name: true, industry: true }, orderBy: { name: "asc" } });
+    res.json({
+      holding: membership?.holding ? {
+        id: membership.holding.id,
+        code: membership.holding.code,
+        name: membership.holding.name,
+        isActive: membership.holding.isActive,
+        tenants: membership.holding.tenants.map((item) => item.tenant),
+        accesses: membership.holding.accesses.map((item) => ({ userId: item.userId, name: item.user.name, email: item.user.email })),
+      } : null,
+      availableTenants,
+      canConfigure: req.user?.role === "SUPER_ADMIN",
+    });
+  } catch (error) { next(error); }
+});
+
+brokerRouter.put("/broker/access/holding", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    if (req.user?.role !== "SUPER_ADMIN") return res.status(403).json({ error: "Solo un superadministrador puede unir empresas y otorgar alcance holding." });
+    const code = text(req.body?.code).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/(^-|-$)/g, "");
+    const name = text(req.body?.name);
+    if (!code || !name) return res.status(422).json({ error: "Indica un nombre y un código válido para el holding." });
+    const requestedSlugs = [...new Set([req.tenant?.slug, ...(Array.isArray(req.body?.tenantSlugs) ? req.body.tenantSlugs : [])].map((item) => text(item)).filter(Boolean))];
+    const tenants = await prisma.tenant.findMany({ where: { slug: { in: requestedSlugs } }, select: { id: true, slug: true, name: true } });
+    if (tenants.length !== requestedSlugs.length) return res.status(422).json({ error: "Una o más empresas indicadas no existen." });
+    const holding = await prisma.brokerHolding.upsert({ where: { code }, update: { name, isActive: true }, create: { code, name } });
+    await prisma.$transaction(async (tx) => {
+      for (const tenant of tenants) await tx.brokerHoldingTenant.upsert({ where: { tenantId: tenant.id }, update: { holdingId: holding.id }, create: { holdingId: holding.id, tenantId: tenant.id } });
+      const userIds = [...new Set((Array.isArray(req.body?.userIds) ? req.body.userIds : []).map((item) => text(item)).filter(Boolean))];
+      if (userIds.length) {
+        const users = await tx.workspaceUser.findMany({ where: { id: { in: userIds }, tenantId: { in: tenants.map((tenant) => tenant.id) }, isActive: true }, select: { id: true } });
+        if (users.length !== userIds.length) throw Object.assign(new Error("Solo puedes autorizar usuarios activos de empresas incluidas en el holding."), { status: 422 });
+        for (const user of users) await tx.brokerHoldingAccess.upsert({ where: { holdingId_userId: { holdingId: holding.id, userId: user.id } }, update: { isActive: true }, create: { holdingId: holding.id, userId: user.id } });
+      }
+    });
+    await recordAuditLog(req, "BROKER_HOLDING_CONFIGURED", "broker_holding", holding.id, { code: holding.code, tenantSlugs: tenants.map((tenant) => tenant.slug), authorizedUserIds: req.body?.userIds || [] });
+    res.json({ holding: { id: holding.id, code: holding.code, name: holding.name }, tenants });
+  } catch (error) { next(error); }
 });
 
 brokerRouter.get("/broker/access/team", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {

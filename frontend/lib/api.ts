@@ -1218,6 +1218,7 @@ export type BrokerAccessProfile = {
   branchKey: string | null;
   technicalRole: string;
   scopeDescription: string;
+  holding: { id: string; code: string; name: string; tenantCount: number } | null;
   policy: { label: string; defaultScope: string; actions: Record<string, string[]> };
 };
 
@@ -1233,6 +1234,27 @@ export function getBrokerAccessTeam(): Promise<{ users: BrokerAccessTeamMember[]
 
 export function updateBrokerAccessProfile(userId: string, input: { businessRole: string; accessScope: string; teamKey?: string; branchKey?: string }): Promise<{ profile: BrokerAccessTeamMember["profile"] }> {
   return request(`/broker/access/users/${encodeURIComponent(userId)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export type BrokerHoldingConfig = {
+  holding: null | {
+    id: string;
+    code: string;
+    name: string;
+    isActive: boolean;
+    tenants: { id: string; slug: string; name: string; industry: string | null }[];
+    accesses: { userId: string; name: string; email: string }[];
+  };
+  availableTenants: { id: string; slug: string; name: string; industry: string | null }[];
+  canConfigure: boolean;
+};
+
+export function getBrokerHoldingConfig(): Promise<BrokerHoldingConfig> {
+  return request<BrokerHoldingConfig>("/broker/access/holding");
+}
+
+export function saveBrokerHoldingConfig(input: { code: string; name: string; tenantSlugs: string[]; userIds: string[] }): Promise<{ holding: { id: string; code: string; name: string } }> {
+  return request("/broker/access/holding", { method: "PUT", body: JSON.stringify(input) });
 }
 
 export function getBrokerOverview(): Promise<BrokerOverview> {

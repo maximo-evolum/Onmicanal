@@ -9,6 +9,7 @@ import {
   getBrokerCatalog,
   getBrokerAccess,
   getBrokerAccessTeam,
+  getBrokerHoldingConfig,
   getBrokerFinancing,
   getBrokerLegalReadiness,
   getBrokerMonthlyAdministration,
@@ -23,6 +24,7 @@ import {
   runBrokerAutomationScan,
   saveBrokerAiEvaluation,
   saveBrokerOperatingConfiguration,
+  saveBrokerHoldingConfig,
   updateBrokerRecord,
   updateBrokerAccessProfile,
   updateBrokerMonthlyLiquidationStatus,
@@ -40,6 +42,7 @@ import {
   type BrokerLegalReadiness,
   type BrokerAccessProfile,
   type BrokerAccessTeamMember,
+  type BrokerHoldingConfig,
   type IndustryRecord
 } from "@/lib/api";
 
@@ -55,7 +58,7 @@ const OPERATION_LABELS: Record<BrokerOperationType, string> = {
 const BROKER_BUSINESS_ROLE_OPTIONS = [
   ["CEO", "Dirección general"], ["GERENTE_COMERCIAL", "Gerencia comercial"], ["COORDINADOR_COMERCIAL", "Coordinación comercial"], ["CORREDOR", "Corredor"], ["CAPTADOR", "Captador"], ["MARKETING", "Marketing"], ["TASADOR", "Tasador"], ["JURIDICO", "Jurídico"], ["ADMINISTRACION", "Administración"], ["FINANZAS", "Finanzas"], ["POSTVENTA", "Postventa"], ["LECTURA", "Solo lectura"],
 ] as const;
-const BROKER_SCOPE_OPTIONS = [["ASSIGNED", "Solo registros asignados"], ["TEAM", "Mi equipo"], ["BRANCH", "Mi sucursal"], ["COMPANY", "Toda la empresa"]] as const;
+const BROKER_SCOPE_OPTIONS = [["ASSIGNED", "Solo registros asignados"], ["TEAM", "Mi equipo"], ["BRANCH", "Mi sucursal"], ["COMPANY", "Toda la empresa"], ["HOLDING", "Empresas autorizadas del holding"]] as const;
 const FINANCING_TERMINAL_STAGES = new Set(["CIERRE", "RECHAZADO", "CANCELADO"]);
 const ADMINISTRATION_LIQUIDATION_STAGES = ["DRAFT", "PENDING_APPROVAL", "ISSUED", "PAID"] as const;
 
@@ -275,10 +278,11 @@ export function BrokerOperationsPageContent() {
   const [legalReadiness, setLegalReadiness] = useState<BrokerLegalReadiness | null>(null);
   const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
   const [accessTeam, setAccessTeam] = useState<BrokerAccessTeamMember[]>([]);
+  const [holdingConfig, setHoldingConfig] = useState<BrokerHoldingConfig | null>(null);
 
   const load = useCallback(async () => {
-    const [nextOverview, nextOperations, nextCatalog, nextConfiguration, nextLegalReadiness, nextAccess, nextAccessTeam] = await Promise.all([
-      getBrokerOverview(), getBrokerOperations(), getBrokerCatalog(), getBrokerOperatingConfiguration().catch(() => null), getBrokerLegalReadiness().catch(() => null), getBrokerAccess(), getBrokerAccessTeam().catch(() => ({ users: [] }))
+    const [nextOverview, nextOperations, nextCatalog, nextConfiguration, nextLegalReadiness, nextAccess, nextAccessTeam, nextHolding] = await Promise.all([
+      getBrokerOverview(), getBrokerOperations(), getBrokerCatalog(), getBrokerOperatingConfiguration().catch(() => null), getBrokerLegalReadiness().catch(() => null), getBrokerAccess(), getBrokerAccessTeam().catch(() => ({ users: [] })), getBrokerHoldingConfig().catch(() => null)
     ]);
     setOverview(nextOverview);
     setOperations(nextOperations);
@@ -288,6 +292,7 @@ export function BrokerOperationsPageContent() {
     setLegalReadiness(nextLegalReadiness);
     setAccess(nextAccess);
     setAccessTeam(nextAccessTeam.users);
+    setHoldingConfig(nextHolding);
   }, []);
 
   useEffect(() => {
@@ -563,6 +568,21 @@ export function BrokerOperationsPageContent() {
     finally { setBusy(false); }
   }
 
+  async function saveHolding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!holdingConfig?.canConfigure) return;
+    const form = new FormData(event.currentTarget);
+    const tenantSlugs = Array.from(form.getAll("tenantSlugs")).map(String);
+    const userIds = Array.from(form.getAll("holdingUserIds")).map(String);
+    setBusy(true); setNotice("");
+    try {
+      await saveBrokerHoldingConfig({ code: String(form.get("holdingCode") || "").trim(), name: String(form.get("holdingName") || "").trim(), tenantSlugs, userIds });
+      setHoldingConfig(await getBrokerHoldingConfig());
+      setNotice("Holding configurado. El acceso entre empresas seguirá requiriendo el alcance Holding y autorización explícita.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo guardar el holding."); }
+    finally { setBusy(false); }
+  }
+
   async function refreshFinancing() {
     const [requests, allRecords] = await Promise.all([getBrokerFinancing(), getBrokerRecords("financing")]);
     setFinancingRecords(requests);
@@ -808,7 +828,7 @@ export function BrokerOperationsPageContent() {
       <p className="broker-human-note">Financiamiento, desembolsos, pagos, firmas y comunicaciones se mantienen con aprobación humana obligatoria. Los campos vacíos quedan pendientes de definición comercial, tributaria o jurídica.</p><button className="primary-btn" disabled={busy}>Guardar parámetros</button>
     </form> : <p className="broker-empty">Cargando parámetros comerciales...</p>}</section> : null}
 
-    {tab === "access" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Roles, permisos y alcance</span><h2>Define qué puede hacer cada persona</h2><p>El rol de negocio determina las acciones; el alcance limita los registros visibles. Los cambios quedan auditados y no modifican el rol global de EVOLUM OS.</p></div><div className="broker-access-grid">{accessTeam.map((user) => <form key={user.id} className="broker-access-card" onSubmit={(event) => saveAccessProfile(user, event)}><div><b>{user.name}</b><span>{user.email} · {user.jobTitle || user.role}</span></div><label>Rol de negocio<select name="businessRole" defaultValue={user.profile.businessRole}>{BROKER_BUSINESS_ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Alcance<select name="accessScope" defaultValue={user.profile.accessScope}>{BROKER_SCOPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Equipo<input name="teamKey" defaultValue={user.profile.teamKey || ""} placeholder="Ej.: ventas-norte" /></label><label>Sucursal<input name="branchKey" defaultValue={user.profile.branchKey || ""} placeholder="Ej.: santiago" /></label><button type="submit" className="secondary-btn" disabled={busy}>Guardar acceso</button></form>)}</div></section> : null}
+    {tab === "access" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Roles, permisos y alcance</span><h2>Define qué puede hacer cada persona</h2><p>El rol de negocio determina las acciones; el alcance limita los registros visibles. Los cambios quedan auditados y no modifican el rol global de EVOLUM OS.</p></div>{holdingConfig?.canConfigure ? <form className="broker-policy-form broker-holding-form" onSubmit={saveHolding}><section><h3>Gobierno Holding</h3><p>Une empresas inmobiliarias solo cuando exista una relación comercial y personas autorizadas. Ninguna cuenta obtiene acceso entre empresas por defecto.</p><label>Nombre del holding<input name="holdingName" defaultValue={holdingConfig.holding?.name || ""} placeholder="Ej.: Grupo Broker Chile" required /></label><label>Código interno<input name="holdingCode" defaultValue={holdingConfig.holding?.code || ""} placeholder="grupo-broker-chile" required /></label></section><section><h3>Empresas incluidas</h3>{holdingConfig.availableTenants.map((tenant) => <label key={tenant.id} className="broker-check-option"><input type="checkbox" name="tenantSlugs" value={tenant.slug} defaultChecked={holdingConfig.holding?.tenants.some((item) => item.id === tenant.id) || false} />{tenant.name} <small>({tenant.slug})</small></label>)}</section><section><h3>Usuarios autorizados</h3>{accessTeam.map((user) => <label key={user.id} className="broker-check-option"><input type="checkbox" name="holdingUserIds" value={user.id} defaultChecked={holdingConfig.holding?.accesses.some((item) => item.userId === user.id) || false} />{user.name} <small>{user.email}</small></label>)}<p className="broker-human-note">Después de guardarlo, asigna el alcance “Holding” solo a las personas que realmente deben consultar varias empresas.</p><button className="primary-btn" disabled={busy}>Guardar gobierno Holding</button></section></form> : access?.holding ? <p className="broker-human-note">Holding activo: <b>{access.holding.name}</b>. Tu cuenta puede consultar {access.holding.tenantCount} empresas autorizadas.</p> : null}<div className="broker-access-grid">{accessTeam.map((user) => <form key={user.id} className="broker-access-card" onSubmit={(event) => saveAccessProfile(user, event)}><div><b>{user.name}</b><span>{user.email} · {user.jobTitle || user.role}</span></div><label>Rol de negocio<select name="businessRole" defaultValue={user.profile.businessRole}>{BROKER_BUSINESS_ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Alcance<select name="accessScope" defaultValue={user.profile.accessScope}>{BROKER_SCOPE_OPTIONS.filter(([value]) => value !== "HOLDING" || access?.technicalRole === "SUPER_ADMIN").map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Equipo<input name="teamKey" defaultValue={user.profile.teamKey || ""} placeholder="Ej.: ventas-norte" /></label><label>Sucursal<input name="branchKey" defaultValue={user.profile.branchKey || ""} placeholder="Ej.: santiago" /></label><button type="submit" className="secondary-btn" disabled={busy}>Guardar acceso</button></form>)}</div></section> : null}
 
     {tab === "compliance" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Preparación legal y externa</span><h2>Qué está listo y qué requiere validación</h2><p>Este panel organiza evidencia y dependencias. No sustituye asesoría legal, tributaria ni la habilitación formal de un proveedor.</p></div>{legalReadiness ? <><section className="broker-reporting"><article><span>Consentimientos otorgados</span><b>{legalReadiness.summary.GRANTED}</b><small>Con evidencia registrada</small></article><article><span>Pendientes</span><b>{legalReadiness.summary.PENDING}</b><small>Antes de proponer uso externo</small></article><article><span>Revocados o vencidos</span><b>{legalReadiness.summary.REVOKED + legalReadiness.summary.EXPIRED}</b><small>Requieren bloqueo o renovación</small></article><article><span>Proveedores externos</span><b>{legalReadiness.providers.length}</b><small>Todos desactivados hasta su validación</small></article></section><div className="broker-compliance-grid"><section><h3>Proveedores y dependencias</h3>{legalReadiness.providers.map((item) => <article key={item.key}><b>{item.label}</b><span>{item.category} · {item.status === "HUMAN_REVIEW" ? "Revisión humana" : "Pendiente de proveedor"}</span><p>{item.description}</p></article>)}</section><section><h3>Consentimientos registrados</h3>{legalReadiness.consents.length ? legalReadiness.consents.map((item) => <article key={item.id}><b>{item.title}</b><span>{readable(item.status)}</span><p>{recordSummary(item, catalog?.recordDefinitions[item.recordType])}</p></article>) : <p className="broker-empty">Aún no hay consentimientos registrados. Puedes crearlos desde “Expediente y documentos”.</p>}</section></div><p className="broker-human-note">Para registrar una autorización utiliza el área “Expediente y documentos”. El sistema exige titular, finalidad, fecha y referencia de evidencia; una autorización registrada no activa por sí misma ningún envío, firma, publicación, acceso bancario ni integración.</p></> : <p className="broker-empty">Cargando estado de cumplimiento...</p>}</section> : null}
 
