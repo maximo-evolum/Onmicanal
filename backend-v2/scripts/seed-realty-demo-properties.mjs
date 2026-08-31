@@ -850,6 +850,81 @@ async function seedBrokerWorkspace(tenantId, properties, brokers, buyers) {
   return records;
 }
 
+// Fichas de captación para demostrar el trabajo previo al mandato: visita en
+// terreno, análisis de comparables, título, regularización y material visual.
+async function seedBrokerCaptures(tenantId, properties, brokers) {
+  const strictProperties = await prisma.brokerProperty.findMany({
+    where: { tenantId, legacyRecordId: { in: properties.map((property) => property.id) } },
+    select: { id: true, legacyRecordId: true },
+  });
+  const strictByLegacy = new Map(strictProperties.map((property) => [property.legacyRecordId, property.id]));
+  let seeded = 0;
+  for (const [index, property] of properties.entries()) {
+    const strictPropertyId = strictByLegacy.get(property.id);
+    if (!strictPropertyId) continue;
+    const source = property.data && typeof property.data === "object" ? property.data : {};
+    const assignedBrokerId = property.assignedToId || brokers[index % brokers.length]?.id || null;
+    const isComplete = index < 7;
+    const isApartment = String(source.propertyType || "").toLowerCase() === "departamento";
+    const suggestedPrice = Number(source.price || 0);
+    const expectedPrice = suggestedPrice ? Math.round(suggestedPrice * (isComplete ? 1.03 : 1.1)) : null;
+    await prisma.brokerPropertyCapture.upsert({
+      where: { propertyId: strictPropertyId },
+      create: {
+        tenantId,
+        propertyId: strictPropertyId,
+        captureOrigin: index % 3 === 0 ? "Referido" : index % 3 === 1 ? "Portal" : "Captación EVOLUM",
+        intendedService: String(source.operation || "Venta").toUpperCase() === "ARRIENDO" ? "ARRIENDO" : "VENTA",
+        status: isComplete ? "LISTA_PARA_MANDATO" : "EVALUACION_COMERCIAL",
+        captureBrokerId: assignedBrokerId,
+        firstContactAt: new Date(`2026-07-${String(5 + index).padStart(2, "0")}T10:00:00.000Z`),
+        siteVisitAt: isComplete ? new Date(`2026-08-${String(3 + index).padStart(2, "0")}T15:00:00.000Z`) : null,
+        ownerExpectedPrice: expectedPrice,
+        suggestedPrice,
+        preliminaryAppraisal: suggestedPrice,
+        marketAnalysisAt: isComplete ? new Date("2026-08-12T12:00:00.000Z") : null,
+        comparableSummary: isComplete ? `Comparables de ${source.comuna || "la zona"}: oferta vigente, metraje y condición revisados presencialmente.` : "Pendiente de completar comparables y visita en terreno.",
+        priceGapPct: isComplete ? 3 : 10,
+        ownerAcceptedEvaluationAt: isComplete ? new Date("2026-08-14T12:00:00.000Z") : null,
+        preliminaryTitleStatus: isComplete ? "REVISADO_SIN_OBSERVACIONES" : "EN_REVISION",
+        regularizationStatus: isComplete ? "REGULARIZADA" : "POR_REVISAR",
+        ownershipStatus: isComplete ? "DOMINIO_VIGENTE" : "POR_CONFIRMAR",
+        propertyConditionAtHandover: "Propiedad visitada; terminaciones, medidores y condición general registrados para la operación.",
+        kitchenType: isApartment ? "Cocina integrada equipada" : "Cocina cerrada amplia",
+        heatingSystem: "Calefacción según equipamiento informado",
+        gasSystem: "Gas por cañería o sistema informado en visita",
+        buildingFloors: isApartment ? 15 : null,
+        unitsPerFloor: isApartment ? 6 : null,
+        elevators: isApartment ? 2 : null,
+        commonExpenses: Number(source.commonExpenses || 0),
+        commonAreas: isApartment ? ["Quincho", "Gimnasio", "Sala multiuso"] : ["Patio", "Estacionamientos"],
+        photoUrls: Array.isArray(source.gallery) ? source.gallery : [source.photoUrl].filter(Boolean),
+        videoUrls: [],
+        floorPlanUrl: isComplete ? "demo://broker/planos/levantamiento-medidas" : null,
+        documentChecklist: [
+          { key: "dominio_vigente", label: "Dominio vigente", status: isComplete ? "DISPONIBLE" : "PENDIENTE" },
+          { key: "contribuciones", label: "Contribuciones", status: isComplete ? "DISPONIBLE" : "PENDIENTE" },
+          { key: "planos", label: "Plano o medición", status: isComplete ? "DISPONIBLE" : "PENDIENTE" },
+        ],
+        publicationReadiness: isComplete ? "EN_PREPARACION" : "PENDIENTE",
+        metadata: { source: DEMO_SOURCE, demo: true }
+      },
+      update: {
+        status: isComplete ? "LISTA_PARA_MANDATO" : "EVALUACION_COMERCIAL",
+        captureBrokerId: assignedBrokerId,
+        ownerExpectedPrice: expectedPrice,
+        suggestedPrice,
+        preliminaryAppraisal: suggestedPrice,
+        comparableSummary: isComplete ? `Comparables de ${source.comuna || "la zona"}: oferta vigente, metraje y condición revisados presencialmente.` : "Pendiente de completar comparables y visita en terreno.",
+        photoUrls: Array.isArray(source.gallery) ? source.gallery : [source.photoUrl].filter(Boolean),
+        publicationReadiness: isComplete ? "EN_PREPARACION" : "PENDIENTE",
+      }
+    });
+    seeded += 1;
+  }
+  return seeded;
+}
+
 const BROKER_DEMO_AREAS = [
   { area: "Propiedades y cartera", recordTypes: ["property"] },
   { area: "Captacion, tasacion y cierre", recordTypes: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_settlement"] },
@@ -922,6 +997,7 @@ async function main() {
   }
   const brokerRecords = await seedBrokerWorkspace(realtyTenant.id, properties, brokers, buyers);
   const agentEvaluations = await seedAgentEvaluations(realtyTenant.id);
+  const captures = await seedBrokerCaptures(realtyTenant.id, properties, brokers);
 
   console.log(JSON.stringify({
     tenant: realtyTenant.name,
@@ -933,6 +1009,7 @@ async function main() {
     properties: properties.length,
     brokerWorkspaceRecords: brokerRecords.length,
     agentEvaluations: agentEvaluations.length,
+    captureRecords: captures,
     legacyPropertyNormalized: Boolean(normalizedLegacy),
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,

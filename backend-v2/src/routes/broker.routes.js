@@ -34,7 +34,8 @@ import {
   validateBrokerFinancingTransition,
   validateBrokerRecord
 } from "../services/broker-workflows.service.js";
-import { brokerRelationalCoverage } from "../services/broker-relational-data.service.js";
+import { brokerRelationalCoverage, normalizeLegacyBrokerProperty } from "../services/broker-relational-data.service.js";
+import { BROKER_CAPTURE_OPTIONS, captureReadiness, normalizeBrokerCapture, validateBrokerCapture } from "../services/broker-capture.service.js";
 import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 
@@ -62,6 +63,13 @@ brokerRouter.get("/broker/data-model/coverage", requireBrokerAction("configurati
     compatibilityMode: strictProperties < legacyProperties,
     ...brokerRelationalCoverage({ legacyProperties, strictProperties, owners }),
   });
+});
+
+// Catálogo y ficha de captación: el proceso registra la visita, el análisis
+// comercial y los antecedentes previos al mandato sin confundirlos con la
+// publicación ni con una operación de venta/arriendo ya iniciada.
+brokerRouter.get("/broker/captures/options", requireBrokerAction("commercial", "VIEW"), (_req, res) => {
+  res.json(BROKER_CAPTURE_OPTIONS);
 });
 
 function text(value, fallback = "") {
@@ -283,6 +291,186 @@ async function assertAssignedUser(req, assignedToId) {
   if (!user) throw new Error("El usuario asignado no pertenece a esta cuenta.");
   return user;
 }
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(String(value).replace(/[^0-9,.-]/g, "").replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function propertyDataFromCapture(input, capture) {
+  const gallery = Array.isArray(capture.photoUrls) ? capture.photoUrls : [];
+  return {
+    ...input,
+    operation: capture.intendedService.toLowerCase(),
+    captureOrigin: capture.captureOrigin || input.captureOrigin || "",
+    captureDate: capture.firstContactAt?.toISOString?.() || input.captureDate || "",
+    siteVisitAt: capture.siteVisitAt?.toISOString?.() || "",
+    ownerExpectedPrice: capture.ownerExpectedPrice,
+    suggestedPrice: capture.suggestedPrice,
+    preliminaryAppraisal: capture.preliminaryAppraisal,
+    marketAnalysisAt: capture.marketAnalysisAt?.toISOString?.() || "",
+    comparableSummary: capture.comparableSummary || "",
+    ownerAcceptedEvaluationAt: capture.ownerAcceptedEvaluationAt?.toISOString?.() || "",
+    preliminaryTitleStatus: capture.preliminaryTitleStatus,
+    titleReviewNotes: capture.titleReviewNotes || "",
+    regularizationStatus: capture.regularizationStatus,
+    irregularConstructionNote: capture.irregularConstructionNote || "",
+    ownershipStatus: capture.ownershipStatus,
+    propertyConditionAtHandover: capture.propertyConditionAtHandover || "",
+    kitchenType: capture.kitchenType || "",
+    heatingSystem: capture.heatingSystem || "",
+    gasSystem: capture.gasSystem || "",
+    buildingFloors: capture.buildingFloors,
+    unitsPerFloor: capture.unitsPerFloor,
+    elevators: capture.elevators,
+    commonExpenses: capture.commonExpenses,
+    commonAreas: capture.commonAreas || [],
+    floorPlanUrl: capture.floorPlanUrl || "",
+    documentChecklist: capture.documentChecklist || [],
+    publicationReadiness: capture.publicationReadiness,
+    captureStatus: capture.status,
+    gallery: gallery.length ? gallery : (Array.isArray(input.gallery) ? input.gallery : []),
+    photoUrl: gallery[0] || text(input.photoUrl),
+    videoUrls: capture.videoUrls || [],
+    videoUrl: (capture.videoUrls || [])[0] || text(input.videoUrl),
+  };
+}
+
+async function ensureBrokerCaptureProperty(db, { tenantId, property, propertyData }) {
+  const normalized = normalizeLegacyBrokerProperty({ ...property, data: propertyData });
+  if (normalized.errors.length) throw new Error(normalized.errors.join(" "));
+  const ownerData = normalized.owner;
+  const owner = ownerData.rut
+    ? await db.brokerOwner.upsert({
+      where: { tenantId_rut: { tenantId, rut: ownerData.rut } },
+      create: { tenantId, ...ownerData },
+      update: { name: ownerData.name, phone: ownerData.phone || null, email: ownerData.email || null }
+    })
+    : await db.brokerOwner.findFirst({ where: { tenantId, name: ownerData.name } }) || await db.brokerOwner.create({ data: { tenantId, ...ownerData } });
+
+  const strictData = {
+    ...normalized.property,
+    usableSquareMeters: numberOrNull(propertyData.usableSquareMeters ?? propertyData.builtM2 ?? propertyData.meters),
+    totalSquareMeters: numberOrNull(propertyData.totalSquareMeters ?? propertyData.landM2 ?? propertyData.meters),
+    askingPrice: numberOrNull(propertyData.price ?? propertyData.suggestedPrice),
+    conservationStatus: text(propertyData.conservationStatus || propertyData.propertyConditionAtHandover) || null,
+    siiAssessmentRole: text(propertyData.siiAssessmentRole) || null,
+    cbrInscription: text(propertyData.cbrInscription) || null,
+    coverImageUrl: text(propertyData.photoUrl) || null,
+    metadata: normalized.property.metadata,
+  };
+  const existing = await db.brokerProperty.findUnique({ where: { legacyRecordId: property.id } });
+  if (existing) return db.brokerProperty.update({ where: { id: existing.id }, data: { ...strictData, ownerId: owner.id, assignedBrokerId: property.assignedToId || null } });
+  return db.brokerProperty.create({ data: { tenantId, ownerId: owner.id, legacyRecordId: property.id, ...strictData } });
+}
+
+function capturePayload(property, capture) {
+  const propertyData = dataOf(property);
+  const merged = { ...propertyData, ...(capture || {}) };
+  return {
+    property,
+    capture: capture ? { ...capture, readiness: captureReadiness({ ...merged, ...capture }) } : null,
+    readiness: captureReadiness(merged),
+    options: BROKER_CAPTURE_OPTIONS,
+  };
+}
+
+brokerRouter.get("/broker/properties/:propertyId/capture", requireBrokerAction("commercial", "VIEW"), async (req, res) => {
+  try {
+    const property = await assertRelatedProperty(req, req.params.propertyId);
+    const strictProperty = await prisma.brokerProperty.findUnique({ where: { legacyRecordId: property.id }, include: { capture: true } });
+    res.json(capturePayload(property, strictProperty?.capture || null));
+  } catch (error) {
+    if (error?.message?.includes("propiedad relacionada")) return res.status(404).json({ error: "Propiedad no encontrada." });
+    console.error("Get broker capture error:", error);
+    res.status(500).json({ error: "No se pudo cargar la ficha de captación." });
+  }
+});
+
+async function persistBrokerCapture(req, { property, rawInput, created = false }) {
+  const baseData = dataOf(property);
+  const raw = { ...baseData, ...rawInput };
+  const ownerName = text(raw.ownerName);
+  const address = text(raw.address);
+  const comuna = text(raw.comuna || raw.commune);
+  const propertyType = text(raw.propertyType);
+  if (!ownerName) throw new Error("Indica el nombre del propietario para iniciar la captación.");
+  if (!address || !comuna || !propertyType) throw new Error("La ficha requiere dirección, comuna y tipo de propiedad.");
+
+  const captureValidation = validateBrokerCapture(raw);
+  if (!captureValidation.ok) throw new Error(captureValidation.errors.join(" "));
+  const capture = captureValidation.normalized;
+  const requestedAssignment = text(raw.assignedToId || capture.captureBrokerId);
+  const assignedToId = requestedAssignment || (Array.isArray(req.brokerAccess?.scopeUserIds) ? req.user?.id : null);
+  if (requestedAssignment && requestedAssignment !== req.user?.id && !canBrokerAction(req.brokerAccess, "commercial", "ASSIGN")) throw new Error("No puedes asignar esta captación a otro usuario.");
+  await assertAssignedUser(req, assignedToId);
+
+  const propertyData = propertyDataFromCapture({ ...raw, assignedBrokerId: assignedToId, assignedBrokerName: raw.assignedBrokerName || "" }, { ...capture, captureBrokerId: assignedToId || null });
+  const saved = await prisma.$transaction(async (db) => {
+    const updatedProperty = await db.industryRecord.update({
+      where: { id: property.id },
+      data: {
+        title: text(raw.title, property.title),
+        assignedToId: assignedToId || null,
+        status: capture.status === "DESCARTADA" ? "ARCHIVED" : "ACTIVE",
+        data: propertyData
+      }
+    });
+    const strictProperty = await ensureBrokerCaptureProperty(db, { tenantId: req.tenantId, property: updatedProperty, propertyData });
+    const savedCapture = await db.brokerPropertyCapture.upsert({
+      where: { propertyId: strictProperty.id },
+      create: { tenantId: req.tenantId, propertyId: strictProperty.id, ...capture, captureBrokerId: assignedToId || null },
+      update: { ...capture, captureBrokerId: assignedToId || null }
+    });
+    const ownerRecord = await db.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "owner", title: ownerName } });
+    if (!ownerRecord) await db.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "owner", title: ownerName, status: "ACTIVE", data: { phone: text(raw.ownerPhone), email: text(raw.ownerEmail), rut: text(raw.ownerRut), propertyId: updatedProperty.id, propertyTitle: updatedProperty.title, source: "captacion_broker" } } });
+    return { property: updatedProperty, capture: savedCapture };
+  });
+  await recordAuditLog(req, created ? "BROKER_CAPTURE_CREATED" : "BROKER_CAPTURE_UPDATED", "broker_property_capture", saved.capture.id, { propertyId: saved.property.id, status: saved.capture.status, readiness: captureValidation.readiness.score });
+  return capturePayload(saved.property, saved.capture);
+}
+
+brokerRouter.post("/broker/captures", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "CREATE"), async (req, res) => {
+  try {
+    const input = dataOf({ data: req.body });
+    const title = text(input.title);
+    if (!title) return res.status(400).json({ error: "Indica un nombre para la propiedad." });
+    if (!text(input.ownerName) || !text(input.address) || !text(input.comuna || input.commune) || !text(input.propertyType)) {
+      return res.status(400).json({ error: "La ficha requiere propietario, dirección, comuna y tipo de propiedad." });
+    }
+    const validation = validateBrokerCapture(input);
+    if (!validation.ok) return res.status(422).json({ error: validation.errors.join(" ") });
+    const preliminaryCapture = normalizeBrokerCapture(input);
+    const property = await prisma.industryRecord.create({
+      data: {
+        tenantId: req.tenantId,
+        recordType: "property",
+        title,
+        status: "ACTIVE",
+        assignedToId: text(input.assignedToId || preliminaryCapture.captureBrokerId) || null,
+        data: { ...input, captureStatus: preliminaryCapture.status, source: text(input.source, "captacion_broker") }
+      }
+    });
+    const saved = await persistBrokerCapture(req, { property, rawInput: input, created: true });
+    res.status(201).json(saved);
+  } catch (error) {
+    console.error("Create broker capture error:", error);
+    res.status(422).json({ error: error?.message || "No se pudo crear la captación." });
+  }
+});
+
+brokerRouter.put("/broker/properties/:propertyId/capture", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "EDIT"), async (req, res) => {
+  try {
+    const property = await assertRelatedProperty(req, req.params.propertyId);
+    const saved = await persistBrokerCapture(req, { property, rawInput: dataOf({ data: req.body }) });
+    res.json(saved);
+  } catch (error) {
+    if (error?.message?.includes("propiedad relacionada")) return res.status(404).json({ error: "Propiedad no encontrada." });
+    console.error("Update broker capture error:", error);
+    res.status(422).json({ error: error?.message || "No se pudo actualizar la captación." });
+  }
+});
 
 brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), async (req, res) => {
   try {

@@ -1265,6 +1265,64 @@ export function getBrokerCatalog(): Promise<BrokerCatalog> {
   return request<BrokerCatalog>("/broker/catalog");
 }
 
+export type BrokerCapture = {
+  id?: string;
+  captureOrigin?: string | null;
+  intendedService: "VENTA" | "ARRIENDO" | "ADMINISTRACION" | string;
+  status: string;
+  captureBrokerId?: string | null;
+  firstContactAt?: string | null;
+  siteVisitAt?: string | null;
+  ownerExpectedPrice?: number | null;
+  suggestedPrice?: number | null;
+  preliminaryAppraisal?: number | null;
+  currency?: string;
+  marketAnalysisAt?: string | null;
+  comparableSummary?: string | null;
+  priceGapPct?: number | null;
+  ownerAcceptedEvaluationAt?: string | null;
+  preliminaryTitleStatus?: string;
+  titleReviewNotes?: string | null;
+  regularizationStatus?: string;
+  irregularConstructionNote?: string | null;
+  ownershipStatus?: string;
+  propertyConditionAtHandover?: string | null;
+  kitchenType?: string | null;
+  heatingSystem?: string | null;
+  gasSystem?: string | null;
+  buildingFloors?: number | null;
+  unitsPerFloor?: number | null;
+  elevators?: number | null;
+  commonExpenses?: number | null;
+  commonAreas?: string[];
+  photoUrls?: string[];
+  videoUrls?: string[];
+  floorPlanUrl?: string | null;
+  documentChecklist?: unknown[];
+  publicationReadiness?: string;
+  rejectionReason?: string | null;
+  readiness?: { score: number; missing: string[]; completed: number; total: number; checks: Array<{ key: string; label: string; ready: boolean }> };
+};
+
+export type BrokerCapturePayload = {
+  property: IndustryRecord;
+  capture: BrokerCapture | null;
+  readiness: NonNullable<BrokerCapture["readiness"]>;
+  options: { statuses: string[]; services: string[]; titleStatuses: string[]; regularizationStatuses: string[]; ownershipStatuses: string[]; readinessStatuses: string[] };
+};
+
+export function getBrokerPropertyCapture(propertyId: string): Promise<BrokerCapturePayload> {
+  return request<BrokerCapturePayload>(`/broker/properties/${encodeURIComponent(propertyId)}/capture`);
+}
+
+export function createBrokerPropertyCapture(input: Record<string, unknown>): Promise<BrokerCapturePayload> {
+  return request<BrokerCapturePayload>("/broker/captures", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function saveBrokerPropertyCapture(propertyId: string, input: Record<string, unknown>): Promise<BrokerCapturePayload> {
+  return request<BrokerCapturePayload>(`/broker/properties/${encodeURIComponent(propertyId)}/capture`, { method: "PUT", body: JSON.stringify(input) });
+}
+
 export type BrokerCommissionPreview = {
   ok: boolean;
   error?: string;

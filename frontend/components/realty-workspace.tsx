@@ -7,10 +7,12 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import {
   createIndustryBrokerUser,
+  createBrokerPropertyCapture,
   createRealtyPropertyCampaignDraft,
   createRealtyBuyer,
   getRealtyLeadMatches,
   getRealtyPropertyMatches,
+  getBrokerPropertyCapture,
   createIndustryRecord,
   deleteIndustryBrokerUser,
   getRealtyIntelligence,
@@ -19,6 +21,8 @@ import {
   getMyModules,
   getIndustryUsers,
   updateIndustryRecord,
+  saveBrokerPropertyCapture,
+  type BrokerCapture,
   type IndustryRecord,
   type IndustryUser,
   type RealtyIntelligence
@@ -78,6 +82,8 @@ const emptyProperty = {
   operation: "venta",
   price: "",
   address: "",
+  comuna: "",
+  region: "",
   material: "",
   bedrooms: "",
   bathrooms: "",
@@ -90,8 +96,37 @@ const emptyProperty = {
   ownerName: "",
   ownerPhone: "",
   ownerEmail: "",
+  ownerRut: "",
   assignedBrokerId: "",
-  stage: "LEAD"
+  stage: "LEAD",
+  captureOrigin: "Referido",
+  intendedService: "VENTA",
+  captureStatus: "PROSPECTO",
+  firstContactAt: "",
+  siteVisitAt: "",
+  ownerExpectedPrice: "",
+  suggestedPrice: "",
+  preliminaryAppraisal: "",
+  marketAnalysisAt: "",
+  comparableSummary: "",
+  ownerAcceptedEvaluationAt: "",
+  preliminaryTitleStatus: "PENDIENTE",
+  titleReviewNotes: "",
+  regularizationStatus: "POR_REVISAR",
+  irregularConstructionNote: "",
+  ownershipStatus: "POR_CONFIRMAR",
+  propertyConditionAtHandover: "",
+  kitchenType: "",
+  heatingSystem: "",
+  gasSystem: "",
+  buildingFloors: "",
+  unitsPerFloor: "",
+  elevators: "",
+  commonExpenses: "",
+  commonAreas: "",
+  floorPlanUrl: "",
+  publicationReadiness: "PENDIENTE",
+  rejectionReason: ""
 };
 
 function parseCsvRows(source: string): Record<string, string>[] {
@@ -172,6 +207,11 @@ function stringList(value: unknown) {
     }
   }
   return raw.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function dateInputValue(value: unknown) {
+  const raw = text(value);
+  return raw ? raw.slice(0, 10) : "";
 }
 
 function propertyPhotos(data: Record<string, unknown>) {
@@ -894,37 +934,93 @@ export function RealtyLoadsPageContent() {
   const [propertyForm, setPropertyForm] = useState(emptyProperty);
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [message, setMessage] = useState("");
+  const [editingPropertyId, setEditingPropertyId] = useState("");
+  const [savingCapture, setSavingCapture] = useState(false);
+  const [captureReadiness, setCaptureReadiness] = useState<{ score: number; missing: string[]; completed: number; total: number } | null>(null);
 
   async function createProperty(event: FormEvent) {
     event.preventDefault();
-    const broker = data.brokers.find((item) => item.id === propertyForm.assignedBrokerId);
-    await createIndustryRecord({
-      recordType: "property",
-      title: propertyForm.title || "Propiedad sin nombre",
-      status: "ACTIVE",
-      assignedToId: propertyForm.assignedBrokerId || null,
-      data: {
+    try {
+      setSavingCapture(true);
+      const broker = data.brokers.find((item) => item.id === propertyForm.assignedBrokerId);
+      const payload = {
         ...propertyForm,
         gallery: stringList(propertyForm.galleryUrls),
-        price: numberValue(propertyForm.price),
-        bedrooms: numberValue(propertyForm.bedrooms),
-        bathrooms: numberValue(propertyForm.bathrooms),
-        parking: numberValue(propertyForm.parking),
-        meters: numberValue(propertyForm.meters),
-        assignedBrokerName: broker?.name || ""
-      }
-    });
-    if (propertyForm.ownerName) {
-      await createIndustryRecord({
-        recordType: "owner",
-        title: propertyForm.ownerName,
-        status: "ACTIVE",
-        data: { phone: propertyForm.ownerPhone, email: propertyForm.ownerEmail, propertyTitle: propertyForm.title }
-      });
+        photoUrls: Array.from(new Set([propertyForm.photoUrl, ...stringList(propertyForm.galleryUrls)].filter(Boolean))),
+        videoUrls: propertyForm.videoUrl ? [propertyForm.videoUrl] : [],
+        commonAreas: stringList(propertyForm.commonAreas),
+        assignedBrokerName: broker?.name || "",
+        source: "captacion_broker"
+      };
+      const saved = editingPropertyId
+        ? await saveBrokerPropertyCapture(editingPropertyId, payload)
+        : await createBrokerPropertyCapture(payload);
+      setCaptureReadiness(saved.readiness);
+      setEditingPropertyId(saved.property.id);
+      setPropertyForm((current) => ({ ...current, title: saved.property.title }));
+      setMessage(editingPropertyId ? "Ficha de captación actualizada." : "Captación creada. Completa los antecedentes antes de emitir el mandato.");
+      await reload();
+    } catch (captureError) {
+      setMessage(captureError instanceof Error ? captureError.message : "No se pudo guardar la captación.");
+    } finally {
+      setSavingCapture(false);
     }
-    setPropertyForm(emptyProperty);
-    setMessage("Propiedad cargada");
-    await reload();
+  }
+
+  async function selectPropertyForCapture(propertyId: string) {
+    setEditingPropertyId(propertyId);
+    setCaptureReadiness(null);
+    if (!propertyId) {
+      setPropertyForm(emptyProperty);
+      return;
+    }
+    const property = data.properties.find((item) => item.id === propertyId);
+    if (!property) return;
+    try {
+      const result = await getBrokerPropertyCapture(propertyId);
+      const propertyData = asData(result.property);
+      const capture = (result.capture || {}) as BrokerCapture;
+      setPropertyForm({
+        ...emptyProperty,
+        ...Object.fromEntries(Object.entries(propertyData).map(([key, value]) => [key, value === null || value === undefined ? "" : Array.isArray(value) ? value.join("\n") : String(value)])),
+        title: result.property.title,
+        assignedBrokerId: text(result.property.assignedToId || propertyData.assignedBrokerId),
+        intendedService: text(capture.intendedService || propertyData.intendedService || propertyData.operation, "VENTA").toUpperCase(),
+        captureStatus: text(capture.status || propertyData.captureStatus, "PROSPECTO"),
+        captureOrigin: text(capture.captureOrigin || propertyData.captureOrigin),
+        firstContactAt: dateInputValue(capture.firstContactAt || propertyData.captureDate),
+        siteVisitAt: dateInputValue(capture.siteVisitAt || propertyData.siteVisitAt),
+        ownerExpectedPrice: text(capture.ownerExpectedPrice || propertyData.ownerExpectedPrice),
+        suggestedPrice: text(capture.suggestedPrice || propertyData.suggestedPrice),
+        preliminaryAppraisal: text(capture.preliminaryAppraisal || propertyData.preliminaryAppraisal),
+        marketAnalysisAt: dateInputValue(capture.marketAnalysisAt || propertyData.marketAnalysisAt),
+        comparableSummary: text(capture.comparableSummary || propertyData.comparableSummary),
+        ownerAcceptedEvaluationAt: dateInputValue(capture.ownerAcceptedEvaluationAt || propertyData.ownerAcceptedEvaluationAt),
+        preliminaryTitleStatus: text(capture.preliminaryTitleStatus || propertyData.preliminaryTitleStatus, "PENDIENTE"),
+        titleReviewNotes: text(capture.titleReviewNotes || propertyData.titleReviewNotes),
+        regularizationStatus: text(capture.regularizationStatus || propertyData.regularizationStatus, "POR_REVISAR"),
+        irregularConstructionNote: text(capture.irregularConstructionNote || propertyData.irregularConstructionNote),
+        ownershipStatus: text(capture.ownershipStatus || propertyData.ownershipStatus, "POR_CONFIRMAR"),
+        propertyConditionAtHandover: text(capture.propertyConditionAtHandover || propertyData.propertyConditionAtHandover),
+        kitchenType: text(capture.kitchenType || propertyData.kitchenType),
+        heatingSystem: text(capture.heatingSystem || propertyData.heatingSystem),
+        gasSystem: text(capture.gasSystem || propertyData.gasSystem),
+        buildingFloors: text(capture.buildingFloors || propertyData.buildingFloors),
+        unitsPerFloor: text(capture.unitsPerFloor || propertyData.unitsPerFloor),
+        elevators: text(capture.elevators || propertyData.elevators),
+        commonExpenses: text(capture.commonExpenses || propertyData.commonExpenses),
+        commonAreas: stringList(capture.commonAreas || propertyData.commonAreas).join("\n"),
+        floorPlanUrl: text(capture.floorPlanUrl || propertyData.floorPlanUrl),
+        publicationReadiness: text(capture.publicationReadiness || propertyData.publicationReadiness, "PENDIENTE"),
+        rejectionReason: text(capture.rejectionReason || propertyData.rejectionReason),
+        galleryUrls: stringList(capture.photoUrls || propertyData.gallery || propertyData.galleryUrls).join("\n"),
+        photoUrl: text((capture.photoUrls || [])[0] || propertyData.photoUrl),
+        videoUrl: text((capture.videoUrls || [])[0] || propertyData.videoUrl)
+      });
+      setCaptureReadiness(result.readiness);
+    } catch (captureError) {
+      setMessage(captureError instanceof Error ? captureError.message : "No se pudo abrir la ficha de captación.");
+    }
   }
 
   async function onPhotoFile(event: ChangeEvent<HTMLInputElement>) {
@@ -1046,19 +1142,42 @@ export function RealtyLoadsPageContent() {
 
       <section className="realty-ws-operation-layout">
         <form className="realty-ws-card realty-property-form" onSubmit={createProperty}>
-          <div className="realty-ws-card-head"><div><span>Ingreso rápido</span><h2>Nueva propiedad</h2><p>Registra los datos esenciales; fotos y detalle quedan asociados a la ficha completa.</p></div></div>
+          <div className="realty-ws-card-head"><div><span>Captación inmobiliaria</span><h2>{editingPropertyId ? "Completar ficha de propiedad" : "Nueva captación"}</h2><p>Levanta antecedentes, visita, evaluación y mandato sin mezclar el trabajo de captación con la publicación.</p></div></div>
+          <label className="realty-capture-existing">Continuar una ficha existente<select value={editingPropertyId} onChange={(event) => selectPropertyForCapture(event.target.value)}><option value="">Crear nueva captación</option>{data.properties.map((property) => <option key={property.id} value={property.id}>{propertyTitle(property.title)}</option>)}</select></label>
+          {captureReadiness ? <div className="realty-capture-readiness"><strong>{captureReadiness.score}% completa</strong><span>{captureReadiness.completed}/{captureReadiness.total} controles listos</span>{captureReadiness.missing.length ? <small>Falta: {captureReadiness.missing.join(" · ")}</small> : <small>Lista para avanzar a mandato.</small>}</div> : null}
+          <div className="realty-capture-section"><span>1 · Origen y propietario</span>
+          <div className="form-grid-2"><select value={propertyForm.captureOrigin} onChange={(e) => setPropertyForm({ ...propertyForm, captureOrigin: e.target.value })}><option>Referido</option><option>Portal</option><option>Campaña</option><option>Walk-in</option><option>Base histórica</option><option>Captación EVOLUM</option></select><select value={propertyForm.intendedService} onChange={(e) => setPropertyForm({ ...propertyForm, intendedService: e.target.value })}><option value="VENTA">Venta</option><option value="ARRIENDO">Arriendo</option><option value="ADMINISTRACION">Administración</option></select></div>
           <input value={propertyForm.title} onChange={(e) => setPropertyForm({ ...propertyForm, title: e.target.value })} placeholder="Nombre de propiedad" />
+          <div className="form-grid-3"><input value={propertyForm.ownerName} onChange={(e) => setPropertyForm({ ...propertyForm, ownerName: e.target.value })} placeholder="Propietario" required /><input value={propertyForm.ownerRut} onChange={(e) => setPropertyForm({ ...propertyForm, ownerRut: e.target.value })} placeholder="RUT propietario" /><input value={propertyForm.ownerPhone} onChange={(e) => setPropertyForm({ ...propertyForm, ownerPhone: e.target.value })} placeholder="Teléfono propietario" /></div>
+          <input value={propertyForm.ownerEmail} onChange={(e) => setPropertyForm({ ...propertyForm, ownerEmail: e.target.value })} placeholder="Correo propietario" />
+          </div>
+          <div className="realty-capture-section"><span>2 · Inmueble y visita presencial</span>
+          <div className="form-grid-2"><input value={propertyForm.address} onChange={(e) => setPropertyForm({ ...propertyForm, address: e.target.value })} placeholder="Dirección" required /><input value={propertyForm.comuna || ""} onChange={(e) => setPropertyForm({ ...propertyForm, comuna: e.target.value })} placeholder="Comuna" required /></div>
+          <div className="form-grid-3"><select value={propertyForm.propertyType} onChange={(e) => setPropertyForm({ ...propertyForm, propertyType: e.target.value })}><option value="departamento">Departamento</option><option value="casa">Casa</option><option value="oficina">Oficina</option><option value="local">Local comercial</option><option value="terreno">Terreno</option><option value="bodega">Bodega</option><option value="parcela">Parcela</option></select><input value={propertyForm.region || ""} onChange={(e) => setPropertyForm({ ...propertyForm, region: e.target.value })} placeholder="Región" /><input type="date" value={propertyForm.siteVisitAt} onChange={(e) => setPropertyForm({ ...propertyForm, siteVisitAt: e.target.value })} /></div>
           <div className="form-grid-2">
             <input value={propertyForm.price} onChange={(e) => setPropertyForm({ ...propertyForm, price: e.target.value })} placeholder="Precio CLP" />
             <input value={propertyForm.meters} onChange={(e) => setPropertyForm({ ...propertyForm, meters: e.target.value })} placeholder="M2" />
           </div>
-          <input value={propertyForm.address} onChange={(e) => setPropertyForm({ ...propertyForm, address: e.target.value })} placeholder="Direccion / comuna" />
           <div className="form-grid-3">
             <input value={propertyForm.bedrooms} onChange={(e) => setPropertyForm({ ...propertyForm, bedrooms: e.target.value })} placeholder="Piezas" />
             <input value={propertyForm.bathrooms} onChange={(e) => setPropertyForm({ ...propertyForm, bathrooms: e.target.value })} placeholder="Banos" />
             <input value={propertyForm.parking} onChange={(e) => setPropertyForm({ ...propertyForm, parking: e.target.value })} placeholder="Estac." />
           </div>
           <input value={propertyForm.material} onChange={(e) => setPropertyForm({ ...propertyForm, material: e.target.value })} placeholder="Material principal" />
+          <div className="form-grid-3"><input value={propertyForm.kitchenType} onChange={(e) => setPropertyForm({ ...propertyForm, kitchenType: e.target.value })} placeholder="Tipo de cocina" /><input value={propertyForm.heatingSystem} onChange={(e) => setPropertyForm({ ...propertyForm, heatingSystem: e.target.value })} placeholder="Calefacción" /><input value={propertyForm.gasSystem} onChange={(e) => setPropertyForm({ ...propertyForm, gasSystem: e.target.value })} placeholder="Gas o energía" /></div>
+          <div className="form-grid-3"><input value={propertyForm.buildingFloors} onChange={(e) => setPropertyForm({ ...propertyForm, buildingFloors: e.target.value })} placeholder="Pisos torre (si aplica)" /><input value={propertyForm.unitsPerFloor} onChange={(e) => setPropertyForm({ ...propertyForm, unitsPerFloor: e.target.value })} placeholder="Deptos. por piso" /><input value={propertyForm.elevators} onChange={(e) => setPropertyForm({ ...propertyForm, elevators: e.target.value })} placeholder="Ascensores" /></div>
+          <div className="form-grid-2"><input value={propertyForm.commonExpenses} onChange={(e) => setPropertyForm({ ...propertyForm, commonExpenses: e.target.value })} placeholder="Gastos comunes CLP" /><input value={propertyForm.commonAreas} onChange={(e) => setPropertyForm({ ...propertyForm, commonAreas: e.target.value })} placeholder="Espacios comunes (separados por coma)" /></div>
+          <textarea value={propertyForm.propertyConditionAtHandover} onChange={(e) => setPropertyForm({ ...propertyForm, propertyConditionAtHandover: e.target.value })} placeholder="Condición observada de la propiedad durante la visita" />
+          </div>
+          <div className="realty-capture-section"><span>3 · Tasación y revisión previa</span>
+          <div className="form-grid-3"><input value={propertyForm.ownerExpectedPrice} onChange={(e) => setPropertyForm({ ...propertyForm, ownerExpectedPrice: e.target.value })} placeholder="Expectativa propietario" /><input value={propertyForm.preliminaryAppraisal} onChange={(e) => setPropertyForm({ ...propertyForm, preliminaryAppraisal: e.target.value })} placeholder="Tasación preliminar" /><input value={propertyForm.suggestedPrice} onChange={(e) => setPropertyForm({ ...propertyForm, suggestedPrice: e.target.value })} placeholder="Precio sugerido" /></div>
+          <div className="form-grid-2"><input type="date" value={propertyForm.marketAnalysisAt} onChange={(e) => setPropertyForm({ ...propertyForm, marketAnalysisAt: e.target.value })} /><select value={propertyForm.preliminaryTitleStatus} onChange={(e) => setPropertyForm({ ...propertyForm, preliminaryTitleStatus: e.target.value })}><option value="PENDIENTE">Preestudio de título pendiente</option><option value="EN_REVISION">Preestudio en revisión</option><option value="REVISADO_SIN_OBSERVACIONES">Revisado sin observaciones</option><option value="REVISADO_CON_OBSERVACIONES">Revisado con observaciones</option></select></div>
+          <textarea value={propertyForm.comparableSummary} onChange={(e) => setPropertyForm({ ...propertyForm, comparableSummary: e.target.value })} placeholder="Comparables y conclusión del análisis de mercado" />
+          <textarea value={propertyForm.titleReviewNotes} onChange={(e) => setPropertyForm({ ...propertyForm, titleReviewNotes: e.target.value })} placeholder="Observaciones del preestudio de título" />
+          <div className="form-grid-2"><select value={propertyForm.regularizationStatus} onChange={(e) => setPropertyForm({ ...propertyForm, regularizationStatus: e.target.value })}><option value="POR_REVISAR">Regularización por revisar</option><option value="REGULARIZADA">Construcción regularizada</option><option value="CON_OBSERVACIONES">Regularización con observaciones</option><option value="NO_REGULARIZADA">Construcción no regularizada</option></select><select value={propertyForm.ownershipStatus} onChange={(e) => setPropertyForm({ ...propertyForm, ownershipStatus: e.target.value })}><option value="POR_CONFIRMAR">Dominio por confirmar</option><option value="DOMINIO_VIGENTE">Dominio vigente</option><option value="POSESION_EFECTIVA_PENDIENTE">Posesión efectiva pendiente</option><option value="OTRO">Otro antecedente</option></select></div>
+          <textarea value={propertyForm.irregularConstructionNote} onChange={(e) => setPropertyForm({ ...propertyForm, irregularConstructionNote: e.target.value })} placeholder="Detalle de ampliaciones o regularizaciones pendientes" />
+          </div>
+          <div className="realty-capture-section"><span>4 · Material, decisión y mandato</span>
           <div className="file-picker-row">
             <input value={propertyForm.photoUrl} onChange={(e) => setPropertyForm({ ...propertyForm, photoUrl: e.target.value })} placeholder="URL foto principal o archivo" />
             <label className="secondary-btn">Subir fotos<input type="file" accept="image/*" multiple hidden onChange={onPhotoFile} /></label>
@@ -1066,15 +1185,19 @@ export function RealtyLoadsPageContent() {
           </div>
           <input value={propertyForm.galleryUrls} onChange={(e) => setPropertyForm({ ...propertyForm, galleryUrls: e.target.value })} placeholder="URLs de galeria, una por linea (opcional)" />
           <input value={propertyForm.videoUrl} onChange={(e) => setPropertyForm({ ...propertyForm, videoUrl: e.target.value })} placeholder="URL de video o recorrido virtual (opcional)" />
+          <input value={propertyForm.floorPlanUrl} onChange={(e) => setPropertyForm({ ...propertyForm, floorPlanUrl: e.target.value })} placeholder="URL plano o medición" />
           <textarea value={propertyForm.observations} onChange={(e) => setPropertyForm({ ...propertyForm, observations: e.target.value })} placeholder="Observaciones generales" />
           <div className="form-grid-2">
-            <input value={propertyForm.ownerName} onChange={(e) => setPropertyForm({ ...propertyForm, ownerName: e.target.value })} placeholder="Propietario" />
             <select value={propertyForm.assignedBrokerId} onChange={(e) => setPropertyForm({ ...propertyForm, assignedBrokerId: e.target.value })}>
               <option value="">Sin corredor asignado</option>
               {data.brokers.map((broker) => <option key={broker.id} value={broker.id}>{broker.name}</option>)}
             </select>
+            <select value={propertyForm.captureStatus} onChange={(e) => setPropertyForm({ ...propertyForm, captureStatus: e.target.value })}><option value="PROSPECTO">Prospecto</option><option value="VISITA_AGENDADA">Visita agendada</option><option value="EVALUACION_COMERCIAL">Evaluación comercial</option><option value="PENDIENTE_DECISION_PROPIETARIO">Pendiente decisión propietario</option><option value="LISTA_PARA_MANDATO">Lista para mandato</option><option value="MANDATO_FIRMADO">Mandato firmado</option><option value="DESCARTADA">Descartada</option></select>
           </div>
-          <button className="primary-btn" type="submit">Guardar propiedad</button>
+          <div className="form-grid-2"><input type="date" value={propertyForm.ownerAcceptedEvaluationAt} onChange={(e) => setPropertyForm({ ...propertyForm, ownerAcceptedEvaluationAt: e.target.value })} /><select value={propertyForm.publicationReadiness} onChange={(e) => setPropertyForm({ ...propertyForm, publicationReadiness: e.target.value })}><option value="PENDIENTE">Publicación pendiente</option><option value="EN_PREPARACION">En preparación</option><option value="LISTA_PARA_PUBLICAR">Lista para publicar</option><option value="BLOQUEADA">Bloqueada</option></select></div>
+          {propertyForm.captureStatus === "DESCARTADA" ? <textarea value={propertyForm.rejectionReason} onChange={(e) => setPropertyForm({ ...propertyForm, rejectionReason: e.target.value })} placeholder="Motivo por el que se descarta la captación" required /> : null}
+          </div>
+          <button className="primary-btn" type="submit" disabled={savingCapture}>{savingCapture ? "Guardando ficha..." : editingPropertyId ? "Guardar ficha de captación" : "Crear captación"}</button>
         </form>
 
         <aside className="realty-ws-card realty-import-assistant">

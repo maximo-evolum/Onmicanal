@@ -74,42 +74,43 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  contacts           Contact[]
-  conversations      Conversation[]
-  messages           Message[]
-  workspaceUsers     WorkspaceUser[]
-  rules              Rule[]
-  leads              Lead[]
-  campaigns          Campaign[]
-  products           Product[]
-  tenantModules      TenantModule[]
-  subscriptions      Subscription[]
-  metadataSchemas    MetadataSchema[]
-  services           Service[]
-  bookings           Booking[]
-  payments           Payment[]
-  memories           ConversationMemory[]
-  salesOutcomes      SalesOutcome[]
-  usageEvents        UsageEvent[]
-  auditLogs          TenantAuditLog[]
-  aiProfiles         TenantAiProfile[]
-  channelConfigs     TenantChannelConfig[]
-  onboardingImports  TenantOnboardingImport[]
-  industryRecords    IndustryRecord[]
-  mobilePushDevices  MobilePushDevice[]
-  brokerOwners       BrokerOwner[]
-  brokerProperties   BrokerProperty[]
-  brokerBuyers       BrokerBuyer[]
-  brokerLeaseTenants BrokerLeaseTenant[]
-  brokerContracts    BrokerContract[]
-  brokerDocuments    BrokerDocument[]
-  brokerPayments     BrokerPayment[]
-  brokerCommissions  BrokerCommission[]
-  brokerMaintenances BrokerMaintenance[]
-  brokerVisits       BrokerVisit[]
-  brokerCommunities  BrokerCommunity[]
-  brokerProviders    BrokerProvider[]
-  brokerFinancings   BrokerFinancing[]
+  contacts                Contact[]
+  conversations           Conversation[]
+  messages                Message[]
+  workspaceUsers          WorkspaceUser[]
+  rules                   Rule[]
+  leads                   Lead[]
+  campaigns               Campaign[]
+  products                Product[]
+  tenantModules           TenantModule[]
+  subscriptions           Subscription[]
+  metadataSchemas         MetadataSchema[]
+  services                Service[]
+  bookings                Booking[]
+  payments                Payment[]
+  memories                ConversationMemory[]
+  salesOutcomes           SalesOutcome[]
+  usageEvents             UsageEvent[]
+  auditLogs               TenantAuditLog[]
+  aiProfiles              TenantAiProfile[]
+  channelConfigs          TenantChannelConfig[]
+  onboardingImports       TenantOnboardingImport[]
+  industryRecords         IndustryRecord[]
+  mobilePushDevices       MobilePushDevice[]
+  brokerOwners            BrokerOwner[]
+  brokerProperties        BrokerProperty[]
+  brokerPropertyCaptures  BrokerPropertyCapture[]
+  brokerBuyers            BrokerBuyer[]
+  brokerLeaseTenants      BrokerLeaseTenant[]
+  brokerContracts         BrokerContract[]
+  brokerDocuments         BrokerDocument[]
+  brokerPayments          BrokerPayment[]
+  brokerCommissions       BrokerCommission[]
+  brokerMaintenances      BrokerMaintenance[]
+  brokerVisits            BrokerVisit[]
+  brokerCommunities       BrokerCommunity[]
+  brokerProviders         BrokerProvider[]
+  brokerFinancings        BrokerFinancing[]
   brokerHoldingMembership BrokerHoldingTenant?
 }
 
@@ -223,15 +224,16 @@ model WorkspaceUser {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  tenant                    Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assignedConversations     Conversation[]     @relation("AssignedConversations")
-  assignedIndustryRecords   IndustryRecord[]   @relation("AssignedIndustryRecords")
-  mobilePushDevices         MobilePushDevice[]
-  brokerPropertiesAssigned  BrokerProperty[]   @relation("BrokerPropertyAssigned")
-  brokerVisitsAssigned      BrokerVisit[]      @relation("BrokerVisitAssigned")
-  brokerFinancingsAssigned  BrokerFinancing[]  @relation("BrokerFinancingAssigned")
-  brokerCommissionsAssigned BrokerCommission[] @relation("BrokerCommissionAssigned")
-  brokerHoldingAccesses     BrokerHoldingAccess[]
+  tenant                         Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedConversations          Conversation[]          @relation("AssignedConversations")
+  assignedIndustryRecords        IndustryRecord[]        @relation("AssignedIndustryRecords")
+  mobilePushDevices              MobilePushDevice[]
+  brokerPropertiesAssigned       BrokerProperty[]        @relation("BrokerPropertyAssigned")
+  brokerPropertyCapturesAssigned BrokerPropertyCapture[] @relation("BrokerPropertyCaptureAssigned")
+  brokerVisitsAssigned           BrokerVisit[]           @relation("BrokerVisitAssigned")
+  brokerFinancingsAssigned       BrokerFinancing[]       @relation("BrokerFinancingAssigned")
+  brokerCommissionsAssigned      BrokerCommission[]      @relation("BrokerCommissionAssigned")
+  brokerHoldingAccesses          BrokerHoldingAccess[]
 }
 
 model MobilePushDevice {
@@ -414,10 +416,10 @@ model BrokerProperty {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  owner          BrokerOwner         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  community      BrokerCommunity?    @relation(fields: [communityId], references: [id], onDelete: SetNull)
-  assignedBroker WorkspaceUser?      @relation("BrokerPropertyAssigned", fields: [assignedBrokerId], references: [id], onDelete: SetNull)
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner          BrokerOwner            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  community      BrokerCommunity?       @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  assignedBroker WorkspaceUser?         @relation("BrokerPropertyAssigned", fields: [assignedBrokerId], references: [id], onDelete: SetNull)
   contracts      BrokerContract[]
   documents      BrokerDocument[]
   payments       BrokerPayment[]
@@ -425,11 +427,66 @@ model BrokerProperty {
   maintenances   BrokerMaintenance[]
   visits         BrokerVisit[]
   financings     BrokerFinancing[]
+  capture        BrokerPropertyCapture?
 
   @@index([tenantId, operationalStatus, isActive])
   @@index([tenantId, comuna, propertyType])
   @@index([tenantId, assignedBrokerId])
   @@index([ownerId, isActive])
+}
+
+// Ficha operativa de captación. Se conserva separada de la propiedad para
+// distinguir los antecedentes levantados antes del mandato de los datos que
+// permanecen vigentes durante toda la vida del inmueble.
+model BrokerPropertyCapture {
+  id                          String    @id @default(cuid())
+  tenantId                    String
+  propertyId                  String    @unique
+  captureOrigin               String?
+  intendedService             String    @default("VENTA")
+  status                      String    @default("PROSPECTO")
+  captureBrokerId             String?
+  firstContactAt              DateTime?
+  siteVisitAt                 DateTime?
+  ownerExpectedPrice          Decimal?  @db.Decimal(18, 2)
+  suggestedPrice              Decimal?  @db.Decimal(18, 2)
+  preliminaryAppraisal        Decimal?  @db.Decimal(18, 2)
+  currency                    String    @default("CLP")
+  marketAnalysisAt            DateTime?
+  comparableSummary           String?
+  priceGapPct                 Decimal?  @db.Decimal(7, 3)
+  ownerAcceptedEvaluationAt   DateTime?
+  preliminaryTitleStatus      String    @default("PENDIENTE")
+  titleReviewNotes            String?
+  regularizationStatus        String    @default("POR_REVISAR")
+  irregularConstructionNote   String?
+  ownershipStatus             String    @default("POR_CONFIRMAR")
+  propertyConditionAtHandover String?
+  kitchenType                 String?
+  heatingSystem               String?
+  gasSystem                   String?
+  buildingFloors              Int?
+  unitsPerFloor               Int?
+  elevators                   Int?
+  commonExpenses              Decimal?  @db.Decimal(18, 2)
+  commonAreas                 Json?
+  photoUrls                   Json?
+  videoUrls                   Json?
+  floorPlanUrl                String?
+  documentChecklist           Json?
+  publicationReadiness        String    @default("PENDIENTE")
+  rejectionReason             String?
+  metadata                    Json?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property      BrokerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  captureBroker WorkspaceUser? @relation("BrokerPropertyCaptureAssigned", fields: [captureBrokerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([tenantId, intendedService, publicationReadiness])
+  @@index([captureBrokerId, status])
 }
 
 model BrokerBuyer {
@@ -751,8 +808,8 @@ model BrokerHoldingAccess {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  holding BrokerHolding  @relation(fields: [holdingId], references: [id], onDelete: Cascade)
-  user    WorkspaceUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  holding BrokerHolding @relation(fields: [holdingId], references: [id], onDelete: Cascade)
+  user    WorkspaceUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([holdingId, userId])
   @@index([userId, isActive])
