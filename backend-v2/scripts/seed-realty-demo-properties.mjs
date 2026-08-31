@@ -925,6 +925,66 @@ async function seedBrokerCaptures(tenantId, properties, brokers) {
   return seeded;
 }
 
+// Casos de venta completos para demostrar los controles de oferta, promesa,
+// título, escritura, inscripción y entrega sin usar información real de clientes.
+async function seedBrokerSaleCases(tenantId, properties) {
+  const propertyByTitle = new Map(properties.map((property) => [property.title, property]));
+  const pocuro = propertyByTitle.get("Departamento Vista Parque Pocuro");
+  const penalolen = propertyByTitle.get("Casa Familiar Penalolen Alto");
+  if (!pocuro || !penalolen) return 0;
+
+  const saleOperation = await upsertDemoRecord(tenantId, {
+    recordType: "broker_operation",
+    title: "Venta Departamento Vista Parque Pocuro",
+    status: "ACTIVE",
+    assignedToId: pocuro.assignedToId,
+    data: {
+      operationType: "SALE", propertyId: pocuro.id, clientName: "Carolina Fuentes", stage: "OFERTA_Y_NEGOCIACION",
+      expectedCloseDate: "2026-09-18", estimatedCommission: 7140000,
+      timeline: [
+        { at: "2026-07-28T10:00:00.000Z", type: "CAPTACION", stage: "EVALUACION_COMERCIAL", note: "Propiedad incorporada a cartera con antecedentes de captación completos." },
+        { at: "2026-08-03T16:30:00.000Z", type: "VISITA", stage: "CALIFICACION_Y_VISITAS", note: "Visita realizada con compradora preaprobada." },
+        { at: "2026-08-12T11:15:00.000Z", type: "OFERTA", stage: "OFERTA_Y_NEGOCIACION", note: "Oferta recibida; se revisan precio, financiamiento y condiciones." },
+      ],
+    },
+  });
+  const closedOperation = await upsertDemoRecord(tenantId, {
+    recordType: "broker_operation",
+    title: "Venta cerrada Casa Familiar Penalolen Alto",
+    status: "COMPLETED",
+    assignedToId: penalolen.assignedToId,
+    data: {
+      operationType: "SALE", propertyId: penalolen.id, clientName: "Felipe Arancibia", stage: "ENTREGA_Y_POSTVENTA",
+      expectedCloseDate: "2026-08-30", estimatedCommission: 10140000,
+      timeline: [
+        { at: "2026-06-18T10:00:00.000Z", type: "MANDATO", stage: "MANDATO_Y_PUBLICACION", note: "Mandato firmado y publicación autorizada." },
+        { at: "2026-07-09T15:00:00.000Z", type: "PROMESA", stage: "PROMESA", note: "Promesa firmada con condiciones revisadas." },
+        { at: "2026-07-28T12:00:00.000Z", type: "TITULOS", stage: "ESTUDIO_DE_TITULO", note: "Estudio de títulos aprobado por revisión responsable." },
+        { at: "2026-08-12T11:00:00.000Z", type: "ESCRITURA", stage: "ESCRITURA", note: "Escritura firmada y resguardada en expediente." },
+        { at: "2026-08-25T10:30:00.000Z", type: "CBR", stage: "INSCRIPCION_CBR", note: "Inscripción informada por Conservador de Bienes Raíces." },
+        { at: "2026-08-30T16:00:00.000Z", type: "ENTREGA", stage: "ENTREGA_Y_POSTVENTA", note: "Entrega documentada con inventario y recepción." },
+      ],
+    },
+  });
+  const strict = await prisma.brokerProperty.findMany({ where: { tenantId, legacyRecordId: { in: [pocuro.id, penalolen.id] } }, select: { id: true, legacyRecordId: true } });
+  const strictByLegacy = new Map(strict.map((property) => [property.legacyRecordId, property.id]));
+  if (!strictByLegacy.get(pocuro.id) || !strictByLegacy.get(penalolen.id)) return 0;
+  const buyerCarolina = await prisma.brokerBuyer.upsert({ where: { tenantId_rut: { tenantId, rut: "17.111.001-1" } }, create: { tenantId, name: "Carolina Fuentes", rut: "17.111.001-1", phone: "+56971110001", status: "PREAPROBADO", financingType: "Crédito hipotecario" }, update: { name: "Carolina Fuentes", status: "PREAPROBADO", financingType: "Crédito hipotecario" } });
+  const buyerFelipe = await prisma.brokerBuyer.upsert({ where: { tenantId_rut: { tenantId, rut: "16.222.002-2" } }, create: { tenantId, name: "Felipe Arancibia", rut: "16.222.002-2", phone: "+56971110002", status: "PREAPROBADO", financingType: "Crédito hipotecario" }, update: { name: "Felipe Arancibia", status: "PREAPROBADO", financingType: "Crédito hipotecario" } });
+  const checkpoints = (keys) => Object.fromEntries(keys.map((key) => [key, { confirmedAt: "2026-08-20T12:00:00.000Z", confirmedBy: "Equipo de demostración Broker OS", note: "Control humano registrado para demostración." }]));
+  await prisma.brokerSaleCase.upsert({
+    where: { operationId: saleOperation.id },
+    create: { tenantId, operationId: saleOperation.id, propertyId: strictByLegacy.get(pocuro.id), buyerId: buyerCarolina.id, buyerName: buyerCarolina.name, currentStage: "OFERTA_Y_NEGOCIACION", buyerQualificationStatus: "PREAPROBADO", preapprovalBank: "Banco de demostración", preapprovalAmount: 175000000, preapprovalExpiresAt: new Date("2026-10-30T00:00:00.000Z"), offerAmount: 229000000, offerStatus: "ACEPTADA", offerReceivedAt: new Date("2026-08-12T11:15:00.000Z"), offerRespondedAt: new Date("2026-08-13T16:00:00.000Z"), offerConditions: "Crédito hipotecario preaprobado, pie informado y fecha de promesa sujeta a revisión documental.", checkpoints: checkpoints(["oferta"]), metadata: { source: DEMO_SOURCE, demo: true } },
+    update: { propertyId: strictByLegacy.get(pocuro.id), buyerId: buyerCarolina.id, buyerName: buyerCarolina.name, currentStage: "OFERTA_Y_NEGOCIACION", buyerQualificationStatus: "PREAPROBADO", preapprovalBank: "Banco de demostración", preapprovalAmount: 175000000, preapprovalExpiresAt: new Date("2026-10-30T00:00:00.000Z"), offerAmount: 229000000, offerStatus: "ACEPTADA", offerReceivedAt: new Date("2026-08-12T11:15:00.000Z"), offerRespondedAt: new Date("2026-08-13T16:00:00.000Z"), offerConditions: "Crédito hipotecario preaprobado, pie informado y fecha de promesa sujeta a revisión documental.", checkpoints: checkpoints(["oferta"]) },
+  });
+  await prisma.brokerSaleCase.upsert({
+    where: { operationId: closedOperation.id },
+    create: { tenantId, operationId: closedOperation.id, propertyId: strictByLegacy.get(penalolen.id), buyerId: buyerFelipe.id, buyerName: buyerFelipe.name, status: "CERRADA", currentStage: "ENTREGA_Y_POSTVENTA", buyerQualificationStatus: "PREAPROBADO", preapprovalBank: "Banco de demostración", preapprovalAmount: 260000000, offerAmount: 338000000, offerStatus: "ACEPTADA", offerReceivedAt: new Date("2026-06-30T00:00:00.000Z"), offerRespondedAt: new Date("2026-07-01T00:00:00.000Z"), promiseStatus: "FIRMADA", promiseSignedAt: new Date("2026-07-09T00:00:00.000Z"), promiseAmount: 338000000, promisePenaltyPct: 10, titleStudyStatus: "APROBADO", titleStudyNotes: "Antecedentes revisados por responsable jurídico de demostración.", titleStudyReviewedAt: new Date("2026-07-28T00:00:00.000Z"), financingStatus: "APROBADO", bankAppraisalStatus: "APROBADA", deedStatus: "FIRMADA", deedScheduledAt: new Date("2026-08-12T00:00:00.000Z"), deedSignedAt: new Date("2026-08-12T00:00:00.000Z"), cbrStatus: "INSCRITA", cbrEntryNumber: "DEMO-CBR-2026-08421", cbrRegisteredAt: new Date("2026-08-25T00:00:00.000Z"), handoverStatus: "COMPLETADA", handoverAt: new Date("2026-08-30T00:00:00.000Z"), handoverRecipient: "Felipe Arancibia", checkpoints: checkpoints(["oferta", "promesa", "titulos", "escritura", "inscripcion", "entrega"]), metadata: { source: DEMO_SOURCE, demo: true } },
+    update: { propertyId: strictByLegacy.get(penalolen.id), buyerId: buyerFelipe.id, buyerName: buyerFelipe.name, status: "CERRADA", currentStage: "ENTREGA_Y_POSTVENTA", buyerQualificationStatus: "PREAPROBADO", preapprovalBank: "Banco de demostración", preapprovalAmount: 260000000, offerAmount: 338000000, offerStatus: "ACEPTADA", offerReceivedAt: new Date("2026-06-30T00:00:00.000Z"), offerRespondedAt: new Date("2026-07-01T00:00:00.000Z"), promiseStatus: "FIRMADA", promiseSignedAt: new Date("2026-07-09T00:00:00.000Z"), promiseAmount: 338000000, promisePenaltyPct: 10, titleStudyStatus: "APROBADO", titleStudyNotes: "Antecedentes revisados por responsable jurídico de demostración.", titleStudyReviewedAt: new Date("2026-07-28T00:00:00.000Z"), financingStatus: "APROBADO", bankAppraisalStatus: "APROBADA", deedStatus: "FIRMADA", deedScheduledAt: new Date("2026-08-12T00:00:00.000Z"), deedSignedAt: new Date("2026-08-12T00:00:00.000Z"), cbrStatus: "INSCRITA", cbrEntryNumber: "DEMO-CBR-2026-08421", cbrRegisteredAt: new Date("2026-08-25T00:00:00.000Z"), handoverStatus: "COMPLETADA", handoverAt: new Date("2026-08-30T00:00:00.000Z"), handoverRecipient: "Felipe Arancibia", checkpoints: checkpoints(["oferta", "promesa", "titulos", "escritura", "inscripcion", "entrega"]), metadata: { source: DEMO_SOURCE, demo: true } },
+  });
+  return 2;
+}
+
 const BROKER_DEMO_AREAS = [
   { area: "Propiedades y cartera", recordTypes: ["property"] },
   { area: "Captacion, tasacion y cierre", recordTypes: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_settlement"] },
@@ -947,6 +1007,7 @@ async function verifyBrokerDemo() {
     where: { tenantId: tenant.id },
     select: { recordType: true },
   });
+  const saleCases = await prisma.brokerSaleCase.findMany({ where: { tenantId: tenant.id }, select: { status: true, currentStage: true } });
   const counts = records.reduce((accumulator, record) => {
     accumulator[record.recordType] = (accumulator[record.recordType] || 0) + 1;
     return accumulator;
@@ -962,12 +1023,15 @@ async function verifyBrokerDemo() {
   const faltantes = areas
     .filter((area) => area.total === 0)
     .map((area) => area.area);
+  if (!saleCases.some((item) => item.currentStage === "OFERTA_Y_NEGOCIACION")) faltantes.push("Venta en negociación con oferta controlada");
+  if (!saleCases.some((item) => item.currentStage === "ENTREGA_Y_POSTVENTA" && item.status === "CERRADA")) faltantes.push("Venta cerrada con inscripción y entrega");
 
   console.log(JSON.stringify({
     tenant: tenant.name,
     tenantId: tenant.id,
     totalRegistros: records.length,
     propiedades: counts.property || 0,
+    expedientesVenta: saleCases.length,
     areas,
     demostracionLista: faltantes.length === 0,
     faltantes,
@@ -998,6 +1062,7 @@ async function main() {
   const brokerRecords = await seedBrokerWorkspace(realtyTenant.id, properties, brokers, buyers);
   const agentEvaluations = await seedAgentEvaluations(realtyTenant.id);
   const captures = await seedBrokerCaptures(realtyTenant.id, properties, brokers);
+  const saleCases = await seedBrokerSaleCases(realtyTenant.id, properties);
 
   console.log(JSON.stringify({
     tenant: realtyTenant.name,
@@ -1010,6 +1075,7 @@ async function main() {
     brokerWorkspaceRecords: brokerRecords.length,
     agentEvaluations: agentEvaluations.length,
     captureRecords: captures,
+    saleCases,
     legacyPropertyNormalized: Boolean(normalizedLegacy),
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,

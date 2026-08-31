@@ -6,6 +6,7 @@ import {
   advanceBrokerOperation,
   createBrokerOperation,
   createBrokerRecord,
+  confirmBrokerSaleCheckpoint,
   getBrokerCatalog,
   getBrokerAccess,
   getBrokerAccessTeam,
@@ -17,12 +18,14 @@ import {
   getBrokerOperations,
   getBrokerOverview,
   getBrokerPropertyExpedient,
+  getBrokerSaleWorkspace,
   getBrokerRecords,
   advanceBrokerFinancing,
   previewBrokerCommission,
   prepareBrokerMonthlyLiquidation,
   runBrokerAutomationScan,
   saveBrokerAiEvaluation,
+  saveBrokerSaleWorkspace,
   saveBrokerOperatingConfiguration,
   saveBrokerHoldingConfig,
   updateBrokerRecord,
@@ -32,6 +35,7 @@ import {
   type BrokerAiScenario,
   type BrokerOperation,
   type BrokerOperationType,
+  type BrokerSaleWorkspace,
   type BrokerPropertyExpedient,
   type BrokerRecordArea,
   type BrokerRecordDefinition,
@@ -264,6 +268,7 @@ export function BrokerOperationsPageContent() {
   const [properties, setProperties] = useState<IndustryRecord[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [expedient, setExpedient] = useState<BrokerPropertyExpedient | null>(null);
+  const [saleWorkspace, setSaleWorkspace] = useState<BrokerSaleWorkspace | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [operationType, setOperationType] = useState<BrokerOperationType>("SALE");
@@ -421,6 +426,72 @@ export function BrokerOperationsPageContent() {
       await load();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo avanzar la etapa.");
+    } finally { setBusy(false); }
+  }
+
+  async function openSaleWorkspace(operation: BrokerOperation) {
+    setBusy(true); setNotice("");
+    try {
+      setSaleWorkspace(await getBrokerSaleWorkspace(operation.id));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo abrir el expediente de venta.");
+    } finally { setBusy(false); }
+  }
+
+  async function saveSaleWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!saleWorkspace) return;
+    const form = new FormData(event.currentTarget);
+    const value = (name: string) => String(form.get(name) || "").trim();
+    const number = (name: string) => value(name) === "" ? null : Number(value(name));
+    setBusy(true); setNotice("");
+    try {
+      const updated = await saveBrokerSaleWorkspace(saleWorkspace.operation.id, {
+        buyerName: value("buyerName"),
+        buyerQualificationStatus: value("buyerQualificationStatus"),
+        preapprovalBank: value("preapprovalBank"),
+        preapprovalAmount: number("preapprovalAmount"),
+        preapprovalExpiresAt: value("preapprovalExpiresAt") || null,
+        offerAmount: number("offerAmount"),
+        offerStatus: value("offerStatus"),
+        offerReceivedAt: value("offerReceivedAt") || null,
+        offerRespondedAt: value("offerRespondedAt") || null,
+        offerConditions: value("offerConditions"),
+        promiseStatus: value("promiseStatus"),
+        promiseSignedAt: value("promiseSignedAt") || null,
+        promiseAmount: number("promiseAmount"),
+        promisePenaltyPct: number("promisePenaltyPct"),
+        titleStudyStatus: value("titleStudyStatus"),
+        titleStudyNotes: value("titleStudyNotes"),
+        financingStatus: value("financingStatus"),
+        bankAppraisalStatus: value("bankAppraisalStatus"),
+        deedStatus: value("deedStatus"),
+        deedScheduledAt: value("deedScheduledAt") || null,
+        deedSignedAt: value("deedSignedAt") || null,
+        cbrStatus: value("cbrStatus"),
+        cbrEntryNumber: value("cbrEntryNumber"),
+        cbrRegisteredAt: value("cbrRegisteredAt") || null,
+        handoverStatus: value("handoverStatus"),
+        handoverAt: value("handoverAt") || null,
+        handoverRecipient: value("handoverRecipient"),
+      });
+      setSaleWorkspace(updated);
+      await load();
+      setNotice("Expediente de venta guardado. Los cambios no ejecutan firmas, pagos ni inscripciones externas.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo guardar el expediente de venta.");
+    } finally { setBusy(false); }
+  }
+
+  async function confirmSaleCheckpoint(checkpoint: "oferta" | "promesa" | "titulos" | "escritura" | "inscripcion" | "entrega") {
+    if (!saleWorkspace) return;
+    setBusy(true); setNotice("");
+    try {
+      const updated = await confirmBrokerSaleCheckpoint(saleWorkspace.operation.id, { checkpoint, note: "Revisión humana confirmada desde el expediente de venta." });
+      setSaleWorkspace(updated);
+      setNotice("Revisión humana registrada en la trazabilidad de la venta.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo confirmar la revisión humana.");
     } finally { setBusy(false); }
   }
 
@@ -719,10 +790,22 @@ export function BrokerOperationsPageContent() {
           const stages = catalog?.operationStages[operation.data.operationType] || [];
           const index = stageIndex(operation, catalog);
           const next = stages[index + 1];
-          return <article key={operation.id} className="broker-operation-card"><div><span>{OPERATION_LABELS[operation.data.operationType]}</span><h3>{operation.title}</h3><p>{readable(operation.data.stage)} · {String(operation.data.clientName || "Sin contraparte registrada")}</p></div><div className="broker-stage"><div><i style={{ width: `${stages.length ? ((index + 1) / stages.length) * 100 : 0}%` }} /></div><small>Etapa {index + 1} de {stages.length}: {readable(stages[index])}</small></div><button className="secondary-btn" disabled={busy || !next} onClick={() => nextStage(operation)}>{next ? `Avanzar a ${readable(next)}` : "Flujo completado"}</button></article>;
+          return <article key={operation.id} className="broker-operation-card"><div><span>{OPERATION_LABELS[operation.data.operationType]}</span><h3>{operation.title}</h3><p>{readable(operation.data.stage)} · {String(operation.data.clientName || "Sin contraparte registrada")}</p></div><div className="broker-stage"><div><i style={{ width: `${stages.length ? ((index + 1) / stages.length) * 100 : 0}%` }} /></div><small>Etapa {index + 1} de {stages.length}: {readable(stages[index])}</small></div><div className="broker-operation-actions">{operation.data.operationType === "SALE" ? <button className="secondary-btn" type="button" disabled={busy} onClick={() => openSaleWorkspace(operation)}>Abrir expediente</button> : null}<button className="primary-btn" type="button" disabled={busy || !next} onClick={() => nextStage(operation)}>{next ? `Avanzar a ${readable(next)}` : "Flujo completado"}</button></div></article>;
         })}
       </section>
       </section>
+      {saleWorkspace ? <section className="broker-sale-case-panel" aria-label="Expediente completo de venta">
+        <header><div><span>Venta de punta a punta</span><h2>{saleWorkspace.operation.title}</h2><p>{saleWorkspace.property.title} · Etapa actual: <b>{readable(saleWorkspace.saleCase.currentStage)}</b></p></div><button type="button" className="secondary-btn" onClick={() => setSaleWorkspace(null)}>Cerrar expediente</button></header>
+        <div className="broker-sale-readiness"><div><b>{saleWorkspace.nextStage ? `Siguiente hito: ${readable(saleWorkspace.nextStage)}` : "Venta finalizada"}</b><p>{saleWorkspace.readiness.ready ? "Los antecedentes mínimos están completos para el siguiente hito." : "Completa los puntos pendientes antes de avanzar."}</p></div>{saleWorkspace.readiness.requirements.length ? <ul>{saleWorkspace.readiness.requirements.map((item) => <li key={item.key} className={item.ready ? "ready" : "pending"}>{item.ready ? "✓" : "○"} {item.label}</li>)}</ul> : <p>El flujo no tiene más etapas pendientes.</p>}</div>
+        <form key={saleWorkspace.saleCase.updatedAt || saleWorkspace.saleCase.id} className="broker-sale-case-form" onSubmit={saveSaleWorkspace}>
+          <section><h3>Comprador y capacidad de compra</h3><label>Comprador<input name="buyerName" defaultValue={saleWorkspace.saleCase.buyerName || ""} placeholder="Nombre de la persona o empresa" /></label><label>Calificación<select name="buyerQualificationStatus" defaultValue={saleWorkspace.saleCase.buyerQualificationStatus}>{saleWorkspace.options.qualificationStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Banco o institución<input name="preapprovalBank" defaultValue={saleWorkspace.saleCase.preapprovalBank || ""} placeholder="Ej.: Banco informado por comprador" /></label><label>Monto preaprobado<input name="preapprovalAmount" type="number" min="0" defaultValue={saleWorkspace.saleCase.preapprovalAmount ?? ""} /></label><label>Vigencia preaprobación<input name="preapprovalExpiresAt" type="date" defaultValue={saleWorkspace.saleCase.preapprovalExpiresAt?.slice(0, 10) || ""} /></label><label>Financiamiento<select name="financingStatus" defaultValue={saleWorkspace.saleCase.financingStatus}>{saleWorkspace.options.financingStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label></section>
+          <section><h3>Oferta y promesa</h3><label>Monto de oferta<input name="offerAmount" type="number" min="0" defaultValue={saleWorkspace.saleCase.offerAmount ?? ""} /></label><label>Estado de oferta<select name="offerStatus" defaultValue={saleWorkspace.saleCase.offerStatus}>{saleWorkspace.options.offerStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Oferta recibida<input name="offerReceivedAt" type="date" defaultValue={saleWorkspace.saleCase.offerReceivedAt?.slice(0, 10) || ""} /></label><label>Respuesta de oferta<input name="offerRespondedAt" type="date" defaultValue={saleWorkspace.saleCase.offerRespondedAt?.slice(0, 10) || ""} /></label><label>Condiciones<textarea name="offerConditions" rows={3} defaultValue={saleWorkspace.saleCase.offerConditions || ""} placeholder="Forma de pago, fechas, bienes incluidos y condiciones relevantes" /></label><label>Estado de promesa<select name="promiseStatus" defaultValue={saleWorkspace.saleCase.promiseStatus}>{saleWorkspace.options.promiseStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Monto de promesa<input name="promiseAmount" type="number" min="0" defaultValue={saleWorkspace.saleCase.promiseAmount ?? ""} /></label><label>Firma de promesa<input name="promiseSignedAt" type="date" defaultValue={saleWorkspace.saleCase.promiseSignedAt?.slice(0, 10) || ""} /></label><label>Cláusula de incumplimiento (%)<input name="promisePenaltyPct" type="number" min="0" max="100" step="0.01" defaultValue={saleWorkspace.saleCase.promisePenaltyPct ?? ""} /></label></section>
+          <section><h3>Revisión jurídica y escritura</h3><label>Estudio de títulos<select name="titleStudyStatus" defaultValue={saleWorkspace.saleCase.titleStudyStatus}>{saleWorkspace.options.titleStudyStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Observaciones de títulos<textarea name="titleStudyNotes" rows={3} defaultValue={saleWorkspace.saleCase.titleStudyNotes || ""} placeholder="Observaciones y responsable de la revisión jurídica" /></label><label>Tasación bancaria<select name="bankAppraisalStatus" defaultValue={saleWorkspace.saleCase.bankAppraisalStatus}>{saleWorkspace.options.bankAppraisalStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Estado de escritura<select name="deedStatus" defaultValue={saleWorkspace.saleCase.deedStatus}>{saleWorkspace.options.deedStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Fecha programada<input name="deedScheduledAt" type="date" defaultValue={saleWorkspace.saleCase.deedScheduledAt?.slice(0, 10) || ""} /></label><label>Fecha de firma<input name="deedSignedAt" type="date" defaultValue={saleWorkspace.saleCase.deedSignedAt?.slice(0, 10) || ""} /></label></section>
+          <section><h3>Inscripción y entrega</h3><label>Estado CBR<select name="cbrStatus" defaultValue={saleWorkspace.saleCase.cbrStatus}>{saleWorkspace.options.cbrStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Número de ingreso o inscripción<input name="cbrEntryNumber" defaultValue={saleWorkspace.saleCase.cbrEntryNumber || ""} /></label><label>Fecha de inscripción<input name="cbrRegisteredAt" type="date" defaultValue={saleWorkspace.saleCase.cbrRegisteredAt?.slice(0, 10) || ""} /></label><label>Estado de entrega<select name="handoverStatus" defaultValue={saleWorkspace.saleCase.handoverStatus}>{saleWorkspace.options.handoverStatuses.map((status) => <option key={status}>{readable(status)}</option>)}</select></label><label>Fecha de entrega<input name="handoverAt" type="date" defaultValue={saleWorkspace.saleCase.handoverAt?.slice(0, 10) || ""} /></label><label>Quién recibe<input name="handoverRecipient" defaultValue={saleWorkspace.saleCase.handoverRecipient || ""} /></label></section>
+          <footer><p className="broker-human-note">Este expediente ordena evidencia y controles internos. No firma documentos, aprueba créditos, inscribe ante CBR ni ejecuta pagos por cuenta propia.</p><button className="primary-btn" disabled={busy}>Guardar controles de venta</button></footer>
+        </form>
+        <div className="broker-sale-confirmations"><h3>Confirmaciones humanas obligatorias</h3><p>Registra la revisión responsable una vez que el antecedente haya sido comprobado fuera de EVOLUM OS.</p><div>{(["oferta", "promesa", "titulos", "escritura", "inscripcion", "entrega"] as const).map((checkpoint) => <button type="button" key={checkpoint} className={saleWorkspace.saleCase.checkpoints?.[checkpoint] ? "secondary-btn confirmed" : "secondary-btn"} disabled={busy} onClick={() => confirmSaleCheckpoint(checkpoint)}>{saleWorkspace.saleCase.checkpoints?.[checkpoint] ? `✓ ${readable(checkpoint)} confirmado` : `Confirmar ${readable(checkpoint)}`}</button>)}</div></div>
+      </section> : null}
     </> : null}
 
     {tab === "financing" ? <section className="broker-financing-workspace" aria-label="Financiamiento operativo">

@@ -1097,6 +1097,66 @@ export type BrokerOperation = IndustryRecord & {
   };
 };
 
+export type BrokerSaleCase = {
+  id: string;
+  updatedAt?: string;
+  operationId: string;
+  propertyId: string;
+  buyerId?: string | null;
+  buyerName?: string | null;
+  status: string;
+  currentStage: string;
+  buyerQualificationStatus: string;
+  preapprovalBank?: string | null;
+  preapprovalAmount?: number | null;
+  preapprovalExpiresAt?: string | null;
+  offerAmount?: number | null;
+  currency: string;
+  offerStatus: string;
+  offerReceivedAt?: string | null;
+  offerRespondedAt?: string | null;
+  offerConditions?: string | null;
+  promiseStatus: string;
+  promiseSignedAt?: string | null;
+  promiseAmount?: number | null;
+  promisePenaltyPct?: number | null;
+  titleStudyStatus: string;
+  titleStudyNotes?: string | null;
+  titleStudyReviewedAt?: string | null;
+  bankAppraisalStatus: string;
+  financingStatus: string;
+  deedStatus: string;
+  deedScheduledAt?: string | null;
+  deedSignedAt?: string | null;
+  cbrStatus: string;
+  cbrEntryNumber?: string | null;
+  cbrRegisteredAt?: string | null;
+  handoverStatus: string;
+  handoverAt?: string | null;
+  handoverRecipient?: string | null;
+  checkpoints?: Record<string, { confirmedAt?: string; confirmedBy?: string; note?: string }>;
+};
+
+export type BrokerSaleWorkspace = {
+  operation: BrokerOperation;
+  property: IndustryRecord;
+  saleCase: BrokerSaleCase;
+  capture: BrokerCapture | null;
+  nextStage: string | null;
+  readiness: { ready: boolean; missing: string[]; requirements: Array<{ key: string; label: string; ready: boolean }> };
+  options: {
+    qualificationStatuses: string[];
+    offerStatuses: string[];
+    promiseStatuses: string[];
+    titleStudyStatuses: string[];
+    financingStatuses: string[];
+    bankAppraisalStatuses: string[];
+    deedStatuses: string[];
+    cbrStatuses: string[];
+    handoverStatuses: string[];
+  };
+};
+
 export type BrokerOverview = {
   kpis: {
     properties: number;
@@ -1470,6 +1530,18 @@ export function createBrokerOperation(input: {
 
 export function advanceBrokerOperation(id: string, input: { stage: string; note?: string }): Promise<BrokerOperation> {
   return request<BrokerOperation>(`/broker/operations/${encodeURIComponent(id)}/stage`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function getBrokerSaleWorkspace(operationId: string): Promise<BrokerSaleWorkspace> {
+  return request<BrokerSaleWorkspace>(`/broker/sales/${encodeURIComponent(operationId)}`);
+}
+
+export function saveBrokerSaleWorkspace(operationId: string, input: Partial<BrokerSaleCase>): Promise<BrokerSaleWorkspace> {
+  return request<BrokerSaleWorkspace>(`/broker/sales/${encodeURIComponent(operationId)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function confirmBrokerSaleCheckpoint(operationId: string, input: { checkpoint: "oferta" | "promesa" | "titulos" | "escritura" | "inscripcion" | "entrega"; note?: string }): Promise<BrokerSaleWorkspace> {
+  return request<BrokerSaleWorkspace>(`/broker/sales/${encodeURIComponent(operationId)}/confirmations`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function addBrokerOperationEvent(id: string, input: { note: string; type?: string }): Promise<BrokerOperation> {
