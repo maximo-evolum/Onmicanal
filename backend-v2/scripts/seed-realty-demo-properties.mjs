@@ -1056,6 +1056,45 @@ async function seedBrokerMaintenanceProjects(tenantId, properties) {
   return { maintenances: 2, projects: 1 };
 }
 
+// Casos de postventa demostrables: inspección cerrada, entrega con firma
+// pendiente, caso en gestión y garantía en revisión. Son datos sintéticos y
+// no gatillan comunicaciones, reclamos ni aceptación externa.
+async function seedBrokerPostSaleControls(tenantId, properties) {
+  const property = properties.find((item) => item.title === "Casa Familiar Penalolen Alto");
+  if (!property) return { inspections: 0, handovers: 0, postSaleCases: 0, warranties: 0 };
+  const strictProperty = await prisma.brokerProperty.findUnique({ where: { legacyRecordId: property.id }, select: { id: true } });
+  if (!strictProperty) return { inspections: 0, handovers: 0, postSaleCases: 0, warranties: 0 };
+  const records = await prisma.industryRecord.findMany({ where: { tenantId, recordType: { in: ["property_inspection", "property_handover", "post_sale_case", "warranty_case"] } } });
+  const byTitle = new Map(records.map((record) => [record.title, record]));
+  const inspectionRecord = byTitle.get("Inspección pre-entrega - Casa Familiar Peñalolén Alto");
+  const handoverRecord = byTitle.get("Entrega programada - Casa Familiar Peñalolén Alto");
+  const postSaleRecord = byTitle.get("Postventa terraza - Casa Familiar Peñalolén Alto");
+  const warrantyRecord = byTitle.get("Garantía iluminación - Casa Familiar Peñalolén Alto");
+  if (!inspectionRecord || !handoverRecord || !postSaleRecord || !warrantyRecord) return { inspections: 0, handovers: 0, postSaleCases: 0, warranties: 0 };
+  const checkpoints = (keys) => Object.fromEntries(keys.map((key) => [key, { confirmedAt: "2026-08-20T12:00:00.000Z", confirmedBy: "Equipo de demostración Broker OS", note: "Control humano registrado para demostración." }]));
+  await prisma.brokerInspection.upsert({
+    where: { legacyRecordId: inspectionRecord.id },
+    create: { tenantId, propertyId: strictProperty.id, legacyRecordId: inspectionRecord.id, inspectionType: "PRE_ENTREGA", status: "CERRADA", workflowStage: "CERRADA", scheduledAt: new Date("2026-08-13T09:30:00.000Z"), inspectedAt: new Date("2026-08-13T10:15:00.000Z"), inspectorName: "Carlos Mendoza Soto", conditionSummary: "Pintura, medidores, llaves y terminaciones revisadas sin observaciones críticas.", checklist: { detalle: "Pintura revisada; medidores fotografiados; llaves completas; inventario y fotografías adjuntados." }, evidence: { reference: "ACTA-INS-2026-041", photos: 12, source: DEMO_SOURCE, demo: true }, observations: "Se corrigió un detalle menor de sello antes de la recepción.", requiresAction: false, completedAt: new Date("2026-08-14T16:00:00.000Z"), checkpoints: checkpoints(["inspeccion", "recepcion"]) },
+    update: { status: "CERRADA", workflowStage: "CERRADA", scheduledAt: new Date("2026-08-13T09:30:00.000Z"), inspectedAt: new Date("2026-08-13T10:15:00.000Z"), inspectorName: "Carlos Mendoza Soto", conditionSummary: "Pintura, medidores, llaves y terminaciones revisadas sin observaciones críticas.", checklist: { detalle: "Pintura revisada; medidores fotografiados; llaves completas; inventario y fotografías adjuntados." }, evidence: { reference: "ACTA-INS-2026-041", photos: 12, source: DEMO_SOURCE, demo: true }, observations: "Se corrigió un detalle menor de sello antes de la recepción.", requiresAction: false, completedAt: new Date("2026-08-14T16:00:00.000Z"), checkpoints: checkpoints(["inspeccion", "recepcion"]) }
+  });
+  await prisma.brokerHandover.upsert({
+    where: { legacyRecordId: handoverRecord.id },
+    create: { tenantId, propertyId: strictProperty.id, legacyRecordId: handoverRecord.id, direction: "ENTREGA", status: "FIRMA", workflowStage: "FIRMA", scheduledAt: new Date("2026-08-30T11:00:00.000Z"), recipientName: "Felipe Arancibia", recipientRole: "Comprador", inventoryReference: "INV-ENT-2026-077 · Inventario, fotos de medidores y 3 juegos de llaves.", evidence: { source: DEMO_SOURCE, demo: true }, observations: "Acta preparada para firma presencial y verificación final de receptores.", checkpoints: checkpoints(["inventario"]) },
+    update: { status: "FIRMA", workflowStage: "FIRMA", scheduledAt: new Date("2026-08-30T11:00:00.000Z"), recipientName: "Felipe Arancibia", recipientRole: "Comprador", inventoryReference: "INV-ENT-2026-077 · Inventario, fotos de medidores y 3 juegos de llaves.", evidence: { source: DEMO_SOURCE, demo: true }, observations: "Acta preparada para firma presencial y verificación final de receptores.", checkpoints: checkpoints(["inventario"]) }
+  });
+  const postSale = await prisma.brokerPostSaleCase.upsert({
+    where: { legacyRecordId: postSaleRecord.id },
+    create: { tenantId, propertyId: strictProperty.id, legacyRecordId: postSaleRecord.id, title: postSaleRecord.title, caseType: "TERMINACION_EXTERIOR", priority: "MEDIA", status: "GESTION", workflowStage: "GESTION", description: "Revisión de sello exterior en terraza antes de la entrega definitiva.", openedAt: new Date("2026-08-14T10:00:00.000Z"), responseDueAt: new Date("2026-08-27T18:00:00.000Z"), responsibleName: "Coordinación de postventa", diagnosis: "Sellado perimetral con desgaste localizado por exposición; no afecta la estructura.", actionPlan: "Proveedor revisará, aplicará sello compatible y adjuntará fotografías de terminación.", evidence: { reference: "POST-2026-018", source: DEMO_SOURCE, demo: true }, checkpoints: checkpoints(["diagnostico"]) },
+    update: { priority: "MEDIA", status: "GESTION", workflowStage: "GESTION", responseDueAt: new Date("2026-08-27T18:00:00.000Z"), responsibleName: "Coordinación de postventa", diagnosis: "Sellado perimetral con desgaste localizado por exposición; no afecta la estructura.", actionPlan: "Proveedor revisará, aplicará sello compatible y adjuntará fotografías de terminación.", evidence: { reference: "POST-2026-018", source: DEMO_SOURCE, demo: true }, checkpoints: checkpoints(["diagnostico"]) }
+  });
+  await prisma.brokerWarrantyCase.upsert({
+    where: { legacyRecordId: warrantyRecord.id },
+    create: { tenantId, propertyId: strictProperty.id, postSaleCaseId: postSale.id, legacyRecordId: warrantyRecord.id, coverageType: "PROVEEDOR", providerName: "Iluminación Exterior Andes", warrantyUntil: new Date("2027-02-28T23:59:59.000Z"), description: "Una luminaria exterior requiere validación de garantía del proveedor.", priority: "MEDIA", status: "REVISION_COBERTURA", workflowStage: "REVISION_COBERTURA", reviewedAt: new Date("2026-08-19T15:00:00.000Z"), evidence: { reference: "GAR-2026-024", purchaseDocument: "Factura demo 2026-144", source: DEMO_SOURCE, demo: true }, checkpoints: checkpoints(["cobertura"]) },
+    update: { postSaleCaseId: postSale.id, coverageType: "PROVEEDOR", providerName: "Iluminación Exterior Andes", warrantyUntil: new Date("2027-02-28T23:59:59.000Z"), priority: "MEDIA", status: "REVISION_COBERTURA", workflowStage: "REVISION_COBERTURA", reviewedAt: new Date("2026-08-19T15:00:00.000Z"), evidence: { reference: "GAR-2026-024", purchaseDocument: "Factura demo 2026-144", source: DEMO_SOURCE, demo: true }, checkpoints: checkpoints(["cobertura"]) }
+  });
+  return { inspections: 1, handovers: 1, postSaleCases: 1, warranties: 1 };
+}
+
 const BROKER_DEMO_AREAS = [
   { area: "Propiedades y cartera", recordTypes: ["property"] },
   { area: "Captacion, tasacion y cierre", recordTypes: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_settlement"] },
@@ -1082,6 +1121,10 @@ async function verifyBrokerDemo() {
   const rentalCases = await prisma.brokerRentalCase.findMany({ where: { tenantId: tenant.id }, select: { status: true, currentStage: true } });
   const maintenanceCases = await prisma.brokerMaintenance.findMany({ where: { tenantId: tenant.id }, select: { workflowStage: true } });
   const projects = await prisma.brokerProject.findMany({ where: { tenantId: tenant.id }, select: { status: true } });
+  const inspections = await prisma.brokerInspection.findMany({ where: { tenantId: tenant.id }, select: { workflowStage: true } });
+  const handovers = await prisma.brokerHandover.findMany({ where: { tenantId: tenant.id }, select: { workflowStage: true } });
+  const postSaleCases = await prisma.brokerPostSaleCase.findMany({ where: { tenantId: tenant.id }, select: { workflowStage: true } });
+  const warrantyCases = await prisma.brokerWarrantyCase.findMany({ where: { tenantId: tenant.id }, select: { workflowStage: true } });
   const counts = records.reduce((accumulator, record) => {
     accumulator[record.recordType] = (accumulator[record.recordType] || 0) + 1;
     return accumulator;
@@ -1104,6 +1147,10 @@ async function verifyBrokerDemo() {
   if (!maintenanceCases.some((item) => item.workflowStage === "CERRADA")) faltantes.push("Mantención cerrada con recepción controlada");
   if (!maintenanceCases.some((item) => item.workflowStage === "COTIZACION")) faltantes.push("Mantención en etapa de cotización");
   if (!projects.some((item) => item.status === "EJECUCION")) faltantes.push("Proyecto en ejecución con presupuesto aprobado");
+  if (!inspections.some((item) => item.workflowStage === "CERRADA")) faltantes.push("Inspección cerrada con recepción confirmada");
+  if (!handovers.some((item) => item.workflowStage === "FIRMA")) faltantes.push("Entrega con inventario y firma pendiente");
+  if (!postSaleCases.some((item) => item.workflowStage === "GESTION")) faltantes.push("Caso de postventa en gestión con diagnóstico");
+  if (!warrantyCases.some((item) => item.workflowStage === "REVISION_COBERTURA")) faltantes.push("Garantía en revisión de cobertura");
 
   console.log(JSON.stringify({
     tenant: tenant.name,
@@ -1114,6 +1161,10 @@ async function verifyBrokerDemo() {
     expedientesArriendo: rentalCases.length,
     controlesMantencion: maintenanceCases.length,
     proyectos: projects.length,
+    inspecciones: inspections.length,
+    entregas: handovers.length,
+    casosPostventa: postSaleCases.length,
+    garantias: warrantyCases.length,
     areas,
     demostracionLista: faltantes.length === 0,
     faltantes,
@@ -1147,6 +1198,7 @@ async function main() {
   const saleCases = await seedBrokerSaleCases(realtyTenant.id, properties);
   const rentalCases = await seedBrokerRentalCases(realtyTenant.id, properties);
   const maintenanceProjects = await seedBrokerMaintenanceProjects(realtyTenant.id, properties);
+  const postSaleControls = await seedBrokerPostSaleControls(realtyTenant.id, properties);
 
   console.log(JSON.stringify({
     tenant: realtyTenant.name,
@@ -1162,6 +1214,7 @@ async function main() {
     saleCases,
     rentalCases,
     maintenanceProjects,
+    postSaleControls,
     legacyPropertyNormalized: Boolean(normalizedLegacy),
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,

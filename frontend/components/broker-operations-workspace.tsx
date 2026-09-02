@@ -6,12 +6,14 @@ import {
   advanceBrokerOperation,
   advanceBrokerMaintenance,
   advanceBrokerProject,
+  advanceBrokerPostSale,
   addBrokerMaintenanceQuote,
   createBrokerOperation,
   createBrokerRecord,
   confirmBrokerSaleCheckpoint,
   confirmBrokerMaintenanceCheckpoint,
   confirmBrokerProjectCheckpoint,
+  confirmBrokerPostSaleCheckpoint,
   confirmBrokerRentalCheckpoint,
   getBrokerCatalog,
   getBrokerAccess,
@@ -27,6 +29,7 @@ import {
   getBrokerPropertyExpedient,
   getBrokerSaleWorkspace,
   getBrokerProjectWorkspace,
+  getBrokerPostSaleWorkspace,
   getBrokerRentalWorkspace,
   getBrokerRecords,
   advanceBrokerFinancing,
@@ -38,6 +41,7 @@ import {
   saveBrokerRentalWorkspace,
   saveBrokerMaintenanceWorkspace,
   saveBrokerProjectWorkspace,
+  saveBrokerPostSaleWorkspace,
   selectBrokerMaintenanceQuote,
   saveBrokerOperatingConfiguration,
   saveBrokerHoldingConfig,
@@ -52,6 +56,7 @@ import {
   type BrokerRentalWorkspace,
   type BrokerMaintenanceWorkspace,
   type BrokerProjectWorkspace,
+  type BrokerPostSaleWorkspace,
   type BrokerPropertyExpedient,
   type BrokerRecordArea,
   type BrokerRecordDefinition,
@@ -81,6 +86,7 @@ const BROKER_BUSINESS_ROLE_OPTIONS = [
 const BROKER_SCOPE_OPTIONS = [["ASSIGNED", "Solo registros asignados"], ["TEAM", "Mi equipo"], ["BRANCH", "Mi sucursal"], ["COMPANY", "Toda la empresa"], ["HOLDING", "Empresas autorizadas del holding"]] as const;
 const FINANCING_TERMINAL_STAGES = new Set(["CIERRE", "RECHAZADO", "CANCELADO"]);
 const ADMINISTRATION_LIQUIDATION_STAGES = ["DRAFT", "PENDING_APPROVAL", "ISSUED", "PAID"] as const;
+const CONTROLLED_BROKER_RECORD_TYPES = new Set(["maintenance_ticket", "remodeling_project", "property_inspection", "property_handover", "post_sale_case", "warranty_case"]);
 
 function financingActionForStage(stage: string) {
   const normalized = String(stage || "").trim().toUpperCase();
@@ -267,7 +273,12 @@ function stageIndex(operation: BrokerOperation, catalog: BrokerCatalog | null) {
 function recordSummary(record: IndustryRecord, definition?: BrokerRecordDefinition) {
   const data = record.data as Record<string, unknown>;
   const keys = (definition?.required || []).filter((key) => key !== "propertyId").slice(0, 2);
-  const values = keys.map((key) => String(data[key] || "").trim()).filter(Boolean);
+  const valueText = (value: unknown) => {
+    if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean).join(", ");
+    if (value && typeof value === "object") return String((value as Record<string, unknown>).detalle ?? (value as Record<string, unknown>).summary ?? (value as Record<string, unknown>).label ?? "").trim();
+    return String(value || "").trim();
+  };
+  const values = keys.map((key) => valueText(data[key])).filter(Boolean);
   return values.length ? values.join(" · ") : "Sin datos adicionales";
 }
 
@@ -288,6 +299,7 @@ export function BrokerOperationsPageContent() {
   const [rentalWorkspace, setRentalWorkspace] = useState<BrokerRentalWorkspace | null>(null);
   const [maintenanceWorkspace, setMaintenanceWorkspace] = useState<BrokerMaintenanceWorkspace | null>(null);
   const [projectWorkspace, setProjectWorkspace] = useState<BrokerProjectWorkspace | null>(null);
+  const [postSaleWorkspace, setPostSaleWorkspace] = useState<BrokerPostSaleWorkspace | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [operationType, setOperationType] = useState<BrokerOperationType>("SALE");
@@ -391,6 +403,14 @@ export function BrokerOperationsPageContent() {
   };
   const selectedScenario = scenarios.find((scenario) => scenario.key === selectedScenarioKey) || scenarios[0];
   const reporting = overview?.reporting;
+  const postSaleEntity = postSaleWorkspace?.entity;
+  const postSaleText = (key: string) => {
+    const value = postSaleEntity?.[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) return String((value as Record<string, unknown>).detalle ?? (value as Record<string, unknown>).summary ?? "");
+    return String(value ?? "");
+  };
+  const postSaleDate = (key: string) => postSaleText(key).slice(0, 10);
+  const postSaleChecked = (key: string) => Boolean(postSaleEntity?.[key]);
 
   useEffect(() => {
     if (!selectedScenarioKey && scenarios[0]?.key) setSelectedScenarioKey(scenarios[0].key);
@@ -563,7 +583,7 @@ export function BrokerOperationsPageContent() {
 
   async function openMaintenanceWorkspace(record: IndustryRecord) {
     setBusy(true); setNotice("");
-    try { setMaintenanceWorkspace(await getBrokerMaintenanceWorkspace(record.id)); setProjectWorkspace(null); }
+    try { setMaintenanceWorkspace(await getBrokerMaintenanceWorkspace(record.id)); setProjectWorkspace(null); setPostSaleWorkspace(null); }
     catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo abrir el control de mantención."); }
     finally { setBusy(false); }
   }
@@ -625,7 +645,7 @@ export function BrokerOperationsPageContent() {
 
   async function openProjectWorkspace(record: IndustryRecord) {
     setBusy(true); setNotice("");
-    try { setProjectWorkspace(await getBrokerProjectWorkspace(record.id)); setMaintenanceWorkspace(null); }
+    try { setProjectWorkspace(await getBrokerProjectWorkspace(record.id)); setMaintenanceWorkspace(null); setPostSaleWorkspace(null); }
     catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo abrir el control del proyecto."); }
     finally { setBusy(false); }
   }
@@ -657,6 +677,49 @@ export function BrokerOperationsPageContent() {
     setBusy(true); setNotice("");
     try { setProjectWorkspace(await advanceBrokerProject(projectWorkspace.record.id, projectWorkspace.nextStage)); setRecords(await getBrokerRecords("projects")); setNotice("Etapa del proyecto actualizada."); }
     catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo avanzar el proyecto."); }
+    finally { setBusy(false); }
+  }
+
+  async function openPostSaleWorkspace(record: IndustryRecord) {
+    setBusy(true); setNotice("");
+    try { setPostSaleWorkspace(await getBrokerPostSaleWorkspace(record.id)); setMaintenanceWorkspace(null); setProjectWorkspace(null); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo abrir el control de postventa."); }
+    finally { setBusy(false); }
+  }
+
+  async function savePostSaleWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!postSaleWorkspace) return;
+    const form = new FormData(event.currentTarget);
+    const value = (name: string) => String(form.get(name) || "").trim();
+    const input = {
+      inspectionType: value("inspectionType"), scheduledAt: value("scheduledAt") || null, inspectedAt: value("inspectedAt") || null, inspectorName: value("inspectorName"), conditionSummary: value("conditionSummary"), checklist: value("checklist"), observations: value("observations"), requiresAction: form.get("requiresAction") === "on", actionPlan: value("actionPlan"), actionDueAt: value("actionDueAt") || null, completedAt: value("completedAt") || null,
+      direction: value("direction"), handoverAt: value("handoverAt") || null, recipientName: value("recipientName"), recipientRole: value("recipientRole"), inventoryReference: value("inventoryReference"), actaReference: value("actaReference"), acceptedAt: value("acceptedAt") || null,
+      title: value("title"), caseType: value("caseType"), priority: value("priority"), description: value("description"), openedAt: value("openedAt") || null, responseDueAt: value("responseDueAt") || null, responsibleName: value("responsibleName"), diagnosis: value("diagnosis"), resolution: value("resolution"),
+      coverageType: value("coverageType"), providerName: value("providerName"), warrantyUntil: value("warrantyUntil") || null, claimReference: value("claimReference"), submittedAt: value("submittedAt") || null, reviewedAt: value("reviewedAt") || null, resolvedAt: value("resolvedAt") || null,
+    };
+    setBusy(true); setNotice("");
+    try {
+      const updated = await saveBrokerPostSaleWorkspace(postSaleWorkspace.record.id, input);
+      setPostSaleWorkspace(updated); setRecords(await getBrokerRecords("post_sale"));
+      setNotice("Control de postventa guardado. El sistema no firma actas, presenta reclamos ni contacta a terceros automáticamente.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo guardar el control de postventa."); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmPostSaleCheckpoint(checkpoint: string) {
+    if (!postSaleWorkspace) return;
+    setBusy(true); setNotice("");
+    try { setPostSaleWorkspace(await confirmBrokerPostSaleCheckpoint(postSaleWorkspace.record.id, { checkpoint, note: "Revisión humana confirmada desde el control de postventa." })); setNotice("Confirmación humana registrada en la trazabilidad."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo confirmar el hito."); }
+    finally { setBusy(false); }
+  }
+
+  async function movePostSaleStage() {
+    if (!postSaleWorkspace?.nextStage) return;
+    setBusy(true); setNotice("");
+    try { setPostSaleWorkspace(await advanceBrokerPostSale(postSaleWorkspace.record.id, postSaleWorkspace.nextStage)); setRecords(await getBrokerRecords("post_sale")); setNotice("Etapa de postventa actualizada."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo avanzar el control de postventa."); }
     finally { setBusy(false); }
   }
 
@@ -1057,7 +1120,7 @@ export function BrokerOperationsPageContent() {
       <section className="broker-os-list"><div className="broker-list-heading"><span>Registros</span><h2>{AREA_CONFIG[currentArea].label}</h2><p>Consulta cada antecedente sin mezclarlo con otra propiedad u operacion.</p></div>
         {records.length === 0 ? <p className="broker-empty">Aun no hay registros en esta area. Crea el primero desde el panel superior.</p> : records.map((record) => {
           const definition = catalog?.recordDefinitions[record.recordType];
-          return <article key={record.id} className="broker-record-card"><div><span>{definition?.label || readable(record.recordType)}</span><h3>{record.title}</h3><p>{recordSummary(record, definition)}</p></div><div className="broker-record-state"><b>{readable(record.status)}</b>{definition?.statuses?.length ? <select aria-label={`Cambiar estado de ${record.title}`} value={record.status} disabled={busy} onChange={(event) => setRecordStatus(record, event.target.value)}>{definition.statuses.map((status) => <option key={status} value={status}>{readable(status)}</option>)}</select> : null}{record.recordType === "maintenance_ticket" ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => openMaintenanceWorkspace(record)}>Control operativo</button> : null}{record.recordType === "remodeling_project" ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => openProjectWorkspace(record)}>Control operativo</button> : null}</div></article>;
+          return <article key={record.id} className="broker-record-card"><div><span>{definition?.label || readable(record.recordType)}</span><h3>{record.title}</h3><p>{recordSummary(record, definition)}</p></div><div className="broker-record-state"><b>{readable(record.status)}</b>{definition?.statuses?.length && !CONTROLLED_BROKER_RECORD_TYPES.has(record.recordType) ? <select aria-label={`Cambiar estado de ${record.title}`} value={record.status} disabled={busy} onChange={(event) => setRecordStatus(record, event.target.value)}>{definition.statuses.map((status) => <option key={status} value={status}>{readable(status)}</option>)}</select> : null}{record.recordType === "maintenance_ticket" ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => openMaintenanceWorkspace(record)}>Control operativo</button> : null}{record.recordType === "remodeling_project" ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => openProjectWorkspace(record)}>Control operativo</button> : null}{["property_inspection", "property_handover", "post_sale_case", "warranty_case"].includes(record.recordType) ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => openPostSaleWorkspace(record)}>Control operativo</button> : null}</div></article>;
         })}
       </section>
     </section> : null}
@@ -1080,6 +1143,20 @@ export function BrokerOperationsPageContent() {
       <form className="broker-sale-case-form" onSubmit={saveProjectWorkspace}><section><h3>Planificación y presupuesto</h3><label>Nombre<input name="name" defaultValue={projectWorkspace.project.name} required /></label><label>Tipo de proyecto<input name="projectType" defaultValue={projectWorkspace.project.projectType} required /></label><label>Alcance<textarea name="scope" rows={4} defaultValue={projectWorkspace.project.scope || ""} placeholder="Qué se hará, límites y criterios de resultado" /></label><label>Presupuesto estimado<input name="budget" type="number" min="0" defaultValue={projectWorkspace.project.budget ?? ""} /></label><label>Presupuesto aprobado<input name="approvedBudget" type="number" min="0" defaultValue={projectWorkspace.project.approvedBudget ?? ""} /></label></section><section><h3>Ejecución y recepción</h3><label>Inicio programado<input name="startAt" type="date" defaultValue={projectWorkspace.project.startAt?.slice(0, 10) || ""} /></label><label>Fecha objetivo<input name="targetAt" type="date" defaultValue={projectWorkspace.project.targetAt?.slice(0, 10) || ""} /></label><label>Fecha de término<input name="completedAt" type="date" defaultValue={projectWorkspace.project.completedAt?.slice(0, 10) || ""} /></label><label>Observaciones de recepción<textarea name="acceptanceNotes" rows={4} defaultValue={projectWorkspace.project.acceptanceNotes || ""} placeholder="Resultado, observaciones y aceptación del responsable" /></label></section><footer><p className="broker-human-note">Este control organiza presupuesto, hitos y evidencia. No compra materiales, firma contratos ni asigna proveedores automáticamente.</p><button className="primary-btn" disabled={busy}>Guardar control</button></footer></form>
       <section className="broker-maintenance-quotes"><div><h3>Hitos del proyecto</h3><p>Los hitos se administran desde el registro de proyectos y quedan asociados a esta propiedad.</p></div>{projectWorkspace.milestones.length ? <div className="broker-maintenance-quote-list">{projectWorkspace.milestones.map((milestone) => { const data = milestone.data as Record<string, unknown>; return <article key={milestone.id}><b>{milestone.title}</b><span>{String(data.description || "Sin descripción")}</span><small>{data.milestoneDate ? new Date(String(data.milestoneDate)).toLocaleDateString("es-CL") : "Sin fecha"} · {readable(milestone.status)}</small></article>; })}</div> : <p className="broker-empty">Aún no hay hitos. Crea uno desde el formulario de Proyectos para ordenar la ejecución.</p>}</section>
       <div className="broker-sale-confirmations"><h3>Confirmaciones humanas obligatorias</h3><p>Los hitos del proyecto deben ser confirmados por el responsable antes de avanzar.</p><div>{(["aprobacion", "ejecucion", "recepcion"] as const).map((checkpoint) => <button type="button" key={checkpoint} className={projectWorkspace.project.checkpoints?.[checkpoint] ? "secondary-btn confirmed" : "secondary-btn"} disabled={busy} onClick={() => confirmProjectCheckpoint(checkpoint)}>{projectWorkspace.project.checkpoints?.[checkpoint] ? `✓ ${readable(checkpoint)} confirmado` : `Confirmar ${readable(checkpoint)}`}</button>)}{projectWorkspace.nextStage ? <button type="button" className="primary-btn" disabled={busy || !projectWorkspace.readiness.ready} onClick={moveProjectStage}>Avanzar a {readable(projectWorkspace.nextStage)}</button> : null}</div></div>
+    </section> : null}
+
+    {postSaleWorkspace ? <section className="broker-sale-case-panel broker-post-sale-case-panel" aria-label="Control operativo de postventa">
+      <header><div><span>{postSaleWorkspace.kind === "inspection" ? "Inspección de propiedad" : postSaleWorkspace.kind === "handover" ? "Entrega y recepción" : postSaleWorkspace.kind === "case" ? "Caso de postventa" : "Garantía"}</span><h2>{postSaleWorkspace.record.title}</h2><p>Etapa actual: <b>{readable(postSaleWorkspace.entity.workflowStage)}</b></p></div><button type="button" className="secondary-btn" onClick={() => setPostSaleWorkspace(null)}>Cerrar control</button></header>
+      <div className="broker-sale-readiness"><div><b>{postSaleWorkspace.nextStage ? `Siguiente hito: ${readable(postSaleWorkspace.nextStage)}` : "Control cerrado"}</b><p>{postSaleWorkspace.readiness.ready ? "Los antecedentes mínimos están listos para avanzar." : "Completa los puntos pendientes antes de avanzar."}</p></div>{postSaleWorkspace.readiness.requirements.length ? <ul>{postSaleWorkspace.readiness.requirements.map((item) => <li key={item.key} className={item.ready ? "ready" : "pending"}>{item.ready ? "✓" : "○"} {item.label}</li>)}</ul> : null}</div>
+      <form className="broker-sale-case-form" onSubmit={savePostSaleWorkspace}>
+        {postSaleWorkspace.kind === "inspection" ? <><section><h3>Programación e inspección</h3><label>Tipo de inspección<select name="inspectionType" defaultValue={postSaleText("inspectionType")}>{postSaleWorkspace.options.inspectionTypes.map((item) => <option key={item} value={item}>{readable(item)}</option>)}</select></label><label>Fecha programada<input name="scheduledAt" type="date" defaultValue={postSaleDate("scheduledAt")} /></label><label>Inspector responsable<input name="inspectorName" defaultValue={postSaleText("inspectorName")} placeholder="Nombre de quien revisa" /></label><label>Fecha realizada<input name="inspectedAt" type="date" defaultValue={postSaleDate("inspectedAt")} /></label><label>Resumen de condición<textarea name="conditionSummary" rows={3} defaultValue={postSaleText("conditionSummary")} placeholder="Estado general y hallazgos relevantes" /></label></section><section><h3>Checklist y observaciones</h3><label>Checklist o inventario<textarea name="checklist" rows={4} defaultValue={postSaleText("checklist")} placeholder="Medidores, terminaciones, llaves, fotografías y observaciones" /></label><label>Observaciones<textarea name="observations" rows={3} defaultValue={postSaleText("observations")} /></label><label className="broker-check-option"><input name="requiresAction" type="checkbox" defaultChecked={postSaleChecked("requiresAction")} /> Requiere correcciones antes de recibir</label><label>Plan de corrección<textarea name="actionPlan" rows={3} defaultValue={postSaleText("actionPlan")} placeholder="Trabajo pendiente y responsable" /></label><label>Fecha compromiso<input name="actionDueAt" type="date" defaultValue={postSaleDate("actionDueAt")} /></label><label>Fecha de cierre<input name="completedAt" type="date" defaultValue={postSaleDate("completedAt")} /></label></section></> : null}
+        {postSaleWorkspace.kind === "handover" ? <><section><h3>Programación e inventario</h3><label>Tipo<select name="direction" defaultValue={postSaleText("direction")}>{postSaleWorkspace.options.handoverDirections.map((item) => <option key={item} value={item}>{readable(item)}</option>)}</select></label><label>Fecha programada<input name="scheduledAt" type="date" defaultValue={postSaleDate("scheduledAt")} /></label><label>Quién recibe<input name="recipientName" defaultValue={postSaleText("recipientName")} /></label><label>Rol de quien recibe<input name="recipientRole" defaultValue={postSaleText("recipientRole")} placeholder="Ej.: Comprador, arrendatario o propietario" /></label><label>Referencia de inventario<textarea name="inventoryReference" rows={3} defaultValue={postSaleText("inventoryReference")} placeholder="Acta, fotografías o documento de inventario" /></label></section><section><h3>Acta y recepción</h3><label>Referencia de acta<textarea name="actaReference" rows={3} defaultValue={postSaleText("actaReference")} placeholder="Número de acta o respaldo firmado" /></label><label>Fecha efectiva de entrega<input name="handoverAt" type="date" defaultValue={postSaleDate("handoverAt")} /></label><label>Fecha de aceptación<input name="acceptedAt" type="date" defaultValue={postSaleDate("acceptedAt")} /></label><label>Observaciones<textarea name="observations" rows={4} defaultValue={postSaleText("observations")} placeholder="Observaciones de entrega, llaves, medidores o pendientes" /></label></section></> : null}
+        {postSaleWorkspace.kind === "case" ? <><section><h3>Ingreso y diagnóstico</h3><label>Nombre del caso<input name="title" defaultValue={postSaleText("title")} required /></label><label>Tipo de caso<input name="caseType" defaultValue={postSaleText("caseType")} placeholder="Ej.: Terminación, filtración o atención al cliente" /></label><label>Prioridad<select name="priority" defaultValue={postSaleText("priority")}>{postSaleWorkspace.options.priorities.map((item) => <option key={item} value={item}>{readable(item)}</option>)}</select></label><label>Descripción<textarea name="description" rows={4} defaultValue={postSaleText("description")} required /></label><label>Fecha de ingreso<input name="openedAt" type="date" defaultValue={postSaleDate("openedAt")} /></label><label>Responsable<input name="responsibleName" defaultValue={postSaleText("responsibleName")} /></label></section><section><h3>Gestión y resolución</h3><label>Diagnóstico<textarea name="diagnosis" rows={3} defaultValue={postSaleText("diagnosis")} placeholder="Causa probable, evidencia y revisión realizada" /></label><label>Plan de acción<textarea name="actionPlan" rows={3} defaultValue={postSaleText("actionPlan")} placeholder="Acciones, responsable y alcance" /></label><label>Fecha compromiso<input name="responseDueAt" type="date" defaultValue={postSaleDate("responseDueAt")} /></label><label>Resolución<textarea name="resolution" rows={3} defaultValue={postSaleText("resolution")} placeholder="Resultado documentado y condición de cierre" /></label><label>Fecha de resolución<input name="resolvedAt" type="date" defaultValue={postSaleDate("resolvedAt")} /></label></section></> : null}
+        {postSaleWorkspace.kind === "warranty" ? <><section><h3>Cobertura de garantía</h3><label>Tipo de cobertura<select name="coverageType" defaultValue={postSaleText("coverageType")}>{postSaleWorkspace.options.warrantyCoverageTypes.map((item) => <option key={item} value={item}>{readable(item)}</option>)}</select></label><label>Proveedor o responsable<input name="providerName" defaultValue={postSaleText("providerName")} placeholder="Constructora, proveedor o fabricante" /></label><label>Vigencia hasta<input name="warrantyUntil" type="date" defaultValue={postSaleDate("warrantyUntil")} /></label><label>Prioridad<select name="priority" defaultValue={postSaleText("priority")}>{postSaleWorkspace.options.priorities.map((item) => <option key={item} value={item}>{readable(item)}</option>)}</select></label><label>Descripción<textarea name="description" rows={4} defaultValue={postSaleText("description")} required /></label><label>Fecha de revisión<input name="reviewedAt" type="date" defaultValue={postSaleDate("reviewedAt")} /></label></section><section><h3>Reclamo y resolución</h3><label>Referencia de reclamo<input name="claimReference" defaultValue={postSaleText("claimReference")} placeholder="Folio, ticket o correo de respaldo" /></label><label>Fecha de presentación<input name="submittedAt" type="date" defaultValue={postSaleDate("submittedAt")} /></label><label>Resolución<textarea name="resolution" rows={4} defaultValue={postSaleText("resolution")} placeholder="Respuesta, reparación o acuerdo documentado" /></label><label>Fecha de resolución<input name="resolvedAt" type="date" defaultValue={postSaleDate("resolvedAt")} /></label><p className="broker-human-note">Broker OS documenta la gestión. No presenta reclamos externos ni acepta condiciones en nombre del cliente.</p></section></> : null}
+        <footer><p className="broker-human-note">El control conserva checklist, evidencias y responsables. La firma, entrega material, reclamo externo y aceptación final siempre los confirma una persona autorizada.</p><button className="primary-btn" disabled={busy}>Guardar control</button></footer>
+      </form>
+      <section className="broker-maintenance-quotes"><div><h3>Expediente relacionado de esta propiedad</h3><p>Consulta las demás inspecciones, entregas, garantías y casos sin mezclar información de otra propiedad.</p></div>{postSaleWorkspace.relatedRecords.length ? <div className="broker-maintenance-quote-list">{postSaleWorkspace.relatedRecords.map((record) => <article key={record.id}><b>{record.title}</b><span>{catalog?.recordDefinitions[record.recordType]?.label || readable(record.recordType)}</span><small>{readable(record.status)}</small></article>)}</div> : <p className="broker-empty">No hay otros controles de postventa asociados.</p>}</section>
+      <div className="broker-sale-confirmations"><h3>Confirmaciones humanas obligatorias</h3><p>Registra cada confirmación solo después de revisar el antecedente o ejecutar la acción fuera de EVOLUM OS.</p><div>{postSaleWorkspace.checkpoints.map((checkpoint) => <button type="button" key={checkpoint} className={postSaleWorkspace.entity.checkpoints?.[checkpoint] ? "secondary-btn confirmed" : "secondary-btn"} disabled={busy} onClick={() => confirmPostSaleCheckpoint(checkpoint)}>{postSaleWorkspace.entity.checkpoints?.[checkpoint] ? `✓ ${readable(checkpoint)} confirmado` : `Confirmar ${readable(checkpoint)}`}</button>)}{postSaleWorkspace.nextStage ? <button type="button" className="primary-btn" disabled={busy || !postSaleWorkspace.readiness.ready} onClick={movePostSaleStage}>Avanzar a {readable(postSaleWorkspace.nextStage)}</button> : null}</div></div>
     </section> : null}
 
     {tab === "commissions" ? <section className="broker-os-grid broker-area-grid">

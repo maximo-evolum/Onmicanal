@@ -104,6 +104,14 @@ const RECORD_MODULES = Object.freeze({
   finance_migration_batch: MODULES.FINANCE_MIGRATION
 });
 
+// Estos expedientes tienen un flujo estricto en Broker OS. Evitamos que una
+// actualización genérica salte una confirmación, una recepción o una garantía
+// solo cambiando el estado del registro histórico.
+const BROKER_CONTROLLED_STATUS_RECORDS = new Set([
+  "maintenance_ticket", "remodeling_project", "property_inspection",
+  "property_handover", "post_sale_case", "warranty_case"
+]);
+
 function cleanText(value, fallback = "") {
   const text = String(value ?? "").trim();
   return text || fallback;
@@ -444,7 +452,12 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
 
     const data = {};
     if (req.body?.title !== undefined) data.title = cleanText(req.body.title, existing.title);
-    if (req.body?.status !== undefined) data.status = cleanText(req.body.status, existing.status).toUpperCase();
+    if (req.body?.status !== undefined) {
+      if (BROKER_CONTROLLED_STATUS_RECORDS.has(existing.recordType)) {
+        return res.status(422).json({ error: "Este expediente tiene un flujo controlado. Cambia de etapa desde su Control operativo para conservar evidencias y confirmaciones." });
+      }
+      data.status = cleanText(req.body.status, existing.status).toUpperCase();
+    }
     if (req.body?.assignedToId !== undefined) {
       const assignedToId = cleanText(req.body.assignedToId) || null;
       if (assignedToId) {

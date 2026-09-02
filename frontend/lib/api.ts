@@ -1243,6 +1243,25 @@ export type BrokerProjectWorkspace = {
   options: { stages: string[]; priorities: string[]; approvalStatuses: string[]; quoteStatuses: string[]; projectStatuses: string[]; };
 };
 
+export type BrokerPostSaleEntity = {
+  id: string;
+  status: string;
+  workflowStage: string;
+  checkpoints?: Record<string, { confirmedAt?: string; confirmedBy?: string; note?: string }>;
+  [key: string]: unknown;
+};
+
+export type BrokerPostSaleWorkspace = {
+  record: IndustryRecord;
+  kind: "inspection" | "handover" | "case" | "warranty";
+  entity: BrokerPostSaleEntity;
+  relatedRecords: IndustryRecord[];
+  nextStage: string | null;
+  readiness: { ready: boolean; missing: string[]; requirements: Array<{ key: string; label: string; ready: boolean }> };
+  checkpoints: string[];
+  options: { inspectionStages: string[]; handoverStages: string[]; caseStages: string[]; warrantyStages: string[]; priorities: string[]; inspectionTypes: string[]; handoverDirections: string[]; warrantyCoverageTypes: string[]; };
+};
+
 export type BrokerOverview = {
   kpis: {
     properties: number;
@@ -1671,6 +1690,18 @@ export function confirmBrokerProjectCheckpoint(recordId: string, input: { checkp
 }
 export function advanceBrokerProject(recordId: string, stage: string): Promise<BrokerProjectWorkspace> {
   return request<BrokerProjectWorkspace>(`/broker/projects/${encodeURIComponent(recordId)}/stage`, { method: "PATCH", body: JSON.stringify({ stage }) });
+}
+export function getBrokerPostSaleWorkspace(recordId: string): Promise<BrokerPostSaleWorkspace> {
+  return request<BrokerPostSaleWorkspace>(`/broker/post-sale/${encodeURIComponent(recordId)}/workspace`);
+}
+export function saveBrokerPostSaleWorkspace(recordId: string, input: Record<string, unknown>): Promise<BrokerPostSaleWorkspace> {
+  return request<BrokerPostSaleWorkspace>(`/broker/post-sale/${encodeURIComponent(recordId)}/workspace`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function confirmBrokerPostSaleCheckpoint(recordId: string, input: { checkpoint: string; note?: string }): Promise<BrokerPostSaleWorkspace> {
+  return request<BrokerPostSaleWorkspace>(`/broker/post-sale/${encodeURIComponent(recordId)}/confirmations`, { method: "POST", body: JSON.stringify(input) });
+}
+export function advanceBrokerPostSale(recordId: string, stage: string): Promise<BrokerPostSaleWorkspace> {
+  return request<BrokerPostSaleWorkspace>(`/broker/post-sale/${encodeURIComponent(recordId)}/stage`, { method: "PATCH", body: JSON.stringify({ stage }) });
 }
 
 export function addBrokerOperationEvent(id: string, input: { note: string; type?: string }): Promise<BrokerOperation> {

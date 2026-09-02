@@ -109,6 +109,10 @@ model Tenant {
   brokerMaintenances      BrokerMaintenance[]
   brokerMaintenanceQuotes BrokerMaintenanceQuote[]
   brokerProjects          BrokerProject[]
+  brokerInspections       BrokerInspection[]
+  brokerHandovers         BrokerHandover[]
+  brokerPostSaleCases     BrokerPostSaleCase[]
+  brokerWarrantyCases     BrokerWarrantyCase[]
   brokerVisits            BrokerVisit[]
   brokerCommunities       BrokerCommunity[]
   brokerProviders         BrokerProvider[]
@@ -432,6 +436,10 @@ model BrokerProperty {
   commissions    BrokerCommission[]
   maintenances   BrokerMaintenance[]
   projects       BrokerProject[]
+  inspections    BrokerInspection[]
+  handovers      BrokerHandover[]
+  postSaleCases  BrokerPostSaleCase[]
+  warrantyCases  BrokerWarrantyCase[]
   visits         BrokerVisit[]
   financings     BrokerFinancing[]
   capture        BrokerPropertyCapture?
@@ -790,6 +798,131 @@ model BrokerProject {
   @@index([tenantId, status])
   @@index([propertyId, status])
   @@index([maintenanceId, status])
+}
+
+// Expediente postventa: cada registro genérico conserva su identificador
+// histórico, mientras el control estricto evita cerrar una inspección, entrega
+// o garantía sin evidencia y confirmación humana.
+model BrokerInspection {
+  id               String    @id @default(cuid())
+  tenantId         String
+  propertyId       String
+  legacyRecordId   String?   @unique
+  inspectionType   String    @default("PRE_ENTREGA")
+  status           String    @default("PROGRAMACION")
+  workflowStage    String    @default("PROGRAMACION")
+  scheduledAt      DateTime?
+  inspectedAt      DateTime?
+  inspectorName    String?
+  conditionSummary String?
+  checklist        Json?
+  evidence         Json?
+  observations     String?
+  requiresAction   Boolean   @default(false)
+  actionPlan       String?
+  actionDueAt      DateTime?
+  completedAt      DateTime?
+  checkpoints      Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property BrokerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, workflowStage])
+  @@index([propertyId, workflowStage])
+}
+
+model BrokerHandover {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  propertyId         String
+  legacyRecordId     String?   @unique
+  direction          String    @default("ENTREGA")
+  status             String    @default("PROGRAMACION")
+  workflowStage      String    @default("PROGRAMACION")
+  scheduledAt        DateTime?
+  handoverAt         DateTime?
+  recipientName      String?
+  recipientRole      String?
+  inventoryReference String?
+  actaReference      String?
+  observations       String?
+  evidence           Json?
+  acceptedAt         DateTime?
+  checkpoints        Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property BrokerProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, workflowStage])
+  @@index([propertyId, workflowStage])
+}
+
+model BrokerPostSaleCase {
+  id              String    @id @default(cuid())
+  tenantId        String
+  propertyId      String
+  legacyRecordId  String?   @unique
+  title           String
+  caseType        String    @default("POSTVENTA")
+  priority        String    @default("MEDIA")
+  status          String    @default("INGRESO")
+  workflowStage   String    @default("INGRESO")
+  description     String
+  openedAt        DateTime  @default(now())
+  responseDueAt   DateTime?
+  responsibleName String?
+  diagnosis       String?
+  actionPlan      String?
+  resolution      String?
+  evidence        Json?
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  checkpoints     Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property       BrokerProperty       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  warrantyCases  BrokerWarrantyCase[]
+
+  @@index([tenantId, workflowStage, priority])
+  @@index([propertyId, workflowStage])
+}
+
+model BrokerWarrantyCase {
+  id              String              @id @default(cuid())
+  tenantId        String
+  propertyId      String
+  postSaleCaseId  String?
+  legacyRecordId  String?             @unique
+  coverageType    String              @default("OTRA")
+  providerName    String?
+  warrantyUntil   DateTime?
+  description     String
+  priority        String              @default("MEDIA")
+  status          String              @default("INGRESO")
+  workflowStage   String              @default("INGRESO")
+  claimReference  String?
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  resolution      String?
+  evidence        Json?
+  resolvedAt      DateTime?
+  checkpoints     Json?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property      BrokerProperty      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  postSaleCase  BrokerPostSaleCase? @relation(fields: [postSaleCaseId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, workflowStage, warrantyUntil])
+  @@index([propertyId, workflowStage])
+  @@index([postSaleCaseId])
 }
 
 model BrokerVisit {

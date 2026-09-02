@@ -40,6 +40,7 @@ import { BROKER_CAPTURE_OPTIONS, captureReadiness, normalizeBrokerCapture, valid
 import { BROKER_SALE_OPTIONS, brokerSaleReadiness, normalizeBrokerSaleCase } from "../services/broker-sale.service.js";
 import { BROKER_RENTAL_OPTIONS, brokerRentalReadiness, normalizeBrokerRentalCase } from "../services/broker-rental.service.js";
 import { BROKER_MAINTENANCE_OPTIONS, brokerMaintenanceReadiness, brokerProjectReadiness, normalizeBrokerMaintenance, normalizeBrokerMaintenanceQuote, normalizeBrokerProject } from "../services/broker-maintenance-project.service.js";
+import { BROKER_POST_SALE_OPTIONS, brokerPostSaleReadiness, normalizeBrokerHandover, normalizeBrokerInspection, normalizeBrokerPostSaleCase, normalizeBrokerWarrantyCase, postSaleStages } from "../services/broker-post-sale.service.js";
 import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 
@@ -700,6 +701,106 @@ async function brokerProjectContext(req, record) {
 
 function brokerProjectPayload(context) {
   return { ...context, options: BROKER_MAINTENANCE_OPTIONS };
+}
+
+const POST_SALE_RECORD_KINDS = Object.freeze({
+  property_inspection: "inspection",
+  property_handover: "handover",
+  post_sale_case: "case",
+  warranty_case: "warranty",
+});
+
+function postSaleKind(record) {
+  return POST_SALE_RECORD_KINDS[record?.recordType] || null;
+}
+
+function postSaleStageFromLegacy(kind, record, data) {
+  const requested = text(data.workflowStage || data.stage).toUpperCase();
+  if (postSaleStages(kind).includes(requested)) return requested;
+  const legacy = text(record.status).toUpperCase();
+  const maps = {
+    inspection: { SCHEDULED: "PROGRAMACION", IN_PROGRESS: "INSPECCION", REQUIRES_ACTION: "CORRECCIONES", COMPLETED: "CERRADA" },
+    handover: { SCHEDULED: "PROGRAMACION", PENDING_SIGNATURE: "FIRMA", OBSERVED: "INVENTARIO", COMPLETED: "CERRADA" },
+    case: { OPEN: "INGRESO", IN_PROGRESS: "GESTION", WAITING_PROVIDER: "GESTION", RESOLVED: "RESOLUCION", CLOSED: "CERRADA" },
+    warranty: { OPEN: "INGRESO", UNDER_REVIEW: "REVISION_COBERTURA", APPROVED: "RECLAMO", REJECTED: "RESOLUCION", RESOLVED: "CERRADA" },
+  };
+  return maps[kind]?.[legacy] || postSaleStages(kind)[0];
+}
+
+function legacyStatusForPostSale(kind, stage) {
+  const maps = {
+    inspection: { PROGRAMACION: "SCHEDULED", INSPECCION: "IN_PROGRESS", CORRECCIONES: "REQUIRES_ACTION", RECEPCION: "IN_PROGRESS", CERRADA: "COMPLETED" },
+    handover: { PROGRAMACION: "SCHEDULED", INVENTARIO: "OBSERVED", FIRMA: "PENDING_SIGNATURE", ENTREGA: "IN_PROGRESS", CERRADA: "COMPLETED" },
+    case: { INGRESO: "OPEN", DIAGNOSTICO: "IN_PROGRESS", GESTION: "WAITING_PROVIDER", RESOLUCION: "RESOLVED", CERRADA: "CLOSED" },
+    warranty: { INGRESO: "OPEN", REVISION_COBERTURA: "UNDER_REVIEW", RECLAMO: "APPROVED", RESOLUCION: "UNDER_REVIEW", CERRADA: "RESOLVED" },
+  };
+  return maps[kind]?.[stage] || "OPEN";
+}
+
+function postSaleCheckpoints(kind) {
+  return ({ inspection: ["inspeccion", "recepcion"], handover: ["inventario", "firma", "entrega"], case: ["diagnostico", "resolucion"], warranty: ["cobertura", "reclamo", "recepcion"] })[kind] || [];
+}
+
+function postSaleModel(kind) {
+  return ({ inspection: "brokerInspection", handover: "brokerHandover", case: "brokerPostSaleCase", warranty: "brokerWarrantyCase" })[kind] || null;
+}
+
+function normalizePostSaleEntity(kind, input) {
+  if (kind === "inspection") return normalizeBrokerInspection(input);
+  if (kind === "handover") return normalizeBrokerHandover(input);
+  if (kind === "case") return normalizeBrokerPostSaleCase(input);
+  return normalizeBrokerWarrantyCase(input);
+}
+
+async function ensureBrokerPostSaleEntity(db, { tenantId, record }) {
+  const kind = postSaleKind(record);
+  const model = postSaleModel(kind);
+  if (!kind || !model) throw new Error("El registro no corresponde a un control de postventa.");
+  const existing = await db[model].findUnique({ where: { legacyRecordId: record.id } });
+  if (existing) return { kind, entity: existing };
+  const data = dataOf(record);
+  const propertyId = text(data.propertyId);
+  if (!propertyId) throw new Error("El control de postventa debe tener una propiedad asociada.");
+  const property = await db.industryRecord.findFirst({ where: { id: propertyId, tenantId, recordType: "property" } });
+  if (!property) throw new Error("El control de postventa no tiene una propiedad válida.");
+  const strictProperty = await ensureBrokerCaptureProperty(db, { tenantId, property, propertyData: dataOf(property) });
+  const workflowStage = postSaleStageFromLegacy(kind, record, data);
+  const normalized = normalizePostSaleEntity(kind, { ...data, title: record.title, workflowStage, status: workflowStage });
+  const base = { tenantId, propertyId: strictProperty.id, legacyRecordId: record.id, ...normalized, evidence: data.evidence && typeof data.evidence === "object" ? data.evidence : { source: "broker_record", demo: Boolean(data.demo) }, checkpoints: data.checkpoints && typeof data.checkpoints === "object" ? data.checkpoints : {} };
+  if (kind === "inspection") return { kind, entity: await db.brokerInspection.create({ data: { ...base, checklist: data.checklist && typeof data.checklist === "object" ? data.checklist : { detalle: text(data.checklist) || "Pendiente" } } }) };
+  if (kind === "handover") return { kind, entity: await db.brokerHandover.create({ data: base }) };
+  if (kind === "case") return { kind, entity: await db.brokerPostSaleCase.create({ data: base }) };
+  const relatedLegacyId = text(data.postSaleRecordId);
+  const related = relatedLegacyId ? await db.brokerPostSaleCase.findUnique({ where: { legacyRecordId: relatedLegacyId } }) : null;
+  return { kind, entity: await db.brokerWarrantyCase.create({ data: { ...base, postSaleCaseId: related?.id || null } }) };
+}
+
+async function brokerPostSaleContext(req, record) {
+  const current = await prisma.$transaction((db) => ensureBrokerPostSaleEntity(db, { tenantId: req.tenantId, record }));
+  const propertyId = text(dataOf(record).propertyId);
+  const relatedRecords = propertyId ? await prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: { in: ["property_inspection", "property_handover", "post_sale_case", "warranty_case"] } }), orderBy: { updatedAt: "desc" }, take: 100 }).then((items) => items.filter((item) => text(dataOf(item).propertyId) === propertyId)) : [];
+  const stages = postSaleStages(current.kind);
+  const index = Math.max(0, stages.indexOf(current.entity.workflowStage));
+  const nextStage = stages[index + 1] || null;
+  return { record, kind: current.kind, entity: current.entity, relatedRecords, nextStage, readiness: nextStage ? brokerPostSaleReadiness({ kind: current.kind, targetStage: nextStage, entity: current.entity }) : { requirements: [], ready: true, missing: [] } };
+}
+
+function brokerPostSalePayload(context) {
+  return { ...context, options: BROKER_POST_SALE_OPTIONS, checkpoints: postSaleCheckpoints(context.kind) };
+}
+
+async function updateBrokerPostSaleEntity(kind, id, data) {
+  const model = postSaleModel(kind);
+  return prisma[model].update({ where: { id }, data });
+}
+
+function postSaleRecordData(kind, record, entity) {
+  const previous = dataOf(record);
+  const common = { ...previous, workflowStage: entity.workflowStage, priority: entity.priority || previous.priority || "MEDIA", evidence: entity.evidence || previous.evidence || null };
+  if (kind === "inspection") return { ...common, inspectionDate: entity.scheduledAt?.toISOString?.() || "", inspectorName: entity.inspectorName || "", conditionSummary: entity.conditionSummary || "", checklist: entity.checklist || {}, requiresAction: entity.requiresAction, actionPlan: entity.actionPlan || "", actionDueAt: entity.actionDueAt?.toISOString?.() || "" };
+  if (kind === "handover") return { ...common, handoverDate: entity.scheduledAt?.toISOString?.() || "", recipientName: entity.recipientName || "", inventoryReference: entity.inventoryReference || "", actaReference: entity.actaReference || "" };
+  if (kind === "case") return { ...common, description: entity.description, openedAt: entity.openedAt?.toISOString?.() || "", responsibleName: entity.responsibleName || "", diagnosis: entity.diagnosis || "", actionPlan: entity.actionPlan || "", responseDueAt: entity.responseDueAt?.toISOString?.() || "", resolution: entity.resolution || "" };
+  return { ...common, description: entity.description, providerName: entity.providerName || "", warrantyUntil: entity.warrantyUntil?.toISOString?.() || "", coverageType: entity.coverageType, claimReference: entity.claimReference || "", resolution: entity.resolution || "" };
 }
 
 brokerRouter.post("/broker/captures", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "CREATE"), async (req, res) => {
@@ -1559,6 +1660,83 @@ brokerRouter.patch("/broker/projects/:recordId/stage", requireRole(ROLE_GROUPS.S
   } catch (error) {
     console.error("Advance broker project stage error:", error);
     res.status(500).json({ error: error?.message || "No se pudo avanzar el proyecto." });
+  }
+});
+
+brokerRouter.get("/broker/post-sale/:recordId/workspace", requireBrokerAction("post_sale", "VIEW"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: { in: Object.keys(POST_SALE_RECORD_KINDS) } }) });
+    if (!record) return res.status(404).json({ error: "Control de postventa no encontrado." });
+    res.json(brokerPostSalePayload(await brokerPostSaleContext(req, record)));
+  } catch (error) {
+    console.error("Get broker post-sale workspace error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo abrir el control de postventa." });
+  }
+});
+
+brokerRouter.put("/broker/post-sale/:recordId/workspace", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("post_sale", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: { in: Object.keys(POST_SALE_RECORD_KINDS) } }) });
+    if (!record) return res.status(404).json({ error: "Control de postventa no encontrado." });
+    const context = await brokerPostSaleContext(req, record);
+    const incoming = dataOf({ data: req.body });
+    const normalized = normalizePostSaleEntity(context.kind, { ...context.entity, ...incoming });
+    const saved = await updateBrokerPostSaleEntity(context.kind, context.entity.id, {
+      ...normalized,
+      ...(context.kind === "inspection" ? { checklist: text(incoming.checklist) ? { detalle: text(incoming.checklist) } : context.entity.checklist || {} } : {}),
+      evidence: context.entity.evidence || {},
+      checkpoints: context.entity.checkpoints || {}
+    });
+    await prisma.industryRecord.update({ where: { id: record.id }, data: { ...(context.kind === "case" ? { title: saved.title } : {}), status: legacyStatusForPostSale(context.kind, saved.workflowStage), data: postSaleRecordData(context.kind, record, saved) } });
+    await recordAuditLog(req, "BROKER_POST_SALE_UPDATED", `broker_${context.kind}`, saved.id, { recordId: record.id, kind: context.kind, stage: saved.workflowStage });
+    res.json(brokerPostSalePayload(await brokerPostSaleContext(req, record)));
+  } catch (error) {
+    console.error("Update broker post-sale workspace error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo guardar el control de postventa." });
+  }
+});
+
+brokerRouter.post("/broker/post-sale/:recordId/confirmations", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("post_sale", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: { in: Object.keys(POST_SALE_RECORD_KINDS) } }) });
+    if (!record) return res.status(404).json({ error: "Control de postventa no encontrado." });
+    const context = await brokerPostSaleContext(req, record);
+    const checkpoint = text(req.body?.checkpoint).toLowerCase();
+    if (!postSaleCheckpoints(context.kind).includes(checkpoint)) return res.status(400).json({ error: "Hito de confirmación inválido." });
+    const checkpoints = context.entity.checkpoints && typeof context.entity.checkpoints === "object" && !Array.isArray(context.entity.checkpoints) ? context.entity.checkpoints : {};
+    const now = new Date();
+    const sideEffects = context.kind === "inspection" && checkpoint === "inspeccion" ? { inspectedAt: context.entity.inspectedAt || now }
+      : context.kind === "inspection" && checkpoint === "recepcion" ? { completedAt: context.entity.completedAt || now }
+        : context.kind === "handover" && checkpoint === "entrega" ? { acceptedAt: context.entity.acceptedAt || now }
+          : context.kind === "case" && checkpoint === "resolucion" ? { resolvedAt: context.entity.resolvedAt || now }
+            : context.kind === "warranty" && checkpoint === "cobertura" ? { reviewedAt: context.entity.reviewedAt || now }
+              : {};
+    const saved = await updateBrokerPostSaleEntity(context.kind, context.entity.id, { ...sideEffects, checkpoints: { ...checkpoints, [checkpoint]: { confirmedAt: now.toISOString(), confirmedBy: req.user?.name || req.user?.email || "Usuario autorizado", note: text(req.body?.note) } } });
+    await recordAuditLog(req, "BROKER_POST_SALE_CHECKPOINT_CONFIRMED", `broker_${context.kind}`, saved.id, { recordId: record.id, kind: context.kind, checkpoint });
+    res.json(brokerPostSalePayload(await brokerPostSaleContext(req, record)));
+  } catch (error) {
+    console.error("Confirm broker post-sale checkpoint error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo confirmar el hito de postventa." });
+  }
+});
+
+brokerRouter.patch("/broker/post-sale/:recordId/stage", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("post_sale", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: { in: Object.keys(POST_SALE_RECORD_KINDS) } }) });
+    if (!record) return res.status(404).json({ error: "Control de postventa no encontrado." });
+    const context = await brokerPostSaleContext(req, record);
+    const target = text(req.body?.stage).toUpperCase();
+    const stages = postSaleStages(context.kind);
+    if (!stages.includes(target) || stages.indexOf(target) !== stages.indexOf(context.entity.workflowStage) + 1) return res.status(422).json({ error: "Solo puedes avanzar a la etapa siguiente del control de postventa." });
+    const readiness = brokerPostSaleReadiness({ kind: context.kind, targetStage: target, entity: context.entity });
+    if (!readiness.ready) return res.status(422).json({ error: `Antes de avanzar debes completar: ${readiness.missing.join(", ")}.`, missing: readiness.missing, requirements: readiness.requirements });
+    const saved = await updateBrokerPostSaleEntity(context.kind, context.entity.id, { workflowStage: target, status: target, ...(context.kind === "case" && target === "CERRADA" ? { closedAt: new Date() } : {}) });
+    await prisma.industryRecord.update({ where: { id: record.id }, data: { status: legacyStatusForPostSale(context.kind, target), data: postSaleRecordData(context.kind, record, saved) } });
+    await recordAuditLog(req, "BROKER_POST_SALE_STAGE_CHANGED", `broker_${context.kind}`, saved.id, { recordId: record.id, kind: context.kind, stage: target });
+    res.json(brokerPostSalePayload(await brokerPostSaleContext(req, record)));
+  } catch (error) {
+    console.error("Advance broker post-sale stage error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo avanzar el control de postventa." });
   }
 });
 
