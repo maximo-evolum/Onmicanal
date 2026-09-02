@@ -1203,6 +1203,46 @@ export type BrokerRentalWorkspace = {
   options: { applicantStatuses: string[]; guarantorStatuses: string[]; reservationStatuses: string[]; contractStatuses: string[]; initialPaymentStatuses: string[]; handoverStatuses: string[]; };
 };
 
+export type BrokerMaintenanceQuote = {
+  id: string;
+  reference: string;
+  scope?: string | null;
+  amount: number;
+  currency: string;
+  validUntil?: string | null;
+  status: string;
+  providerId?: string | null;
+  provider?: { id: string; name: string } | null;
+};
+
+export type BrokerMaintenanceWorkspace = {
+  record: IndustryRecord;
+  maintenance: {
+    id: string; updatedAt?: string; category: string; specificType?: string | null; description: string; priority: string; workflowStage: string;
+    diagnosis?: string | null; approvalStatus: string; approvedAt?: string | null; scheduledAt?: string | null; providerId?: string | null;
+    estimatedCost?: number | null; actualCost?: number | null; completionEvidence?: string | null; resolvedAt?: string | null; acceptedAt?: string | null;
+    checkpoints?: Record<string, { confirmedAt?: string; confirmedBy?: string; note?: string }>;
+  };
+  quotes: BrokerMaintenanceQuote[];
+  providers: Array<{ id: string; name: string; specialties?: unknown; averageRating?: number | null }>;
+  nextStage: string | null;
+  readiness: { ready: boolean; missing: string[]; requirements: Array<{ key: string; label: string; ready: boolean }> };
+  options: { stages: string[]; priorities: string[]; approvalStatuses: string[]; quoteStatuses: string[]; projectStatuses: string[]; };
+};
+
+export type BrokerProjectWorkspace = {
+  record: IndustryRecord;
+  project: {
+    id: string; updatedAt?: string; name: string; projectType: string; status: string; budget?: number | null; approvedBudget?: number | null; currency: string;
+    startAt?: string | null; targetAt?: string | null; completedAt?: string | null; scope?: string | null; acceptanceNotes?: string | null;
+    checkpoints?: Record<string, { confirmedAt?: string; confirmedBy?: string; note?: string }>;
+  };
+  milestones: IndustryRecord[];
+  nextStage: string | null;
+  readiness: { ready: boolean; missing: string[]; requirements: Array<{ key: string; label: string; ready: boolean }> };
+  options: { stages: string[]; priorities: string[]; approvalStatuses: string[]; quoteStatuses: string[]; projectStatuses: string[]; };
+};
+
 export type BrokerOverview = {
   kpis: {
     properties: number;
@@ -1600,6 +1640,37 @@ export function saveBrokerRentalWorkspace(operationId: string, input: Partial<Br
 
 export function confirmBrokerRentalCheckpoint(operationId: string, input: { checkpoint: "evaluacion" | "reserva" | "contrato" | "pago_inicial" | "entrega"; note?: string }): Promise<BrokerRentalWorkspace> {
   return request<BrokerRentalWorkspace>(`/broker/rentals/${encodeURIComponent(operationId)}/confirmations`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getBrokerMaintenanceWorkspace(recordId: string): Promise<BrokerMaintenanceWorkspace> {
+  return request<BrokerMaintenanceWorkspace>(`/broker/maintenance/${encodeURIComponent(recordId)}/workspace`);
+}
+export function saveBrokerMaintenanceWorkspace(recordId: string, input: Partial<BrokerMaintenanceWorkspace["maintenance"]> & { providerName?: string }): Promise<BrokerMaintenanceWorkspace> {
+  return request<BrokerMaintenanceWorkspace>(`/broker/maintenance/${encodeURIComponent(recordId)}/workspace`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function addBrokerMaintenanceQuote(recordId: string, input: { providerId?: string; providerName?: string; reference: string; scope?: string; amount: number; validUntil?: string | null; status?: string }): Promise<BrokerMaintenanceWorkspace> {
+  return request<BrokerMaintenanceWorkspace>(`/broker/maintenance/${encodeURIComponent(recordId)}/quotes`, { method: "POST", body: JSON.stringify(input) });
+}
+export function selectBrokerMaintenanceQuote(recordId: string, quoteId: string): Promise<BrokerMaintenanceWorkspace> {
+  return request<BrokerMaintenanceWorkspace>(`/broker/maintenance/${encodeURIComponent(recordId)}/quotes/${encodeURIComponent(quoteId)}/select`, { method: "POST" });
+}
+export function confirmBrokerMaintenanceCheckpoint(recordId: string, input: { checkpoint: "diagnostico" | "aprobacion" | "recepcion"; note?: string }): Promise<BrokerMaintenanceWorkspace> {
+  return request<BrokerMaintenanceWorkspace>(`/broker/maintenance/${encodeURIComponent(recordId)}/confirmations`, { method: "POST", body: JSON.stringify(input) });
+}
+export function advanceBrokerMaintenance(recordId: string, stage: string): Promise<BrokerMaintenanceWorkspace> {
+  return request<BrokerMaintenanceWorkspace>(`/broker/maintenance/${encodeURIComponent(recordId)}/stage`, { method: "PATCH", body: JSON.stringify({ stage }) });
+}
+export function getBrokerProjectWorkspace(recordId: string): Promise<BrokerProjectWorkspace> {
+  return request<BrokerProjectWorkspace>(`/broker/projects/${encodeURIComponent(recordId)}/workspace`);
+}
+export function saveBrokerProjectWorkspace(recordId: string, input: Partial<BrokerProjectWorkspace["project"]>): Promise<BrokerProjectWorkspace> {
+  return request<BrokerProjectWorkspace>(`/broker/projects/${encodeURIComponent(recordId)}/workspace`, { method: "PUT", body: JSON.stringify(input) });
+}
+export function confirmBrokerProjectCheckpoint(recordId: string, input: { checkpoint: "aprobacion" | "ejecucion" | "recepcion"; note?: string }): Promise<BrokerProjectWorkspace> {
+  return request<BrokerProjectWorkspace>(`/broker/projects/${encodeURIComponent(recordId)}/confirmations`, { method: "POST", body: JSON.stringify(input) });
+}
+export function advanceBrokerProject(recordId: string, stage: string): Promise<BrokerProjectWorkspace> {
+  return request<BrokerProjectWorkspace>(`/broker/projects/${encodeURIComponent(recordId)}/stage`, { method: "PATCH", body: JSON.stringify({ stage }) });
 }
 
 export function addBrokerOperationEvent(id: string, input: { note: string; type?: string }): Promise<BrokerOperation> {

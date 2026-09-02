@@ -107,6 +107,8 @@ model Tenant {
   brokerPayments          BrokerPayment[]
   brokerCommissions       BrokerCommission[]
   brokerMaintenances      BrokerMaintenance[]
+  brokerMaintenanceQuotes BrokerMaintenanceQuote[]
+  brokerProjects          BrokerProject[]
   brokerVisits            BrokerVisit[]
   brokerCommunities       BrokerCommunity[]
   brokerProviders         BrokerProvider[]
@@ -429,6 +431,7 @@ model BrokerProperty {
   payments       BrokerPayment[]
   commissions    BrokerCommission[]
   maintenances   BrokerMaintenance[]
+  projects       BrokerProject[]
   visits         BrokerVisit[]
   financings     BrokerFinancing[]
   capture        BrokerPropertyCapture?
@@ -684,6 +687,7 @@ model BrokerProvider {
 
   tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   maintenances BrokerMaintenance[]
+  quotes       BrokerMaintenanceQuote[]
 
   @@unique([tenantId, rut])
   @@index([tenantId, status])
@@ -699,21 +703,93 @@ model BrokerMaintenance {
   specificType   String?
   description    String
   status         String    @default("ABIERTA")
+  priority       String    @default("MEDIA")
+  workflowStage  String    @default("REPORTE")
+  diagnosis      String?
+  approvalStatus String    @default("PENDIENTE")
+  approvedAt     DateTime?
+  scheduledAt    DateTime?
   reportedAt     DateTime  @default(now())
   resolvedAt     DateTime?
   estimatedCost  Decimal?  @db.Decimal(18, 2)
   actualCost     Decimal?  @db.Decimal(18, 2)
   evidence       Json?
+  completionEvidence String?
+  acceptedAt     DateTime?
+  checkpoints    Json?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   property BrokerProperty  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   provider BrokerProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  quotes   BrokerMaintenanceQuote[]
+  projects BrokerProject[]
 
   @@index([tenantId, status, reportedAt])
   @@index([propertyId, status])
   @@index([providerId, status])
+}
+
+// Cotización trazable de una incidencia. La selección no crea una orden de
+// compra ni compromete pagos; solo prepara la revisión humana correspondiente.
+model BrokerMaintenanceQuote {
+  id             String    @id @default(cuid())
+  tenantId       String
+  maintenanceId  String
+  providerId     String?
+  legacyRecordId String?   @unique
+  reference      String
+  scope          String?
+  amount         Decimal   @db.Decimal(18, 2)
+  currency       String    @default("CLP")
+  validUntil     DateTime?
+  status         String    @default("RECIBIDA")
+  selectedAt     DateTime?
+  evidence       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  maintenance BrokerMaintenance  @relation(fields: [maintenanceId], references: [id], onDelete: Cascade)
+  provider    BrokerProvider?    @relation(fields: [providerId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([maintenanceId, status])
+  @@index([providerId, status])
+}
+
+// Proyecto asociado a una propiedad o a una mantención. Permite controlar
+// presupuesto, hitos y recepción sin ejecutar compras ni contratos externos.
+model BrokerProject {
+  id                String    @id @default(cuid())
+  tenantId          String
+  propertyId        String
+  maintenanceId     String?
+  legacyRecordId    String?   @unique
+  name              String
+  projectType       String
+  status            String    @default("PLANIFICACION")
+  budget            Decimal?  @db.Decimal(18, 2)
+  approvedBudget    Decimal?  @db.Decimal(18, 2)
+  currency          String    @default("CLP")
+  startAt           DateTime?
+  targetAt          DateTime?
+  completedAt       DateTime?
+  scope             String?
+  acceptanceNotes   String?
+  checkpoints       Json?
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  property     BrokerProperty     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  maintenance  BrokerMaintenance? @relation(fields: [maintenanceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([propertyId, status])
+  @@index([maintenanceId, status])
 }
 
 model BrokerVisit {

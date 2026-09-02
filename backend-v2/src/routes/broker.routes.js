@@ -39,6 +39,7 @@ import { brokerRelationalCoverage, normalizeLegacyBrokerProperty } from "../serv
 import { BROKER_CAPTURE_OPTIONS, captureReadiness, normalizeBrokerCapture, validateBrokerCapture } from "../services/broker-capture.service.js";
 import { BROKER_SALE_OPTIONS, brokerSaleReadiness, normalizeBrokerSaleCase } from "../services/broker-sale.service.js";
 import { BROKER_RENTAL_OPTIONS, brokerRentalReadiness, normalizeBrokerRentalCase } from "../services/broker-rental.service.js";
+import { BROKER_MAINTENANCE_OPTIONS, brokerMaintenanceReadiness, brokerProjectReadiness, normalizeBrokerMaintenance, normalizeBrokerMaintenanceQuote, normalizeBrokerProject } from "../services/broker-maintenance-project.service.js";
 import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 
@@ -615,6 +616,90 @@ function brokerRentalPayload(context) {
     readiness: context.readiness,
     options: BROKER_RENTAL_OPTIONS,
   };
+}
+
+async function ensureBrokerProvider(db, { tenantId, providerId, providerName }) {
+  const requestedId = text(providerId);
+  if (requestedId) {
+    const existing = await db.brokerProvider.findFirst({ where: { id: requestedId, tenantId } });
+    if (existing) return existing;
+  }
+  const name = text(providerName);
+  if (!name) return null;
+  const existing = await db.brokerProvider.findFirst({ where: { tenantId, name }, orderBy: { updatedAt: "desc" } });
+  if (existing) return existing;
+  return db.brokerProvider.create({ data: { tenantId, name, status: "ACTIVO" } });
+}
+
+async function syncBrokerProvidersFromRecords(tenantId) {
+  const records = await prisma.industryRecord.findMany({ where: { tenantId, recordType: "service_provider" }, take: 300, orderBy: { updatedAt: "desc" } });
+  await Promise.all(records.map(async (record) => {
+    const data = dataOf(record);
+    const name = text(data.providerName || record.title);
+    if (!name) return;
+    const existing = await prisma.brokerProvider.findUnique({ where: { legacyRecordId: record.id } });
+    const providerData = { name, contactName: text(data.contactName) || null, phone: text(data.phone) || null, email: text(data.email) || null, specialties: data.specialty ? [text(data.specialty)] : Array.isArray(data.specialties) ? data.specialties : null, averageRating: data.rating === undefined || data.rating === "" ? null : Number(data.rating) || null, status: text(record.status, "ACTIVO").toUpperCase() === "SUSPENDED" ? "INACTIVO" : "ACTIVO" };
+    if (existing) await prisma.brokerProvider.update({ where: { id: existing.id }, data: providerData });
+    else await prisma.brokerProvider.create({ data: { tenantId, legacyRecordId: record.id, ...providerData } });
+  }));
+}
+
+async function ensureBrokerMaintenance(db, { tenantId, record }) {
+  const existing = await db.brokerMaintenance.findUnique({ where: { legacyRecordId: record.id } });
+  if (existing) return existing;
+  const data = dataOf(record);
+  const propertyId = text(data.propertyId);
+  if (!propertyId) throw new Error("La mantención debe tener una propiedad asociada.");
+  const property = await db.industryRecord.findFirst({ where: { id: propertyId, tenantId, recordType: "property" } });
+  if (!property) throw new Error("La mantención no tiene una propiedad válida.");
+  const strictProperty = await ensureBrokerCaptureProperty(db, { tenantId, property, propertyData: dataOf(property) });
+  const normalized = normalizeBrokerMaintenance({ ...data, category: data.category || "General", description: data.description || record.title, workflowStage: data.workflowStage || "REPORTE" });
+  const provider = await ensureBrokerProvider(db, { tenantId, providerId: data.providerId, providerName: data.providerName });
+  return db.brokerMaintenance.create({ data: { tenantId, propertyId: strictProperty.id, providerId: provider?.id || null, legacyRecordId: record.id, ...normalized, reportedAt: data.reportedAt ? new Date(data.reportedAt) : new Date(), evidence: { source: "broker_record", demo: Boolean(data.demo) } } });
+}
+
+async function brokerMaintenanceContext(req, record) {
+  await syncBrokerProvidersFromRecords(req.tenantId);
+  const maintenance = await prisma.$transaction((db) => ensureBrokerMaintenance(db, { tenantId: req.tenantId, record }));
+  const [quotes, providers] = await Promise.all([
+    prisma.brokerMaintenanceQuote.findMany({ where: { tenantId: req.tenantId, maintenanceId: maintenance.id }, include: { provider: true }, orderBy: { updatedAt: "desc" } }),
+    prisma.brokerProvider.findMany({ where: { tenantId: req.tenantId, status: { not: "INACTIVO" } }, orderBy: { name: "asc" }, take: 200 }),
+  ]);
+  const stages = BROKER_MAINTENANCE_OPTIONS.stages;
+  const index = Math.max(0, stages.indexOf(maintenance.workflowStage));
+  const nextStage = stages[index + 1] || null;
+  return { record, maintenance, quotes, providers, nextStage, readiness: nextStage ? brokerMaintenanceReadiness({ targetStage: nextStage, maintenance, quotes }) : { requirements: [], ready: true, missing: [] } };
+}
+
+function brokerMaintenancePayload(context) {
+  return { ...context, options: BROKER_MAINTENANCE_OPTIONS };
+}
+
+async function ensureBrokerProject(db, { tenantId, record }) {
+  const existing = await db.brokerProject.findUnique({ where: { legacyRecordId: record.id } });
+  if (existing) return existing;
+  const data = dataOf(record);
+  const propertyId = text(data.propertyId);
+  if (!propertyId) throw new Error("El proyecto debe tener una propiedad asociada.");
+  const property = await db.industryRecord.findFirst({ where: { id: propertyId, tenantId, recordType: "property" } });
+  if (!property) throw new Error("El proyecto no tiene una propiedad válida.");
+  const strictProperty = await ensureBrokerCaptureProperty(db, { tenantId, property, propertyData: dataOf(property) });
+  const normalized = normalizeBrokerProject({ ...data, name: data.name || record.title, projectType: data.projectType || "Mejora de inmueble", status: data.status || "PLANIFICACION" });
+  return db.brokerProject.create({ data: { tenantId, propertyId: strictProperty.id, legacyRecordId: record.id, ...normalized, metadata: { source: "broker_record", demo: Boolean(data.demo) } } });
+}
+
+async function brokerProjectContext(req, record) {
+  const project = await prisma.$transaction((db) => ensureBrokerProject(db, { tenantId: req.tenantId, record }));
+  const propertyId = text(dataOf(record).propertyId);
+  const milestones = propertyId ? await prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "project_milestone" }), orderBy: { updatedAt: "desc" }, take: 200 }).then((items) => items.filter((item) => text(dataOf(item).propertyId) === propertyId)) : [];
+  const stages = BROKER_MAINTENANCE_OPTIONS.projectStatuses.filter((stage) => stage !== "CANCELADO");
+  const index = Math.max(0, stages.indexOf(project.status));
+  const nextStage = stages[index + 1] || null;
+  return { record, project, milestones, nextStage, readiness: nextStage ? brokerProjectReadiness({ targetStage: nextStage, project }) : { requirements: [], ready: true, missing: [] } };
+}
+
+function brokerProjectPayload(context) {
+  return { ...context, options: BROKER_MAINTENANCE_OPTIONS };
 }
 
 brokerRouter.post("/broker/captures", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "CREATE"), async (req, res) => {
@@ -1309,6 +1394,171 @@ brokerRouter.post("/broker/rentals/:operationId/confirmations", requireRole(ROLE
   } catch (error) {
     console.error("Confirm broker rental checkpoint error:", error);
     res.status(500).json({ error: "No se pudo confirmar el hito de arriendo." });
+  }
+});
+
+brokerRouter.get("/broker/maintenance/:recordId/workspace", requireBrokerAction("maintenance", "VIEW"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "maintenance_ticket" }) });
+    if (!record) return res.status(404).json({ error: "Solicitud de mantención no encontrada." });
+    res.json(brokerMaintenancePayload(await brokerMaintenanceContext(req, record)));
+  } catch (error) {
+    console.error("Get broker maintenance workspace error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo abrir el control de mantención." });
+  }
+});
+
+brokerRouter.put("/broker/maintenance/:recordId/workspace", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("maintenance", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "maintenance_ticket" }) });
+    if (!record) return res.status(404).json({ error: "Solicitud de mantención no encontrada." });
+    const context = await brokerMaintenanceContext(req, record);
+    const incoming = dataOf({ data: req.body });
+    const normalized = normalizeBrokerMaintenance({ ...context.maintenance, ...incoming });
+    const provider = await ensureBrokerProvider(prisma, { tenantId: req.tenantId, providerId: text(incoming.providerId), providerName: text(incoming.providerName) });
+    const saved = await prisma.brokerMaintenance.update({ where: { id: context.maintenance.id }, data: { ...normalized, ...(provider ? { providerId: provider.id } : {}), evidence: context.maintenance.evidence || {}, } });
+    const previous = dataOf(record);
+    await prisma.industryRecord.update({ where: { id: record.id }, data: { status: saved.workflowStage === "CERRADA" ? "COMPLETED" : saved.workflowStage === "EJECUCION" ? "IN_PROGRESS" : previous.status, data: { ...previous, category: saved.category, description: saved.description, priority: saved.priority, providerId: provider?.id || previous.providerId || null, providerName: provider?.name || previous.providerName || "", workflowStage: saved.workflowStage, estimatedCost: saved.estimatedCost, actualCost: saved.actualCost } } });
+    await recordAuditLog(req, "BROKER_MAINTENANCE_UPDATED", "broker_maintenance", saved.id, { recordId: record.id, stage: saved.workflowStage });
+    res.json(brokerMaintenancePayload(await brokerMaintenanceContext(req, record)));
+  } catch (error) {
+    console.error("Update broker maintenance workspace error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo guardar el control de mantención." });
+  }
+});
+
+brokerRouter.post("/broker/maintenance/:recordId/quotes", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("maintenance", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "maintenance_ticket" }) });
+    if (!record) return res.status(404).json({ error: "Solicitud de mantención no encontrada." });
+    const context = await brokerMaintenanceContext(req, record);
+    const quote = normalizeBrokerMaintenanceQuote(dataOf({ data: req.body }));
+    if (!quote.reference || quote.amount === null) return res.status(422).json({ error: "Indica referencia y monto de la cotización." });
+    const provider = await ensureBrokerProvider(prisma, { tenantId: req.tenantId, providerId: quote.providerId, providerName: quote.providerName });
+    if (!provider) return res.status(422).json({ error: "Indica el proveedor de la cotización." });
+    const saved = await prisma.brokerMaintenanceQuote.create({ data: { tenantId: req.tenantId, maintenanceId: context.maintenance.id, providerId: provider.id, reference: quote.reference, scope: quote.scope, amount: quote.amount, currency: quote.currency, validUntil: quote.validUntil, status: quote.status } });
+    await recordAuditLog(req, "BROKER_MAINTENANCE_QUOTE_CREATED", "broker_maintenance_quote", saved.id, { recordId: record.id, providerId: provider.id, amount: quote.amount });
+    res.status(201).json(brokerMaintenancePayload(await brokerMaintenanceContext(req, record)));
+  } catch (error) {
+    console.error("Create broker maintenance quote error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo registrar la cotización." });
+  }
+});
+
+brokerRouter.post("/broker/maintenance/:recordId/quotes/:quoteId/select", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("maintenance", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "maintenance_ticket" }) });
+    if (!record) return res.status(404).json({ error: "Solicitud de mantención no encontrada." });
+    const context = await brokerMaintenanceContext(req, record);
+    const quote = await prisma.brokerMaintenanceQuote.findFirst({ where: { id: req.params.quoteId, tenantId: req.tenantId, maintenanceId: context.maintenance.id } });
+    if (!quote) return res.status(404).json({ error: "Cotización no encontrada." });
+    await prisma.$transaction([
+      prisma.brokerMaintenanceQuote.updateMany({ where: { maintenanceId: context.maintenance.id, status: "SELECCIONADA" }, data: { status: "RECIBIDA", selectedAt: null } }),
+      prisma.brokerMaintenanceQuote.update({ where: { id: quote.id }, data: { status: "SELECCIONADA", selectedAt: new Date() } }),
+      prisma.brokerMaintenance.update({ where: { id: context.maintenance.id }, data: { providerId: quote.providerId || null, estimatedCost: quote.amount } }),
+    ]);
+    await recordAuditLog(req, "BROKER_MAINTENANCE_QUOTE_SELECTED", "broker_maintenance_quote", quote.id, { recordId: record.id });
+    res.json(brokerMaintenancePayload(await brokerMaintenanceContext(req, record)));
+  } catch (error) {
+    console.error("Select broker maintenance quote error:", error);
+    res.status(500).json({ error: "No se pudo seleccionar la cotización." });
+  }
+});
+
+brokerRouter.post("/broker/maintenance/:recordId/confirmations", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("maintenance", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "maintenance_ticket" }) });
+    if (!record) return res.status(404).json({ error: "Solicitud de mantención no encontrada." });
+    const context = await brokerMaintenanceContext(req, record);
+    const checkpoint = text(req.body?.checkpoint).toLowerCase();
+    if (!new Set(["diagnostico", "aprobacion", "recepcion"]).has(checkpoint)) return res.status(400).json({ error: "Hito de confirmación inválido." });
+    const checkpoints = context.maintenance.checkpoints && typeof context.maintenance.checkpoints === "object" && !Array.isArray(context.maintenance.checkpoints) ? context.maintenance.checkpoints : {};
+    const saved = await prisma.brokerMaintenance.update({ where: { id: context.maintenance.id }, data: { checkpoints: { ...checkpoints, [checkpoint]: { confirmedAt: new Date().toISOString(), confirmedBy: req.user?.name || req.user?.email || "Usuario autorizado", note: text(req.body?.note) } }, ...(checkpoint === "aprobacion" ? { approvalStatus: "APROBADA", approvedAt: new Date() } : {}), ...(checkpoint === "recepcion" ? { acceptedAt: new Date() } : {}) } });
+    await recordAuditLog(req, "BROKER_MAINTENANCE_CHECKPOINT_CONFIRMED", "broker_maintenance", saved.id, { recordId: record.id, checkpoint });
+    res.json(brokerMaintenancePayload(await brokerMaintenanceContext(req, record)));
+  } catch (error) {
+    console.error("Confirm broker maintenance checkpoint error:", error);
+    res.status(500).json({ error: "No se pudo confirmar el hito de mantención." });
+  }
+});
+
+brokerRouter.patch("/broker/maintenance/:recordId/stage", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("maintenance", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "maintenance_ticket" }) });
+    if (!record) return res.status(404).json({ error: "Solicitud de mantención no encontrada." });
+    const context = await brokerMaintenanceContext(req, record);
+    const target = text(req.body?.stage).toUpperCase();
+    const stages = BROKER_MAINTENANCE_OPTIONS.stages;
+    if (!stages.includes(target) || stages.indexOf(target) !== stages.indexOf(context.maintenance.workflowStage) + 1) return res.status(422).json({ error: "Solo puedes avanzar a la etapa siguiente de la mantención." });
+    const readiness = brokerMaintenanceReadiness({ targetStage: target, maintenance: context.maintenance, quotes: context.quotes });
+    if (!readiness.ready) return res.status(422).json({ error: `Antes de avanzar debes completar: ${readiness.missing.join(", ")}.`, missing: readiness.missing, requirements: readiness.requirements });
+    const saved = await prisma.brokerMaintenance.update({ where: { id: context.maintenance.id }, data: { workflowStage: target, status: target === "CERRADA" ? "CERRADA" : target, ...(target === "RECEPCION" ? { resolvedAt: new Date() } : {}) } });
+    await recordAuditLog(req, "BROKER_MAINTENANCE_STAGE_CHANGED", "broker_maintenance", saved.id, { recordId: record.id, stage: target });
+    res.json(brokerMaintenancePayload(await brokerMaintenanceContext(req, record)));
+  } catch (error) {
+    console.error("Advance broker maintenance stage error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo avanzar la mantención." });
+  }
+});
+
+brokerRouter.get("/broker/projects/:recordId/workspace", requireBrokerAction("projects", "VIEW"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "remodeling_project" }) });
+    if (!record) return res.status(404).json({ error: "Proyecto no encontrado." });
+    res.json(brokerProjectPayload(await brokerProjectContext(req, record)));
+  } catch (error) {
+    console.error("Get broker project workspace error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo abrir el control del proyecto." });
+  }
+});
+
+brokerRouter.put("/broker/projects/:recordId/workspace", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("projects", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "remodeling_project" }) });
+    if (!record) return res.status(404).json({ error: "Proyecto no encontrado." });
+    const context = await brokerProjectContext(req, record);
+    const saved = await prisma.brokerProject.update({ where: { id: context.project.id }, data: normalizeBrokerProject({ ...context.project, ...dataOf({ data: req.body }) }) });
+    await prisma.industryRecord.update({ where: { id: record.id }, data: { status: saved.status === "CERRADO" ? "COMPLETED" : saved.status, data: { ...dataOf(record), name: saved.name, projectType: saved.projectType, budget: saved.budget, approvedBudget: saved.approvedBudget, status: saved.status, scope: saved.scope } } });
+    await recordAuditLog(req, "BROKER_PROJECT_UPDATED", "broker_project", saved.id, { recordId: record.id, stage: saved.status });
+    res.json(brokerProjectPayload(await brokerProjectContext(req, record)));
+  } catch (error) {
+    console.error("Update broker project workspace error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo guardar el control del proyecto." });
+  }
+});
+
+brokerRouter.post("/broker/projects/:recordId/confirmations", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("projects", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "remodeling_project" }) });
+    if (!record) return res.status(404).json({ error: "Proyecto no encontrado." });
+    const context = await brokerProjectContext(req, record);
+    const checkpoint = text(req.body?.checkpoint).toLowerCase();
+    if (!new Set(["aprobacion", "ejecucion", "recepcion"]).has(checkpoint)) return res.status(400).json({ error: "Hito de confirmación inválido." });
+    const checkpoints = context.project.checkpoints && typeof context.project.checkpoints === "object" && !Array.isArray(context.project.checkpoints) ? context.project.checkpoints : {};
+    await prisma.brokerProject.update({ where: { id: context.project.id }, data: { checkpoints: { ...checkpoints, [checkpoint]: { confirmedAt: new Date().toISOString(), confirmedBy: req.user?.name || req.user?.email || "Usuario autorizado", note: text(req.body?.note) } } } });
+    res.json(brokerProjectPayload(await brokerProjectContext(req, record)));
+  } catch (error) {
+    console.error("Confirm broker project checkpoint error:", error);
+    res.status(500).json({ error: "No se pudo confirmar el hito del proyecto." });
+  }
+});
+
+brokerRouter.patch("/broker/projects/:recordId/stage", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("projects", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.recordId, recordType: "remodeling_project" }) });
+    if (!record) return res.status(404).json({ error: "Proyecto no encontrado." });
+    const context = await brokerProjectContext(req, record);
+    const target = text(req.body?.stage).toUpperCase();
+    const stages = BROKER_MAINTENANCE_OPTIONS.projectStatuses.filter((stage) => stage !== "CANCELADO");
+    if (!stages.includes(target) || stages.indexOf(target) !== stages.indexOf(context.project.status) + 1) return res.status(422).json({ error: "Solo puedes avanzar a la etapa siguiente del proyecto." });
+    const readiness = brokerProjectReadiness({ targetStage: target, project: context.project });
+    if (!readiness.ready) return res.status(422).json({ error: `Antes de avanzar debes completar: ${readiness.missing.join(", ")}.`, missing: readiness.missing, requirements: readiness.requirements });
+    const saved = await prisma.brokerProject.update({ where: { id: context.project.id }, data: { status: target } });
+    await recordAuditLog(req, "BROKER_PROJECT_STAGE_CHANGED", "broker_project", saved.id, { recordId: record.id, stage: target });
+    res.json(brokerProjectPayload(await brokerProjectContext(req, record)));
+  } catch (error) {
+    console.error("Advance broker project stage error:", error);
+    res.status(500).json({ error: error?.message || "No se pudo avanzar el proyecto." });
   }
 });
 

@@ -4,9 +4,14 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   advanceBrokerOperation,
+  advanceBrokerMaintenance,
+  advanceBrokerProject,
+  addBrokerMaintenanceQuote,
   createBrokerOperation,
   createBrokerRecord,
   confirmBrokerSaleCheckpoint,
+  confirmBrokerMaintenanceCheckpoint,
+  confirmBrokerProjectCheckpoint,
   confirmBrokerRentalCheckpoint,
   getBrokerCatalog,
   getBrokerAccess,
@@ -15,11 +20,13 @@ import {
   getBrokerFinancing,
   getBrokerLegalReadiness,
   getBrokerMonthlyAdministration,
+  getBrokerMaintenanceWorkspace,
   getBrokerOperatingConfiguration,
   getBrokerOperations,
   getBrokerOverview,
   getBrokerPropertyExpedient,
   getBrokerSaleWorkspace,
+  getBrokerProjectWorkspace,
   getBrokerRentalWorkspace,
   getBrokerRecords,
   advanceBrokerFinancing,
@@ -29,6 +36,9 @@ import {
   saveBrokerAiEvaluation,
   saveBrokerSaleWorkspace,
   saveBrokerRentalWorkspace,
+  saveBrokerMaintenanceWorkspace,
+  saveBrokerProjectWorkspace,
+  selectBrokerMaintenanceQuote,
   saveBrokerOperatingConfiguration,
   saveBrokerHoldingConfig,
   updateBrokerRecord,
@@ -40,6 +50,8 @@ import {
   type BrokerOperationType,
   type BrokerSaleWorkspace,
   type BrokerRentalWorkspace,
+  type BrokerMaintenanceWorkspace,
+  type BrokerProjectWorkspace,
   type BrokerPropertyExpedient,
   type BrokerRecordArea,
   type BrokerRecordDefinition,
@@ -274,6 +286,8 @@ export function BrokerOperationsPageContent() {
   const [expedient, setExpedient] = useState<BrokerPropertyExpedient | null>(null);
   const [saleWorkspace, setSaleWorkspace] = useState<BrokerSaleWorkspace | null>(null);
   const [rentalWorkspace, setRentalWorkspace] = useState<BrokerRentalWorkspace | null>(null);
+  const [maintenanceWorkspace, setMaintenanceWorkspace] = useState<BrokerMaintenanceWorkspace | null>(null);
+  const [projectWorkspace, setProjectWorkspace] = useState<BrokerProjectWorkspace | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [operationType, setOperationType] = useState<BrokerOperationType>("SALE");
@@ -545,6 +559,105 @@ export function BrokerOperationsPageContent() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo confirmar la revisión humana.");
     } finally { setBusy(false); }
+  }
+
+  async function openMaintenanceWorkspace(record: IndustryRecord) {
+    setBusy(true); setNotice("");
+    try { setMaintenanceWorkspace(await getBrokerMaintenanceWorkspace(record.id)); setProjectWorkspace(null); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo abrir el control de mantención."); }
+    finally { setBusy(false); }
+  }
+
+  async function saveMaintenanceWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!maintenanceWorkspace) return;
+    const form = new FormData(event.currentTarget);
+    const value = (name: string) => String(form.get(name) || "").trim();
+    const number = (name: string) => value(name) === "" ? null : Number(value(name));
+    setBusy(true); setNotice("");
+    try {
+      const updated = await saveBrokerMaintenanceWorkspace(maintenanceWorkspace.record.id, {
+        category: value("category"), specificType: value("specificType"), description: value("description"), priority: value("priority"), diagnosis: value("diagnosis"),
+        providerId: value("providerId") || null, providerName: value("providerName"), scheduledAt: value("scheduledAt") || null, estimatedCost: number("estimatedCost"), actualCost: number("actualCost"), completionEvidence: value("completionEvidence"), resolvedAt: value("resolvedAt") || null,
+      });
+      setMaintenanceWorkspace(updated); setRecords(await getBrokerRecords("maintenance")); setNotice("Control de mantención guardado. No se emitieron órdenes de compra ni pagos.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo guardar la mantención."); }
+    finally { setBusy(false); }
+  }
+
+  async function addMaintenanceQuote(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!maintenanceWorkspace) return;
+    const form = new FormData(event.currentTarget);
+    const amount = Number(String(form.get("quoteAmount") || ""));
+    if (!Number.isFinite(amount) || amount < 0) return setNotice("Indica un monto válido para la cotización.");
+    setBusy(true); setNotice("");
+    try {
+      const updated = await addBrokerMaintenanceQuote(maintenanceWorkspace.record.id, { providerId: String(form.get("quoteProviderId") || "") || undefined, providerName: String(form.get("quoteProviderName") || "").trim() || undefined, reference: String(form.get("quoteReference") || "").trim(), scope: String(form.get("quoteScope") || "").trim() || undefined, amount, validUntil: String(form.get("quoteValidUntil") || "") || null });
+      setMaintenanceWorkspace(updated); event.currentTarget.reset(); setNotice("Cotización registrada. Aún no ha sido aprobada ni convertida en una orden.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo registrar la cotización."); }
+    finally { setBusy(false); }
+  }
+
+  async function selectMaintenanceQuote(quoteId: string) {
+    if (!maintenanceWorkspace) return;
+    setBusy(true); setNotice("");
+    try { setMaintenanceWorkspace(await selectBrokerMaintenanceQuote(maintenanceWorkspace.record.id, quoteId)); setNotice("Cotización seleccionada para revisión y aprobación humana."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo seleccionar la cotización."); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmMaintenanceCheckpoint(checkpoint: "diagnostico" | "aprobacion" | "recepcion") {
+    if (!maintenanceWorkspace) return;
+    setBusy(true); setNotice("");
+    try { setMaintenanceWorkspace(await confirmBrokerMaintenanceCheckpoint(maintenanceWorkspace.record.id, { checkpoint, note: "Revisión humana confirmada desde el control de mantenciones." })); setNotice("Confirmación humana registrada."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo confirmar el hito."); }
+    finally { setBusy(false); }
+  }
+
+  async function moveMaintenanceStage() {
+    if (!maintenanceWorkspace?.nextStage) return;
+    setBusy(true); setNotice("");
+    try { setMaintenanceWorkspace(await advanceBrokerMaintenance(maintenanceWorkspace.record.id, maintenanceWorkspace.nextStage)); setRecords(await getBrokerRecords("maintenance")); setNotice("Etapa de mantención actualizada."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo avanzar la mantención."); }
+    finally { setBusy(false); }
+  }
+
+  async function openProjectWorkspace(record: IndustryRecord) {
+    setBusy(true); setNotice("");
+    try { setProjectWorkspace(await getBrokerProjectWorkspace(record.id)); setMaintenanceWorkspace(null); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo abrir el control del proyecto."); }
+    finally { setBusy(false); }
+  }
+
+  async function saveProjectWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!projectWorkspace) return;
+    const form = new FormData(event.currentTarget);
+    const value = (name: string) => String(form.get(name) || "").trim();
+    const number = (name: string) => value(name) === "" ? null : Number(value(name));
+    setBusy(true); setNotice("");
+    try {
+      const updated = await saveBrokerProjectWorkspace(projectWorkspace.record.id, { name: value("name"), projectType: value("projectType"), scope: value("scope"), budget: number("budget"), approvedBudget: number("approvedBudget"), startAt: value("startAt") || null, targetAt: value("targetAt") || null, completedAt: value("completedAt") || null, acceptanceNotes: value("acceptanceNotes") });
+      setProjectWorkspace(updated); setRecords(await getBrokerRecords("projects")); setNotice("Control del proyecto guardado. No se ejecutaron compras ni contrataciones externas.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo guardar el proyecto."); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmProjectCheckpoint(checkpoint: "aprobacion" | "ejecucion" | "recepcion") {
+    if (!projectWorkspace) return;
+    setBusy(true); setNotice("");
+    try { setProjectWorkspace(await confirmBrokerProjectCheckpoint(projectWorkspace.record.id, { checkpoint, note: "Revisión humana confirmada desde el control de proyectos." })); setNotice("Confirmación humana registrada."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo confirmar el hito."); }
+    finally { setBusy(false); }
+  }
+
+  async function moveProjectStage() {
+    if (!projectWorkspace?.nextStage) return;
+    setBusy(true); setNotice("");
+    try { setProjectWorkspace(await advanceBrokerProject(projectWorkspace.record.id, projectWorkspace.nextStage)); setRecords(await getBrokerRecords("projects")); setNotice("Etapa del proyecto actualizada."); }
+    catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo avanzar el proyecto."); }
+    finally { setBusy(false); }
   }
 
   async function setRecordStatus(record: IndustryRecord, status: string) {
@@ -944,9 +1057,29 @@ export function BrokerOperationsPageContent() {
       <section className="broker-os-list"><div className="broker-list-heading"><span>Registros</span><h2>{AREA_CONFIG[currentArea].label}</h2><p>Consulta cada antecedente sin mezclarlo con otra propiedad u operacion.</p></div>
         {records.length === 0 ? <p className="broker-empty">Aun no hay registros en esta area. Crea el primero desde el panel superior.</p> : records.map((record) => {
           const definition = catalog?.recordDefinitions[record.recordType];
-          return <article key={record.id} className="broker-record-card"><div><span>{definition?.label || readable(record.recordType)}</span><h3>{record.title}</h3><p>{recordSummary(record, definition)}</p></div><div className="broker-record-state"><b>{readable(record.status)}</b>{definition?.statuses?.length ? <select aria-label={`Cambiar estado de ${record.title}`} value={record.status} disabled={busy} onChange={(event) => setRecordStatus(record, event.target.value)}>{definition.statuses.map((status) => <option key={status} value={status}>{readable(status)}</option>)}</select> : null}</div></article>;
+          return <article key={record.id} className="broker-record-card"><div><span>{definition?.label || readable(record.recordType)}</span><h3>{record.title}</h3><p>{recordSummary(record, definition)}</p></div><div className="broker-record-state"><b>{readable(record.status)}</b>{definition?.statuses?.length ? <select aria-label={`Cambiar estado de ${record.title}`} value={record.status} disabled={busy} onChange={(event) => setRecordStatus(record, event.target.value)}>{definition.statuses.map((status) => <option key={status} value={status}>{readable(status)}</option>)}</select> : null}{record.recordType === "maintenance_ticket" ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => openMaintenanceWorkspace(record)}>Control operativo</button> : null}{record.recordType === "remodeling_project" ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => openProjectWorkspace(record)}>Control operativo</button> : null}</div></article>;
         })}
       </section>
+    </section> : null}
+
+    {maintenanceWorkspace ? <section className="broker-sale-case-panel broker-maintenance-case-panel" aria-label="Control operativo de mantención">
+      <header><div><span>Mantenciones y proveedores</span><h2>{maintenanceWorkspace.record.title}</h2><p>Etapa actual: <b>{readable(maintenanceWorkspace.maintenance.workflowStage)}</b></p></div><button type="button" className="secondary-btn" onClick={() => setMaintenanceWorkspace(null)}>Cerrar control</button></header>
+      <div className="broker-sale-readiness"><div><b>{maintenanceWorkspace.nextStage ? `Siguiente hito: ${readable(maintenanceWorkspace.nextStage)}` : "Mantención cerrada"}</b><p>{maintenanceWorkspace.readiness.ready ? "Los antecedentes mínimos están listos para avanzar." : "Completa los puntos pendientes antes de avanzar."}</p></div>{maintenanceWorkspace.readiness.requirements.length ? <ul>{maintenanceWorkspace.readiness.requirements.map((item) => <li key={item.key} className={item.ready ? "ready" : "pending"}>{item.ready ? "✓" : "○"} {item.label}</li>)}</ul> : null}</div>
+      <form className="broker-sale-case-form" onSubmit={saveMaintenanceWorkspace}>
+        <section><h3>Incidencia y diagnóstico</h3><label>Categoría<input name="category" defaultValue={maintenanceWorkspace.maintenance.category} required /></label><label>Tipo específico<input name="specificType" defaultValue={maintenanceWorkspace.maintenance.specificType || ""} /></label><label>Prioridad<select name="priority" defaultValue={maintenanceWorkspace.maintenance.priority}>{maintenanceWorkspace.options.priorities.map((item) => <option key={item}>{readable(item)}</option>)}</select></label><label>Descripción<textarea name="description" rows={3} defaultValue={maintenanceWorkspace.maintenance.description} required /></label><label>Diagnóstico técnico<textarea name="diagnosis" rows={3} defaultValue={maintenanceWorkspace.maintenance.diagnosis || ""} placeholder="Hallazgo, causa probable y trabajo sugerido" /></label></section>
+        <section><h3>Proveedor y ejecución</h3><label>Proveedor existente<select name="providerId" defaultValue={maintenanceWorkspace.maintenance.providerId || ""}><option value="">Seleccionar después</option>{maintenanceWorkspace.providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></label><label>Nuevo proveedor<input name="providerName" placeholder="Solo si no está en la lista" /></label><label>Fecha programada<input name="scheduledAt" type="date" defaultValue={maintenanceWorkspace.maintenance.scheduledAt?.slice(0, 10) || ""} /></label><label>Costo estimado<input name="estimatedCost" type="number" min="0" defaultValue={maintenanceWorkspace.maintenance.estimatedCost ?? ""} /></label><label>Costo real<input name="actualCost" type="number" min="0" defaultValue={maintenanceWorkspace.maintenance.actualCost ?? ""} /></label><label>Trabajo terminado<input name="resolvedAt" type="date" defaultValue={maintenanceWorkspace.maintenance.resolvedAt?.slice(0, 10) || ""} /></label><label>Evidencia de cierre<textarea name="completionEvidence" rows={3} defaultValue={maintenanceWorkspace.maintenance.completionEvidence || ""} placeholder="Referencia de acta, fotos, informe o respaldo" /></label></section>
+        <footer><p className="broker-human-note">Guardar organiza la gestión interna. No contrata proveedores, emite órdenes de compra ni ejecuta pagos.</p><button className="primary-btn" disabled={busy}>Guardar control</button></footer>
+      </form>
+      <section className="broker-maintenance-quotes"><div><h3>Cotizaciones recibidas</h3><p>Registra alternativas y selecciona una para revisión. La selección no equivale a contratar ni pagar.</p></div>{maintenanceWorkspace.quotes.length ? <div className="broker-maintenance-quote-list">{maintenanceWorkspace.quotes.map((quote) => <article key={quote.id}><b>{quote.provider?.name || "Proveedor pendiente"}</b><span>{quote.reference}</span><small>{quote.scope || "Sin alcance detallado"} · {new Intl.NumberFormat("es-CL", { style: "currency", currency: quote.currency || "CLP", maximumFractionDigits: 0 }).format(Number(quote.amount || 0))}</small><button type="button" className={quote.status === "SELECCIONADA" ? "secondary-btn confirmed" : "secondary-btn"} disabled={busy || quote.status === "SELECCIONADA"} onClick={() => selectMaintenanceQuote(quote.id)}>{quote.status === "SELECCIONADA" ? "✓ Seleccionada" : "Seleccionar para revisión"}</button></article>)}</div> : <p className="broker-empty">Aún no hay cotizaciones registradas.</p>}<form className="broker-quote-form" onSubmit={addMaintenanceQuote}><label>Proveedor<select name="quoteProviderId"><option value="">Seleccionar proveedor existente</option>{maintenanceWorkspace.providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</select></label><label>Nuevo proveedor<input name="quoteProviderName" placeholder="Solo si no existe" /></label><label>Referencia<input name="quoteReference" required placeholder="Ej.: Cotización N° 1024" /></label><label>Alcance<input name="quoteScope" placeholder="Trabajo incluido" /></label><label>Monto<input name="quoteAmount" type="number" min="0" required /></label><label>Vigencia<input name="quoteValidUntil" type="date" /></label><button className="secondary-btn" disabled={busy}>Registrar cotización</button></form></section>
+      <div className="broker-sale-confirmations"><h3>Confirmaciones humanas obligatorias</h3><p>Confirma diagnóstico, aprobación y recepción solo luego de revisar los antecedentes fuera del sistema.</p><div>{(["diagnostico", "aprobacion", "recepcion"] as const).map((checkpoint) => <button type="button" key={checkpoint} className={maintenanceWorkspace.maintenance.checkpoints?.[checkpoint] ? "secondary-btn confirmed" : "secondary-btn"} disabled={busy} onClick={() => confirmMaintenanceCheckpoint(checkpoint)}>{maintenanceWorkspace.maintenance.checkpoints?.[checkpoint] ? `✓ ${readable(checkpoint)} confirmado` : `Confirmar ${readable(checkpoint)}`}</button>)}{maintenanceWorkspace.nextStage ? <button type="button" className="primary-btn" disabled={busy || !maintenanceWorkspace.readiness.ready} onClick={moveMaintenanceStage}>Avanzar a {readable(maintenanceWorkspace.nextStage)}</button> : null}</div></div>
+    </section> : null}
+
+    {projectWorkspace ? <section className="broker-sale-case-panel broker-project-case-panel" aria-label="Control operativo de proyecto">
+      <header><div><span>Proyecto y mejora de inmueble</span><h2>{projectWorkspace.record.title}</h2><p>Etapa actual: <b>{readable(projectWorkspace.project.status)}</b></p></div><button type="button" className="secondary-btn" onClick={() => setProjectWorkspace(null)}>Cerrar control</button></header>
+      <div className="broker-sale-readiness"><div><b>{projectWorkspace.nextStage ? `Siguiente hito: ${readable(projectWorkspace.nextStage)}` : "Proyecto cerrado"}</b><p>{projectWorkspace.readiness.ready ? "Los antecedentes mínimos están listos para avanzar." : "Completa los puntos pendientes antes de avanzar."}</p></div>{projectWorkspace.readiness.requirements.length ? <ul>{projectWorkspace.readiness.requirements.map((item) => <li key={item.key} className={item.ready ? "ready" : "pending"}>{item.ready ? "✓" : "○"} {item.label}</li>)}</ul> : null}</div>
+      <form className="broker-sale-case-form" onSubmit={saveProjectWorkspace}><section><h3>Planificación y presupuesto</h3><label>Nombre<input name="name" defaultValue={projectWorkspace.project.name} required /></label><label>Tipo de proyecto<input name="projectType" defaultValue={projectWorkspace.project.projectType} required /></label><label>Alcance<textarea name="scope" rows={4} defaultValue={projectWorkspace.project.scope || ""} placeholder="Qué se hará, límites y criterios de resultado" /></label><label>Presupuesto estimado<input name="budget" type="number" min="0" defaultValue={projectWorkspace.project.budget ?? ""} /></label><label>Presupuesto aprobado<input name="approvedBudget" type="number" min="0" defaultValue={projectWorkspace.project.approvedBudget ?? ""} /></label></section><section><h3>Ejecución y recepción</h3><label>Inicio programado<input name="startAt" type="date" defaultValue={projectWorkspace.project.startAt?.slice(0, 10) || ""} /></label><label>Fecha objetivo<input name="targetAt" type="date" defaultValue={projectWorkspace.project.targetAt?.slice(0, 10) || ""} /></label><label>Fecha de término<input name="completedAt" type="date" defaultValue={projectWorkspace.project.completedAt?.slice(0, 10) || ""} /></label><label>Observaciones de recepción<textarea name="acceptanceNotes" rows={4} defaultValue={projectWorkspace.project.acceptanceNotes || ""} placeholder="Resultado, observaciones y aceptación del responsable" /></label></section><footer><p className="broker-human-note">Este control organiza presupuesto, hitos y evidencia. No compra materiales, firma contratos ni asigna proveedores automáticamente.</p><button className="primary-btn" disabled={busy}>Guardar control</button></footer></form>
+      <section className="broker-maintenance-quotes"><div><h3>Hitos del proyecto</h3><p>Los hitos se administran desde el registro de proyectos y quedan asociados a esta propiedad.</p></div>{projectWorkspace.milestones.length ? <div className="broker-maintenance-quote-list">{projectWorkspace.milestones.map((milestone) => { const data = milestone.data as Record<string, unknown>; return <article key={milestone.id}><b>{milestone.title}</b><span>{String(data.description || "Sin descripción")}</span><small>{data.milestoneDate ? new Date(String(data.milestoneDate)).toLocaleDateString("es-CL") : "Sin fecha"} · {readable(milestone.status)}</small></article>; })}</div> : <p className="broker-empty">Aún no hay hitos. Crea uno desde el formulario de Proyectos para ordenar la ejecución.</p>}</section>
+      <div className="broker-sale-confirmations"><h3>Confirmaciones humanas obligatorias</h3><p>Los hitos del proyecto deben ser confirmados por el responsable antes de avanzar.</p><div>{(["aprobacion", "ejecucion", "recepcion"] as const).map((checkpoint) => <button type="button" key={checkpoint} className={projectWorkspace.project.checkpoints?.[checkpoint] ? "secondary-btn confirmed" : "secondary-btn"} disabled={busy} onClick={() => confirmProjectCheckpoint(checkpoint)}>{projectWorkspace.project.checkpoints?.[checkpoint] ? `✓ ${readable(checkpoint)} confirmado` : `Confirmar ${readable(checkpoint)}`}</button>)}{projectWorkspace.nextStage ? <button type="button" className="primary-btn" disabled={busy || !projectWorkspace.readiness.ready} onClick={moveProjectStage}>Avanzar a {readable(projectWorkspace.nextStage)}</button> : null}</div></div>
     </section> : null}
 
     {tab === "commissions" ? <section className="broker-os-grid broker-area-grid">

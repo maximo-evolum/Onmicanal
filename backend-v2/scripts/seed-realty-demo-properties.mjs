@@ -1031,6 +1031,31 @@ async function seedBrokerRentalCases(tenantId, properties) {
   return 2;
 }
 
+// Casos estructurados para demostrar el control de mantenciones, proveedores
+// y proyectos sin emitir órdenes de compra, contratos ni pagos reales.
+async function seedBrokerMaintenanceProjects(tenantId, properties) {
+  const propertyByTitle = new Map(properties.map((property) => [property.title, property]));
+  const santiago = propertyByTitle.get("Departamento Inversion Santiago Centro");
+  const apoquindo = propertyByTitle.get("Oficina Premium Apoquindo");
+  const montemar = propertyByTitle.get("Penthouse Costa de Montemar");
+  if (!santiago || !apoquindo || !montemar) return { maintenances: 0, projects: 0 };
+  const strict = await prisma.brokerProperty.findMany({ where: { tenantId, legacyRecordId: { in: [santiago.id, apoquindo.id, montemar.id] } }, select: { id: true, legacyRecordId: true } });
+  const strictByLegacy = new Map(strict.map((property) => [property.legacyRecordId, property.id]));
+  if (!strictByLegacy.get(santiago.id) || !strictByLegacy.get(apoquindo.id) || !strictByLegacy.get(montemar.id)) return { maintenances: 0, projects: 0 };
+  const provider = await prisma.brokerProvider.upsert({ where: { tenantId_rut: { tenantId, rut: "77.111.222-3" } }, create: { tenantId, name: "Servicios Técnicos Cordillera SpA", rut: "77.111.222-3", contactName: "Tomás Vega", phone: "+56962223344", email: "contacto@cordillera.demo", specialties: ["Climatización", "Gasfitería"], averageRating: 4.8, status: "ACTIVO" }, update: { name: "Servicios Técnicos Cordillera SpA", specialties: ["Climatización", "Gasfitería"], averageRating: 4.8, status: "ACTIVO" } });
+  const checkpoints = (keys) => Object.fromEntries(keys.map((key) => [key, { confirmedAt: "2026-08-20T12:00:00.000Z", confirmedBy: "Equipo de demostración Broker OS", note: "Control humano registrado para demostración." }]));
+  const closedLegacy = await prisma.industryRecord.findFirst({ where: { tenantId, recordType: "maintenance_ticket", title: "Reparación menor - Departamento Inversión Santiago Centro" } });
+  const activeLegacy = await prisma.industryRecord.findFirst({ where: { tenantId, recordType: "maintenance_ticket", title: "Mantención climatización - Oficina Premium Apoquindo" } });
+  const projectLegacy = await prisma.industryRecord.findFirst({ where: { tenantId, recordType: "remodeling_project", title: "Puesta en valor - Penthouse Costa de Montemar" } });
+  if (!closedLegacy || !activeLegacy || !projectLegacy) return { maintenances: 0, projects: 0 };
+  const closed = await prisma.brokerMaintenance.upsert({ where: { legacyRecordId: closedLegacy.id }, create: { tenantId, propertyId: strictByLegacy.get(santiago.id), providerId: provider.id, legacyRecordId: closedLegacy.id, category: "Gasfitería", specificType: "Llave de lavaplatos", description: "Reparación de llave de lavaplatos con evidencia de cierre.", priority: "MEDIA", workflowStage: "CERRADA", diagnosis: "Desgaste de flexible y sello; se reemplazó componente afectado.", approvalStatus: "APROBADA", approvedAt: new Date("2026-08-15T00:00:00.000Z"), scheduledAt: new Date("2026-08-16T09:00:00.000Z"), reportedAt: new Date("2026-08-14T00:00:00.000Z"), resolvedAt: new Date("2026-08-16T00:00:00.000Z"), estimatedCost: 30000, actualCost: 28000, completionEvidence: "Acta DEMO-MANT-001 y registro fotográfico de cierre.", acceptedAt: new Date("2026-08-16T00:00:00.000Z"), checkpoints: checkpoints(["diagnostico", "aprobacion", "recepcion"]), evidence: { source: DEMO_SOURCE, demo: true } }, update: { providerId: provider.id, workflowStage: "CERRADA", diagnosis: "Desgaste de flexible y sello; se reemplazó componente afectado.", approvalStatus: "APROBADA", approvedAt: new Date("2026-08-15T00:00:00.000Z"), scheduledAt: new Date("2026-08-16T09:00:00.000Z"), resolvedAt: new Date("2026-08-16T00:00:00.000Z"), estimatedCost: 30000, actualCost: 28000, completionEvidence: "Acta DEMO-MANT-001 y registro fotográfico de cierre.", acceptedAt: new Date("2026-08-16T00:00:00.000Z"), checkpoints: checkpoints(["diagnostico", "aprobacion", "recepcion"]) } });
+  await prisma.brokerMaintenanceQuote.upsert({ where: { legacyRecordId: "demo-maintenance-quote-santiago" }, create: { tenantId, maintenanceId: closed.id, providerId: provider.id, legacyRecordId: "demo-maintenance-quote-santiago", reference: "Cotización DEMO-001", scope: "Cambio de flexible, sello y prueba de funcionamiento.", amount: 28000, status: "SELECCIONADA", selectedAt: new Date("2026-08-15T00:00:00.000Z") }, update: { providerId: provider.id, amount: 28000, status: "SELECCIONADA", selectedAt: new Date("2026-08-15T00:00:00.000Z") } });
+  const active = await prisma.brokerMaintenance.upsert({ where: { legacyRecordId: activeLegacy.id }, create: { tenantId, propertyId: strictByLegacy.get(apoquindo.id), providerId: provider.id, legacyRecordId: activeLegacy.id, category: "Climatización", specificType: "Mantención preventiva", description: "Revisión preventiva de equipos de aire acondicionado antes de nueva visita comercial.", priority: "MEDIA", workflowStage: "COTIZACION", diagnosis: "Dos equipos requieren limpieza profunda y revisión de presión.", reportedAt: new Date("2026-08-11T00:00:00.000Z"), estimatedCost: 485000, checkpoints: checkpoints(["diagnostico"]), evidence: { source: DEMO_SOURCE, demo: true } }, update: { providerId: provider.id, workflowStage: "COTIZACION", diagnosis: "Dos equipos requieren limpieza profunda y revisión de presión.", estimatedCost: 485000, checkpoints: checkpoints(["diagnostico"]) } });
+  await prisma.brokerMaintenanceQuote.upsert({ where: { legacyRecordId: "demo-maintenance-quote-apoquindo" }, create: { tenantId, maintenanceId: active.id, providerId: provider.id, legacyRecordId: "demo-maintenance-quote-apoquindo", reference: "Cotización DEMO-CLIMA-002", scope: "Mantención preventiva de cuatro equipos de aire acondicionado.", amount: 485000, validUntil: new Date("2026-09-05T00:00:00.000Z"), status: "RECIBIDA" }, update: { providerId: provider.id, amount: 485000, status: "RECIBIDA" } });
+  await prisma.brokerProject.upsert({ where: { legacyRecordId: projectLegacy.id }, create: { tenantId, propertyId: strictByLegacy.get(montemar.id), legacyRecordId: projectLegacy.id, name: "Puesta en valor - Penthouse Costa de Montemar", projectType: "Puesta en valor para publicación", status: "EJECUCION", budget: 3200000, approvedBudget: 3150000, startAt: new Date("2026-08-01T00:00:00.000Z"), targetAt: new Date("2026-09-05T00:00:00.000Z"), scope: "Pintura, iluminación, estilismo comercial y material fotográfico de publicación.", checkpoints: checkpoints(["aprobacion", "ejecucion"]), metadata: { source: DEMO_SOURCE, demo: true } }, update: { status: "EJECUCION", budget: 3200000, approvedBudget: 3150000, startAt: new Date("2026-08-01T00:00:00.000Z"), targetAt: new Date("2026-09-05T00:00:00.000Z"), scope: "Pintura, iluminación, estilismo comercial y material fotográfico de publicación.", checkpoints: checkpoints(["aprobacion", "ejecucion"]) } });
+  return { maintenances: 2, projects: 1 };
+}
+
 const BROKER_DEMO_AREAS = [
   { area: "Propiedades y cartera", recordTypes: ["property"] },
   { area: "Captacion, tasacion y cierre", recordTypes: ["property_appraisal", "property_mandate", "property_offer", "property_promise", "commission_settlement"] },
@@ -1055,6 +1080,8 @@ async function verifyBrokerDemo() {
   });
   const saleCases = await prisma.brokerSaleCase.findMany({ where: { tenantId: tenant.id }, select: { status: true, currentStage: true } });
   const rentalCases = await prisma.brokerRentalCase.findMany({ where: { tenantId: tenant.id }, select: { status: true, currentStage: true } });
+  const maintenanceCases = await prisma.brokerMaintenance.findMany({ where: { tenantId: tenant.id }, select: { workflowStage: true } });
+  const projects = await prisma.brokerProject.findMany({ where: { tenantId: tenant.id }, select: { status: true } });
   const counts = records.reduce((accumulator, record) => {
     accumulator[record.recordType] = (accumulator[record.recordType] || 0) + 1;
     return accumulator;
@@ -1074,6 +1101,9 @@ async function verifyBrokerDemo() {
   if (!saleCases.some((item) => item.currentStage === "ENTREGA_Y_POSTVENTA" && item.status === "CERRADA")) faltantes.push("Venta cerrada con inscripción y entrega");
   if (!rentalCases.some((item) => item.currentStage === "PAGO_INICIAL")) faltantes.push("Arriendo con pago inicial en revisión");
   if (!rentalCases.some((item) => item.currentStage === "ENTREGA_LLAVES" && item.status === "CERRADA")) faltantes.push("Arriendo cerrado con entrega de llaves");
+  if (!maintenanceCases.some((item) => item.workflowStage === "CERRADA")) faltantes.push("Mantención cerrada con recepción controlada");
+  if (!maintenanceCases.some((item) => item.workflowStage === "COTIZACION")) faltantes.push("Mantención en etapa de cotización");
+  if (!projects.some((item) => item.status === "EJECUCION")) faltantes.push("Proyecto en ejecución con presupuesto aprobado");
 
   console.log(JSON.stringify({
     tenant: tenant.name,
@@ -1082,6 +1112,8 @@ async function verifyBrokerDemo() {
     propiedades: counts.property || 0,
     expedientesVenta: saleCases.length,
     expedientesArriendo: rentalCases.length,
+    controlesMantencion: maintenanceCases.length,
+    proyectos: projects.length,
     areas,
     demostracionLista: faltantes.length === 0,
     faltantes,
@@ -1114,6 +1146,7 @@ async function main() {
   const captures = await seedBrokerCaptures(realtyTenant.id, properties, brokers);
   const saleCases = await seedBrokerSaleCases(realtyTenant.id, properties);
   const rentalCases = await seedBrokerRentalCases(realtyTenant.id, properties);
+  const maintenanceProjects = await seedBrokerMaintenanceProjects(realtyTenant.id, properties);
 
   console.log(JSON.stringify({
     tenant: realtyTenant.name,
@@ -1128,6 +1161,7 @@ async function main() {
     captureRecords: captures,
     saleCases,
     rentalCases,
+    maintenanceProjects,
     legacyPropertyNormalized: Boolean(normalizedLegacy),
     assigned: properties.filter((property) => property.assignedToId).length,
     unassigned: properties.filter((property) => !property.assignedToId).length,

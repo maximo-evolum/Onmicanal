@@ -38,5 +38,5 @@ test("La liquidación mensual no permite saltar la revisión humana", () => {
 
 test("El período mensual se normaliza sin aceptar fechas ambiguas", () => {
   assert.equal(normalizeAdministrationPeriod("2026-02"), "2026-02");
-  assert.equal(normalizeAdministrationPeriod("febrero"), "2026-08");
+  assert.equal(normalizeAdministrationPeriod("febrero", new Date("2026-08-18T12:00:00.000Z")), "2026-08");
 });
