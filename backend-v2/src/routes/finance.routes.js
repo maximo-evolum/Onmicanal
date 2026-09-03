@@ -48,6 +48,7 @@ import {
 import { createFloidConsentCase, normalizeFloidTransactions } from "../services/finance-floid.service.js";
 import { getFinanceMonthlyClosePreview, validFinancePeriod } from "../services/finance-monthly-close.service.js";
 import { getFinancePlanning, validPlanningPeriod } from "../services/finance-planning.service.js";
+import { canPerformFinanceAction, FINANCE_ACTIONS, financeRoleCapabilities } from "../services/finance-security.service.js";
 
 export const financeRouter = Router();
 export const financePublicRouter = Router();
@@ -77,6 +78,14 @@ async function requireFinanceModule(req, res, module) {
 function cleanText(value, fallback = "") {
   const normalized = String(value || "").trim();
   return normalized || fallback;
+}
+
+function requireFinancePermission(action) {
+  return (req, res, next) => {
+    if (canPerformFinanceAction(req.user?.role, action)) return next();
+    console.warn("[FINANCE_PERMISSION_FORBIDDEN]", { userId: req.user?.id, tenantId: req.tenantId, role: req.user?.role, action });
+    return res.status(403).json({ error: "Tu rol no tiene permiso para esta acción financiera.", action });
+  };
 }
 
 function connectionMetadata(config) {
@@ -504,7 +513,7 @@ financeRouter.get("/finance/collections/portfolio", async (req, res) => {
 
 // Registrar un cobro es una acción humana y trazable. No dispara mensajes ni
 // cambios hacia Nubox/ERP: solo actualiza el registro interno de EVOLUM.
-financeRouter.post("/finance/invoices/:id/receipts", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+financeRouter.post("/finance/invoices/:id/receipts", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.REGISTER), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
     const invoice = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_invoice" } });
@@ -619,7 +628,7 @@ financeRouter.get("/finance/payables/summary", async (req, res) => {
   }
 });
 
-financeRouter.post("/finance/payables/:id/payments", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+financeRouter.post("/finance/payables/:id/payments", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.REGISTER), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_PAYABLES))) return;
     const payable = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_payable" } });
@@ -705,7 +714,7 @@ financeRouter.post("/finance/migrations/preview-file", requireRole(ROLE_GROUPS.M
   }
 });
 
-financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_MIGRATION))) return;
     const sourceFile = (cleanText(req.body?.sourceFile) || "migracion-historica.csv").slice(0, 180);
@@ -848,7 +857,7 @@ financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GRO
   }
 });
 
-financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
     const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : [];
@@ -1170,7 +1179,7 @@ financeRouter.get("/finance/monthly-close/preview", async (req, res) => {
   }
 });
 
-financeRouter.post("/finance/monthly-close", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+financeRouter.post("/finance/monthly-close", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.CLOSE_PERIOD), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
     const period = cleanText(req.body?.period) || new Date().toISOString().slice(0, 7);
@@ -1297,6 +1306,19 @@ financeRouter.get("/finance/reconciliation-suggestions", async (req, res) => {
   }
 });
 
+// Devuelve únicamente capacidades de negocio, nunca secretos ni reglas
+// internas. Sirve para que el frontend o soporte expliquen por qué una acción
+// aparece deshabilitada sin inferir permisos desde la interfaz.
+financeRouter.get("/finance/security/access", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    res.json({ role: req.user?.role || "VIEWER", capabilities: financeRoleCapabilities(req.user?.role) });
+  } catch (error) {
+    console.error("Finance security access error:", error);
+    res.status(500).json({ error: "No se pudieron consultar los permisos financieros." });
+  }
+});
+
 financeRouter.get("/finance/agents", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
@@ -1307,7 +1329,7 @@ financeRouter.get("/finance/agents", async (req, res) => {
   }
 });
 
-financeRouter.patch("/finance/agents/policy", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+financeRouter.patch("/finance/agents/policy", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.CONFIGURE), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
     const policy = await updateFinanceAgentPolicy({ tenantId: req.tenantId, patch: req.body || {} });
@@ -1335,7 +1357,7 @@ financeRouter.post("/finance/agents/analyze", requireRole(ROLE_GROUPS.STAFF), as
   }
 });
 
-financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
     const requestedInvoiceIds = [...new Set([
