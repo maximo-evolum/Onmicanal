@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { createHash } from "node:crypto";
 
 const MAX_MIGRATION_ROWS = 500;
 const MAX_MIGRATION_FILE_BYTES = 8 * 1024 * 1024;
@@ -69,6 +70,18 @@ function historicalStatus({ sourceStatus, amount, balance, paidAmount, dueDate, 
 
 function safeSourceRow(row) {
   return Object.fromEntries(Object.entries(row || {}).slice(0, 80).map(([key, value]) => [String(key).slice(0, 100), String(value ?? "").slice(0, 500)]));
+}
+
+export function historicalFinanceFingerprint(input = {}) {
+  const source = [
+    normalizeKey(input.kind || input.documentSide),
+    normalizeKey(input.documentNumber),
+    normalizeKey(input.rut),
+    Math.round(Number(input.amount) || 0),
+    cleanText(input.issueDate),
+    normalizeKey(input.partyName)
+  ].join("|");
+  return createHash("sha256").update(source).digest("hex");
 }
 
 function valueFromSheetCell(value) {
@@ -199,6 +212,7 @@ export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit =
     if (!partyName) missing.push(kind === "PAYABLE" ? "proveedor" : "cliente");
     if (!amount) missing.push("monto");
     const source = safeSourceRow(row);
+    const fingerprint = historicalFinanceFingerprint({ kind, documentNumber, rut: readValue(row, ["rut", "rut_cliente", "rut_proveedor", "tax_id"]), amount, issueDate, partyName });
     return {
       rowNumber: index + 2,
       kind,
@@ -215,6 +229,7 @@ export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit =
       dueDate,
       status,
       sourceStatus,
+      fingerprint,
       needsReview: missing.length > 0,
       reviewReasons: missing,
       source

@@ -544,7 +544,7 @@ function FinanceWorkspace() {
       setMigrationPreview(null);
       setMigrationRows([]);
       setMigrationSourceFile("");
-      setMessage(`${result.imported} registros históricos incorporados. ${result.requiresReview} quedaron en Excepciones para revisión humana.`);
+      setMessage(`${result.imported} registros históricos incorporados. ${result.duplicateRows || 0} duplicados se omitieron y ${result.requiresReview} quedaron en Excepciones para revisión humana.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo importar el historial."); }
     finally { setSaving(false); }
   }

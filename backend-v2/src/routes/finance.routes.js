@@ -26,7 +26,7 @@ import {
   issueNuboxSales,
   syncNuboxForTenant
 } from "../services/finance-sync.service.js";
-import { MAX_MIGRATION_FILE_BYTES, MAX_MIGRATION_ROWS, normalizeHistoricalFinanceRows, readHistoricalFinanceFile, summarizeHistoricalFinanceRows } from "../services/finance-migration.service.js";
+import { MAX_MIGRATION_FILE_BYTES, MAX_MIGRATION_ROWS, historicalFinanceFingerprint, normalizeHistoricalFinanceRows, readHistoricalFinanceFile, summarizeHistoricalFinanceRows } from "../services/finance-migration.service.js";
 import {
   MAX_BANK_STATEMENT_FILE_BYTES,
   MAX_BANK_STATEMENT_ROWS,
@@ -713,6 +713,25 @@ financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGER
     if (!rows.length) return res.status(400).json({ error: "No se detectaron filas para importar." });
     const summary = summarizeHistoricalFinanceRows(rows);
     const importedAt = new Date().toISOString();
+    const existingDocuments = await prisma.industryRecord.findMany({
+      where: { tenantId: req.tenantId, recordType: { in: ["finance_invoice", "finance_payable"] } },
+      select: { data: true }, take: 10000, orderBy: { updatedAt: "desc" }
+    });
+    const knownFingerprints = new Set(existingDocuments.map((record) => {
+      const data = financeRecordData(record);
+      return cleanText(data.migrationFingerprint) || historicalFinanceFingerprint({
+        kind: data.documentSide === "SUPPLIER" ? "PAYABLE" : "RECEIVABLE", documentNumber: data.documentNumber || data.invoiceNumber,
+        rut: data.clientRut || data.customerRut || data.supplierRut || data.rut, amount: data.amount, issueDate: data.issueDate, partyName: data.customerName || data.clientName || data.supplierName
+      });
+    }).filter(Boolean));
+    const seenFingerprints = new Set();
+    const importableRows = [];
+    let duplicateRows = 0;
+    for (const row of rows) {
+      if (!row.needsReview && (knownFingerprints.has(row.fingerprint) || seenFingerprints.has(row.fingerprint))) { duplicateRows += 1; continue; }
+      seenFingerprints.add(row.fingerprint);
+      importableRows.push(row);
+    }
     const batch = await prisma.$transaction(async (tx) => {
       const batchRecord = await tx.industryRecord.create({
         data: {
@@ -720,11 +739,11 @@ financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGER
           recordType: "finance_migration_batch",
           title: `Migración histórica · ${sourceFile}`.slice(0, 220),
           status: "COMPLETED",
-          data: { sourceFile, totalRows: rows.length, reviewRows: summary.reviewRows, summary, importedAt, importedById: req.user?.id || null }
+          data: { sourceFile, totalRows: rows.length, reviewRows: summary.reviewRows, duplicateRows, summary, importedAt, importedById: req.user?.id || null }
         }
       });
       const records = [];
-      for (const row of rows) {
+      for (const row of importableRows) {
         const historicalData = {
           documentSide: row.documentSide,
           direction: row.kind === "PAYABLE" ? "PURCHASE" : "SALE",
@@ -749,9 +768,10 @@ financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGER
           needsReview: row.needsReview,
           reviewReasons: row.reviewReasons,
           sourceStatus: row.sourceStatus,
+          migrationFingerprint: row.fingerprint,
           sourceRow: row.source
         };
-        records.push(await tx.industryRecord.create({
+        const created = await tx.industryRecord.create({
           data: {
             tenantId: req.tenantId,
             recordType: row.needsReview ? "finance_exception" : row.recordType,
@@ -763,13 +783,26 @@ financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGER
               ? { type: "MIGRATION_REVIEW", detail: `Faltan: ${row.reviewReasons.join(", ")}`, priority: "MEDIUM", ...historicalData }
               : historicalData
           }
-        }));
+        });
+        records.push(created);
+        // Un saldo histórico puede ser parcialmente o totalmente pagado. Se
+        // conserva un comprobante interno para que el saldo inicial sea
+        // auditable sin inventar una cartola bancaria ni un medio de pago.
+        if (!row.needsReview && row.paidAmount > 0) {
+          await tx.industryRecord.create({ data: {
+            tenantId: req.tenantId,
+            recordType: row.kind === "PAYABLE" ? "finance_payable_payment" : "finance_invoice_receipt",
+            title: `${row.kind === "PAYABLE" ? "Pago histórico" : "Cobro histórico"} ${row.documentNumber}`.slice(0, 220),
+            status: "MIGRATED",
+            data: { [row.kind === "PAYABLE" ? "payableId" : "invoiceId"]: created.id, amount: row.paidAmount, paymentDate: row.issueDate || importedAt.slice(0, 10), source: "historical_migration", migrationBatchId: batchRecord.id, migrationRow: row.rowNumber, note: "Saldo inicial importado; requiere respaldo externo si se necesita comprobante bancario." }
+          } });
+        }
       }
       await tx.industryRecord.update({ where: { id: batchRecord.id }, data: { data: { ...financeRecordData(batchRecord), importedRows: records.length, exceptionRows: summary.reviewRows } } });
       return { batch: batchRecord, records };
     });
-    await recordAuditLog(req, "FINANCE_HISTORICAL_MIGRATION_IMPORTED", "finance_migration_batch", batch.batch.id, { sourceFile, totalRows: rows.length, summary });
-    res.status(201).json({ batch: batch.batch, summary, imported: batch.records.length, requiresReview: summary.reviewRows });
+    await recordAuditLog(req, "FINANCE_HISTORICAL_MIGRATION_IMPORTED", "finance_migration_batch", batch.batch.id, { sourceFile, totalRows: rows.length, imported: batch.records.length, duplicateRows, summary });
+    res.status(201).json({ batch: batch.batch, summary, imported: batch.records.length, duplicateRows, requiresReview: summary.reviewRows });
   } catch (error) {
     console.error("Import historical finance migration error:", error);
     res.status(500).json({ error: "No se pudo importar la migración histórica." });

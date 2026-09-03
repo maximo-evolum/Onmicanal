@@ -1070,7 +1070,7 @@ export function previewFinanceMigrationFile(file: File): Promise<FinanceMigratio
   return request<FinanceMigrationPreview>("/finance/migrations/preview-file", { method: "POST", body: data });
 }
 
-export function importFinanceMigration(input: { sourceFile: string; rows: Array<Record<string, unknown>> }): Promise<{ imported: number; requiresReview: number; summary: FinanceMigrationPreview["summary"] }> {
+export function importFinanceMigration(input: { sourceFile: string; rows: Array<Record<string, unknown>> }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceMigrationPreview["summary"] }> {
   return request("/finance/migrations/import", { method: "POST", body: JSON.stringify(input) });
 }
 

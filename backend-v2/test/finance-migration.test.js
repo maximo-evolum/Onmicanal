@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
-import { normalizeHistoricalFinanceRows, readHistoricalFinanceFile, summarizeHistoricalFinanceRows } from "../src/services/finance-migration.service.js";
+import { historicalFinanceFingerprint, normalizeHistoricalFinanceRows, readHistoricalFinanceFile, summarizeHistoricalFinanceRows } from "../src/services/finance-migration.service.js";
 
 test("la migración histórica clasifica cuentas por cobrar, pagar y filas que requieren revisión", () => {
   const rows = normalizeHistoricalFinanceRows([
@@ -36,4 +36,10 @@ test("lee un Excel histórico antes de normalizarlo", async () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].Proveedor, "Servicios Sur");
   assert.equal(normalizeHistoricalFinanceRows(rows)[0].recordType, "finance_payable");
+});
+
+test("mantiene una huella estable para impedir duplicar documentos históricos", () => {
+  const first = historicalFinanceFingerprint({ kind: "RECEIVABLE", documentNumber: "F-100", rut: "76.111.222-3", amount: 1250000, issueDate: "2026-01-02", partyName: "Comercial Andina" });
+  const second = historicalFinanceFingerprint({ kind: "receivable", documentNumber: " f-100 ", rut: "76.111.222-3", amount: "1250000", issueDate: "2026-01-02", partyName: "COMERCIAL ANDINA" });
+  assert.equal(first, second);
 });
