@@ -46,3 +46,29 @@ test("lee una cartola Excel y mantiene una huella estable para evitar duplicados
   assert.equal(row.amount, 350000);
   assert.equal(row.fingerprint, bankMovementFingerprint(row));
 });
+
+test("reconoce la plantilla Santander con carátula previa y marca Cargo/Abono", async () => {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Cartola Santander");
+  sheet.addRow(["Cartolas históricas de Cuentas Corrientes"]);
+  sheet.addRow(["Empresa:", "Transportes Ejemplo Ltda."]);
+  sheet.addRow(["RUT empresa:", "77.111.222-3"]);
+  sheet.addRow(["Número cartola:", "42"]);
+  sheet.addRow([]);
+  sheet.addRow(["Detalle movimientos"]);
+  sheet.addRow(["MONTO", "DESCRIPCIÓN MOVIMIENTO", "FECHA", "N° DOCUMENTO", "SUCURSAL", "CARGO/ABONO"]);
+  sheet.addRow(["1.250.000", "PAGO CLIENTE FACTURA 105", "02/01/2026", "105", "Principal", "A"]);
+  sheet.addRow(["450.000", "PAGO PROVEEDOR", "03/01/2026", "200", "Principal", "C"]);
+
+  const sourceRows = await readBankStatementFile({ originalname: "santander.xlsx", buffer: Buffer.from(await workbook.xlsx.writeBuffer()) });
+  const rows = normalizeBankStatementRows(sourceRows, { bankKey: "santander_chile", accountAlias: "Cuenta principal", accountLast4: "8304" });
+
+  assert.equal(sourceRows.length, 2);
+  assert.equal(rows[0].description, "PAGO CLIENTE FACTURA 105");
+  assert.equal(rows[0].reference, "105");
+  assert.equal(rows[0].direction, "CREDIT");
+  assert.equal(rows[0].movementKind, "INCOME");
+  assert.equal(rows[1].direction, "DEBIT");
+  assert.equal(rows[1].signedAmount, -450000);
+  assert.equal(rows[1].branch, "Principal");
+});

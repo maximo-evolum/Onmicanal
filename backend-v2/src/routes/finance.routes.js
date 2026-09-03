@@ -8,6 +8,7 @@ import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { ensureTenantModuleEligibility } from "../services/tenant-modules.service.js";
 import {
   financeRecordData,
+  financeAgingSegment,
   getFinanceOverview,
   getFinanceReconciliationSuggestions,
   getInvoiceFinancialState,
@@ -155,7 +156,7 @@ function financeHistory(data) {
 
 function financeCaseUpdate(input = {}) {
   const status = cleanText(input.status).toUpperCase();
-  const allowedStatuses = new Set(["PENDING", "CONTACTED", "PROMISE", "PAID", "ESCALATED", "CLOSED"]);
+  const allowedStatuses = new Set(["MONITORING", "PENDING", "CONTACTED", "PROMISE", "PAID", "ESCALATED", "CLOSED"]);
   return {
     ...(allowedStatuses.has(status) ? { status } : {}),
     ...(cleanText(input.channel) ? { channel: cleanText(input.channel).toLowerCase() } : {}),
@@ -446,7 +447,9 @@ financeRouter.get("/finance/collections/portfolio", async (req, res) => {
         reminders: 0,
         lastReminderAt: null,
         latestCaseId: null,
-        reminderStatus: "Sin recordatorio preparado"
+        reminderStatus: "Sin recordatorio preparado",
+        agingSegments: { POR_VENCER: 0, "1_7": 0, "8_30": 0, "31_60": 0, "61_90": 0, MAS_90: 0 },
+        recommendedAction: "Monitoreo preventivo"
       };
       row.documents += 1;
       if (state.status !== "PAID") {
@@ -456,6 +459,10 @@ financeRouter.get("/finance/collections/portfolio", async (req, res) => {
           row.overdueDocuments += 1;
           row.overdueAmount += state.balance;
         }
+        const segment = financeAgingSegment(state.dueDate, now);
+        row.agingSegments[segment.code] = (row.agingSegments[segment.code] || 0) + state.balance;
+        const actionPriority = { "Monitoreo preventivo": 0, "Cobranza preventiva": 1, "Cobranza activa": 2, "Cobranza intensiva": 3, "Cobranza crítica": 4, "Gestión especial": 5 };
+        if ((actionPriority[segment.action] || 0) >= (actionPriority[row.recommendedAction] || 0)) row.recommendedAction = segment.action;
         const dueDate = state.dueDate;
         if (dueDate && dueDate >= now && dueDate.getTime() - now.getTime() <= 30 * 24 * 60 * 60 * 1000) row.dueSoonAmount += state.balance;
       }
@@ -566,12 +573,13 @@ financeRouter.post("/finance/collections/portfolio/:partyKey/reminders", require
       const data = financeRecordData(invoice);
       const party = financeParty(invoice);
       const existing = existingByInvoice.get(invoice.id);
-      const event = { at: now, type: "REMINDER_DRAFT_PREPARED", detail: "Borrador preparado. No se envió ningún mensaje.", userId: req.user?.id || null };
+      const segment = financeAgingSegment(state.dueDate, new Date());
+      const event = { at: now, type: "REMINDER_DRAFT_PREPARED", detail: `Borrador preparado para cartera ${segment.label}. No se envió ningún mensaje.`, userId: req.user?.id || null };
       if (existing) {
-        const updated = await prisma.industryRecord.update({ where: { id: existing.id }, data: { data: { ...financeRecordData(existing), reminderStatus: "Recordatorio preparado", lastReminderAt: now, history: [...financeHistory(financeRecordData(existing)), event] } } });
+        const updated = await prisma.industryRecord.update({ where: { id: existing.id }, data: { data: { ...financeRecordData(existing), balance: state.balance, agingBucket: segment.label, agingCode: segment.code, daysPastDue: segment.daysPastDue, recommendedAction: segment.action, reminderStatus: "Recordatorio preparado", lastReminderAt: now, history: [...financeHistory(financeRecordData(existing)), event] } } });
         prepared.push(updated);
       } else {
-        const created = await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_collection_case", title: `Cobranza ${data.invoiceNumber || invoice.title}`.slice(0, 220), status: "PENDING", data: { invoiceId: invoice.id, invoiceNumber: data.invoiceNumber || invoice.title, customerName: party.name, clientRut: party.rut, balance: state.balance, channel: "manual", reminderStatus: "Recordatorio preparado", lastReminderAt: now, nextActionAt: now, history: [{ at: now, type: "CASE_CREATED", detail: "Caso preparado para revisión humana." }, event] } } });
+        const created = await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_collection_case", title: `Cobranza ${data.invoiceNumber || invoice.title}`.slice(0, 220), status: segment.code === "POR_VENCER" ? "MONITORING" : "PENDING", data: { invoiceId: invoice.id, invoiceNumber: data.invoiceNumber || invoice.title, customerName: party.name, clientRut: party.rut, balance: state.balance, agingBucket: segment.label, agingCode: segment.code, daysPastDue: segment.daysPastDue, recommendedAction: segment.action, channel: "manual", reminderStatus: "Recordatorio preparado", lastReminderAt: now, nextActionAt: now, history: [{ at: now, type: "CASE_CREATED", detail: `${segment.action}. Caso preparado para revisión humana.` }, event] } } });
         prepared.push(created);
       }
     }
@@ -870,6 +878,7 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
             status: "PENDING",
             data: {
               ...row,
+              sourceRow: row.source,
               source: "bank_statement_import",
               sourceFile,
               importBatchId: batch.id,
@@ -1045,23 +1054,44 @@ financeRouter.post("/finance/sii/dte/import", requireRole(ROLE_GROUPS.MANAGERS),
       });
       if (valid.length) await tx.industryRecord.createMany({ data: valid.map((document) => {
         const isSupplier = document.side === "SUPPLIER";
+        const isAdjustment = ["56", "61"].includes(String(document.documentTypeCode));
         return {
           tenantId: req.tenantId,
-          recordType: isSupplier ? "finance_payable" : "finance_invoice",
+          recordType: isAdjustment ? "finance_document_adjustment" : (isSupplier ? "finance_payable" : "finance_invoice"),
           title: `${document.documentTypeName} ${document.documentNumber} · ${document.partyName}`.slice(0, 220),
-          status: "OPEN",
+          status: isAdjustment ? "PENDING_LINK" : "OPEN",
           data: {
             source: "sii_dte_xml", siiDteFingerprint: document.fingerprint, siiImportBatchId: batch.id, sourceFile: document.sourceFile,
-            documentSide: document.side, direction: isSupplier ? "PURCHASE" : "SALE", documentNumber: document.documentNumber,
+            documentSide: document.side, direction: isAdjustment ? (document.documentTypeCode === "61" ? "CREDIT_NOTE" : "DEBIT_NOTE") : (isSupplier ? "PURCHASE" : "SALE"), documentNumber: document.documentNumber,
+            adjustmentType: isAdjustment ? (document.documentTypeCode === "61" ? "CREDIT_NOTE" : "DEBIT_NOTE") : undefined,
+            referenceDocumentType: document.referenceDocumentType, referenceDocumentNumber: document.referenceDocumentNumber, referenceDocumentDate: document.referenceDocumentDate,
             invoiceNumber: isSupplier ? undefined : document.documentNumber, documentTypeCode: document.documentTypeCode, documentTypeName: document.documentTypeName,
             emitterRut: document.emitterRut, emitterName: document.emitterName, receiverRut: document.receiverRut, receiverName: document.receiverName,
             customerName: isSupplier ? undefined : document.partyName, customerRut: isSupplier ? undefined : document.partyRut,
             clientName: isSupplier ? undefined : document.partyName, clientRut: isSupplier ? undefined : document.partyRut,
             supplierName: isSupplier ? document.partyName : undefined, supplierRut: isSupplier ? document.partyRut : undefined,
-            rut: document.partyRut, issueDate: document.issueDate, amount: document.amount, balance: document.amount, paidAmount: 0, currency: "CLP", importedAt
+            rut: document.partyRut, issueDate: document.issueDate, amount: document.amount, balance: isAdjustment ? 0 : document.amount, paidAmount: 0, currency: "CLP", importedAt
           }
         };
       }) });
+      const customerAdjustments = valid.filter((document) => document.side === "CUSTOMER" && ["56", "61"].includes(String(document.documentTypeCode)) && document.referenceDocumentNumber);
+      if (customerAdjustments.length) {
+        const invoices = await tx.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" }, take: 1000, orderBy: { updatedAt: "desc" } });
+        const adjustments = (await tx.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_document_adjustment" }, take: 1000, orderBy: { updatedAt: "desc" } }))
+          .filter((record) => financeRecordData(record).siiImportBatchId === batch.id);
+        for (const adjustment of adjustments) {
+          const adjustmentData = financeRecordData(adjustment);
+          const target = invoices.find((invoice) => String(financeRecordData(invoice).invoiceNumber || financeRecordData(invoice).documentNumber || "") === String(adjustmentData.referenceDocumentNumber || ""));
+          if (!target) continue;
+          const targetData = financeRecordData(target);
+          const isCredit = adjustmentData.adjustmentType === "CREDIT_NOTE";
+          const adjustmentAmount = safeAmount(adjustmentData.amount);
+          const current = getInvoiceFinancialState(target);
+          const nextBalance = isCredit ? Math.max(0, current.balance - adjustmentAmount) : current.balance + adjustmentAmount;
+          await tx.industryRecord.update({ where: { id: target.id }, data: { status: nextBalance === 0 ? "PAID" : target.status, data: { ...targetData, balance: nextBalance, creditNotesTotal: safeAmount(targetData.creditNotesTotal) + (isCredit ? adjustmentAmount : 0), debitNotesTotal: safeAmount(targetData.debitNotesTotal) + (isCredit ? 0 : adjustmentAmount), lastAdjustmentId: adjustment.id } } });
+          await tx.industryRecord.update({ where: { id: adjustment.id }, data: { status: "APPLIED", data: { ...adjustmentData, invoiceId: target.id, appliedAt: importedAt } } });
+        }
+      }
       if (review.length) await tx.industryRecord.createMany({ data: review.map((document) => ({
         tenantId: req.tenantId, recordType: "finance_exception", title: `Revisar DTE ${document.documentNumber || "sin folio"} · ${document.sourceFile}`.slice(0, 220), status: "OPEN",
         data: { type: "SII_DTE_IMPORT_REVIEW", priority: "MEDIUM", detail: `Faltan: ${document.reviewReasons.join(", ")}`, source: "sii_dte_xml", siiImportBatchId: batch.id, document }
@@ -1275,35 +1305,52 @@ financeRouter.post("/finance/agents/analyze", requireRole(ROLE_GROUPS.STAFF), as
 financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
-    const invoiceId = cleanText(req.body?.invoiceId);
-    if (!invoiceId) return res.status(400).json({ error: "invoiceId es requerido" });
+    const requestedInvoiceIds = [...new Set([
+      cleanText(req.body?.invoiceId),
+      ...(Array.isArray(req.body?.invoiceIds) ? req.body.invoiceIds.map((id) => cleanText(id)) : [])
+    ].filter(Boolean))].slice(0, 3);
+    if (!requestedInvoiceIds.length) return res.status(400).json({ error: "Selecciona al menos una factura para conciliar." });
 
-    const [movement, invoice] = await Promise.all([
+    const [movement, invoices] = await Promise.all([
       prisma.industryRecord.findFirst({ where: { id: req.params.movementId, tenantId: req.tenantId, recordType: "bank_movement" } }),
-      prisma.industryRecord.findFirst({ where: { id: invoiceId, tenantId: req.tenantId, recordType: "finance_invoice" } })
+      prisma.industryRecord.findMany({ where: { id: { in: requestedInvoiceIds }, tenantId: req.tenantId, recordType: "finance_invoice" } })
     ]);
-    if (!movement || !invoice) return res.status(404).json({ error: "Movimiento o factura no encontrados" });
+    if (!movement || invoices.length !== requestedInvoiceIds.length) return res.status(404).json({ error: "Movimiento o factura no encontrados" });
     if (String(movement.status || "").toUpperCase() === "MATCHED") return res.status(409).json({ error: "Este movimiento ya fue conciliado" });
 
-    const suggestion = scoreFinanceReconciliation(invoice, movement);
+    const movementData = financeRecordData(movement);
+    const movementKind = String(movementData.movementKind || "").toUpperCase();
+    if (String(movementData.direction || "").toUpperCase() === "DEBIT" || ["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(movementKind)) {
+      return res.status(400).json({ error: "Este movimiento no es un abono externo conciliable contra cuentas por cobrar." });
+    }
     const movementAmount = Math.abs(Number(financeRecordData(movement).amount || 0));
-    const invoiceState = getInvoiceFinancialState(invoice);
-    const remainingBalance = Math.max(0, invoiceState.balance - movementAmount);
+    if (!movementAmount) return res.status(400).json({ error: "El movimiento no tiene un monto conciliable." });
+    const invoiceStates = invoices.map((invoice) => ({ invoice, state: getInvoiceFinancialState(invoice) }));
+    const totalBalance = invoiceStates.reduce((sum, item) => sum + item.state.balance, 0);
+    if (movementAmount > totalBalance + 1) {
+      return res.status(400).json({ error: "El abono supera el saldo de los documentos seleccionados. Registra la diferencia como excepción antes de conciliar." });
+    }
+    if (invoices.length > 1 && Math.abs(totalBalance - movementAmount) > 1) {
+      return res.status(400).json({ error: "Una conciliación agrupada debe cuadrar exactamente. Para pagos parciales confirma una sola factura o revisa la excepción." });
+    }
+    const suggestions = invoices.map((invoice) => scoreFinanceReconciliation(invoice, movement));
     const now = new Date();
 
-    const reconciliation = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const created = await tx.industryRecord.create({
         data: {
           tenantId: req.tenantId,
           recordType: "finance_reconciliation",
-          title: `${invoice.title} - ${movement.title}`.slice(0, 220),
+          title: `${invoices.length > 1 ? `${invoices.length} documentos` : invoices[0].title} - ${movement.title}`.slice(0, 220),
           status: "APPROVED",
           data: {
-            invoiceId: invoice.id,
+            invoiceId: invoices.length === 1 ? invoices[0].id : null,
+            invoiceIds: invoices.map((invoice) => invoice.id),
             movementId: movement.id,
-            confidence: suggestion.confidence,
-            matchReasons: suggestion.reasons,
-            difference: suggestion.difference,
+            confidence: Math.min(...suggestions.map((suggestion) => suggestion.confidence)),
+            matchReasons: suggestions.flatMap((suggestion) => suggestion.reasons),
+            difference: Math.abs(totalBalance - movementAmount),
+            reconciliationType: invoices.length > 1 ? "GROUPED_PAYMENT" : (movementAmount < totalBalance ? "PARTIAL_PAYMENT" : "EXACT_PAYMENT"),
             approvedAt: now.toISOString(),
             approvedById: req.user?.id || null
           }
@@ -1311,26 +1358,42 @@ financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(R
       });
       await tx.industryRecord.update({
         where: { id: movement.id },
-        data: { status: "MATCHED", data: { ...financeRecordData(movement), status: "MATCHED", reconciliationId: created.id, reconciledAt: now.toISOString() } }
+        data: { status: "MATCHED", data: { ...movementData, status: "MATCHED", reconciliationId: created.id, reconciledAt: now.toISOString(), reconciledById: req.user?.id || null } }
       });
-      await tx.industryRecord.update({
-        where: { id: invoice.id },
-        data: {
-          status: remainingBalance === 0 ? "PAID" : "PARTIAL",
+      const updatedInvoices = [];
+      let remainingToApply = movementAmount;
+      for (const { invoice, state } of invoiceStates) {
+        const appliedAmount = Math.min(state.balance, remainingToApply);
+        remainingToApply = Math.max(0, remainingToApply - appliedAmount);
+        const remainingBalance = Math.max(0, state.balance - appliedAmount);
+        const invoiceData = financeRecordData(invoice);
+        const receipt = await tx.industryRecord.create({ data: {
+          tenantId: req.tenantId, recordType: "finance_invoice_receipt",
+          title: `Cobro conciliado ${invoiceData.invoiceNumber || invoice.title}`.slice(0, 220), status: "RECONCILED",
+          data: { invoiceId: invoice.id, amount: appliedAmount, paymentDate: movementData.transactionDate || now.toISOString().slice(0, 10), reference: movementData.reference || null, movementId: movement.id, reconciliationId: created.id, source: "bank_reconciliation", registeredById: req.user?.id || null }
+        } });
+        const updated = await tx.industryRecord.update({
+          where: { id: invoice.id },
           data: {
-            ...financeRecordData(invoice),
-            balance: remainingBalance,
             status: remainingBalance === 0 ? "PAID" : "PARTIAL",
-            paidAt: remainingBalance === 0 ? now.toISOString() : financeRecordData(invoice).paidAt || null,
-            lastReconciliationId: created.id
+            data: {
+              ...invoiceData,
+              balance: remainingBalance,
+              paidAmount: safeAmount(invoiceData.paidAmount) + appliedAmount,
+              status: remainingBalance === 0 ? "PAID" : "PARTIAL",
+              paidAt: remainingBalance === 0 ? now.toISOString() : invoiceData.paidAt || null,
+              lastReconciliationId: created.id,
+              history: [...financeHistory(invoiceData), { at: now.toISOString(), type: "BANK_RECONCILIATION_APPLIED", amount: appliedAmount, movementId: movement.id, reconciliationId: created.id, receiptId: receipt.id }]
+            }
           }
-        }
-      });
-      return created;
+        });
+        updatedInvoices.push(updated);
+      }
+      return { reconciliation: created, invoices: updatedInvoices };
     });
 
-    await recordAuditLog(req, "FINANCE_RECONCILIATION_APPROVED", "finance_reconciliation", reconciliation.id, { invoiceId, movementId: movement.id, confidence: suggestion.confidence });
-    res.status(201).json({ reconciliation, remainingBalance, confidence: suggestion.confidence, reasons: suggestion.reasons });
+    await recordAuditLog(req, "FINANCE_RECONCILIATION_APPROVED", "finance_reconciliation", result.reconciliation.id, { invoiceIds: invoices.map((invoice) => invoice.id), movementId: movement.id, grouped: invoices.length > 1 });
+    res.status(201).json({ reconciliation: result.reconciliation, invoices: result.invoices, remainingBalance: Math.max(0, totalBalance - movementAmount), confidence: Math.min(...suggestions.map((suggestion) => suggestion.confidence)), reasons: suggestions.flatMap((suggestion) => suggestion.reasons) });
   } catch (error) {
     console.error("Approve finance reconciliation error:", error);
     res.status(500).json({ error: "No se pudo aprobar la conciliacion" });
@@ -1369,24 +1432,28 @@ financeRouter.post("/finance/collection-cases/generate", requireRole(ROLE_GROUPS
 
     for (const invoice of invoices) {
       const state = getInvoiceFinancialState(invoice, now);
-      if (state.status !== "OVERDUE" || existingInvoiceIds.has(invoice.id)) continue;
+      if (state.status === "PAID" || existingInvoiceIds.has(invoice.id)) continue;
       const data = financeRecordData(invoice);
-      const daysPastDue = Math.max(0, Math.floor((now.getTime() - state.dueDate.getTime()) / (24 * 60 * 60 * 1000)));
+      const segment = financeAgingSegment(state.dueDate, now);
       const record = await prisma.industryRecord.create({
         data: {
           tenantId: req.tenantId,
           recordType: "finance_collection_case",
           title: `Cobranza ${data.invoiceNumber || invoice.title}`.slice(0, 220),
-          status: "PENDING",
+          status: segment.code === "POR_VENCER" ? "MONITORING" : "PENDING",
           data: {
             invoiceId: invoice.id,
             invoiceNumber: data.invoiceNumber || invoice.title,
-            customerName: data.customerName || data.customer || "Cliente sin nombre",
+            customerName: data.customerName || data.clientName || data.customer || "Cliente sin nombre",
+            clientRut: data.clientRut || data.customerRut || data.rut || null,
             balance: state.balance,
-            agingBucket: daysPastDue <= 30 ? "1-30 dias" : daysPastDue <= 60 ? "31-60 dias" : daysPastDue <= 90 ? "61-90 dias" : "+90 dias",
+            agingBucket: segment.label,
+            agingCode: segment.code,
+            daysPastDue: segment.daysPastDue,
+            recommendedAction: segment.action,
             channel: "manual",
             nextActionAt: now.toISOString(),
-            history: [{ at: now.toISOString(), type: "CASE_CREATED", detail: "Caso preparado para revision y contacto." }]
+            history: [{ at: now.toISOString(), type: "CASE_CREATED", detail: `${segment.action}. Caso preparado para revisión humana.` }]
           }
         }
       });

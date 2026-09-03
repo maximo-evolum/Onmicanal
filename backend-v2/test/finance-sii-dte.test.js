@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parseSiiDteFiles, sanitizeSiiDteDocuments, summarizeSiiDteDocuments } from "../src/services/finance-sii-dte.service.js";
 
-function dteXml({ emitterRut, receiverRut, folio = "101", total = "1250000" } = {}) {
-  return `<?xml version="1.0" encoding="ISO-8859-1"?><DTE><Documento ID="F101"><Encabezado><IdDoc><TipoDTE>33</TipoDTE><Folio>${folio}</Folio><FchEmis>2026-09-03</FchEmis></IdDoc><Emisor><RUTEmisor>${emitterRut}</RUTEmisor><RznSoc>Servicios Andinos SpA</RznSoc></Emisor><Receptor><RUTRecep>${receiverRut}</RUTRecep><RznSocRecep>Comercial Norte Ltda.</RznSocRecep></Receptor><Totales><MntTotal>${total}</MntTotal></Totales></Encabezado></Documento></DTE>`;
+function dteXml({ emitterRut, receiverRut, folio = "101", total = "1250000", type = "33", reference = "" } = {}) {
+  return `<?xml version="1.0" encoding="ISO-8859-1"?><DTE><Documento ID="F101"><Encabezado><IdDoc><TipoDTE>${type}</TipoDTE><Folio>${folio}</Folio><FchEmis>2026-09-03</FchEmis></IdDoc><Emisor><RUTEmisor>${emitterRut}</RUTEmisor><RznSoc>Servicios Andinos SpA</RznSoc></Emisor><Receptor><RUTRecep>${receiverRut}</RUTRecep><RznSocRecep>Comercial Norte Ltda.</RznSocRecep></Receptor><Totales><MntTotal>${total}</MntTotal></Totales></Encabezado>${reference}</Documento></DTE>`;
 }
 
 test("clasifica un DTE emitido como documento por cobrar", () => {
@@ -33,4 +33,14 @@ test("marca documentos de otro contribuyente para revisión al importar", () => 
   }], { companyRut: "76.123.456-7" });
   assert.equal(document.needsReview, true);
   assert.match(document.reviewReasons.join(" "), /no corresponde/i);
+});
+
+test("conserva la referencia de una nota de crédito para vincularla al documento original", () => {
+  const [document] = parseSiiDteFiles([{
+    originalname: "nota-credito.xml",
+    buffer: Buffer.from(dteXml({ emitterRut: "76.123.456-7", receiverRut: "77.222.333-4", type: "61", folio: "22", total: "50000", reference: "<Referencia><TpoDocRef>33</TpoDocRef><FolioRef>101</FolioRef><FchRef>2026-09-01</FchRef></Referencia>" }))
+  }], { companyRut: "76.123.456-7" });
+  assert.equal(document.referenceDocumentType, "33");
+  assert.equal(document.referenceDocumentNumber, "101");
+  assert.equal(document.referenceDocumentDate, "2026-09-01");
 });

@@ -103,18 +103,19 @@ export async function prepareFinanceAgentExceptions({ tenantId }) {
   const policy = await getFinanceAgentPolicy(tenantId);
   if (!policy.autoCreateExceptions) return { created: [], skipped: "POLICY_DISABLED" };
 
-  const [suggestions, existing] = await Promise.all([
+  const [suggestions, existing, movements] = await Promise.all([
     getFinanceReconciliationSuggestions({ tenantId, limit: 100 }),
     prisma.industryRecord.findMany({
       where: { tenantId, recordType: "finance_exception", status: { notIn: ["RESOLVED", "CLOSED"] } },
       take: 500
-    })
+    }),
+    prisma.industryRecord.findMany({ where: { tenantId, recordType: "bank_movement", status: { not: "MATCHED" } }, orderBy: { updatedAt: "desc" }, take: 500 })
   ]);
   const existingKeys = new Set(existing.map((item) => {
     const data = financeRecordData(item);
     return `${data.invoiceId || ""}:${data.movementId || ""}:${data.type || ""}`;
   }));
-  const candidates = suggestions.filter((suggestion) => suggestion.partial || suggestion.difference > 1);
+  const candidates = suggestions.filter((suggestion) => suggestion.partial || suggestion.overpayment || suggestion.difference > 1);
   const created = [];
 
   for (const suggestion of candidates) {
@@ -136,6 +137,30 @@ export async function prepareFinanceAgentExceptions({ tenantId }) {
           suggestedBy: "finance_exceptions_agent",
           reasons: suggestion.reasons,
           createdAt: new Date().toISOString()
+        }
+      }
+    });
+    existingKeys.add(key);
+    created.push(record);
+  }
+
+  // Un abono que no tiene ningún documento candidato no se descarta ni se
+  // imputa a pérdida: queda en una bandeja explícita para identificarlo.
+  const suggestedMovementIds = new Set(suggestions.map((suggestion) => suggestion.movement?.id).filter(Boolean));
+  for (const movement of movements) {
+    const data = financeRecordData(movement);
+    const direction = String(data.direction || "").toUpperCase();
+    const kind = String(data.movementKind || "").toUpperCase();
+    if (suggestedMovementIds.has(movement.id) || direction === "DEBIT" || ["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(kind)) continue;
+    const key = `:${movement.id}:UNIDENTIFIED_INCOME`;
+    if (existingKeys.has(key)) continue;
+    const record = await prisma.industryRecord.create({
+      data: {
+        tenantId, recordType: "finance_exception", title: `Ingreso sin documento identificado · ${movement.title}`.slice(0, 220), status: "OPEN",
+        data: {
+          type: "UNIDENTIFIED_INCOME", movementId: movement.id, priority: "HIGH", amount: data.amount || 0,
+          detail: "El abono no tiene una factura candidata. Revisa referencia, RUT, contraparte o medio de pago antes de conciliar.",
+          suggestedBy: "finance_exceptions_agent", createdAt: new Date().toISOString()
         }
       }
     });

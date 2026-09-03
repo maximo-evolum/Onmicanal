@@ -74,6 +74,7 @@ function parseDocument(xml, { companyRut, sourceFile = "dte.xml" } = {}) {
   const emitter = section(header, "Emisor");
   const receiver = section(header, "Receptor");
   const totals = section(header, "Totales");
+  const reference = section(document, "Referencia");
   const documentTypeCode = tag(idDoc, "TipoDTE");
   const documentNumber = tag(idDoc, "Folio");
   const issueDate = validDate(tag(idDoc, "FchEmis"));
@@ -107,6 +108,9 @@ function parseDocument(xml, { companyRut, sourceFile = "dte.xml" } = {}) {
     receiverRut,
     receiverName,
     amount,
+    referenceDocumentType: tag(reference, "TpoDocRef") || null,
+    referenceDocumentNumber: tag(reference, "FolioRef") || null,
+    referenceDocumentDate: validDate(tag(reference, "FchRef")),
     currency: "CLP",
     side,
     partyName: side === "CUSTOMER" ? receiverName : side === "SUPPLIER" ? emitterName : "Contraparte por revisar",
@@ -142,6 +146,9 @@ export function sanitizeSiiDteDocuments(documents, { companyRut } = {}) {
     const documentNumber = cleanText(document.documentNumber).slice(0, 80);
     const issueDate = validDate(document.issueDate);
     const amount = safeNumber(document.amount);
+    const referenceDocumentType = cleanText(document.referenceDocumentType).slice(0, 10) || null;
+    const referenceDocumentNumber = cleanText(document.referenceDocumentNumber).slice(0, 80) || null;
+    const referenceDocumentDate = validDate(document.referenceDocumentDate);
     const reviewReasons = [];
     if (!documentTypeCode) reviewReasons.push("tipo de DTE");
     if (!documentNumber) reviewReasons.push("folio");
@@ -155,6 +162,7 @@ export function sanitizeSiiDteDocuments(documents, { companyRut } = {}) {
     return {
       sourceFile: cleanText(document.sourceFile, "dte.xml").slice(0, 180), documentTypeCode, documentTypeName, documentNumber, issueDate,
       emitterRut, emitterName, receiverRut, receiverName, amount, currency: "CLP", side,
+      referenceDocumentType, referenceDocumentNumber, referenceDocumentDate,
       partyName: side === "CUSTOMER" ? receiverName : side === "SUPPLIER" ? emitterName : "Contraparte por revisar",
       partyRut: side === "CUSTOMER" ? receiverRut : side === "SUPPLIER" ? emitterRut : null,
       fingerprint: siiDteFingerprint({ emitterRut, receiverRut, documentTypeCode, documentNumber, issueDate, amount }),

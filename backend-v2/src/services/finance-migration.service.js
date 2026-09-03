@@ -82,14 +82,54 @@ function valueFromSheetCell(value) {
   return String(value).trim();
 }
 
-function detectDelimiter(line) {
+function detectDelimiter(source) {
   const candidates = [";", ",", "\t"];
-  return candidates.reduce((selected, candidate) => (line.split(candidate).length > line.split(selected).length ? candidate : selected), ";");
+  const sample = String(source || "").split("\n").slice(0, 40).join("\n");
+  return candidates.reduce((selected, candidate) => (sample.split(candidate).length > sample.split(selected).length ? candidate : selected), ";");
+}
+
+// Algunos bancos chilenos exportan una carátula antes de la tabla (titular,
+// cuenta, saldos, etc.). No se puede asumir que la primera fila es el
+// encabezado: buscamos una fila que tenga suficientes nombres de columnas
+// financieros y conservamos la primera como alternativa para CSV simples.
+function headerScore(row) {
+  const known = new Set([
+    "fecha", "fecha_movimiento", "fecha_emision", "fecha_vencimiento",
+    "monto", "importe", "valor", "cargo", "abono", "cargo_abono",
+    "descripcion", "descripcion_movimiento", "glosa", "detalle",
+    "documento", "n_documento", "factura", "folio", "referencia",
+    "cliente", "proveedor", "rut", "saldo", "estado"
+  ]);
+  return (Array.isArray(row) ? row : []).reduce((score, cell) => {
+    const key = normalizeKey(cell);
+    return score + (known.has(key) ? 1 : 0);
+  }, 0);
+}
+
+function rowsToObjects(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) return [];
+  const searchLimit = Math.min(rows.length - 1, 40);
+  let headerIndex = 0;
+  let bestScore = headerScore(rows[0]);
+  for (let index = 1; index <= searchLimit; index += 1) {
+    const score = headerScore(rows[index]);
+    if (score > bestScore) {
+      bestScore = score;
+      headerIndex = index;
+    }
+  }
+  // Dos columnas conocidas bastan para formatos simples; para una carátula
+  // con texto libre mantenemos la primera fila, que será revisada aguas abajo.
+  if (bestScore < 2) headerIndex = 0;
+  const headers = rows[headerIndex].map((header, index) => cleanText(header, `Columna ${index + 1}`));
+  return rows.slice(headerIndex + 1)
+    .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])))
+    .filter((row) => Object.values(row).some((value) => cleanText(value)));
 }
 
 function parseDelimitedText(text) {
   const source = String(text || "").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
-  const delimiter = detectDelimiter(source.split("\n")[0] || "");
+  const delimiter = detectDelimiter(source);
   const rows = [];
   let currentRow = [];
   let currentValue = "";
@@ -113,9 +153,7 @@ function parseDelimitedText(text) {
   }
   currentRow.push(currentValue.trim());
   if (currentRow.some(Boolean)) rows.push(currentRow);
-  if (rows.length < 2) return [];
-  const headers = rows[0].map((header, index) => cleanText(header, `Columna ${index + 1}`));
-  return rows.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""]))).filter((row) => Object.values(row).some((value) => cleanText(value)));
+  return rowsToObjects(rows);
 }
 
 async function parseSpreadsheet(buffer) {
@@ -125,9 +163,7 @@ async function parseSpreadsheet(buffer) {
   if (!sheet) return [];
   const rawRows = [];
   sheet.eachRow({ includeEmpty: false }, (row) => rawRows.push(row.values.slice(1).map(valueFromSheetCell)));
-  if (rawRows.length < 2) return [];
-  const headers = rawRows[0].map((header, index) => cleanText(header, `Columna ${index + 1}`));
-  return rawRows.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""]))).filter((row) => Object.values(row).some((value) => cleanText(value)));
+  return rowsToObjects(rawRows);
 }
 
 export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION_FILE_BYTES } = {}) {

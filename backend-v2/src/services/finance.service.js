@@ -33,7 +33,13 @@ function sharesTerm(left, right) {
 
 export function getInvoiceFinancialState(invoice, now = new Date()) {
   const data = dataOf(invoice);
-  const amount = Math.max(0, numberOf(data.amount ?? data.total ?? data.value));
+  const originalAmount = Math.max(0, numberOf(data.amount ?? data.total ?? data.value));
+  // El saldo operativo considera notas de crédito y débito ya vinculadas. No
+  // cambia el documento tributario original; solo evita cobrar un saldo que ya
+  // fue ajustado dentro del expediente financiero.
+  const creditNotes = Math.max(0, numberOf(data.creditNotesTotal ?? data.creditNoteAmount));
+  const debitNotes = Math.max(0, numberOf(data.debitNotesTotal ?? data.debitNoteAmount));
+  const amount = Math.max(0, originalAmount - creditNotes + debitNotes);
   const storedBalance = data.balance === undefined || data.balance === null || data.balance === ""
     ? amount
     : Math.max(0, numberOf(data.balance));
@@ -43,7 +49,17 @@ export function getInvoiceFinancialState(invoice, now = new Date()) {
     ? "PAID"
     : (dueDate && dueDate < now ? "OVERDUE" : rawStatus === "PARTIAL" ? "PARTIAL" : "OPEN");
 
-  return { amount, balance: storedBalance, dueDate, status };
+  return { amount, originalAmount, creditNotes, debitNotes, balance: storedBalance, dueDate, status };
+}
+
+export function financeAgingSegment(dueDate, now = new Date()) {
+  if (!dueDate || dueDate >= now) return { code: "POR_VENCER", label: "Por vencer", daysPastDue: 0, action: "Monitoreo preventivo" };
+  const daysPastDue = Math.max(0, Math.floor((now.getTime() - dueDate.getTime()) / DAY_MS));
+  if (daysPastDue <= 7) return { code: "1_7", label: "1–7 días", daysPastDue, action: "Cobranza preventiva" };
+  if (daysPastDue <= 30) return { code: "8_30", label: "8–30 días", daysPastDue, action: "Cobranza activa" };
+  if (daysPastDue <= 60) return { code: "31_60", label: "31–60 días", daysPastDue, action: "Cobranza intensiva" };
+  if (daysPastDue <= 90) return { code: "61_90", label: "61–90 días", daysPastDue, action: "Cobranza crítica" };
+  return { code: "MAS_90", label: "+90 días", daysPastDue, action: "Gestión especial" };
 }
 
 export function scoreFinanceReconciliation(invoice, movement, now = new Date()) {
@@ -73,12 +89,13 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
     reasons.push("Referencia de factura");
   }
 
-  if (invoiceData.rut && movementData.rut && normalizeText(invoiceData.rut) === normalizeText(movementData.rut)) {
+  const invoiceRut = invoiceData.clientRut || invoiceData.customerRut || invoiceData.rut || invoiceData.partyRut;
+  if (invoiceRut && movementData.rut && normalizeText(invoiceRut) === normalizeText(movementData.rut)) {
     score += 12;
     reasons.push("RUT coincidente");
   }
 
-  const customerName = invoiceData.customerName || invoiceData.customer || invoice.title;
+  const customerName = invoiceData.customerName || invoiceData.clientName || invoiceData.customer || invoiceData.partyName || invoice.title;
   if (sharesTerm(customerName, movementData.payerName || movementData.counterparty || reference)) {
     score += 10;
     reasons.push("Cliente o razon social coincidente");
@@ -99,6 +116,7 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
     confidence: Math.min(99, Math.round(score)),
     difference,
     partial: movementAmount > 0 && movementAmount < financial.balance,
+    overpayment: movementAmount > financial.balance + 1,
     reasons,
     invoice,
     movement
@@ -106,12 +124,8 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
 }
 
 function agingBucket(dueDate, now = new Date()) {
-  if (!dueDate || dueDate >= now) return "No vencida";
-  const days = Math.max(0, Math.floor((now.getTime() - dueDate.getTime()) / DAY_MS));
-  if (days <= 30) return "1-30 dias";
-  if (days <= 60) return "31-60 dias";
-  if (days <= 90) return "61-90 dias";
-  return "+90 dias";
+  const code = financeAgingSegment(dueDate, now).code;
+  return ({ POR_VENCER: "No vencida", "1_7": "1-7 dias", "8_30": "8-30 dias", "31_60": "31-60 dias", "61_90": "61-90 dias", MAS_90: "+90 dias" })[code] || "No vencida";
 }
 
 export async function getFinanceOverview({ tenantId, now = new Date() }) {
@@ -132,7 +146,7 @@ export async function getFinanceOverview({ tenantId, now = new Date() }) {
   let paid = 0;
   let pending = 0;
   let overdue = 0;
-  const aging = { "No vencida": 0, "1-30 dias": 0, "31-60 dias": 0, "61-90 dias": 0, "+90 dias": 0 };
+  const aging = { "No vencida": 0, "1-7 dias": 0, "8-30 dias": 0, "31-60 dias": 0, "61-90 dias": 0, "+90 dias": 0 };
   const dsoValues = [];
 
   for (const invoice of invoices) {
@@ -233,18 +247,74 @@ export async function getFinanceReconciliationSuggestions({ tenantId, movementId
     prisma.industryRecord.findMany({ where: { tenantId, recordType: "bank_movement", ...(movementId ? { id: movementId } : {}) }, orderBy: { updatedAt: "desc" }, take: 500 })
   ]);
   const openInvoices = invoices.filter((invoice) => getInvoiceFinancialState(invoice).status !== "PAID");
-  const candidates = movements
-    .filter((movement) => String(movement.status || dataOf(movement).status || "UNRECONCILED").toUpperCase() !== "MATCHED")
-    .flatMap((movement) => openInvoices.map((invoice) => scoreFinanceReconciliation(invoice, movement)))
-    .filter((item) => item.confidence >= 35)
-    .sort((left, right) => right.confidence - left.confidence)
-    .slice(0, Math.max(1, Math.min(Number(limit) || 30, 200)));
+  const maxResults = Math.max(1, Math.min(Number(limit) || 30, 200));
+  const serializable = (record) => ({ id: record.id, title: record.title, data: dataOf(record), status: record.status });
+  const results = [];
 
-  return candidates.map(({ invoice, movement, ...suggestion }) => ({
-    ...suggestion,
-    invoice: { id: invoice.id, title: invoice.title, data: dataOf(invoice), status: invoice.status },
-    movement: { id: movement.id, title: movement.title, data: dataOf(movement), status: movement.status }
-  }));
+  for (const movement of movements) {
+    const movementData = dataOf(movement);
+    const status = String(movement.status || movementData.status || "UNRECONCILED").toUpperCase();
+    const kind = String(movementData.movementKind || "").toUpperCase();
+    // Solo un abono externo puede liquidar una cuenta por cobrar. Comisiones,
+    // egresos y traspasos propios se conservan para control, pero no se
+    // proponen como pago de cliente.
+    if (status === "MATCHED" || String(movementData.direction || "").toUpperCase() === "DEBIT" || ["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(kind)) continue;
+
+    const scored = openInvoices.map((invoice) => scoreFinanceReconciliation(invoice, movement))
+      .filter((candidate) => candidate.confidence >= 35)
+      .sort((left, right) => right.confidence - left.confidence);
+    if (!scored.length) continue;
+
+    let best = scored[0];
+    const movementAmount = Math.abs(numberOf(movementData.amount));
+    const pool = scored.slice(0, 12).filter((candidate) => getInvoiceFinancialState(candidate.invoice).balance > 0);
+    let grouped = null;
+    // Un pago agrupado puede cubrir dos o tres facturas. Se limita el pool y
+    // el tamaño del grupo para ser determinista, explicable y seguro.
+    for (let first = 0; first < pool.length && !grouped; first += 1) {
+      for (let second = first + 1; second < pool.length && !grouped; second += 1) {
+        const candidates = [pool[first], pool[second]];
+        for (let third = second + 1; third < pool.length + 1; third += 1) {
+          const group = third < pool.length ? [...candidates, pool[third]] : candidates;
+          const total = group.reduce((sum, candidate) => sum + getInvoiceFinancialState(candidate.invoice).balance, 0);
+          if (Math.abs(total - movementAmount) <= 1) {
+            const confidence = Math.min(99, Math.max(88, Math.round(group.reduce((sum, candidate) => sum + candidate.confidence, 0) / group.length)));
+            grouped = { group, total, confidence };
+            break;
+          }
+        }
+      }
+    }
+    if (grouped && (best.confidence < 95 || best.difference > 1)) {
+      best = {
+        ...best,
+        confidence: grouped.confidence,
+        difference: Math.abs(grouped.total - movementAmount),
+        partial: false,
+        grouped: true,
+        invoiceIds: grouped.group.map((candidate) => candidate.invoice.id),
+        invoices: grouped.group.map((candidate) => candidate.invoice),
+        reasons: ["Pago agrupado", "Monto exacto entre documentos", ...grouped.group.flatMap((candidate) => candidate.reasons.filter((reason) => reason !== "Monto exacto")).slice(0, 3)]
+      };
+    }
+    results.push(best);
+  }
+
+  return results
+    .sort((left, right) => right.confidence - left.confidence)
+    .slice(0, maxResults)
+    .map(({ invoice, movement, invoices: groupedInvoices, ...suggestion }) => {
+      const confidence = Math.min(99, Math.round(suggestion.confidence));
+      return {
+        ...suggestion,
+        confidence,
+        level: confidence >= 95 ? "HIGH" : confidence >= 80 ? "MEDIUM" : "LOW",
+        amountDifference: suggestion.difference,
+        invoice: serializable(invoice),
+        invoices: groupedInvoices ? groupedInvoices.map(serializable) : undefined,
+        movement: serializable(movement)
+      };
+    });
 }
 
 export function financeRecordData(record) {

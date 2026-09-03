@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getInvoiceFinancialState, scoreFinanceReconciliation } from "../src/services/finance.service.js";
+import { financeAgingSegment, getInvoiceFinancialState, scoreFinanceReconciliation } from "../src/services/finance.service.js";
 
 const NOW = new Date("2026-07-25T12:00:00.000Z");
 
@@ -39,4 +39,23 @@ test("Finance OS identifica pagos parciales y facturas vencidas", () => {
   assert.equal(state.status, "OVERDUE");
   assert.equal(result.partial, true);
   assert.ok(result.reasons.includes("Posible pago parcial"));
+});
+
+test("usa los campos reales de cliente importados desde DTE y reconoce un abono mayor como diferencia", () => {
+  const invoice = {
+    id: "invoice-3", title: "Factura 1050", status: "OPEN",
+    data: { invoiceNumber: "1050", clientName: "Comercial Los Andes SpA", clientRut: "77.111.222-3", amount: 100000, balance: 100000 }
+  };
+  const movement = { id: "movement-3", title: "Abono Comercial Los Andes", data: { amount: 120000, reference: "Pago 1050", rut: "77.111.222-3", payerName: "Comercial Los Andes SpA" } };
+  const result = scoreFinanceReconciliation(invoice, movement, NOW);
+  assert.equal(result.overpayment, true);
+  assert.ok(result.reasons.includes("RUT coincidente"));
+  assert.ok(result.reasons.includes("Cliente o razon social coincidente"));
+});
+
+test("segmenta la cobranza por antigüedad sin mezclar monitoreo y mora", () => {
+  assert.equal(financeAgingSegment(new Date("2026-07-30T00:00:00.000Z"), NOW).code, "POR_VENCER");
+  assert.equal(financeAgingSegment(new Date("2026-07-21T00:00:00.000Z"), NOW).code, "1_7");
+  assert.equal(financeAgingSegment(new Date("2026-06-10T00:00:00.000Z"), NOW).code, "31_60");
+  assert.equal(financeAgingSegment(new Date("2026-03-01T00:00:00.000Z"), NOW).code, "MAS_90");
 });

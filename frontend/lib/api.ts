@@ -835,6 +835,9 @@ export type FinanceOverview = {
 export type FinanceReconciliationSuggestion = {
   movement: IndustryRecord;
   invoice: IndustryRecord;
+  invoices?: IndustryRecord[];
+  invoiceIds?: string[];
+  grouped?: boolean;
   confidence: number;
   level: "HIGH" | "MEDIUM" | "LOW";
   reasons: string[];
@@ -849,10 +852,10 @@ export function getFinanceReconciliationSuggestions(): Promise<{ suggestions: Fi
   return request<{ suggestions: FinanceReconciliationSuggestion[] }>("/finance/reconciliation-suggestions");
 }
 
-export function approveFinanceReconciliation(movementId: string, invoiceId: string): Promise<{ reconciliation: IndustryRecord; movement: IndustryRecord; invoice: IndustryRecord }> {
+export function approveFinanceReconciliation(movementId: string, invoiceId: string, invoiceIds?: string[]): Promise<{ reconciliation: IndustryRecord; invoices: IndustryRecord[] }> {
   return request(`/finance/reconciliations/${encodeURIComponent(movementId)}/approve`, {
     method: "POST",
-    body: JSON.stringify({ invoiceId })
+    body: JSON.stringify({ invoiceId, invoiceIds })
   });
 }
 
