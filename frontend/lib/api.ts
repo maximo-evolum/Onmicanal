@@ -921,6 +921,16 @@ export type FinanceMigrationPreview = {
   rows: Array<Record<string, unknown>>;
   sourceRows?: Array<Record<string, unknown>>;
 };
+export type ChileanBank = { key: string; name: string; cmfCode: string };
+export type FinanceBankStatementAccount = { bank: string; bankKey: string; cmfCode: string; accountAlias: string; accountType: string; accountLast4: string | null };
+export type FinanceBankStatementPreview = {
+  sourceFile: string;
+  maxRows: number;
+  account: FinanceBankStatementAccount;
+  summary: { totalRows: number; reviewRows: number; credits: number; debits: number; net: number };
+  rows: Array<Record<string, unknown>>;
+  sourceRows: Array<Record<string, unknown>>;
+};
 export type FinanceSyncHistoryEntry = {
   id: string;
   action: "NUBOX_SALES_SYNCED" | "NUBOX_SALES_SYNC_FAILED" | "FINANCE_POST_INGESTION_ANALYZED" | string;
@@ -1006,6 +1016,24 @@ export function previewFinanceMigrationFile(file: File): Promise<FinanceMigratio
 
 export function importFinanceMigration(input: { sourceFile: string; rows: Array<Record<string, unknown>> }): Promise<{ imported: number; requiresReview: number; summary: FinanceMigrationPreview["summary"] }> {
   return request("/finance/migrations/import", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getFinanceBankCatalog(): Promise<{ banks: ChileanBank[]; supportedFormats: string[]; maxRows: number; note: string }> {
+  return request("/finance/banks/catalog");
+}
+
+export function previewFinanceBankStatementFile(file: File, account: { bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<FinanceBankStatementPreview> {
+  const data = new FormData();
+  data.append("file", file);
+  data.append("bankKey", account.bankKey);
+  data.append("accountAlias", account.accountAlias || "");
+  data.append("accountType", account.accountType || "Cuenta corriente");
+  data.append("accountLast4", account.accountLast4 || "");
+  return request<FinanceBankStatementPreview>("/finance/bank-statements/preview-file", { method: "POST", body: data });
+}
+
+export function importFinanceBankStatement(input: { sourceFile: string; rows: Array<Record<string, unknown>>; bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceBankStatementPreview["summary"] }> {
+  return request("/finance/bank-statements/import", { method: "POST", body: JSON.stringify(input) });
 }
 
 export function getFinanceSyncHistory(limit = 12): Promise<{ generatedAt: string; entries: FinanceSyncHistoryEntry[] }> {

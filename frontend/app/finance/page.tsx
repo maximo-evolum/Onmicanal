@@ -21,13 +21,16 @@ import {
   getFinanceSyncHistory,
   getFinancePlan,
   getFinanceAgentWorkspace,
+  getFinanceBankCatalog,
   getFinanceOverview,
   getFinancePayables,
   getFinanceReconciliationSuggestions,
   getIndustryRecords,
   importFinanceMigration,
+  importFinanceBankStatement,
   previewFinanceMigration,
   previewFinanceMigrationFile,
+  previewFinanceBankStatementFile,
   prepareFinanceCollectionReminders,
   registerFinanceInvoiceReceipt,
   registerFinancePayablePayment,
@@ -36,6 +39,8 @@ import {
   type FinancePayableSummary,
   type FinanceAgentPolicy,
   type FinanceAgentWorkspace,
+  type ChileanBank,
+  type FinanceBankStatementPreview,
   type FinanceCustomer,
   type FinanceCollectionPortfolioRow,
   type FinanceDocument,
@@ -200,6 +205,10 @@ function FinanceWorkspace() {
   const [migrationSourceFile, setMigrationSourceFile] = useState("");
   const [agentPolicy, setAgentPolicy] = useState<FinanceAgentPolicy | null>(null);
   const [financeDocuments, setFinanceDocuments] = useState<FinanceDocument[]>([]);
+  const [chileanBanks, setChileanBanks] = useState<ChileanBank[]>([]);
+  const [bankStatementPreview, setBankStatementPreview] = useState<FinanceBankStatementPreview | null>(null);
+  const [bankStatementRows, setBankStatementRows] = useState<Array<Record<string, unknown>>>([]);
+  const [bankStatementForm, setBankStatementForm] = useState({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
   const [documentFilter, setDocumentFilter] = useState<"all" | "customers" | "suppliers">("all");
   const [documentQuery, setDocumentQuery] = useState("");
   const [documentStatusFilter, setDocumentStatusFilter] = useState<FinanceDocumentStatusFilter>("all");
@@ -245,7 +254,12 @@ function FinanceWorkspace() {
     try {
       if (activeTab === "resumen") setOverview(await getFinanceOverview());
       if (activeTab === "facturas") setFinanceDocuments((await getFinanceDocuments(documentFilter)).documents);
-      if (activeTab === "cartolas") setRecords(await getIndustryRecords("bank_movement"));
+      if (activeTab === "cartolas") {
+        const [movements, catalog] = await Promise.all([getIndustryRecords("bank_movement"), getFinanceBankCatalog()]);
+        setRecords(movements);
+        setChileanBanks(catalog.banks || []);
+        setBankStatementForm((current) => current.bankKey || !catalog.banks?.length ? current : { ...current, bankKey: catalog.banks[0].key });
+      }
       if (activeTab === "excepciones") setRecords(await getIndustryRecords("finance_exception"));
       if (activeTab === "cobranza") setCollectionPortfolio((await getFinanceCollectionPortfolio()).portfolio);
       if (activeTab === "pagos") setPayableSummary(await getFinancePayables());
@@ -512,23 +526,35 @@ function FinanceWorkspace() {
     finally { setSaving(false); }
   }
 
-  async function importCsv(event: ChangeEvent<HTMLInputElement>) {
+  async function previewBankStatement(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!/\.csv$/i.test(file.name)) return setMessage("Esta primera version importa cartolas CSV. Los PDF y Excel se guardan en Archivos para su procesamiento posterior.");
+    if (!bankStatementForm.bankKey) return setMessage("Selecciona el banco de la cartola antes de cargar el archivo.");
+    if (!/\.(csv|xlsx|xlsm)$/i.test(file.name)) return setMessage("Selecciona una cartola CSV o Excel (.xlsx). Los PDF requieren una revisión humana.");
     setSaving(true);
     try {
-      const rows = parseDelimitedRows(await file.text());
-      if (!rows.length) throw new Error("No se detectaron movimientos en el archivo CSV.");
-      await Promise.all(rows.slice(0, 500).map((row, index) => {
-        const date = row.fecha || row.date || row.fecha_movimiento || "";
-        const rawAmount = row.monto || row.amount || row.abono || row.credito || "0";
-        const description = row.descripcion || row.description || row.glosa || row.detalle || "Movimiento importado";
-        const reference = row.referencia || row.reference || row.comprobante || "";
-        return createIndustryRecord({ recordType: "bank_movement", title: `${date || "Sin fecha"} - ${description}`, status: "PENDING", data: { date, transactionDate: date, amount: amount(String(rawAmount).replace(/\./g, "").replace(",", ".")), description, reference, source: "csv", sourceFile: file.name, importRow: index + 2 } });
-      }));
-      setMessage(`${Math.min(rows.length, 500)} movimientos importados. Revisa la conciliacion sugerida.`);
+      const preview = await previewFinanceBankStatementFile(file, bankStatementForm);
+      if (!preview.sourceRows.length) throw new Error("No se detectaron movimientos en la cartola.");
+      setBankStatementPreview(preview);
+      setBankStatementRows(preview.sourceRows);
+      setMessage("Vista previa lista. Revisa el resumen antes de incorporar movimientos a la conciliación.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo revisar la cartola."); }
+    finally { setSaving(false); }
+  }
+
+  async function importBankStatement() {
+    if (!bankStatementPreview || !bankStatementRows.length) return;
+    setSaving(true);
+    try {
+      const result = await importFinanceBankStatement({
+        sourceFile: bankStatementPreview.sourceFile,
+        rows: bankStatementRows,
+        ...bankStatementForm
+      });
+      setBankStatementPreview(null);
+      setBankStatementRows([]);
+      setMessage(`${result.imported} movimientos incorporados. ${result.duplicateRows} duplicados se omitieron y ${result.requiresReview} fila(s) quedaron para revisión.`);
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo importar la cartola."); }
     finally { setSaving(false); }
@@ -647,7 +673,7 @@ function FinanceWorkspace() {
             <form className="finance-card finance-form finance-document-entry" onSubmit={createInvoice}><span className="finance-eyebrow">Registro manual</span><h2>Nueva factura de cliente</h2><p>Registra una factura emitida. El cobro y cualquier aviso posterior quedan siempre bajo revisión humana.</p><input required placeholder="Número de factura" value={invoiceForm.number} onChange={(event) => setInvoiceForm({ ...invoiceForm, number: event.target.value })} /><input required placeholder="Cliente o empresa" value={invoiceForm.client} onChange={(event) => setInvoiceForm({ ...invoiceForm, client: event.target.value })} /><input placeholder="RUT cliente (opcional)" value={invoiceForm.rut} onChange={(event) => setInvoiceForm({ ...invoiceForm, rut: event.target.value })} /><input required type="number" placeholder="Monto CLP" value={invoiceForm.amount} onChange={(event) => setInvoiceForm({ ...invoiceForm, amount: event.target.value })} /><label>Vencimiento<input required type="date" value={invoiceForm.dueDate} onChange={(event) => setInvoiceForm({ ...invoiceForm, dueDate: event.target.value })} /></label><button className="primary-btn" disabled={saving}>Guardar factura</button></form>
           </section> : null}
 
-          {activeTab === "cartolas" ? <section className="finance-grid"><article className="finance-card finance-form"><h2>Importar cartola</h2><p>CSV queda listo para conciliacion. PDF y Excel pueden guardarse en Archivos mientras se activa el parser de la integracion contratada.</p><label className="finance-upload">Seleccionar cartola CSV<input type="file" accept=".csv,text/csv" onChange={importCsv} disabled={saving} /></label><hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripcion" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form></article><article className="finance-card"><h2>Movimientos cargados</h2><FinanceTable records={records} kind="movement" query={search} /></article></section> : null}
+          {activeTab === "cartolas" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Importación multi-banco</span><h2>Importar cartola bancaria</h2><p>Funciona con cartolas CSV y Excel exportadas por los bancos establecidos en Chile. Primero revisas los movimientos; después decides si incorporarlos a la conciliación.</p><label>Banco de la cartola<select value={bankStatementForm.bankKey} onChange={(event) => setBankStatementForm({ ...bankStatementForm, bankKey: event.target.value })}><option value="">Selecciona un banco</option>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name} · CMF {bank.cmfCode}</option>)}</select></label><input placeholder="Nombre visible de la cuenta (ej. Recaudación)" value={bankStatementForm.accountAlias} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountAlias: event.target.value })} /><label>Tipo de cuenta<select value={bankStatementForm.accountType} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountType: event.target.value })}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label><input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos (opcional)" value={bankStatementForm.accountLast4} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} /><label className="finance-upload">Seleccionar cartola CSV o Excel<input type="file" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={previewBankStatement} disabled={saving} /></label><button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>{bankStatementPreview ? <div className="finance-note"><strong>Vista previa: {bankStatementPreview.account.bank}</strong><span>{bankStatementPreview.summary.totalRows} filas · Abonos {money(bankStatementPreview.summary.credits)} · Cargos {money(bankStatementPreview.summary.debits)}</span><span>{bankStatementPreview.summary.reviewRows ? `${bankStatementPreview.summary.reviewRows} filas requieren revisión.` : "Sin filas incompletas detectadas."}</span><button type="button" className="primary-btn" disabled={saving} onClick={importBankStatement}>Incorporar movimientos</button></div> : null}<hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form></article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliación</span><h2>Movimientos cargados</h2></div><span>{records.length} movimientos</span></div>{bankStatementPreview ? <div className="finance-migration-preview"><h3>Primeras filas detectadas</h3><div className="finance-migration-table"><div><span>Fecha</span><span>Descripción</span><span>Monto</span><span>Estado</span></div>{bankStatementPreview.rows.slice(0, 8).map((row) => <div key={String(row.rowNumber)} className={row.needsReview ? "needs-review" : ""}><span>{shortDate(row.transactionDate)}</span><span>{financeLabel(row.description)}</span><span>{money(row.amount)}</span><span>{row.needsReview ? "Revisar" : row.direction === "DEBIT" ? "Cargo" : "Abono"}</span></div>)}</div></div> : null}<FinanceTable records={records} kind="movement" query={search} /></article></section> : null}
 
           {activeTab === "conciliacion" ? <section className="finance-card"><h2>Sugerencias de conciliación</h2><p>La IA explica cada coincidencia. Las de confianza media o baja siempre requieren tu aprobación.</p><div className="finance-suggestions">{suggestions.map((item) => <article key={`${item.movement.id}-${item.invoice.id}`}><div><b className={`finance-confidence ${item.level.toLowerCase()}`}>{item.confidence}% {financeConfidenceLabel(item.level)}</b><strong>{financeLabel(asData(item.movement).description, financeLabel(item.movement.title))}</strong><span>{money(asData(item.movement).amount)} · {shortDate(asData(item.movement).date)}</span></div><div><strong>{financeLabel(asData(item.invoice).invoiceNumber, financeLabel(item.invoice.title))}</strong><span>{financeLabel(asData(item.invoice).clientName)} · {money(asData(item.invoice).amount)}</span><small>{financeReasons(item.reasons)}</small></div><button className="primary-btn" type="button" disabled={saving} onClick={() => approveSuggestion(item)}>Confirmar</button></article>)}{!suggestions.length && !loading ? <p className="finance-empty">Aún no hay coincidencias. Carga facturas y movimientos para calcularlas.</p> : null}</div></section> : null}
 

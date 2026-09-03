@@ -33,7 +33,7 @@ export const CHILEAN_FINANCIAL_INSTITUTIONS = Object.freeze([
   { key: "tenpo_bank_chile", name: "Tenpo Bank Chile", cmfCode: "063" }
 ]);
 
-function resolveInstitution(value) {
+export function getChileanFinancialInstitution(value) {
   const text = cleanText(value);
   const search = normalizedSearch(text);
   return CHILEAN_FINANCIAL_INSTITUTIONS.find((institution) => (
@@ -49,7 +49,7 @@ export function normalizeChileanBankAccounts(value) {
   return value.slice(0, 20).map((item) => {
     const source = item && typeof item === "object" && !Array.isArray(item) ? item : {};
     const requestedBank = cleanText(source.bank || source.bankKey);
-    const institution = resolveInstitution(requestedBank);
+    const institution = getChileanFinancialInstitution(requestedBank);
     if (!requestedBank && !institution) return null;
 
     const last4 = String(source.accountLast4 || "").replace(/\D/g, "").slice(-4);

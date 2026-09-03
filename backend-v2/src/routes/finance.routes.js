@@ -24,11 +24,25 @@ import {
   syncNuboxForTenant
 } from "../services/finance-sync.service.js";
 import { MAX_MIGRATION_FILE_BYTES, MAX_MIGRATION_ROWS, normalizeHistoricalFinanceRows, readHistoricalFinanceFile, summarizeHistoricalFinanceRows } from "../services/finance-migration.service.js";
+import {
+  MAX_BANK_STATEMENT_FILE_BYTES,
+  MAX_BANK_STATEMENT_ROWS,
+  bankMovementFingerprint,
+  normalizeBankStatementRows,
+  readBankStatementFile,
+  summarizeBankStatementRows,
+  withBankStatementNet
+} from "../services/finance-bank-statements.service.js";
+import { CHILEAN_FINANCIAL_INSTITUTIONS } from "../lib/finance-integrations.js";
 
 export const financeRouter = Router();
 const historicalMigrationUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_MIGRATION_FILE_BYTES, files: 1 }
+});
+const bankStatementUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_BANK_STATEMENT_FILE_BYTES, files: 1 }
 });
 
 async function requireFinanceModule(req, res, module) {
@@ -662,6 +676,153 @@ financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGER
   } catch (error) {
     console.error("Import historical finance migration error:", error);
     res.status(500).json({ error: "No se pudo importar la migración histórica." });
+  }
+});
+
+// Catálogo único para toda la plataforma. Las cuentas se importan desde el
+// archivo del banco; una API bancaria directa sigue requiriendo autorización
+// individual de cada banco y del titular de la cuenta.
+financeRouter.get("/finance/banks/catalog", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    res.json({
+      banks: CHILEAN_FINANCIAL_INSTITUTIONS,
+      supportedFormats: ["CSV", "XLSX"],
+      maxRows: MAX_BANK_STATEMENT_ROWS,
+      note: "Puedes importar cartolas exportadas por cualquier banco del catálogo CMF. La conexión automática por API depende de la autorización de cada banco."
+    });
+  } catch (error) {
+    console.error("Finance bank catalog error:", error);
+    res.status(500).json({ error: "No se pudo obtener el catálogo bancario." });
+  }
+});
+
+financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GROUPS.MANAGERS), bankStatementUpload.single("file"), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const sourceRows = await readBankStatementFile(req.file);
+    const rows = normalizeBankStatementRows(sourceRows, req.body || {}, { limit: MAX_BANK_STATEMENT_ROWS });
+    if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos en la cartola." });
+    const summary = withBankStatementNet(summarizeBankStatementRows(rows));
+    res.json({
+      sourceFile: cleanText(req.file?.originalname, "cartola-bancaria"),
+      maxRows: MAX_BANK_STATEMENT_ROWS,
+      account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },
+      summary,
+      rows: rows.slice(0, 100),
+      sourceRows: sourceRows.slice(0, MAX_BANK_STATEMENT_ROWS)
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudo leer la cartola bancaria.";
+    res.status(400).json({ error: message });
+  }
+});
+
+financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    const rows = normalizeBankStatementRows(sourceRows, req.body || {}, { limit: MAX_BANK_STATEMENT_ROWS });
+    if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos para importar." });
+    const sourceFile = cleanText(req.body?.sourceFile, "cartola-bancaria").slice(0, 180);
+    const summary = withBankStatementNet(summarizeBankStatementRows(rows));
+    const existingMovements = await prisma.industryRecord.findMany({
+      where: { tenantId: req.tenantId, recordType: "bank_movement" },
+      select: { data: true },
+      take: 10000,
+      orderBy: { createdAt: "desc" }
+    });
+    const knownFingerprints = new Set(existingMovements.map((record) => {
+      const data = financeRecordData(record);
+      return cleanText(data.fingerprint) || bankMovementFingerprint(data);
+    }).filter(Boolean));
+    const seenInFile = new Set();
+    const validRows = [];
+    const reviewRows = [];
+    let duplicateRows = 0;
+    for (const row of rows) {
+      if (row.needsReview) {
+        reviewRows.push(row);
+        continue;
+      }
+      if (knownFingerprints.has(row.fingerprint) || seenInFile.has(row.fingerprint)) {
+        duplicateRows += 1;
+        continue;
+      }
+      seenInFile.add(row.fingerprint);
+      validRows.push(row);
+    }
+    const importedAt = new Date().toISOString();
+    const result = await prisma.$transaction(async (tx) => {
+      const batch = await tx.industryRecord.create({
+        data: {
+          tenantId: req.tenantId,
+          recordType: "bank_statement",
+          title: `Cartola ${rows[0].bank} · ${rows[0].accountAlias} · ${sourceFile}`.slice(0, 220),
+          status: "IMPORTED",
+          data: {
+            sourceFile,
+            importedAt,
+            importedById: req.user?.id || null,
+            account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },
+            summary,
+            importedRows: validRows.length,
+            duplicateRows,
+            reviewRows: reviewRows.length
+          }
+        }
+      });
+      if (validRows.length) {
+        await tx.industryRecord.createMany({
+          data: validRows.map((row) => ({
+            tenantId: req.tenantId,
+            recordType: "bank_movement",
+            title: `${row.transactionDate} · ${row.description}`.slice(0, 220),
+            status: "PENDING",
+            data: {
+              ...row,
+              source: "bank_statement_import",
+              sourceFile,
+              importBatchId: batch.id,
+              importRow: row.rowNumber,
+              importedAt
+            }
+          }))
+        });
+      }
+      if (reviewRows.length) {
+        await tx.industryRecord.createMany({
+          data: reviewRows.map((row) => ({
+            tenantId: req.tenantId,
+            recordType: "finance_exception",
+            title: `Revisar cartola fila ${row.rowNumber} · ${row.description}`.slice(0, 220),
+            status: "OPEN",
+            data: {
+              type: "BANK_STATEMENT_IMPORT_REVIEW",
+              priority: "MEDIUM",
+              detail: `Faltan: ${row.reviewReasons.join(", ")}`,
+              source: "bank_statement_import",
+              sourceFile,
+              importBatchId: batch.id,
+              movement: row
+            }
+          }))
+        });
+      }
+      return { batch, imported: validRows.length, requiresReview: reviewRows.length };
+    });
+    await recordAuditLog(req, "FINANCE_BANK_STATEMENT_IMPORTED", "bank_statement", result.batch.id, {
+      sourceFile,
+      bankKey: rows[0].bankKey,
+      cmfCode: rows[0].cmfCode,
+      imported: result.imported,
+      duplicateRows,
+      requiresReview: result.requiresReview
+    });
+    res.status(201).json({ ...result, duplicateRows, summary });
+  } catch (error) {
+    console.error("Import bank statement error:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo importar la cartola bancaria." });
   }
 });
 

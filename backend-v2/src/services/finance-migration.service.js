@@ -130,9 +130,9 @@ async function parseSpreadsheet(buffer) {
   return rawRows.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""]))).filter((row) => Object.values(row).some((value) => cleanText(value)));
 }
 
-export async function readHistoricalFinanceFile(file) {
+export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION_FILE_BYTES } = {}) {
   if (!file?.buffer?.length) throw new Error("Selecciona un archivo con datos para revisar.");
-  if (file.buffer.length > MAX_MIGRATION_FILE_BYTES) throw new Error("El archivo supera el límite de 8 MB para una revisión segura.");
+  if (file.buffer.length > maxBytes) throw new Error(`El archivo supera el límite de ${Math.round(maxBytes / (1024 * 1024))} MB para una revisión segura.`);
   const name = cleanText(file.originalname || file.name).toLocaleLowerCase("es");
   if (/\.(xlsx|xlsm)$/i.test(name)) return parseSpreadsheet(file.buffer);
   if (/\.csv$/i.test(name)) return parseDelimitedText(file.buffer.toString("utf8"));
