@@ -24,7 +24,7 @@ import { bookingsRouter } from "./routes/bookings.routes.js";
 import { paymentsRouter } from "./routes/payments.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { reportsRouter } from "./routes/reports.routes.js";
-import { financeRouter } from "./routes/finance.routes.js";
+import { financePublicRouter, financeRouter } from "./routes/finance.routes.js";
 import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { modulesRouter } from "./routes/modules.routes.js";
 import { industriesRouter } from "./routes/industries.routes.js";
@@ -209,6 +209,10 @@ app.get("/", (_req, res) => {
 app.use("/meta", metaRouter);
 app.use("/api", authRouter);
 app.use("/api", connectionsPublicRouter);
+// Flöid entrega los movimientos luego del consentimiento bancario mediante un
+// callback del proveedor. Esta ruta valida su secreto propio, por eso debe
+// montarse antes de la autenticación de sesión de EVOLUM.
+app.use("/api", financePublicRouter);
 app.use("/api", mobileReleasesRouter);
 if (env.enableDevTools) {
   app.use("/api", workspaceUsersRouter); // helper local/demo, deshabilitado en producción por defecto

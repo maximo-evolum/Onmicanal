@@ -1,7 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { prisma } from "../lib/db.js";
+import { env } from "../lib/env.js";
 import { MODULES } from "../lib/modules.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { ensureTenantModuleEligibility } from "../services/tenant-modules.service.js";
@@ -14,6 +15,7 @@ import {
 } from "../services/finance.service.js";
 import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions, updateFinanceAgentPolicy } from "../services/finance-agents.service.js";
 import { recordAuditLog } from "../lib/audit.js";
+import { createTenantNotification } from "../lib/notifications.js";
 import {
   downloadNuboxSaleFile,
   financeSyncHistory,
@@ -34,8 +36,20 @@ import {
   withBankStatementNet
 } from "../services/finance-bank-statements.service.js";
 import { CHILEAN_FINANCIAL_INSTITUTIONS } from "../lib/finance-integrations.js";
+import {
+  MAX_SII_DTE_FILE_BYTES,
+  MAX_SII_DTE_FILES,
+  parseSiiDteFiles,
+  sanitizeSiiDteDocuments,
+  siiDteFingerprint,
+  summarizeSiiDteDocuments
+} from "../services/finance-sii-dte.service.js";
+import { createFloidConsentCase, normalizeFloidTransactions } from "../services/finance-floid.service.js";
+import { getFinanceMonthlyClosePreview, validFinancePeriod } from "../services/finance-monthly-close.service.js";
+import { getFinancePlanning, validPlanningPeriod } from "../services/finance-planning.service.js";
 
 export const financeRouter = Router();
+export const financePublicRouter = Router();
 const historicalMigrationUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_MIGRATION_FILE_BYTES, files: 1 }
@@ -43,6 +57,10 @@ const historicalMigrationUpload = multer({
 const bankStatementUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_BANK_STATEMENT_FILE_BYTES, files: 1 }
+});
+const siiDteUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_SII_DTE_FILE_BYTES, files: MAX_SII_DTE_FILES }
 });
 
 async function requireFinanceModule(req, res, module) {
@@ -58,6 +76,77 @@ async function requireFinanceModule(req, res, module) {
 function cleanText(value, fallback = "") {
   const normalized = String(value || "").trim();
   return normalized || fallback;
+}
+
+function connectionMetadata(config) {
+  return config?.metadata && typeof config.metadata === "object" && !Array.isArray(config.metadata) ? config.metadata : {};
+}
+
+function normalizedRut(value) {
+  return cleanText(value).replace(/[.\s]/g, "").toUpperCase();
+}
+
+async function siiConfigForTenant(tenantId) {
+  const config = await prisma.tenantChannelConfig.findUnique({ where: { tenantId_channel: { tenantId, channel: "finance_sii" } }, select: { id: true, isActive: true, metadata: true, updatedAt: true } });
+  const metadata = connectionMetadata(config);
+  return {
+    config,
+    companyRut: normalizedRut(metadata.companyRut),
+    environment: cleanText(metadata.environment, "certification").toLowerCase() === "production" ? "production" : "certification",
+    certificateReference: cleanText(metadata.certificateReference)
+  };
+}
+
+function financePublicBaseUrl(req) {
+  const host = req.get("host");
+  const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+  return String(env.publicBaseUrl || (host ? `${protocol}://${host}` : "")).replace(/\/+$/, "");
+}
+
+function providerReadyForFloid() {
+  return Boolean(env.floidApiBaseUrl && env.floidClientId && env.floidClientSecret && env.floidWebhookSecret);
+}
+
+function secureWebhookSecretMatches(received) {
+  const expected = String(env.floidWebhookSecret || "");
+  const candidate = String(received || "");
+  if (!expected || !candidate || expected.length !== candidate.length) return false;
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(candidate));
+}
+
+async function findFloidConsent(caseId) {
+  const candidates = await prisma.industryRecord.findMany({
+    where: { recordType: "finance_open_banking_consent", status: { in: ["PENDING", "PROCESSING"] } },
+    orderBy: { updatedAt: "desc" }, take: 1000
+  });
+  return candidates.find((record) => cleanText(financeRecordData(record).caseId) === cleanText(caseId)) || null;
+}
+
+async function importFloidMovements({ tenantId, consent, payload }) {
+  const consentData = financeRecordData(consent);
+  const normalized = normalizeFloidTransactions(payload, consentData.account || {});
+  if (!normalized.movements.length) throw new Error("Flöid no entregó movimientos para esta autorización.");
+  const existing = await prisma.industryRecord.findMany({ where: { tenantId, recordType: "bank_movement" }, select: { data: true }, take: 10000, orderBy: { createdAt: "desc" } });
+  const known = new Set(existing.map((record) => cleanText(financeRecordData(record).fingerprint) || bankMovementFingerprint(financeRecordData(record))).filter(Boolean));
+  const unique = [];
+  const review = [];
+  const seen = new Set();
+  let duplicates = 0;
+  for (const movement of normalized.movements) {
+    if (movement.needsReview) { review.push(movement); continue; }
+    if (known.has(movement.fingerprint) || seen.has(movement.fingerprint)) { duplicates += 1; continue; }
+    seen.add(movement.fingerprint);
+    unique.push(movement);
+  }
+  const importedAt = new Date().toISOString();
+  const result = await prisma.$transaction(async (tx) => {
+    const batch = await tx.industryRecord.create({ data: { tenantId, recordType: "bank_statement", title: `Banca abierta · ${normalized.caseId || consentData.caseId}`.slice(0, 220), status: "IMPORTED", data: { source: "floid_open_banking", consentId: consent.id, caseId: normalized.caseId || consentData.caseId, account: consentData.account, summary: normalized.summary, importedAt, importedRows: unique.length, duplicateRows: duplicates, reviewRows: review.length } } });
+    if (unique.length) await tx.industryRecord.createMany({ data: unique.map((movement) => ({ tenantId, recordType: "bank_movement", title: `${movement.transactionDate} · ${movement.description}`.slice(0, 220), status: "PENDING", data: { ...movement, source: "floid_open_banking", sourceBatchId: batch.id, consentId: consent.id, caseId: normalized.caseId || consentData.caseId, importedAt } })) });
+    if (review.length) await tx.industryRecord.createMany({ data: review.map((movement) => ({ tenantId, recordType: "finance_exception", title: `Revisar movimiento de banca abierta · ${movement.description}`.slice(0, 220), status: "OPEN", data: { type: "OPEN_BANKING_IMPORT_REVIEW", priority: "MEDIUM", detail: `Faltan: ${movement.reviewReasons.join(", ")}`, movement, consentId: consent.id, caseId: normalized.caseId || consentData.caseId } })) });
+    const updatedConsent = await tx.industryRecord.update({ where: { id: consent.id }, data: { status: "SYNCED", data: { ...consentData, lastSyncAt: importedAt, lastSyncSummary: { imported: unique.length, duplicates, requiresReview: review.length }, lastProviderStatus: normalized.status } } });
+    return { batch, consent: updatedConsent, imported: unique.length, duplicates, requiresReview: review.length };
+  });
+  return { ...result, summary: normalized.summary };
 }
 
 function financeHistory(data) {
@@ -826,6 +915,167 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
   }
 });
 
+// Banca abierta no solicita ni almacena la clave bancaria del usuario. La
+// cuenta se vincula en el proveedor autorizado y este devuelve movimientos al
+// callback asociado al caseId de EVOLUM.
+financeRouter.get("/finance/open-banking/status", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const consents = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_open_banking_consent" }, orderBy: { updatedAt: "desc" }, take: 20 });
+    res.json({
+      provider: "Floid",
+      providerReady: providerReadyForFloid(),
+      callbackConfigured: Boolean(env.publicBaseUrl && env.floidWebhookSecret),
+      consents: consents.map((record) => {
+        const data = financeRecordData(record);
+        return { id: record.id, status: record.status, createdAt: record.createdAt, updatedAt: record.updatedAt, bank: data.account?.bankKey || null, alias: data.account?.accountAlias || "Cuenta sin nombre", accountLast4: data.account?.accountLast4 || null, lastSyncAt: data.lastSyncAt || null, lastSyncSummary: data.lastSyncSummary || null };
+      }),
+      message: providerReadyForFloid()
+        ? "EVOLUM está listo para recibir consentimientos y movimientos desde Floid. Configura en Floid el callback entregado para cada caseId."
+        : "Falta habilitar las credenciales y el secreto de webhook de Floid en Railway. La importación manual por cartola sigue disponible."
+    });
+  } catch (error) {
+    console.error("Open banking status error:", error);
+    res.status(500).json({ error: "No se pudo revisar la banca abierta." });
+  }
+});
+
+financeRouter.post("/finance/open-banking/consents", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const consent = createFloidConsentCase(req.body || {});
+    if (!consent.account.bankKey) return res.status(400).json({ error: "Selecciona el banco que el titular autorizará." });
+    const callbackUrl = `${financePublicBaseUrl(req)}/api/finance/floid/webhook`;
+    if (!financePublicBaseUrl(req)) return res.status(400).json({ error: "PUBLIC_BASE_URL es necesaria para preparar el callback de banca abierta." });
+    const created = await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_open_banking_consent", title: `Consentimiento banca abierta · ${consent.account.accountAlias}`.slice(0, 220), status: "PENDING", data: { ...consent, provider: "floid", callbackUrl, createdById: req.user?.id || null, createdAt: new Date().toISOString(), consentRequired: true, credentialsHandledByProvider: true } } });
+    await recordAuditLog(req, "FINANCE_OPEN_BANKING_CONSENT_PREPARED", "finance_open_banking_consent", created.id, { bankKey: consent.account.bankKey, accountLast4: consent.account.accountLast4, providerReady: providerReadyForFloid() });
+    res.status(201).json({ consent: { id: created.id, caseId: consent.caseId, status: created.status, account: consent.account }, callbackUrl, providerReady: providerReadyForFloid(), message: providerReadyForFloid() ? "Consentimiento preparado. Usa este caseId al iniciar el flujo de Flöid para que los movimientos regresen a EVOLUM." : "Consentimiento preparado. Falta activar Floid en Railway antes de iniciar el flujo externo." });
+  } catch (error) {
+    console.error("Open banking consent error:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "No se pudo preparar el consentimiento." });
+  }
+});
+
+financePublicRouter.post("/finance/floid/webhook", async (req, res) => {
+  try {
+    if (!env.floidWebhookSecret) return res.status(503).json({ error: "Webhook de Floid no configurado." });
+    const receivedSecret = req.get("x-evolum-floid-secret") || req.get("x-floid-webhook-secret") || String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    if (!secureWebhookSecretMatches(receivedSecret)) return res.status(401).json({ error: "Webhook no autorizado." });
+    const caseId = cleanText(req.body?.caseId || req.body?.caseid || req.body?.data?.caseId);
+    if (!caseId) return res.status(400).json({ error: "caseId es requerido." });
+    const consent = await findFloidConsent(caseId);
+    if (!consent) return res.status(404).json({ error: "Consentimiento no encontrado o ya procesado." });
+    const result = await importFloidMovements({ tenantId: consent.tenantId, consent, payload: req.body || {} });
+    await prisma.tenantAuditLog.create({ data: { tenantId: consent.tenantId, action: "FINANCE_FLOID_WEBHOOK_IMPORTED", entity: "finance_open_banking_consent", entityId: consent.id, metadata: { caseId, imported: result.imported, duplicates: result.duplicates, requiresReview: result.requiresReview } } });
+    if (result.imported || result.requiresReview) await createTenantNotification({ tenantId: consent.tenantId, type: "OPEN_BANKING_SYNC_READY", title: "Movimientos bancarios disponibles", body: `${result.imported} movimiento(s) de banca abierta quedaron listos para conciliación${result.requiresReview ? ` y ${result.requiresReview} requieren revisión` : ""}.`, href: "/finance?tab=cartolas" });
+    res.status(202).json({ ok: true, imported: result.imported, duplicates: result.duplicates, requiresReview: result.requiresReview });
+  } catch (error) {
+    console.error("Floid webhook error:", error);
+    res.status(400).json({ error: error instanceof Error ? error.message : "No se pudo procesar la respuesta de banca abierta." });
+  }
+});
+
+// El SII exige certificado digital y autorización del contribuyente para sus
+// web services. Mientras esa autorización externa se completa, EVOLUM puede
+// incorporar DTE XML reales de manera trazable, sin alterar ni emitir DTE.
+financeRouter.get("/finance/sii/status", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const sii = await siiConfigForTenant(req.tenantId);
+    const configured = Boolean(sii.config?.isActive && sii.companyRut && sii.certificateReference);
+    res.json({
+      configured,
+      companyRut: sii.companyRut || null,
+      environment: sii.environment,
+      certificateReference: sii.certificateReference || null,
+      manualDteImportReady: Boolean(sii.companyRut),
+      automationReady: false,
+      message: configured
+        ? "Configuración base lista. La automatización queda pendiente de la autorización y validación externa del SII."
+        : "Configura RUT, ambiente y referencia del certificado desde Centro de Conexiones para trabajar DTE XML."
+    });
+  } catch (error) {
+    console.error("Finance SII status error:", error);
+    res.status(500).json({ error: "No se pudo revisar la configuración SII." });
+  }
+});
+
+financeRouter.post("/finance/sii/dte/preview-files", requireRole(ROLE_GROUPS.MANAGERS), siiDteUpload.array("files", MAX_SII_DTE_FILES), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const sii = await siiConfigForTenant(req.tenantId);
+    const documents = parseSiiDteFiles(req.files, { companyRut: sii.companyRut });
+    if (!documents.length) return res.status(400).json({ error: "Selecciona al menos un DTE XML para revisar." });
+    res.json({ companyRut: sii.companyRut, environment: sii.environment, maxFiles: MAX_SII_DTE_FILES, summary: summarizeSiiDteDocuments(documents), documents });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se pudieron leer los DTE XML.";
+    res.status(400).json({ error: message });
+  }
+});
+
+financeRouter.post("/finance/sii/dte/import", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const sii = await siiConfigForTenant(req.tenantId);
+    const documents = sanitizeSiiDteDocuments(req.body?.documents, { companyRut: sii.companyRut });
+    if (!documents.length) return res.status(400).json({ error: "No se detectaron DTE para importar." });
+    const summary = summarizeSiiDteDocuments(documents);
+    const existing = await prisma.industryRecord.findMany({
+      where: { tenantId: req.tenantId, recordType: { in: ["finance_invoice", "finance_payable"] } },
+      select: { data: true }, take: 10000, orderBy: { createdAt: "desc" }
+    });
+    const known = new Set(existing.map((record) => {
+      const data = financeRecordData(record);
+      return cleanText(data.siiDteFingerprint) || (data.emitterRut && data.receiverRut ? siiDteFingerprint(data) : "");
+    }).filter(Boolean));
+    const seen = new Set();
+    const valid = [];
+    const review = [];
+    let duplicates = 0;
+    for (const document of documents) {
+      if (document.needsReview) { review.push(document); continue; }
+      if (known.has(document.fingerprint) || seen.has(document.fingerprint)) { duplicates += 1; continue; }
+      seen.add(document.fingerprint);
+      valid.push(document);
+    }
+    const importedAt = new Date().toISOString();
+    const result = await prisma.$transaction(async (tx) => {
+      const batch = await tx.industryRecord.create({
+        data: { tenantId: req.tenantId, recordType: "finance_sii_import_batch", title: `Importación DTE SII · ${importedAt.slice(0, 10)}`, status: "COMPLETED", data: { companyRut: sii.companyRut, environment: sii.environment, importedAt, summary, importedRows: valid.length, duplicateRows: duplicates, reviewRows: review.length } }
+      });
+      if (valid.length) await tx.industryRecord.createMany({ data: valid.map((document) => {
+        const isSupplier = document.side === "SUPPLIER";
+        return {
+          tenantId: req.tenantId,
+          recordType: isSupplier ? "finance_payable" : "finance_invoice",
+          title: `${document.documentTypeName} ${document.documentNumber} · ${document.partyName}`.slice(0, 220),
+          status: "OPEN",
+          data: {
+            source: "sii_dte_xml", siiDteFingerprint: document.fingerprint, siiImportBatchId: batch.id, sourceFile: document.sourceFile,
+            documentSide: document.side, direction: isSupplier ? "PURCHASE" : "SALE", documentNumber: document.documentNumber,
+            invoiceNumber: isSupplier ? undefined : document.documentNumber, documentTypeCode: document.documentTypeCode, documentTypeName: document.documentTypeName,
+            emitterRut: document.emitterRut, emitterName: document.emitterName, receiverRut: document.receiverRut, receiverName: document.receiverName,
+            customerName: isSupplier ? undefined : document.partyName, customerRut: isSupplier ? undefined : document.partyRut,
+            clientName: isSupplier ? undefined : document.partyName, clientRut: isSupplier ? undefined : document.partyRut,
+            supplierName: isSupplier ? document.partyName : undefined, supplierRut: isSupplier ? document.partyRut : undefined,
+            rut: document.partyRut, issueDate: document.issueDate, amount: document.amount, balance: document.amount, paidAmount: 0, currency: "CLP", importedAt
+          }
+        };
+      }) });
+      if (review.length) await tx.industryRecord.createMany({ data: review.map((document) => ({
+        tenantId: req.tenantId, recordType: "finance_exception", title: `Revisar DTE ${document.documentNumber || "sin folio"} · ${document.sourceFile}`.slice(0, 220), status: "OPEN",
+        data: { type: "SII_DTE_IMPORT_REVIEW", priority: "MEDIUM", detail: `Faltan: ${document.reviewReasons.join(", ")}`, source: "sii_dte_xml", siiImportBatchId: batch.id, document }
+      })) });
+      return { batch, imported: valid.length, requiresReview: review.length };
+    });
+    await recordAuditLog(req, "FINANCE_SII_DTE_IMPORTED", "finance_sii_import_batch", result.batch.id, { imported: result.imported, duplicates, requiresReview: result.requiresReview, companyRut: sii.companyRut, environment: sii.environment });
+    res.status(201).json({ ...result, duplicates, summary });
+  } catch (error) {
+    console.error("Finance SII DTE import error:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudieron importar los DTE." });
+  }
+});
+
 financeRouter.get("/finance/plan", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
@@ -839,6 +1089,90 @@ financeRouter.get("/finance/plan", async (req, res) => {
   } catch (error) {
     console.error("Finance plan error:", error);
     res.status(500).json({ error: "No se pudo obtener el uso del plan financiero" });
+  }
+});
+
+// El cierre mensual es una fotografía controlada para administración y
+// contabilidad. No genera asientos, no presenta declaraciones y no modifica
+// facturas: exige que los movimientos y excepciones del período estén revisados.
+financeRouter.get("/finance/monthly-close/preview", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const period = cleanText(req.query?.period) || new Date().toISOString().slice(0, 7);
+    if (!validFinancePeriod(period)) return res.status(400).json({ error: "El período debe tener el formato AAAA-MM." });
+    res.json(await getFinanceMonthlyClosePreview({ tenantId: req.tenantId, period }));
+  } catch (error) {
+    console.error("Finance monthly close preview error:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo preparar el cierre mensual." });
+  }
+});
+
+financeRouter.post("/finance/monthly-close", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const period = cleanText(req.body?.period) || new Date().toISOString().slice(0, 7);
+    if (req.body?.confirmation !== "CERRAR") return res.status(400).json({ error: "Confirma el cierre con la palabra CERRAR." });
+    const preview = await getFinanceMonthlyClosePreview({ tenantId: req.tenantId, period });
+    if (preview.status !== "READY_TO_CLOSE") return res.status(409).json({ error: "El período tiene movimientos sin conciliar o excepciones abiertas. Resuélvelos antes de cerrarlo.", preview });
+    const existing = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_monthly_close" }, select: { id: true, data: true }, take: 500, orderBy: { createdAt: "desc" } });
+    if (existing.some((record) => cleanText(financeRecordData(record).period) === period)) return res.status(409).json({ error: "Este período ya tiene un cierre registrado." });
+    const closedAt = new Date().toISOString();
+    const close = await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_monthly_close", title: `Cierre financiero ${period}`, status: "CLOSED", data: { ...preview, period, closedAt, closedById: req.user?.id || null, note: cleanText(req.body?.note) } } });
+    await recordAuditLog(req, "FINANCE_MONTHLY_CLOSE_REGISTERED", "finance_monthly_close", close.id, { period, metrics: preview.metrics });
+    await createTenantNotification({ tenantId: req.tenantId, type: "FINANCE_MONTHLY_CLOSE_READY", title: `Cierre financiero ${period} registrado`, body: "La fotografía del período quedó disponible para revisión administrativa y contable.", href: "/finance?tab=cierre" });
+    res.status(201).json({ close, preview });
+  } catch (error) {
+    console.error("Finance monthly close error:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo registrar el cierre mensual." });
+  }
+});
+
+// Presupuesto y flujo proyectado: usa únicamente datos registrados en la
+// cuenta. Las proyecciones son apoyo administrativo, no una orden de pago ni
+// una predicción garantizada.
+financeRouter.get("/finance/planning", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const period = cleanText(req.query?.period) || new Date().toISOString().slice(0, 7);
+    if (!validPlanningPeriod(period)) return res.status(400).json({ error: "El período debe tener el formato AAAA-MM." });
+    res.json(await getFinancePlanning({ tenantId: req.tenantId, period }));
+  } catch (error) {
+    console.error("Finance planning error:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo preparar la planificación financiera." });
+  }
+});
+
+financeRouter.post("/finance/budgets", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const period = cleanText(req.body?.period);
+    const category = cleanText(req.body?.category).slice(0, 120);
+    if (!validPlanningPeriod(period) || !category) return res.status(400).json({ error: "Indica un período válido y una categoría." });
+    const data = { period, category, plannedIncome: safeAmount(req.body?.plannedIncome), plannedExpense: safeAmount(req.body?.plannedExpense), note: cleanText(req.body?.note).slice(0, 500), updatedAt: new Date().toISOString(), updatedById: req.user?.id || null };
+    const candidates = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_budget" }, orderBy: { updatedAt: "desc" }, take: 1000 });
+    const existing = candidates.find((record) => cleanText(financeRecordData(record).period) === period && cleanText(financeRecordData(record).category).toLocaleLowerCase("es") === category.toLocaleLowerCase("es"));
+    const budget = existing
+      ? await prisma.industryRecord.update({ where: { id: existing.id }, data: { title: `Presupuesto ${period} · ${category}`.slice(0, 220), status: "ACTIVE", data: { ...financeRecordData(existing), ...data } } })
+      : await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_budget", title: `Presupuesto ${period} · ${category}`.slice(0, 220), status: "ACTIVE", data } });
+    await recordAuditLog(req, existing ? "FINANCE_BUDGET_UPDATED" : "FINANCE_BUDGET_CREATED", "finance_budget", budget.id, { period, category, plannedIncome: data.plannedIncome, plannedExpense: data.plannedExpense });
+    res.status(existing ? 200 : 201).json({ budget, planning: await getFinancePlanning({ tenantId: req.tenantId, period }) });
+  } catch (error) {
+    console.error("Finance budget save error:", error);
+    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo guardar el presupuesto." });
+  }
+});
+
+financeRouter.delete("/finance/budgets/:id", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const budget = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_budget" } });
+    if (!budget) return res.status(404).json({ error: "Presupuesto no encontrado." });
+    await prisma.industryRecord.delete({ where: { id: budget.id } });
+    await recordAuditLog(req, "FINANCE_BUDGET_DELETED", "finance_budget", budget.id, { period: financeRecordData(budget).period, category: financeRecordData(budget).category });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("Finance budget delete error:", error);
+    res.status(500).json({ error: "No se pudo eliminar el presupuesto." });
   }
 });
 

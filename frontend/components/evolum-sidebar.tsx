@@ -80,7 +80,9 @@ const baseItems: SidebarItem[] = [
 baseItems.push(
   ["Resumen financiero", "/finance", "Cartera, flujo de caja y alertas de la operación", "FI", "finance_analytics"],
   ["Facturas por cobrar", "/finance?tab=facturas", "Documentos emitidos, saldos y vencimientos", "FI", "finance_invoices"],
+  ["DTE SII", "/finance?tab=sii", "Importación trazable de DTE XML emitidos y recibidos", "SI", "finance_invoices"],
   ["Cartolas y movimientos", "/finance?tab=cartolas", "Carga bancaria, importación y movimientos manuales", "FI", "finance_bank_sync"],
+  ["Banca abierta", "/finance?tab=banca_abierta", "Cuentas autorizadas y sincronización de movimientos", "BA", "finance_bank_sync"],
   ["Conciliación IA", "/finance?tab=conciliacion", "Coincidencias sugeridas entre pagos y facturas", "FI", "finance_reconciliation"],
   ["Excepciones financieras", "/finance?tab=excepciones", "Diferencias, pagos parciales y casos a revisar", "FI", "finance_exceptions"],
   ["Cobranza IA", "/finance?tab=cobranza", "Seguimiento responsable de cartera vencida", "FI", "finance_collections"],
@@ -89,6 +91,8 @@ baseItems.push(
   ["Aprobaciones financieras", "/finance?tab=aprobaciones", "Confirmaciones humanas antes de modificar registros", "FI", "finance_reconciliation"],
   ["Clientes financieros", "/finance?tab=clientes", "Cartera, riesgo y saldos por cliente", "FI", "finance_invoices"],
   ["Indicadores financieros", "/finance?tab=indicadores", "Caja proyectada, DSO y recuperación", "FI", "finance_analytics"],
+  ["Cierre mensual", "/finance?tab=cierre", "Consolidación revisada del período financiero", "CM", "finance_analytics"],
+  ["Presupuesto y caja", "/finance?tab=planificacion", "Presupuesto, ejecución y flujo esperado", "PC", "finance_analytics"],
   ["Integraciones financieras", "/finance?tab=integraciones", "Estado seguro de ERP, bancos y fuentes conectadas", "FI", "finance_analytics"],
   ["Plan y uso financiero", "/finance?tab=plan", "Consumo de documentos y capacidad de la cuenta", "FI", "finance_analytics"],
   ["Equipo IA financiero", "/finance?tab=agentes", "Agentes, políticas y controles humanos", "FI", "finance_analytics"]

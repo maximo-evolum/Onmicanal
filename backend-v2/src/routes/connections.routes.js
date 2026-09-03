@@ -366,11 +366,12 @@ function requiresExternalAuthorization(provider) {
 
 function normalizeSiiConfiguration(value) {
   const metadata = normalizeMetadata(value, {});
-  const environment = cleanText(metadata.environment, env.siiEnvironment || "certification").toLowerCase();
+  const requestedEnvironment = cleanText(metadata.environment, env.siiEnvironment || "certification").toLowerCase();
+  const environment = /^(production|produccion|producción)$/.test(requestedEnvironment) ? "production" : "certification";
   return {
     ...metadata,
     companyRut: cleanText(metadata.companyRut).replace(/[.\s]/g, ""),
-    environment: environment === "production" ? "production" : "certification",
+    environment,
     certificateReference: cleanText(metadata.certificateReference)
   };
 }

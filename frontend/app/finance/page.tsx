@@ -22,15 +22,25 @@ import {
   getFinancePlan,
   getFinanceAgentWorkspace,
   getFinanceBankCatalog,
+  getFinanceOpenBankingStatus,
+  getFinanceMonthlyClosePreview,
+  getFinancePlanning,
   getFinanceOverview,
   getFinancePayables,
+  getFinanceSiiStatus,
   getFinanceReconciliationSuggestions,
   getIndustryRecords,
   importFinanceMigration,
   importFinanceBankStatement,
+  importFinanceSiiDtes,
+  prepareFinanceOpenBankingConsent,
+  registerFinanceMonthlyClose,
+  saveFinanceBudget,
+  deleteFinanceBudget,
   previewFinanceMigration,
   previewFinanceMigrationFile,
   previewFinanceBankStatementFile,
+  previewFinanceSiiDtes,
   prepareFinanceCollectionReminders,
   registerFinanceInvoiceReceipt,
   registerFinancePayablePayment,
@@ -41,6 +51,12 @@ import {
   type FinanceAgentWorkspace,
   type ChileanBank,
   type FinanceBankStatementPreview,
+  type FinanceOpenBankingStatus,
+  type FinanceMonthlyClosePreview,
+  type FinancePlanning,
+  type FinanceSiiDte,
+  type FinanceSiiPreview,
+  type FinanceSiiStatus,
   type FinanceCustomer,
   type FinanceCollectionPortfolioRow,
   type FinanceDocument,
@@ -55,7 +71,7 @@ import {
 import { useAgentSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
 
-type FinanceTab = "resumen" | "facturas" | "cartolas" | "conciliacion" | "excepciones" | "cobranza" | "pagos" | "migracion" | "aprobaciones" | "clientes" | "indicadores" | "integraciones" | "plan" | "agentes";
+type FinanceTab = "resumen" | "facturas" | "sii" | "cartolas" | "banca_abierta" | "conciliacion" | "excepciones" | "cobranza" | "pagos" | "migracion" | "aprobaciones" | "clientes" | "indicadores" | "cierre" | "planificacion" | "integraciones" | "plan" | "agentes";
 type FinanceDocumentStatusFilter = "all" | "paid" | "cancelled" | "pending" | "overdue";
 type NuboxResourceKind = "documento" | "productos" | "referencias";
 type NuboxResourcePanel = { documentId: string; title: string; value: unknown };
@@ -63,7 +79,9 @@ type NuboxResourcePanel = { documentId: string; title: string; value: unknown };
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
   { key: "resumen", label: "Resumen financiero", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
   { key: "facturas", label: "Facturas por cobrar", module: "finance_invoices", detail: "Registra documentos pendientes de cobro." },
+  { key: "sii", label: "DTE SII", module: "finance_invoices", detail: "Revisa DTE XML emitidos o recibidos antes de incorporarlos." },
   { key: "cartolas", label: "Cartolas y movimientos", module: "finance_bank_sync", detail: "Importa movimientos bancarios para conciliarlos." },
+  { key: "banca_abierta", label: "Banca abierta", module: "finance_bank_sync", detail: "Vincula cuentas con consentimiento y recibe movimientos automáticamente." },
   { key: "conciliacion", label: "Conciliación IA", module: "finance_reconciliation", detail: "Revisa sugerencias antes de confirmar cambios." },
   { key: "excepciones", label: "Excepciones financieras", module: "finance_exceptions", detail: "Ordena diferencias y casos que requieren revision." },
   { key: "cobranza", label: "Cobranza IA", module: "finance_collections", detail: "Prepara la cartera vencida para un seguimiento aprobado." },
@@ -72,6 +90,8 @@ const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; det
   { key: "aprobaciones", label: "Aprobaciones financieras", module: "finance_reconciliation", detail: "Valida sugerencias antes de modificar la operación financiera." },
   { key: "clientes", label: "Clientes financieros", module: "finance_invoices", detail: "Consulta la cartera y el riesgo por cliente." },
   { key: "indicadores", label: "Indicadores financieros", module: "finance_analytics", detail: "Revisa caja, cartera, DSO y proyecciones." },
+  { key: "cierre", label: "Cierre mensual", module: "finance_analytics", detail: "Consolida y revisa el período antes de registrarlo." },
+  { key: "planificacion", label: "Presupuesto y caja", module: "finance_analytics", detail: "Compara presupuesto, ejecución y flujo esperado." },
   { key: "integraciones", label: "Integraciones financieras", module: "finance_analytics", detail: "Estado seguro de las fuentes que alimentan el ciclo." },
   { key: "plan", label: "Plan y uso financiero", module: "finance_analytics", detail: "Consulta el consumo de documentos de tu plan financiero." },
   { key: "agentes", label: "Equipo IA financiero", module: "finance_analytics", detail: "Cinco agentes especializados coordinados con controles humanos." }
@@ -209,6 +229,18 @@ function FinanceWorkspace() {
   const [bankStatementPreview, setBankStatementPreview] = useState<FinanceBankStatementPreview | null>(null);
   const [bankStatementRows, setBankStatementRows] = useState<Array<Record<string, unknown>>>([]);
   const [bankStatementForm, setBankStatementForm] = useState({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
+  const [openBankingStatus, setOpenBankingStatus] = useState<FinanceOpenBankingStatus | null>(null);
+  const [openBankingForm, setOpenBankingForm] = useState({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
+  const [openBankingCaseId, setOpenBankingCaseId] = useState<string | null>(null);
+  const [monthlyClose, setMonthlyClose] = useState<FinanceMonthlyClosePreview | null>(null);
+  const [monthlyClosePeriod, setMonthlyClosePeriod] = useState(() => new Date().toISOString().slice(0, 7));
+  const [monthlyCloseNote, setMonthlyCloseNote] = useState("");
+  const [financePlanning, setFinancePlanning] = useState<FinancePlanning | null>(null);
+  const [planningPeriod, setPlanningPeriod] = useState(() => new Date().toISOString().slice(0, 7));
+  const [budgetForm, setBudgetForm] = useState({ category: "", plannedIncome: "", plannedExpense: "", note: "" });
+  const [siiStatus, setSiiStatus] = useState<FinanceSiiStatus | null>(null);
+  const [siiPreview, setSiiPreview] = useState<FinanceSiiPreview | null>(null);
+  const [siiDocuments, setSiiDocuments] = useState<FinanceSiiDte[]>([]);
   const [documentFilter, setDocumentFilter] = useState<"all" | "customers" | "suppliers">("all");
   const [documentQuery, setDocumentQuery] = useState("");
   const [documentStatusFilter, setDocumentStatusFilter] = useState<FinanceDocumentStatusFilter>("all");
@@ -254,11 +286,18 @@ function FinanceWorkspace() {
     try {
       if (activeTab === "resumen") setOverview(await getFinanceOverview());
       if (activeTab === "facturas") setFinanceDocuments((await getFinanceDocuments(documentFilter)).documents);
+      if (activeTab === "sii") setSiiStatus(await getFinanceSiiStatus());
       if (activeTab === "cartolas") {
         const [movements, catalog] = await Promise.all([getIndustryRecords("bank_movement"), getFinanceBankCatalog()]);
         setRecords(movements);
         setChileanBanks(catalog.banks || []);
         setBankStatementForm((current) => current.bankKey || !catalog.banks?.length ? current : { ...current, bankKey: catalog.banks[0].key });
+      }
+      if (activeTab === "banca_abierta") {
+        const [status, catalog] = await Promise.all([getFinanceOpenBankingStatus(), getFinanceBankCatalog()]);
+        setOpenBankingStatus(status);
+        setChileanBanks(catalog.banks || []);
+        setOpenBankingForm((current) => current.bankKey || !catalog.banks?.length ? current : { ...current, bankKey: catalog.banks[0].key });
       }
       if (activeTab === "excepciones") setRecords(await getIndustryRecords("finance_exception"));
       if (activeTab === "cobranza") setCollectionPortfolio((await getFinanceCollectionPortfolio()).portfolio);
@@ -267,6 +306,8 @@ function FinanceWorkspace() {
       if (activeTab === "aprobaciones") setSuggestions(normalizeFinanceSuggestions((await getFinanceReconciliationSuggestions()).suggestions));
       if (activeTab === "clientes") setFinanceCustomers((await getFinanceCustomers()).customers);
       if (activeTab === "indicadores") setOverview(await getFinanceOverview());
+      if (activeTab === "cierre") setMonthlyClose(await getFinanceMonthlyClosePreview(monthlyClosePeriod));
+      if (activeTab === "planificacion") setFinancePlanning(await getFinancePlanning(planningPeriod));
       if (activeTab === "integraciones") {
         const [integrations, history] = await Promise.all([getFinanceIntegrations(), getFinanceSyncHistory()]);
         setFinanceIntegrations(integrations.integrations);
@@ -560,6 +601,116 @@ function FinanceWorkspace() {
     finally { setSaving(false); }
   }
 
+  async function prepareOpenBankingConsent() {
+    if (!openBankingForm.bankKey) return setMessage("Selecciona el banco que el titular autorizará.");
+    setSaving(true);
+    try {
+      const result = await prepareFinanceOpenBankingConsent(openBankingForm);
+      setOpenBankingCaseId(result.consent.caseId);
+      setMessage(result.message);
+      await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo preparar el consentimiento bancario."); }
+    finally { setSaving(false); }
+  }
+
+  async function refreshMonthlyClose(period = monthlyClosePeriod) {
+    setSaving(true);
+    try {
+      setMonthlyClose(await getFinanceMonthlyClosePreview(period));
+      setMessage("Vista previa del cierre actualizada. Revisa los pendientes antes de registrarlo.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo actualizar el cierre mensual."); }
+    finally { setSaving(false); }
+  }
+
+  async function registerMonthlyClose() {
+    if (!monthlyClose || monthlyClose.status !== "READY_TO_CLOSE") return;
+    if (!window.confirm(`¿Registrar el cierre financiero de ${monthlyClosePeriod}? Esta acción deja una fotografía auditable del período.`)) return;
+    setSaving(true);
+    try {
+      await registerFinanceMonthlyClose({ period: monthlyClosePeriod, note: monthlyCloseNote, confirmation: "CERRAR" });
+      setMonthlyCloseNote("");
+      setMonthlyClose(await getFinanceMonthlyClosePreview(monthlyClosePeriod));
+      setMessage(`Cierre financiero ${monthlyClosePeriod} registrado con trazabilidad.`);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo registrar el cierre mensual."); }
+    finally { setSaving(false); }
+  }
+
+  function downloadMonthlyCloseCsv() {
+    if (!monthlyClose) return;
+    const quote = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const lines = [
+      ["Fecha", "Tipo", "Documento", "Contraparte", "Categoría", "Monto", "Saldo", "Estado"],
+      ...monthlyClose.rows.map((row) => [row.fecha, row.tipo, row.documento, row.contraparte, row.categoria, row.monto, row.saldo, row.estado])
+    ].map((row) => row.map(quote).join(";")).join("\n");
+    const url = URL.createObjectURL(new Blob(["\uFEFF" + lines], { type: "text/csv;charset=utf-8" }));
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = `cierre-financiero-${monthlyClose.period}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function refreshFinancePlanning(period = planningPeriod) {
+    setSaving(true);
+    try {
+      setFinancePlanning(await getFinancePlanning(period));
+      setMessage("Planificación financiera actualizada con los datos registrados.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo actualizar la planificación."); }
+    finally { setSaving(false); }
+  }
+
+  async function submitBudget(event: FormEvent) {
+    event.preventDefault();
+    if (!budgetForm.category.trim()) return setMessage("Indica la categoría del presupuesto.");
+    setSaving(true);
+    try {
+      const result = await saveFinanceBudget({ period: planningPeriod, category: budgetForm.category, plannedIncome: amount(budgetForm.plannedIncome), plannedExpense: amount(budgetForm.plannedExpense), note: budgetForm.note });
+      setFinancePlanning(result.planning);
+      setBudgetForm({ category: "", plannedIncome: "", plannedExpense: "", note: "" });
+      setMessage("Presupuesto guardado. Puedes volver a editar la misma categoría sin crear duplicados.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar el presupuesto."); }
+    finally { setSaving(false); }
+  }
+
+  async function removeBudget(id: string) {
+    if (!window.confirm("¿Eliminar esta categoría presupuestaria?")) return;
+    setSaving(true);
+    try {
+      await deleteFinanceBudget(id);
+      await refreshFinancePlanning();
+      setMessage("Presupuesto eliminado.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo eliminar el presupuesto."); }
+    finally { setSaving(false); }
+  }
+
+  async function previewSiiDtes(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+    if (files.some((file) => !/\.xml$/i.test(file.name))) return setMessage("Selecciona únicamente documentos DTE XML exportados desde el SII o tu sistema autorizado.");
+    setSaving(true);
+    try {
+      const preview = await previewFinanceSiiDtes(files);
+      setSiiPreview(preview);
+      setSiiDocuments(preview.documents);
+      setMessage("DTE revisados. Confirma la vista previa antes de incorporarlos a las cuentas por cobrar o pagar.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudieron revisar los DTE XML."); }
+    finally { setSaving(false); }
+  }
+
+  async function importSiiDtes() {
+    if (!siiPreview || !siiDocuments.length) return;
+    setSaving(true);
+    try {
+      const result = await importFinanceSiiDtes(siiDocuments);
+      setSiiPreview(null);
+      setSiiDocuments([]);
+      setMessage(`${result.imported} DTE incorporados. ${result.duplicates} duplicados se omitieron y ${result.requiresReview} quedaron en Excepciones.`);
+      await load();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudieron importar los DTE."); }
+    finally { setSaving(false); }
+  }
+
   async function approveSuggestion(suggestion: FinanceReconciliationSuggestion) {
     setSaving(true);
     try {
@@ -673,7 +824,11 @@ function FinanceWorkspace() {
             <form className="finance-card finance-form finance-document-entry" onSubmit={createInvoice}><span className="finance-eyebrow">Registro manual</span><h2>Nueva factura de cliente</h2><p>Registra una factura emitida. El cobro y cualquier aviso posterior quedan siempre bajo revisión humana.</p><input required placeholder="Número de factura" value={invoiceForm.number} onChange={(event) => setInvoiceForm({ ...invoiceForm, number: event.target.value })} /><input required placeholder="Cliente o empresa" value={invoiceForm.client} onChange={(event) => setInvoiceForm({ ...invoiceForm, client: event.target.value })} /><input placeholder="RUT cliente (opcional)" value={invoiceForm.rut} onChange={(event) => setInvoiceForm({ ...invoiceForm, rut: event.target.value })} /><input required type="number" placeholder="Monto CLP" value={invoiceForm.amount} onChange={(event) => setInvoiceForm({ ...invoiceForm, amount: event.target.value })} /><label>Vencimiento<input required type="date" value={invoiceForm.dueDate} onChange={(event) => setInvoiceForm({ ...invoiceForm, dueDate: event.target.value })} /></label><button className="primary-btn" disabled={saving}>Guardar factura</button></form>
           </section> : null}
 
+          {activeTab === "sii" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Etapa 2 · SII / DTE</span><h2>Incorporar documentos tributarios electrónicos</h2><p>Importa DTE XML reales emitidos o recibidos. EVOLUM identifica automáticamente si corresponden a una factura de cliente o a una cuenta por pagar, usando el RUT configurado para la empresa.</p><div className="finance-note"><strong>{siiStatus?.configured ? "Configuración SII registrada" : "Configuración SII pendiente"}</strong><span>{siiStatus?.message || "Revisando configuración tributaria..."}</span>{siiStatus?.companyRut ? <span>RUT configurado: {siiStatus.companyRut} · Ambiente: {siiStatus.environment === "production" ? "Producción" : "Certificación"}</span> : null}</div>{!siiStatus?.manualDteImportReady ? <button type="button" className="primary-btn" onClick={() => window.location.assign("/connections")}>Configurar SII en Centro de Conexiones</button> : <><label className="finance-upload">Seleccionar uno o más DTE XML<input type="file" accept=".xml,text/xml,application/xml" multiple onChange={previewSiiDtes} disabled={saving} /></label><p className="finance-muted">No se emite, anula ni envía ningún DTE desde esta pantalla. La automatización con el SII queda bloqueada hasta contar con certificado y autorización externa vigentes.</p></>}{siiPreview ? <div className="finance-note"><strong>Vista previa: {siiPreview.summary.total} DTE</strong><span>{siiPreview.summary.customerDocuments} de clientes · {money(siiPreview.summary.customerAmount)}</span><span>{siiPreview.summary.supplierDocuments} de proveedores · {money(siiPreview.summary.supplierAmount)}</span><span>{siiPreview.summary.review ? `${siiPreview.summary.review} requieren revisión.` : "Todos están asociados al RUT configurado."}</span><button type="button" className="primary-btn" onClick={importSiiDtes} disabled={saving}>Incorporar DTE revisados</button></div> : null}</article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Validación previa</span><h2>Documentos detectados</h2></div>{siiPreview ? <span>{siiPreview.documents.length} XML</span> : null}</div>{siiPreview ? <div className="finance-migration-table"><div><span>Documento</span><span>Contraparte</span><span>Monto</span><span>Destino</span></div>{siiPreview.documents.map((document) => <div key={document.fingerprint} className={document.needsReview ? "needs-review" : ""}><span>{document.documentTypeName} · {document.documentNumber}</span><span>{document.partyName}<small>{document.partyRut || "RUT por revisar"}</small></span><span>{money(document.amount)}</span><span>{document.needsReview ? "Revisar" : document.side === "SUPPLIER" ? "Cuenta por pagar" : "Factura de cliente"}</span></div>)}</div> : <p className="finance-empty">Configura el RUT tributario y selecciona DTE XML para verlos aquí antes de importar.</p>}</article></section> : null}
+
           {activeTab === "cartolas" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Importación multi-banco</span><h2>Importar cartola bancaria</h2><p>Funciona con cartolas CSV y Excel exportadas por los bancos establecidos en Chile. Primero revisas los movimientos; después decides si incorporarlos a la conciliación.</p><label>Banco de la cartola<select value={bankStatementForm.bankKey} onChange={(event) => setBankStatementForm({ ...bankStatementForm, bankKey: event.target.value })}><option value="">Selecciona un banco</option>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name} · CMF {bank.cmfCode}</option>)}</select></label><input placeholder="Nombre visible de la cuenta (ej. Recaudación)" value={bankStatementForm.accountAlias} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountAlias: event.target.value })} /><label>Tipo de cuenta<select value={bankStatementForm.accountType} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountType: event.target.value })}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label><input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos (opcional)" value={bankStatementForm.accountLast4} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} /><label className="finance-upload">Seleccionar cartola CSV o Excel<input type="file" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={previewBankStatement} disabled={saving} /></label><button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>{bankStatementPreview ? <div className="finance-note"><strong>Vista previa: {bankStatementPreview.account.bank}</strong><span>{bankStatementPreview.summary.totalRows} filas · Abonos {money(bankStatementPreview.summary.credits)} · Cargos {money(bankStatementPreview.summary.debits)}</span><span>{bankStatementPreview.summary.reviewRows ? `${bankStatementPreview.summary.reviewRows} filas requieren revisión.` : "Sin filas incompletas detectadas."}</span><button type="button" className="primary-btn" disabled={saving} onClick={importBankStatement}>Incorporar movimientos</button></div> : null}<hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form></article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliación</span><h2>Movimientos cargados</h2></div><span>{records.length} movimientos</span></div>{bankStatementPreview ? <div className="finance-migration-preview"><h3>Primeras filas detectadas</h3><div className="finance-migration-table"><div><span>Fecha</span><span>Descripción</span><span>Monto</span><span>Estado</span></div>{bankStatementPreview.rows.slice(0, 8).map((row) => <div key={String(row.rowNumber)} className={row.needsReview ? "needs-review" : ""}><span>{shortDate(row.transactionDate)}</span><span>{financeLabel(row.description)}</span><span>{money(row.amount)}</span><span>{row.needsReview ? "Revisar" : row.direction === "DEBIT" ? "Cargo" : "Abono"}</span></div>)}</div></div> : null}<FinanceTable records={records} kind="movement" query={search} /></article></section> : null}
+
+          {activeTab === "banca_abierta" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Etapa 3 · Banca abierta</span><h2>Vincular una cuenta con consentimiento</h2><p>El titular se autentica únicamente en la experiencia autorizada del proveedor. EVOLUM no solicita, recibe ni guarda claves bancarias.</p><label>Banco<select value={openBankingForm.bankKey} onChange={(event) => setOpenBankingForm({ ...openBankingForm, bankKey: event.target.value })}><option value="">Selecciona un banco</option>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name} · CMF {bank.cmfCode}</option>)}</select></label><input placeholder="Nombre visible de la cuenta (ej. Cuenta de operaciones)" value={openBankingForm.accountAlias} onChange={(event) => setOpenBankingForm({ ...openBankingForm, accountAlias: event.target.value })} /><label>Tipo de cuenta<select value={openBankingForm.accountType} onChange={(event) => setOpenBankingForm({ ...openBankingForm, accountType: event.target.value })}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label><input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos (opcional)" value={openBankingForm.accountLast4} onChange={(event) => setOpenBankingForm({ ...openBankingForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} /><button className="primary-btn" type="button" disabled={saving} onClick={prepareOpenBankingConsent}>{saving ? "Preparando..." : "Preparar consentimiento"}</button>{openBankingCaseId ? <div className="finance-note"><strong>Consentimiento preparado</strong><span>Código de seguimiento: <b>{openBankingCaseId}</b></span><span>Úsalo únicamente en el flujo autorizado de Flöid para esta cuenta.</span></div> : null}<div className="finance-note"><strong>¿Aún no tienes proveedor de banca abierta?</strong><span>La carga de cartolas continúa disponible y sirve como respaldo mientras se completa la habilitación externa.</span><button type="button" className="finance-link-button" onClick={() => selectTab("cartolas")}>Ir a cartolas</button></div></article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Estado de la integración</span><h2>Sincronizaciones autorizadas</h2></div><span>{openBankingStatus?.provider || "Proveedor"}</span></div><div className="finance-note"><strong>{openBankingStatus?.providerReady ? "Proveedor habilitado" : "Proveedor pendiente de activación"}</strong><span>{openBankingStatus?.message || "Revisando disponibilidad de banca abierta..."}</span></div><div className="finance-migration-table"><div><span>Cuenta</span><span>Estado</span><span>Última sincronización</span><span>Resultado</span></div>{openBankingStatus?.consents.map((consent) => <div key={consent.id}><span>{chileanBanks.find((bank) => bank.key === consent.bank)?.name || consent.bank || "Banco"}<small>{consent.alias}{consent.accountLast4 ? ` · ****${consent.accountLast4}` : ""}</small></span><span>{financeLabel(consent.status)}</span><span>{consent.lastSyncAt ? shortDate(consent.lastSyncAt) : "Aún sin movimientos"}</span><span>{consent.lastSyncSummary ? `${consent.lastSyncSummary.imported || 0} incorporados · ${consent.lastSyncSummary.requiresReview || 0} por revisar` : "Esperando autorización"}</span></div>)}{!openBankingStatus?.consents.length && !loading ? <p className="finance-empty">Aún no hay consentimientos preparados para esta cuenta.</p> : null}</div></article></section> : null}
 
           {activeTab === "conciliacion" ? <section className="finance-card"><h2>Sugerencias de conciliación</h2><p>La IA explica cada coincidencia. Las de confianza media o baja siempre requieren tu aprobación.</p><div className="finance-suggestions">{suggestions.map((item) => <article key={`${item.movement.id}-${item.invoice.id}`}><div><b className={`finance-confidence ${item.level.toLowerCase()}`}>{item.confidence}% {financeConfidenceLabel(item.level)}</b><strong>{financeLabel(asData(item.movement).description, financeLabel(item.movement.title))}</strong><span>{money(asData(item.movement).amount)} · {shortDate(asData(item.movement).date)}</span></div><div><strong>{financeLabel(asData(item.invoice).invoiceNumber, financeLabel(item.invoice.title))}</strong><span>{financeLabel(asData(item.invoice).clientName)} · {money(asData(item.invoice).amount)}</span><small>{financeReasons(item.reasons)}</small></div><button className="primary-btn" type="button" disabled={saving} onClick={() => approveSuggestion(item)}>Confirmar</button></article>)}{!suggestions.length && !loading ? <p className="finance-empty">Aún no hay coincidencias. Carga facturas y movimientos para calcularlas.</p> : null}</div></section> : null}
 
@@ -708,6 +863,8 @@ function FinanceWorkspace() {
           {activeTab === "aprobaciones" ? <section className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Control humano</span><h2>Aprobaciones pendientes</h2></div><span className="finance-approval-count">{suggestions.length}</span></div><p>Las conciliaciones sugeridas no modifican facturas ni movimientos hasta que una persona autorizada las confirme.</p><div className="finance-suggestions">{suggestions.map((item) => <article key={`${item.movement.id}-${item.invoice.id}`}><div><b className={`finance-confidence ${item.level.toLowerCase()}`}>{item.confidence}% {financeConfidenceLabel(item.level)}</b><strong>{financeLabel(asData(item.movement).description, financeLabel(item.movement.title))}</strong><span>{money(asData(item.movement).amount)} · {shortDate(asData(item.movement).date)}</span></div><div><strong>{financeLabel(asData(item.invoice).invoiceNumber, financeLabel(item.invoice.title))}</strong><span>{financeLabel(asData(item.invoice).customerName)} · {money(asData(item.invoice).amount)}</span><small>{financeReasons(item.reasons)}</small></div><button className="primary-btn" type="button" disabled={saving} onClick={() => approveSuggestion(item)}>Aprobar</button></article>)}{!suggestions.length && !loading ? <p className="finance-empty">No hay aprobaciones financieras pendientes.</p> : null}</div></section> : null}
           {activeTab === "clientes" ? <section className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Cartera de clientes</span><h2>Riesgo y saldo por cliente</h2></div><span>{financeCustomers.length} clientes</span></div><div className="finance-client-table"><div className="finance-client-table-head"><span>Cliente</span><span>Facturas</span><span>Por cobrar</span><span>Vencido</span></div>{financeCustomers.filter((item) => `${item.name} ${item.rut || ""}`.toLocaleLowerCase("es").includes(search.toLocaleLowerCase("es"))).map((item) => <div key={item.key}><div><strong>{financeLabel(item.name)}</strong><small>{item.rut || "Sin RUT registrado"}</small></div><span>{item.openInvoices}/{item.invoices}</span><b>{money(item.outstandingAmount)}</b><b className={item.overdueAmount ? "is-overdue" : ""}>{money(item.overdueAmount)}</b></div>)}{!financeCustomers.length && !loading ? <p className="finance-empty">Aún no hay facturas para construir la cartera de clientes.</p> : null}</div></section> : null}
           {activeTab === "indicadores" && overview ? <section className="finance-indicator-layout"><article className="finance-card"><span className="finance-eyebrow">Flujo de caja proyectado</span><h2>{money(overview.collection.expectedNext30Days)}</h2><p>Estimación de cobros para los próximos 30 días, basada en vencimientos y saldos abiertos.</p><div className="finance-projection-bars">{[28, 44, 57, 43, 70, 86].map((value, index) => <div key={index}><i style={{ height: `${value}%` }} /><span>S{index + 1}</span></div>)}</div></article><article className="finance-card"><span className="finance-eyebrow">Indicadores clave</span><div className="finance-indicator-list"><div><span>Tasa de recuperación</span><strong>{overview.collection.rate}%</strong></div><div><span>DSO</span><strong>{overview.collection.dsoDays} días</strong></div><div><span>Conciliación automática</span><strong>{overview.reconciliation.rate}%</strong></div><div><span>Excepciones críticas</span><strong>{overview.exceptions.critical}</strong></div></div></article></section> : null}
+          {activeTab === "cierre" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Etapa 4 · Control mensual</span><h2>Preparar cierre financiero</h2><p>Consolida la información del período para administración y contador. No genera asientos, declaraciones ni cambios automáticos en documentos.</p><label>Período<input type="month" value={monthlyClosePeriod} onChange={(event) => setMonthlyClosePeriod(event.target.value)} /></label><button type="button" className="primary-btn" onClick={() => refreshMonthlyClose()} disabled={saving}>{saving ? "Actualizando..." : "Actualizar vista previa"}</button><div className="finance-note"><strong>Regla de cierre</strong><span>Debes resolver los movimientos sin conciliar y las excepciones abiertas antes de registrar una fotografía cerrada del período.</span></div>{monthlyClose?.status === "READY_TO_CLOSE" ? <><textarea placeholder="Nota interna del cierre (opcional)" value={monthlyCloseNote} onChange={(event) => setMonthlyCloseNote(event.target.value)} /><button type="button" className="primary-btn" onClick={registerMonthlyClose} disabled={saving}>Registrar cierre {monthlyClose.period}</button></> : null}</article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Resultado del período</span><h2>{monthlyClose?.period || monthlyClosePeriod}</h2></div><span>{monthlyClose?.status === "READY_TO_CLOSE" ? "Listo para cerrar" : "Requiere revisión"}</span></div>{monthlyClose ? <><div className="finance-migration-kpis"><div><small>Facturado</small><strong>{money(monthlyClose.metrics.issued)}</strong></div><div><small>Cobrado</small><strong>{money(monthlyClose.metrics.collected)}</strong></div><div><small>Pagado</small><strong>{money(monthlyClose.metrics.paidPayables)}</strong></div><div><small>Flujo bancario neto</small><strong>{money(monthlyClose.metrics.netBankFlow)}</strong></div></div><div className="finance-note"><strong>{monthlyClose.blockers.length ? `${monthlyClose.blockers.length} pendiente(s) por resolver` : "Sin bloqueos operativos"}</strong><span>{monthlyClose.blockers.length ? "Revisa conciliación y excepciones antes de cerrar." : "Puedes registrar una fotografía auditable del período."}</span></div>{monthlyClose.blockers.length ? <div className="finance-table">{monthlyClose.blockers.slice(0, 8).map((blocker) => <div key={blocker.id}><div><strong>{blocker.type === "MOVIMIENTO_SIN_CONCILIAR" ? "Movimiento sin conciliar" : "Excepción abierta"}</strong><span>{blocker.title}</span></div><button type="button" className="secondary-btn" onClick={() => selectTab(blocker.type === "MOVIMIENTO_SIN_CONCILIAR" ? "conciliacion" : "excepciones")}>Resolver</button></div>)}</div> : null}<button type="button" className="secondary-btn" onClick={downloadMonthlyCloseCsv}>Descargar CSV para contador</button></> : <p className="finance-empty">Selecciona un período para consolidar sus documentos y movimientos.</p>}</article></section> : null}
+          {activeTab === "planificacion" ? <section className="finance-grid"><form className="finance-card finance-form" onSubmit={submitBudget}><span className="finance-eyebrow">Etapa 5 · Planificación</span><h2>Presupuesto por categoría</h2><p>Define ingresos y egresos esperados. La ejecución se calcula con facturas y cuentas por pagar ya registradas.</p><label>Período<input type="month" value={planningPeriod} onChange={(event) => setPlanningPeriod(event.target.value)} /></label><input required placeholder="Categoría (ej. Honorarios, ventas, arriendo)" value={budgetForm.category} onChange={(event) => setBudgetForm({ ...budgetForm, category: event.target.value })} /><input type="number" min="0" placeholder="Ingreso presupuestado CLP" value={budgetForm.plannedIncome} onChange={(event) => setBudgetForm({ ...budgetForm, plannedIncome: event.target.value })} /><input type="number" min="0" placeholder="Egreso presupuestado CLP" value={budgetForm.plannedExpense} onChange={(event) => setBudgetForm({ ...budgetForm, plannedExpense: event.target.value })} /><textarea placeholder="Nota interna (opcional)" value={budgetForm.note} onChange={(event) => setBudgetForm({ ...budgetForm, note: event.target.value })} /><button className="primary-btn" disabled={saving}>Guardar presupuesto</button><button className="secondary-btn" type="button" onClick={() => refreshFinancePlanning()} disabled={saving}>Actualizar datos reales</button></form><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Presupuesto vs ejecución</span><h2>{financePlanning?.period || planningPeriod}</h2></div><span>{financePlanning?.categories.length || 0} categorías</span></div>{financePlanning ? <><div className="finance-migration-kpis"><div><small>Ingreso presupuestado</small><strong>{money(financePlanning.totals.plannedIncome)}</strong></div><div><small>Ingreso cobrado</small><strong>{money(financePlanning.totals.actualIncome)}</strong></div><div><small>Egreso presupuestado</small><strong>{money(financePlanning.totals.plannedExpense)}</strong></div><div><small>Egreso pagado</small><strong>{money(financePlanning.totals.actualExpense)}</strong></div></div><div className="finance-migration-table"><div><span>Categoría</span><span>Ingresos</span><span>Egresos</span><span>Acción</span></div>{financePlanning.categories.map((item) => <div key={`${item.id || "derived"}-${item.category}`}><span>{item.category}<small>Real: {money(item.actualIncome)} ingreso · {money(item.actualExpense)} egreso</small></span><span>{money(item.plannedIncome)}</span><span>{money(item.plannedExpense)}</span>{item.id ? <button type="button" className="secondary-btn" disabled={saving} onClick={() => removeBudget(item.id || "")}>Eliminar</button> : <span>Dato real</span>}</div>)}</div><h3>Flujo esperado</h3><div className="finance-migration-table"><div><span>Mes</span><span>Ingresos esperados</span><span>Egresos esperados</span><span>Flujo neto</span></div>{financePlanning.cashFlow.map((item) => <div key={item.period}><span>{item.period}</span><span>{money(item.expectedIncome)}</span><span>{money(item.expectedExpense)}</span><strong className={item.net < 0 ? "is-overdue" : ""}>{money(item.net)}</strong></div>)}</div></> : <p className="finance-empty">Selecciona un período para cargar presupuesto, ejecución y flujo proyectado.</p>}</article></section> : null}
           {activeTab === "integraciones" ? <section className="finance-grid finance-integrations-workspace">
             <article className="finance-card">
               <span className="finance-eyebrow">Fuentes del ciclo</span>

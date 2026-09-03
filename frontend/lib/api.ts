@@ -931,6 +931,59 @@ export type FinanceBankStatementPreview = {
   rows: Array<Record<string, unknown>>;
   sourceRows: Array<Record<string, unknown>>;
 };
+export type FinanceSiiDte = {
+  sourceFile: string;
+  documentTypeCode: string;
+  documentTypeName: string;
+  documentNumber: string;
+  issueDate: string | null;
+  emitterRut: string;
+  emitterName: string;
+  receiverRut: string;
+  receiverName: string;
+  amount: number;
+  currency: string;
+  side: "CUSTOMER" | "SUPPLIER" | null;
+  partyName: string;
+  partyRut: string | null;
+  fingerprint: string;
+  needsReview: boolean;
+  reviewReasons: string[];
+};
+export type FinanceSiiStatus = { configured: boolean; companyRut: string | null; environment: "certification" | "production"; certificateReference: string | null; manualDteImportReady: boolean; automationReady: boolean; message: string };
+export type FinanceSiiPreview = { companyRut: string; environment: string; maxFiles: number; summary: { total: number; review: number; customerDocuments: number; supplierDocuments: number; customerAmount: number; supplierAmount: number }; documents: FinanceSiiDte[] };
+export type FinanceOpenBankingConsent = {
+  id: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  bank: string | null;
+  alias: string;
+  accountLast4: string | null;
+  lastSyncAt: string | null;
+  lastSyncSummary: { imported?: number; duplicates?: number; requiresReview?: number } | null;
+};
+export type FinanceOpenBankingStatus = {
+  provider: string;
+  providerReady: boolean;
+  callbackConfigured: boolean;
+  consents: FinanceOpenBankingConsent[];
+  message: string;
+};
+export type FinanceMonthlyClosePreview = {
+  period: string;
+  generatedAt: string;
+  status: "READY_TO_CLOSE" | "REQUIRES_REVIEW" | string;
+  metrics: { issued: number; collected: number; registeredPayables: number; paidPayables: number; incoming: number; outgoing: number; netBankFlow: number; reconciliations: number; unreconciledMovements: number; openExceptions: number };
+  blockers: Array<{ type: string; title: string; id: string }>;
+  rows: Array<{ fecha: string; tipo: string; documento: string; contraparte: string; categoria: string; monto: number; saldo: number; estado: string }>;
+};
+export type FinancePlanning = {
+  period: string;
+  categories: Array<{ id: string | null; category: string; plannedIncome: number; plannedExpense: number; actualIncome: number; actualExpense: number; incomeVariance: number; expenseVariance: number }>;
+  totals: { plannedIncome: number; plannedExpense: number; actualIncome: number; actualExpense: number };
+  cashFlow: Array<{ period: string; expectedIncome: number; expectedExpense: number; net: number }>;
+};
 export type FinanceSyncHistoryEntry = {
   id: string;
   action: "NUBOX_SALES_SYNCED" | "NUBOX_SALES_SYNC_FAILED" | "FINANCE_POST_INGESTION_ANALYZED" | string;
@@ -1034,6 +1087,48 @@ export function previewFinanceBankStatementFile(file: File, account: { bankKey: 
 
 export function importFinanceBankStatement(input: { sourceFile: string; rows: Array<Record<string, unknown>>; bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceBankStatementPreview["summary"] }> {
   return request("/finance/bank-statements/import", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getFinanceOpenBankingStatus(): Promise<FinanceOpenBankingStatus> {
+  return request("/finance/open-banking/status");
+}
+
+export function prepareFinanceOpenBankingConsent(input: { bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<{ consent: { id: string; caseId: string; status: string; account: { bankKey: string; accountAlias: string; accountType: string; accountLast4: string | null } }; callbackUrl: string; providerReady: boolean; message: string }> {
+  return request("/finance/open-banking/consents", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getFinanceMonthlyClosePreview(period: string): Promise<FinanceMonthlyClosePreview> {
+  return request(`/finance/monthly-close/preview?period=${encodeURIComponent(period)}`);
+}
+
+export function registerFinanceMonthlyClose(input: { period: string; note?: string; confirmation: "CERRAR" }): Promise<{ close: IndustryRecord; preview: FinanceMonthlyClosePreview }> {
+  return request("/finance/monthly-close", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getFinancePlanning(period: string): Promise<FinancePlanning> {
+  return request(`/finance/planning?period=${encodeURIComponent(period)}`);
+}
+
+export function saveFinanceBudget(input: { period: string; category: string; plannedIncome?: number; plannedExpense?: number; note?: string }): Promise<{ budget: IndustryRecord; planning: FinancePlanning }> {
+  return request("/finance/budgets", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function deleteFinanceBudget(id: string): Promise<{ ok: true }> {
+  return request(`/finance/budgets/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function getFinanceSiiStatus(): Promise<FinanceSiiStatus> {
+  return request("/finance/sii/status");
+}
+
+export function previewFinanceSiiDtes(files: File[]): Promise<FinanceSiiPreview> {
+  const data = new FormData();
+  files.forEach((file) => data.append("files", file));
+  return request<FinanceSiiPreview>("/finance/sii/dte/preview-files", { method: "POST", body: data });
+}
+
+export function importFinanceSiiDtes(documents: FinanceSiiDte[]): Promise<{ imported: number; duplicates: number; requiresReview: number; summary: FinanceSiiPreview["summary"] }> {
+  return request("/finance/sii/dte/import", { method: "POST", body: JSON.stringify({ documents }) });
 }
 
 export function getFinanceSyncHistory(limit = 12): Promise<{ generatedAt: string; entries: FinanceSyncHistoryEntry[] }> {

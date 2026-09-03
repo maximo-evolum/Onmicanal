@@ -192,7 +192,15 @@ function fieldsForProvider(provider: ConnectionProvider): ProviderField[] {
     finance_nubox: [{ key: "accessToken", label: "x-api-key de Nubox", secret: true }, { key: "verifyToken", label: "Authorization de Nubox", secret: true, placeholder: "Bearer NP_SECRET_..." }],
     finance_defontana: [{ key: "companyCode", label: "Código de empresa" }, { key: "accessToken", label: "Clave API de Defontana", secret: true }],
     finance_softland: [{ key: "companyCode", label: "Código de empresa / sociedad" }, { key: "accessToken", label: "Clave API de Softland", secret: true }],
-    finance_sii: [{ key: "taxpayerRut", label: "RUT del contribuyente" }, { key: "accessToken", label: "Credencial o token autorizado", secret: true }]
+    // El SII no se configura con un token genérico. Su operación automatizada
+    // exige certificado digital y autorización externa; aquí solo persistimos
+    // datos públicos de referencia, nunca el certificado ni su clave.
+    finance_sii: [
+      { key: "companyRut", label: "RUT del contribuyente", placeholder: "76.123.456-7" },
+      { key: "environment", label: "Ambiente SII", options: ["Certificación", "Producción"] },
+      { key: "certificateReference", label: "Referencia del certificado", placeholder: "Ej. Certificado empresa vigente 2026" }
+    ],
+    finance_open_banking: [{ key: "companyRut", label: "RUT del titular o empresa", placeholder: "76.123.456-7" }]
   };
   return fields[provider.key] || [];
 }
@@ -304,7 +312,7 @@ export default function ConnectionsPage() {
         externalAccountId: form.externalAccountId,
         ...(form.accessToken ? { accessToken: form.accessToken } : {}),
         ...(form.verifyToken ? { verifyToken: form.verifyToken } : {}),
-        metadata: selected.key === "finance_bank_statements" ? { ...metadata, bankAccounts } : metadata,
+        metadata: ["finance_bank_statements", "finance_open_banking"].includes(selected.key) ? { ...metadata, bankAccounts } : metadata,
         isActive: form.isActive,
       });
       setConnectionActivity({ key: selected.key, stage: "Configuración guardada", progress: 100 });
@@ -728,8 +736,11 @@ export default function ConnectionsPage() {
                         </>
                       ) : (
                         <>
-                          {selected.key === "finance_bank_statements" ? (
-                            <FinanceBankAccountsEditor accounts={bankAccounts} setAccounts={setBankAccounts} />
+                          {["finance_bank_statements", "finance_open_banking"].includes(selected.key) ? (
+                            <>
+                              {selected.key === "finance_open_banking" ? <><p className="connection-form-help">El consentimiento se inicia después desde Finanzas OS. EVOLUM nunca solicita ni almacena claves bancarias.</p><ProviderFieldGrid provider={selected} form={form} setForm={setForm} /></> : null}
+                              <FinanceBankAccountsEditor accounts={bankAccounts} setAccounts={setBankAccounts} />
+                            </>
                           ) : <>
                             {selected.key !== "finance_nubox" ? <div className="connection-form-grid">
                               <label>
