@@ -304,17 +304,81 @@ function spreadsheetColumnIndex(reference) {
   return [...letters].reduce((total, letter) => (total * 26) + letter.charCodeAt(0) - 64, 0) - 1;
 }
 
-async function parseSpreadsheetFallback(buffer) {
-  const zip = await JSZip.loadAsync(buffer);
-  const worksheetPath = Object.keys(zip.files)
-    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name))
-    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))[0];
-  if (!worksheetPath) throw new Error("No se encontró una hoja de cálculo.");
+function decodeSpreadsheetText(buffer) {
+  const raw = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer || "");
+  if (raw[0] === 0xff && raw[1] === 0xfe) return raw.subarray(2).toString("utf16le");
+  if (raw[0] === 0xfe && raw[1] === 0xff) {
+    const swapped = Buffer.alloc(Math.max(0, raw.length - 2));
+    for (let index = 2; index < raw.length - 1; index += 2) {
+      swapped[index - 2] = raw[index + 1];
+      swapped[index - 1] = raw[index];
+    }
+    return swapped.toString("utf16le");
+  }
+  return raw.toString("utf8").replace(/\u0000/g, "");
+}
 
-  const sharedPath = Object.keys(zip.files).find((name) => /^xl\/sharedStrings\.xml$/i.test(name));
-  const sharedXml = sharedPath ? await zip.files[sharedPath].async("string") : "";
+function parseLegacySpreadsheet(buffer) {
+  const source = decodeSpreadsheetText(buffer);
+  const rawRows = [];
+  // Excel 2003 XML y exportaciones XML de bancos que mantienen las etiquetas
+  // Row/Cell aunque tengan una extensión .xlsx.
+  for (const rowMatch of source.matchAll(/<(?:[\w-]+:)?Row\b[^>]*>([\s\S]*?)<\/(?:[\w-]+:)?Row>/gi)) {
+    const row = [];
+    let fallbackIndex = 0;
+    for (const cellMatch of rowMatch[1].matchAll(/<(?:[\w-]+:)?Cell\b([^>]*)>([\s\S]*?)<\/(?:[\w-]+:)?Cell>/gi)) {
+      const declaredIndex = Number(cellMatch[1].match(/(?:[\w-]+:)?Index="(\d+)"/i)?.[1] || 0) - 1;
+      const targetIndex = declaredIndex >= 0 ? declaredIndex : fallbackIndex;
+      row[targetIndex] = xmlText(cellMatch[2]);
+      fallbackIndex = targetIndex + 1;
+    }
+    if (row.some((value) => cleanText(value))) rawRows.push(row);
+  }
+  if (rawRows.length) return rowsToObjects(rawRows);
+
+  // Algunos portales bancarios entregan una tabla HTML con extensión Excel.
+  for (const rowMatch of source.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const row = [...rowMatch[1].matchAll(/<(?:th|td)\b[^>]*>([\s\S]*?)<\/(?:th|td)>/gi)].map((cell) => xmlText(cell[1]));
+    if (row.some((value) => cleanText(value))) rawRows.push(row);
+  }
+  return rowsToObjects(rawRows);
+}
+
+function parseOdsSpreadsheet(source) {
+  const rawRows = [];
+  for (const rowMatch of source.matchAll(/<table:table-row\b[^>]*>([\s\S]*?)<\/table:table-row>/gi)) {
+    const row = [...rowMatch[1].matchAll(/<table:table-cell\b[^>]*>([\s\S]*?)<\/table:table-cell>/gi)].map((cell) => xmlText(cell[1]));
+    if (row.some((value) => cleanText(value))) rawRows.push(row);
+  }
+  return rowsToObjects(rawRows);
+}
+
+async function parseSpreadsheetFallback(buffer) {
+  let zip;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch {
+    const legacyRows = parseLegacySpreadsheet(buffer);
+    if (legacyRows.length) return legacyRows;
+    throw new Error("El archivo no contiene una planilla compatible.");
+  }
+  const entries = Object.entries(zip.files).map(([name, entry]) => ({ name: name.replace(/^\/+/, ""), entry }));
+  const worksheet = entries
+    .filter(({ name }) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name))
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }))[0];
+  if (!worksheet) {
+    const ods = entries.find(({ name }) => /^content\.xml$/i.test(name));
+    if (ods) {
+      const rows = parseOdsSpreadsheet(await ods.entry.async("string"));
+      if (rows.length) return rows;
+    }
+    throw new Error("No se encontró una hoja de cálculo.");
+  }
+
+  const shared = entries.find(({ name }) => /^xl\/sharedStrings\.xml$/i.test(name));
+  const sharedXml = shared ? await shared.entry.async("string") : "";
   const sharedStrings = [...sharedXml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/gi)].map((match) => xmlText(match[1]));
-  const sheetXml = await zip.files[worksheetPath].async("string");
+  const sheetXml = await worksheet.entry.async("string");
   const rawRows = [];
 
   for (const rowMatch of sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/gi)) {

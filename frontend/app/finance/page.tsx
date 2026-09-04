@@ -78,6 +78,7 @@ type NuboxResourceKind = "documento" | "productos" | "referencias";
 type NuboxResourcePanel = { documentId: string; title: string; value: unknown };
 type BankStatementAccountInput = { bankKey: string; accountAlias: string; accountType: string; accountLast4: string };
 type BankStatementQueueItem = { id: string; preview: FinanceBankStatementPreview; rows: Array<Record<string, unknown>>; account: BankStatementAccountInput };
+type BankStatementUploadProgress = { total: number; processed: number; ready: number; failed: number; currentFile: string; finished: boolean };
 
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
   { key: "resumen", label: "Resumen financiero", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
@@ -240,6 +241,8 @@ function FinanceWorkspace() {
   const [financeDocuments, setFinanceDocuments] = useState<FinanceDocument[]>([]);
   const [chileanBanks, setChileanBanks] = useState<ChileanBank[]>([]);
   const [bankStatementQueue, setBankStatementQueue] = useState<BankStatementQueueItem[]>([]);
+  const [bankStatementUploadProgress, setBankStatementUploadProgress] = useState<BankStatementUploadProgress | null>(null);
+  const [bankStatementUploadIssues, setBankStatementUploadIssues] = useState<Array<{ fileName: string; detail: string }>>([]);
   const [bankStatementForm, setBankStatementForm] = useState<BankStatementAccountInput>({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
   const [openBankingStatus, setOpenBankingStatus] = useState<FinanceOpenBankingStatus | null>(null);
   const [openBankingForm, setOpenBankingForm] = useState({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
@@ -609,21 +612,27 @@ function FinanceWorkspace() {
     const invalidFiles = files.filter((file) => !/\.(csv|xlsx|xlsm)$/i.test(file.name));
     if (invalidFiles.length) return setMessage("Selecciona solo cartolas CSV o Excel (.xlsx/.xlsm). Los PDF requieren revisión humana en Documentos.");
     setSaving(true);
+    const selectedFiles = files.slice(0, 10);
+    setBankStatementUploadIssues([]);
+    setBankStatementUploadProgress({ total: selectedFiles.length, processed: 0, ready: 0, failed: 0, currentFile: selectedFiles[0]?.name || "", finished: false });
     try {
       const ready: BankStatementQueueItem[] = [];
-      const errors: string[] = [];
-      for (const [index, file] of files.slice(0, 10).entries()) {
+      const errors: Array<{ fileName: string; detail: string }> = [];
+      for (const [index, file] of selectedFiles.entries()) {
+        setBankStatementUploadProgress({ total: selectedFiles.length, processed: index, ready: ready.length, failed: errors.length, currentFile: file.name, finished: false });
         try {
           const preview = await previewFinanceBankStatementFile(file, bankStatementForm);
           if (!preview.sourceRows.length) throw new Error("No se detectaron movimientos.");
           ready.push({ id: `${file.name}-${file.lastModified}-${Date.now()}-${index}`, preview, rows: preview.sourceRows, account: { ...bankStatementForm } });
         } catch (error) {
-          errors.push(`${file.name}: ${error instanceof Error ? error.message : "no se pudo leer"}`);
+          errors.push({ fileName: file.name, detail: error instanceof Error ? error.message : "No se pudo leer el archivo." });
         }
+        setBankStatementUploadProgress({ total: selectedFiles.length, processed: index + 1, ready: ready.length, failed: errors.length, currentFile: file.name, finished: index + 1 === selectedFiles.length });
       }
       if (ready.length) setBankStatementQueue((current) => [...current, ...ready]);
+      setBankStatementUploadIssues(errors);
       setMessage(errors.length
-        ? `${ready.length} cartola(s) lista(s). ${errors.length} archivo(s) requieren atención: ${errors.join(" · ")}`
+        ? `${ready.length} cartola(s) lista(s). ${errors.length} archivo(s) requieren atención; revisa el detalle de carga por archivo.`
         : `${ready.length} cartola(s) lista(s). Revisa cada resumen antes de incorporarlas a la conciliación.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo revisar la cartola."); }
     finally { setSaving(false); }
@@ -931,6 +940,7 @@ function FinanceWorkspace() {
               <input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos (opcional)" value={bankStatementForm.accountLast4} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} />
               <label className="finance-upload">Seleccionar una o más cartolas CSV o Excel<input type="file" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple onChange={previewBankStatement} disabled={saving} /></label>
               <p className="finance-muted">Puedes agregar hasta 10 archivos por selección. Si corresponden a bancos o cuentas distintas, ajusta el banco y cuenta en su tarjeta de revisión.</p>
+              {bankStatementUploadProgress ? <section className="finance-upload-progress" aria-live="polite"><div><strong>{bankStatementUploadProgress.finished ? "Revisión de archivos finalizada" : "Revisando cartolas"}</strong><span>{bankStatementUploadProgress.processed} de {bankStatementUploadProgress.total} archivo(s) · {bankStatementUploadProgress.ready} listos · {bankStatementUploadProgress.failed} con observaciones</span></div><progress value={bankStatementUploadProgress.processed} max={bankStatementUploadProgress.total}> {bankStatementUploadProgress.processed} de {bankStatementUploadProgress.total} </progress>{!bankStatementUploadProgress.finished && bankStatementUploadProgress.currentFile ? <small>Analizando: {bankStatementUploadProgress.currentFile}</small> : null}{bankStatementUploadIssues.length ? <ul>{bankStatementUploadIssues.map((issue) => <li key={`${issue.fileName}-${issue.detail}`}><b>{issue.fileName}</b><span>{issue.detail}</span></li>)}</ul> : null}</section> : null}
               <button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>
               {bankStatementQueue.length ? <div className="finance-note"><strong>{bankStatementQueue.length} cartola(s) preparada(s)</strong><span>Las cartolas repetidas se bloquean antes de importar. Los duplicados parciales se omiten y las filas incompletas quedan en revisión.</span><button type="button" className="primary-btn" disabled={saving || !bankStatementQueue.some((item) => !item.preview.duplicate?.blocked)} onClick={importBankStatements}>Incorporar {bankStatementQueue.filter((item) => !item.preview.duplicate?.blocked).length} cartola(s) nueva(s)</button></div> : null}
               <hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form>

@@ -96,3 +96,18 @@ test("recupera una cartola XLSX con metadatos de libro incompletos", async () =>
   assert.equal(row.amount, 125000);
   assert.equal(row.direction, "CREDIT");
 });
+
+test("recupera una exportación XML bancaria con extensión Excel", async () => {
+  const legacyXml = `<?xml version="1.0" encoding="utf-8"?>
+    <Workbook xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet><Table>
+      <Row><Cell><Data>Fecha</Data></Cell><Cell><Data>Glosa</Data></Cell><Cell><Data>Cargo/Abono</Data></Cell><Cell><Data>Monto</Data></Cell></Row>
+      <Row><Cell><Data>04/09/2026</Data></Cell><Cell><Data>Transferencia recibida</Data></Cell><Cell><Data>A</Data></Cell><Cell><Data>425.000</Data></Cell></Row>
+    </Table></Worksheet></Workbook>`;
+  const sourceRows = await readBankStatementFile({ originalname: "cartola-banco.xlsx", buffer: Buffer.from(legacyXml, "utf8") });
+  const [row] = normalizeBankStatementRows(sourceRows, { bankKey: "bancoestado" });
+
+  assert.equal(sourceRows.length, 1);
+  assert.equal(row.transactionDate, "2026-09-04");
+  assert.equal(row.direction, "CREDIT");
+  assert.equal(row.amount, 425000);
+});
