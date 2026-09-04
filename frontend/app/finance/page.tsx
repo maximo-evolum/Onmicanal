@@ -76,6 +76,8 @@ type FinanceTab = "resumen" | "facturas" | "sii" | "cartolas" | "banca_abierta" 
 type FinanceDocumentStatusFilter = "all" | "paid" | "cancelled" | "pending" | "overdue";
 type NuboxResourceKind = "documento" | "productos" | "referencias";
 type NuboxResourcePanel = { documentId: string; title: string; value: unknown };
+type BankStatementAccountInput = { bankKey: string; accountAlias: string; accountType: string; accountLast4: string };
+type BankStatementQueueItem = { id: string; preview: FinanceBankStatementPreview; rows: Array<Record<string, unknown>>; account: BankStatementAccountInput };
 
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
   { key: "resumen", label: "Resumen financiero", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
@@ -237,9 +239,8 @@ function FinanceWorkspace() {
   const [agentPolicy, setAgentPolicy] = useState<FinanceAgentPolicy | null>(null);
   const [financeDocuments, setFinanceDocuments] = useState<FinanceDocument[]>([]);
   const [chileanBanks, setChileanBanks] = useState<ChileanBank[]>([]);
-  const [bankStatementPreview, setBankStatementPreview] = useState<FinanceBankStatementPreview | null>(null);
-  const [bankStatementRows, setBankStatementRows] = useState<Array<Record<string, unknown>>>([]);
-  const [bankStatementForm, setBankStatementForm] = useState({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
+  const [bankStatementQueue, setBankStatementQueue] = useState<BankStatementQueueItem[]>([]);
+  const [bankStatementForm, setBankStatementForm] = useState<BankStatementAccountInput>({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
   const [openBankingStatus, setOpenBankingStatus] = useState<FinanceOpenBankingStatus | null>(null);
   const [openBankingForm, setOpenBankingForm] = useState({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
   const [openBankingCaseId, setOpenBankingCaseId] = useState<string | null>(null);
@@ -601,35 +602,62 @@ function FinanceWorkspace() {
   }
 
   async function previewBankStatement(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files || []);
     event.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
     if (!bankStatementForm.bankKey) return setMessage("Selecciona el banco de la cartola antes de cargar el archivo.");
-    if (!/\.(csv|xlsx|xlsm)$/i.test(file.name)) return setMessage("Selecciona una cartola CSV o Excel (.xlsx). Los PDF requieren una revisión humana.");
+    const invalidFiles = files.filter((file) => !/\.(csv|xlsx|xlsm)$/i.test(file.name));
+    if (invalidFiles.length) return setMessage("Selecciona solo cartolas CSV o Excel (.xlsx/.xlsm). Los PDF requieren revisión humana en Documentos.");
     setSaving(true);
     try {
-      const preview = await previewFinanceBankStatementFile(file, bankStatementForm);
-      if (!preview.sourceRows.length) throw new Error("No se detectaron movimientos en la cartola.");
-      setBankStatementPreview(preview);
-      setBankStatementRows(preview.sourceRows);
-      setMessage("Vista previa lista. Revisa el resumen antes de incorporar movimientos a la conciliación.");
+      const ready: BankStatementQueueItem[] = [];
+      const errors: string[] = [];
+      for (const [index, file] of files.slice(0, 10).entries()) {
+        try {
+          const preview = await previewFinanceBankStatementFile(file, bankStatementForm);
+          if (!preview.sourceRows.length) throw new Error("No se detectaron movimientos.");
+          ready.push({ id: `${file.name}-${file.lastModified}-${Date.now()}-${index}`, preview, rows: preview.sourceRows, account: { ...bankStatementForm } });
+        } catch (error) {
+          errors.push(`${file.name}: ${error instanceof Error ? error.message : "no se pudo leer"}`);
+        }
+      }
+      if (ready.length) setBankStatementQueue((current) => [...current, ...ready]);
+      setMessage(errors.length
+        ? `${ready.length} cartola(s) lista(s). ${errors.length} archivo(s) requieren atención: ${errors.join(" · ")}`
+        : `${ready.length} cartola(s) lista(s). Revisa cada resumen antes de incorporarlas a la conciliación.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo revisar la cartola."); }
     finally { setSaving(false); }
   }
 
-  async function importBankStatement() {
-    if (!bankStatementPreview || !bankStatementRows.length) return;
+  function updateQueuedBankStatement(id: string, update: Partial<BankStatementAccountInput>) {
+    setBankStatementQueue((current) => current.map((item) => item.id === id ? { ...item, account: { ...item.account, ...update } } : item));
+  }
+
+  async function importBankStatements() {
+    if (!bankStatementQueue.length) return;
     setSaving(true);
     try {
-      const result = await importFinanceBankStatement({
-        sourceFile: bankStatementPreview.sourceFile,
-        rows: bankStatementRows,
-        ...bankStatementForm
-      });
-      setBankStatementPreview(null);
-      setBankStatementRows([]);
-      setMessage(`${result.imported} movimientos incorporados. ${result.duplicateRows} duplicados se omitieron y ${result.requiresReview} fila(s) quedaron para revisión.`);
-      await load();
+      let imported = 0;
+      let duplicateRows = 0;
+      let requiresReview = 0;
+      const pending: BankStatementQueueItem[] = [];
+      const errors: string[] = [];
+      for (const item of bankStatementQueue) {
+        try {
+          const result = await importFinanceBankStatement({ sourceFile: item.preview.sourceFile, rows: item.rows, ...item.account });
+          imported += result.imported;
+          duplicateRows += result.duplicateRows;
+          requiresReview += result.requiresReview;
+        } catch (error) {
+          pending.push(item);
+          errors.push(`${item.preview.sourceFile}: ${error instanceof Error ? error.message : "no se pudo importar"}`);
+        }
+      }
+      setBankStatementQueue(pending);
+      setMessage(errors.length
+        ? `${imported} movimientos incorporados. Quedaron ${pending.length} cartola(s) pendientes: ${errors.join(" · ")}`
+        : `${imported} movimientos incorporados desde las cartolas seleccionadas. ${duplicateRows} duplicados se omitieron y ${requiresReview} fila(s) quedaron para revisión.`);
+      if (imported || requiresReview) await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo importar la cartola."); }
     finally { setSaving(false); }
   }
@@ -890,7 +918,33 @@ function FinanceWorkspace() {
 
           {activeTab === "sii" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Etapa 2 · SII / DTE</span><h2>Incorporar documentos tributarios electrónicos</h2><p>Importa DTE XML reales emitidos o recibidos. EVOLUM identifica automáticamente si corresponden a una factura de cliente o a una cuenta por pagar, usando el RUT configurado para la empresa.</p><div className="finance-note"><strong>{siiStatus?.configured ? "Configuración SII registrada" : "Configuración SII pendiente"}</strong><span>{siiStatus?.message || "Revisando configuración tributaria..."}</span>{siiStatus?.companyRut ? <span>RUT configurado: {siiStatus.companyRut} · Ambiente: {siiStatus.environment === "production" ? "Producción" : "Certificación"}</span> : null}</div>{!siiStatus?.manualDteImportReady ? <button type="button" className="primary-btn" onClick={() => window.location.assign("/connections")}>Configurar SII en Centro de Conexiones</button> : <><label className="finance-upload">Seleccionar uno o más DTE XML<input type="file" accept=".xml,text/xml,application/xml" multiple onChange={previewSiiDtes} disabled={saving} /></label><p className="finance-muted">No se emite, anula ni envía ningún DTE desde esta pantalla. La automatización con el SII queda bloqueada hasta contar con certificado y autorización externa vigentes.</p></>}{siiPreview ? <div className="finance-note"><strong>Vista previa: {siiPreview.summary.total} DTE</strong><span>{siiPreview.summary.customerDocuments} de clientes · {money(siiPreview.summary.customerAmount)}</span><span>{siiPreview.summary.supplierDocuments} de proveedores · {money(siiPreview.summary.supplierAmount)}</span><span>{siiPreview.summary.review ? `${siiPreview.summary.review} requieren revisión.` : "Todos están asociados al RUT configurado."}</span><button type="button" className="primary-btn" onClick={importSiiDtes} disabled={saving}>Incorporar DTE revisados</button></div> : null}</article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Validación previa</span><h2>Documentos detectados</h2></div>{siiPreview ? <span>{siiPreview.documents.length} XML</span> : null}</div>{siiPreview ? <div className="finance-migration-table"><div><span>Documento</span><span>Contraparte</span><span>Monto</span><span>Destino</span></div>{siiPreview.documents.map((document) => <div key={document.fingerprint} className={document.needsReview ? "needs-review" : ""}><span>{document.documentTypeName} · {document.documentNumber}</span><span>{document.partyName}<small>{document.partyRut || "RUT por revisar"}</small></span><span>{money(document.amount)}</span><span>{document.needsReview ? "Revisar" : document.side === "SUPPLIER" ? "Cuenta por pagar" : "Factura de cliente"}</span></div>)}</div> : <p className="finance-empty">Configura el RUT tributario y selecciona DTE XML para verlos aquí antes de importar.</p>}</article></section> : null}
 
-          {activeTab === "cartolas" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Importación multi-banco</span><h2>Importar cartola bancaria</h2><p>Funciona con cartolas CSV y Excel exportadas por los bancos establecidos en Chile. Primero revisas los movimientos; después decides si incorporarlos a la conciliación.</p><label>Banco de la cartola<select value={bankStatementForm.bankKey} onChange={(event) => setBankStatementForm({ ...bankStatementForm, bankKey: event.target.value })}><option value="">Selecciona un banco</option>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name} · CMF {bank.cmfCode}</option>)}</select></label><input placeholder="Nombre visible de la cuenta (ej. Recaudación)" value={bankStatementForm.accountAlias} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountAlias: event.target.value })} /><label>Tipo de cuenta<select value={bankStatementForm.accountType} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountType: event.target.value })}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label><input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos (opcional)" value={bankStatementForm.accountLast4} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} /><label className="finance-upload">Seleccionar cartola CSV o Excel<input type="file" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={previewBankStatement} disabled={saving} /></label><button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>{bankStatementPreview ? <div className="finance-note"><strong>Vista previa: {bankStatementPreview.account.bank}</strong><span>{bankStatementPreview.summary.totalRows} filas · Abonos {money(bankStatementPreview.summary.credits)} · Cargos {money(bankStatementPreview.summary.debits)}</span><span>{bankStatementPreview.summary.reviewRows ? `${bankStatementPreview.summary.reviewRows} filas requieren revisión.` : "Sin filas incompletas detectadas."}</span><button type="button" className="primary-btn" disabled={saving} onClick={importBankStatement}>Incorporar movimientos</button></div> : null}<hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form></article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliación</span><h2>Movimientos cargados</h2></div><span>{records.length} movimientos</span></div>{bankStatementPreview ? <div className="finance-migration-preview"><h3>Primeras filas detectadas</h3><div className="finance-migration-table"><div><span>Fecha</span><span>Descripción</span><span>Monto</span><span>Estado</span></div>{bankStatementPreview.rows.slice(0, 8).map((row) => <div key={String(row.rowNumber)} className={row.needsReview ? "needs-review" : ""}><span>{shortDate(row.transactionDate)}</span><span>{financeLabel(row.description)}</span><span>{money(row.amount)}</span><span>{row.needsReview ? "Revisar" : row.direction === "DEBIT" ? "Cargo" : "Abono"}</span></div>)}</div></div> : null}<FinanceTable records={records} kind="movement" query={search} /></article></section> : null}
+          {activeTab === "cartolas" ? <section className="finance-grid">
+            <article className="finance-card finance-form">
+              <span className="finance-eyebrow">Importación multi-banco</span>
+              <h2>Importar una o más cartolas</h2>
+              <p>Selecciona varias cartolas CSV o Excel a la vez. Cada una se revisa por separado antes de incorporarla; nada se envía a conciliación sin tu confirmación.</p>
+              <label>Banco predeterminado de las cartolas<select value={bankStatementForm.bankKey} onChange={(event) => setBankStatementForm({ ...bankStatementForm, bankKey: event.target.value })}><option value="">Selecciona un banco</option>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name} · CMF {bank.cmfCode}</option>)}</select></label>
+              <input placeholder="Nombre visible de la cuenta (ej. Recaudación)" value={bankStatementForm.accountAlias} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountAlias: event.target.value })} />
+              <label>Tipo de cuenta<select value={bankStatementForm.accountType} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountType: event.target.value })}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label>
+              <input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos (opcional)" value={bankStatementForm.accountLast4} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} />
+              <label className="finance-upload">Seleccionar una o más cartolas CSV o Excel<input type="file" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple onChange={previewBankStatement} disabled={saving} /></label>
+              <p className="finance-muted">Puedes agregar hasta 10 archivos por selección. Si corresponden a bancos o cuentas distintas, ajusta el banco y cuenta en su tarjeta de revisión.</p>
+              <button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>
+              {bankStatementQueue.length ? <div className="finance-note"><strong>{bankStatementQueue.length} cartola(s) preparada(s)</strong><span>Importarás solamente las filas que confirmes. Los duplicados se omiten y las filas incompletas quedan en revisión.</span><button type="button" className="primary-btn" disabled={saving} onClick={importBankStatements}>Incorporar {bankStatementQueue.length} cartola(s)</button></div> : null}
+              <hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form>
+            </article>
+            <article className="finance-card">
+              <div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliación</span><h2>Cartolas preparadas y movimientos cargados</h2></div><span>{records.length} movimientos</span></div>
+              {bankStatementQueue.map((item) => <article className="finance-bank-statement-preview" key={item.id}>
+                <div className="finance-card-heading"><div><h3>{item.preview.sourceFile}</h3><small>{item.preview.summary.totalRows} filas · Abonos {money(item.preview.summary.credits)} · Cargos {money(item.preview.summary.debits)}</small></div><button type="button" className="finance-link-button" disabled={saving} onClick={() => setBankStatementQueue((current) => current.filter((queued) => queued.id !== item.id))}>Quitar</button></div>
+                <div className="finance-bank-statement-account"><label>Banco<select value={item.account.bankKey} onChange={(event) => updateQueuedBankStatement(item.id, { bankKey: event.target.value })}>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name}</option>)}</select></label><input placeholder="Nombre de cuenta" value={item.account.accountAlias} onChange={(event) => updateQueuedBankStatement(item.id, { accountAlias: event.target.value })} /><input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos" value={item.account.accountLast4} onChange={(event) => updateQueuedBankStatement(item.id, { accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} /></div>
+                {item.preview.summary.reviewRows ? <p className="finance-muted">{item.preview.summary.reviewRows} fila(s) quedarán en Excepciones para revisión humana.</p> : null}
+                <div className="finance-migration-table"><div><span>Fecha</span><span>Descripción</span><span>Monto</span><span>Estado</span></div>{item.preview.rows.slice(0, 6).map((row) => <div key={`${item.id}-${String(row.rowNumber)}`} className={row.needsReview ? "needs-review" : ""}><span>{shortDate(row.transactionDate)}</span><span>{financeLabel(row.description)}</span><span>{money(row.amount)}</span><span>{row.needsReview ? "Revisar" : row.direction === "DEBIT" ? "Cargo" : "Abono"}</span></div>)}</div>
+              </article>)}
+              {!bankStatementQueue.length ? <p className="finance-empty">Selecciona una o más cartolas para ver cada resumen aquí antes de importarlas.</p> : null}
+              <FinanceTable records={records} kind="movement" query={search} />
+            </article>
+          </section> : null}
 
           {activeTab === "banca_abierta" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Etapa 3 · Banca abierta</span><h2>Vincular una cuenta con consentimiento</h2><p>El titular se autentica únicamente en la experiencia autorizada del proveedor. EVOLUM no solicita, recibe ni guarda claves bancarias.</p><label>Banco<select value={openBankingForm.bankKey} onChange={(event) => setOpenBankingForm({ ...openBankingForm, bankKey: event.target.value })}><option value="">Selecciona un banco</option>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name} · CMF {bank.cmfCode}</option>)}</select></label><input placeholder="Nombre visible de la cuenta (ej. Cuenta de operaciones)" value={openBankingForm.accountAlias} onChange={(event) => setOpenBankingForm({ ...openBankingForm, accountAlias: event.target.value })} /><label>Tipo de cuenta<select value={openBankingForm.accountType} onChange={(event) => setOpenBankingForm({ ...openBankingForm, accountType: event.target.value })}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label><input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos (opcional)" value={openBankingForm.accountLast4} onChange={(event) => setOpenBankingForm({ ...openBankingForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} /><button className="primary-btn" type="button" disabled={saving} onClick={prepareOpenBankingConsent}>{saving ? "Preparando..." : "Preparar consentimiento"}</button>{openBankingCaseId ? <div className="finance-note"><strong>Consentimiento preparado</strong><span>Código de seguimiento: <b>{openBankingCaseId}</b></span><span>Úsalo únicamente en el flujo autorizado de Flöid para esta cuenta.</span></div> : null}<div className="finance-note"><strong>¿Aún no tienes proveedor de banca abierta?</strong><span>La carga de cartolas continúa disponible y sirve como respaldo mientras se completa la habilitación externa.</span><button type="button" className="finance-link-button" onClick={() => selectTab("cartolas")}>Ir a cartolas</button></div></article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Estado de la integración</span><h2>Sincronizaciones autorizadas</h2></div><span>{openBankingStatus?.provider || "Proveedor"}</span></div><div className="finance-note"><strong>{openBankingStatus?.providerReady ? "Proveedor habilitado" : "Proveedor pendiente de activación"}</strong><span>{openBankingStatus?.message || "Revisando disponibilidad de banca abierta..."}</span></div><div className="finance-migration-table"><div><span>Cuenta</span><span>Estado</span><span>Última sincronización</span><span>Resultado</span></div>{openBankingStatus?.consents.map((consent) => <div key={consent.id}><span>{chileanBanks.find((bank) => bank.key === consent.bank)?.name || consent.bank || "Banco"}<small>{consent.alias}{consent.accountLast4 ? ` · ****${consent.accountLast4}` : ""}</small></span><span>{financeLabel(consent.status)}</span><span>{consent.lastSyncAt ? shortDate(consent.lastSyncAt) : "Aún sin movimientos"}</span><span>{consent.lastSyncSummary ? `${consent.lastSyncSummary.imported || 0} incorporados · ${consent.lastSyncSummary.requiresReview || 0} por revisar` : "Esperando autorización"}</span></div>)}{!openBankingStatus?.consents.length && !loading ? <p className="finance-empty">Aún no hay consentimientos preparados para esta cuenta.</p> : null}</div></article></section> : null}
 

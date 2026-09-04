@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { createHash } from "node:crypto";
 import { normalizeFinanceDocumentData, validateFinanceDocumentData } from "./finance-document.service.js";
 
@@ -255,12 +256,85 @@ function parseDelimitedText(text) {
 }
 
 async function parseSpreadsheet(buffer) {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer);
-  const sheet = workbook.worksheets.find((candidate) => candidate.actualRowCount > 1) || workbook.worksheets[0];
-  if (!sheet) return [];
+  try {
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    const sheets = Array.isArray(workbook.worksheets) ? workbook.worksheets : [];
+    const sheet = sheets.find((candidate) => candidate.actualRowCount > 1) || sheets[0];
+    if (!sheet) return parseSpreadsheetFallback(buffer);
+    const rawRows = [];
+    sheet.eachRow({ includeEmpty: false }, (row) => rawRows.push(row.values.slice(1).map(valueFromSheetCell)));
+    const rows = rowsToObjects(rawRows);
+    // Un libro con metadatos incompletos puede abrirse sin error pero no
+    // exponer hojas a ExcelJS. La segunda lectura evita devolver una cartola
+    // vacía cuando el XML de la hoja sí contiene movimientos.
+    return rows.length ? rows : parseSpreadsheetFallback(buffer);
+  } catch (primaryError) {
+    // Algunos bancos generan archivos XLSX válidos para Excel pero con el
+    // catálogo de hojas incompleto. ExcelJS no siempre los abre; se intenta
+    // una lectura segura de la primera hoja antes de pedir al usuario que lo
+    // vuelva a exportar.
+    try {
+      return await parseSpreadsheetFallback(buffer);
+    } catch {
+      const detail = primaryError instanceof Error ? primaryError.message : "";
+      if (/sheets|workbook|zip|central directory/i.test(detail)) {
+        throw new Error("No se pudo leer la estructura del Excel. Ábrelo en Excel o Google Sheets, guárdalo como Libro de Excel (.xlsx) o expórtalo a CSV y vuelve a intentarlo.");
+      }
+      throw new Error("No se pudo leer el archivo Excel. Verifica que no esté protegido con contraseña ni dañado, o expórtalo nuevamente como .xlsx o CSV.");
+    }
+  }
+}
+
+function decodeXml(value) {
+  return String(value || "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+function xmlText(value) {
+  return decodeXml(String(value || "").replace(/<[^>]+>/g, "")).trim();
+}
+
+function spreadsheetColumnIndex(reference) {
+  const letters = String(reference || "").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "";
+  return [...letters].reduce((total, letter) => (total * 26) + letter.charCodeAt(0) - 64, 0) - 1;
+}
+
+async function parseSpreadsheetFallback(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const worksheetPath = Object.keys(zip.files)
+    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(name))
+    .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }))[0];
+  if (!worksheetPath) throw new Error("No se encontró una hoja de cálculo.");
+
+  const sharedPath = Object.keys(zip.files).find((name) => /^xl\/sharedStrings\.xml$/i.test(name));
+  const sharedXml = sharedPath ? await zip.files[sharedPath].async("string") : "";
+  const sharedStrings = [...sharedXml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/gi)].map((match) => xmlText(match[1]));
+  const sheetXml = await zip.files[worksheetPath].async("string");
   const rawRows = [];
-  sheet.eachRow({ includeEmpty: false }, (row) => rawRows.push(row.values.slice(1).map(valueFromSheetCell)));
+
+  for (const rowMatch of sheetXml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/gi)) {
+    const row = [];
+    let fallbackIndex = 0;
+    for (const cellMatch of rowMatch[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/gi)) {
+      const attributes = cellMatch[1] || "";
+      const body = cellMatch[2] || "";
+      const reference = attributes.match(/\br="([^"]+)"/i)?.[1] || "";
+      const index = spreadsheetColumnIndex(reference);
+      const targetIndex = index >= 0 ? index : fallbackIndex;
+      const type = attributes.match(/\bt="([^"]+)"/i)?.[1] || "";
+      const rawValue = body.match(/<v\b[^>]*>([\s\S]*?)<\/v>/i)?.[1] || "";
+      const inline = body.match(/<is\b[^>]*>([\s\S]*?)<\/is>/i)?.[1] || "";
+      const value = type === "s" ? sharedStrings[Number(rawValue)] || "" : xmlText(rawValue || inline);
+      row[targetIndex] = value;
+      fallbackIndex = targetIndex + 1;
+    }
+    if (row.some((value) => cleanText(value))) rawRows.push(row);
+  }
   return rowsToObjects(rawRows);
 }
 

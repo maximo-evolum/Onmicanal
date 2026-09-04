@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import {
   bankMovementFingerprint,
   normalizeBankStatementRows,
@@ -71,4 +72,21 @@ test("reconoce la plantilla Santander con carátula previa y marca Cargo/Abono",
   assert.equal(rows[1].direction, "DEBIT");
   assert.equal(rows[1].signedAmount, -450000);
   assert.equal(rows[1].branch, "Principal");
+});
+
+test("recupera una cartola XLSX con metadatos de libro incompletos", async () => {
+  const zip = new JSZip();
+  zip.file("xl/worksheets/sheet1.xml", `<?xml version="1.0" encoding="UTF-8"?>
+    <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
+      <row r="1"><c r="A1" t="inlineStr"><is><t>Fecha</t></is></c><c r="B1" t="inlineStr"><is><t>Descripción</t></is></c><c r="C1" t="inlineStr"><is><t>Abono</t></is></c></row>
+      <row r="2"><c r="A2" t="inlineStr"><is><t>01/09/2026</t></is></c><c r="B2" t="inlineStr"><is><t>Pago cliente</t></is></c><c r="C2"><v>125000</v></c></row>
+    </sheetData></worksheet>`);
+  const sourceRows = await readBankStatementFile({ originalname: "cartola-exportada.xlsx", buffer: await zip.generateAsync({ type: "nodebuffer" }) });
+  const [row] = normalizeBankStatementRows(sourceRows, { bankKey: "santander_chile" });
+
+  assert.equal(sourceRows.length, 1);
+  assert.equal(row.transactionDate, "2026-09-01");
+  assert.equal(row.description, "Pago cliente");
+  assert.equal(row.amount, 125000);
+  assert.equal(row.direction, "CREDIT");
 });
