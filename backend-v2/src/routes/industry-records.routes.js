@@ -13,6 +13,7 @@ import { evaluateMetadataRecord } from "../services/metadata-quality.service.js"
 import { redactMetadataForRole } from "../lib/metadata-access.js";
 import { runWorkflowsForEvent } from "./workflows.routes.js";
 import { runFinancePostIngestionAnalysis } from "../services/finance-automation.service.js";
+import { canMutateFinanceRecord, financeActionForRecordMutation } from "../services/finance-security.service.js";
 
 export const industryRecordsRouter = Router();
 
@@ -128,6 +129,23 @@ async function assertRecordModule(req, recordType) {
   if (role === "SUPER_ADMIN") return true;
   if (!isModuleAllowedForIndustry(module, req.tenant?.industry)) return false;
   return ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant });
+}
+
+function assertFinanceRecordMutation(req, res, recordType) {
+  const action = financeActionForRecordMutation(recordType);
+  if (!action || canMutateFinanceRecord(req.user?.role, recordType)) return true;
+  console.warn("[FINANCE_RECORD_MUTATION_FORBIDDEN]", {
+    userId: req.user?.id,
+    tenantId: req.tenantId,
+    role: req.user?.role,
+    recordType,
+    action
+  });
+  res.status(403).json({
+    error: "Tu rol no tiene permiso para modificar este registro financiero.",
+    action
+  });
+  return false;
 }
 
 async function evaluateRecordMetadata(tenantId, recordType, data) {
@@ -369,6 +387,7 @@ industryRecordsRouter.delete("/industry-records/brokers/:userId", requireRole(RO
 industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     const recordType = normalizeRecordType(req.body?.recordType);
+    if (!assertFinanceRecordMutation(req, res, recordType)) return;
     if (!(await assertRecordModule(req, recordType))) {
       return res.status(403).json({ error: `Modulo no habilitado para ${recordType}` });
     }
@@ -446,6 +465,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       where: { id: req.params.id, tenantId: req.tenantId }
     });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
+    if (!assertFinanceRecordMutation(req, res, existing.recordType)) return;
     if (!(await assertRecordModule(req, existing.recordType))) {
       return res.status(403).json({ error: `Modulo no habilitado para ${existing.recordType}` });
     }
@@ -499,6 +519,7 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
       where: { id: req.params.id, tenantId: req.tenantId }
     });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
+    if (!assertFinanceRecordMutation(req, res, existing.recordType)) return;
     if (!(await assertRecordModule(req, existing.recordType))) {
       return res.status(403).json({ error: `Modulo no habilitado para ${existing.recordType}` });
     }
@@ -526,6 +547,7 @@ industryRecordsRouter.delete("/industry-records/:id", requireRole(ROLE_GROUPS.MA
   try {
     const existing = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
+    if (!assertFinanceRecordMutation(req, res, existing.recordType)) return;
     await prisma.industryRecord.delete({ where: { id: existing.id } });
     await recordAuditLog(req, "INDUSTRY_RECORD_DELETED", existing.recordType, existing.id, { recordType: existing.recordType, title: existing.title });
     res.json({ ok: true });
