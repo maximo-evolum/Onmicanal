@@ -15420,6 +15420,39 @@ textarea:focus {
 .finance-sync-history span { color: #6c7180; white-space: nowrap; }
 @media (max-width: 760px) { .finance-client-table > div { grid-template-columns: minmax(150px,1fr) .8fr .9fr; }.finance-client-table > div > :last-child { display: none; }.finance-indicator-layout { grid-template-columns: 1fr; }.finance-integration-grid article { grid-template-columns: 10px minmax(0,1fr); }.finance-integration-grid article > b { grid-column: 2; } }
 
+/* Carga de cartolas: este formulario no usa la grilla genérica de altas.
+   La carga, la confirmación y el ingreso manual son tres acciones distintas. */
+.finance-grid:has(.finance-bank-upload-form) .finance-bank-upload-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: stretch; }
+.finance-bank-upload-intro h2 { margin: 5px 0 7px; }
+.finance-bank-upload-intro p { margin: 0; max-width: 760px; }
+.finance-bank-account-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 11px; padding: 14px; border: 1px solid #dbe6e2; border-radius: 14px; background: #fbfdfc; }
+.finance-bank-account-form label { display: grid; gap: 6px; min-width: 0; color: #50616a; font-size: 12px; font-weight: 800; }
+.finance-bank-upload-control { display: grid; gap: 11px; padding: 16px; border: 1px solid #c9e2dd; border-radius: 16px; background: linear-gradient(135deg, #f5fcfa, #f8fbff); }
+.finance-bank-upload-control .finance-upload { margin: 0; border-color: #079a9d; background: #fff; color: #174d58; box-shadow: inset 0 0 0 1px rgba(7,154,157,.04); }
+.finance-bank-upload-control .finance-muted { margin: 0; }
+.finance-upload-progress { gap: 10px; margin: 2px 0; padding: 14px; border-color: #b8ddd6; border-radius: 13px; background: #fff; box-shadow: 0 5px 14px rgba(27,108,107,.06); }
+.finance-upload-progress-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.finance-upload-progress-heading > div { display: grid; gap: 3px; }
+.finance-upload-progress-heading strong { color: #183c48; font-size: 13px; }
+.finance-upload-progress-heading small { color: #627681; font-size: 12px; }
+.finance-upload-progress-heading > b { display: grid; place-items: center; flex: 0 0 auto; min-width: 46px; min-height: 28px; padding: 0 8px; border-radius: 999px; color: #087b7d; background: #e2f5f1; font-size: 12px; }
+.finance-upload-progress-track { height: 10px; overflow: hidden; border-radius: 999px; background: #dcebe8; box-shadow: inset 0 1px 2px rgba(13,82,80,.08); }
+.finance-upload-progress-track i { display: block; height: 100%; min-width: 0; border-radius: inherit; background: linear-gradient(90deg, #079a9d, #22bca8); box-shadow: 0 0 12px rgba(7,154,157,.3); transition: width .28s ease; }
+.finance-upload-current { overflow: hidden; color: #476570 !important; text-overflow: ellipsis; white-space: nowrap; }
+.finance-bank-import-ready { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #bfe4d4; border-radius: 13px; background: #f0fbf6; }
+.finance-bank-import-ready > div { display: grid; gap: 3px; }
+.finance-bank-import-ready strong { color: #176044; }
+.finance-bank-import-ready span { color: #4d6c62; font-size: 12px; line-height: 1.45; }
+.finance-bank-import-ready .primary-btn { flex: 0 0 auto; width: auto !important; min-width: 230px !important; }
+.finance-bank-manual { display: grid; gap: 12px; padding-top: 18px; border-top: 1px solid #dce6e3; }
+.finance-bank-manual > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.finance-bank-manual h3,.finance-bank-manual p { margin: 0; }
+.finance-bank-manual p { color: #71808a; font-size: 12px; }
+.finance-bank-manual form { display: grid; grid-template-columns: minmax(130px,.7fr) minmax(150px,.8fr) minmax(200px,1.3fr) minmax(170px,1fr) auto; gap: 10px; align-items: center; }
+.finance-bank-manual form .primary-btn { width: auto !important; min-width: 160px; }
+@media (max-width: 1000px) { .finance-bank-account-form { grid-template-columns: repeat(2, minmax(0,1fr)); }.finance-bank-manual form { grid-template-columns: repeat(2, minmax(0,1fr)); }.finance-bank-manual form .primary-btn { grid-column: 1 / -1; width: max-content !important; } }
+@media (max-width: 620px) { .finance-bank-account-form,.finance-bank-manual form { grid-template-columns: 1fr; }.finance-bank-import-ready,.finance-bank-manual > div { align-items: stretch; flex-direction: column; }.finance-bank-import-ready .primary-btn,.finance-bank-manual form .primary-btn { width: 100% !important; min-width: 0; }.finance-upload-progress-heading { align-items: center; }.finance-upload-current { max-width: 100%; } }
+
 /* El ciclo es una superficie oscura en ambos modos: no debe heredar tinta del tema claro. */
 .finance-cycle {
   border-color: rgba(120, 96, 214, .6);
@@ -17619,3 +17652,7 @@ html[data-theme="dark"] .realty-capture-section { background: color-mix(in srgb,
 .broker-maintenance-quotes { display:grid; gap:14px; margin-top:18px; padding:18px; border:1px solid #dcebe8; border-radius:16px; background:#f8fffe; }.broker-maintenance-quotes h3 { margin:0; color:#008c91; font-size:11px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }.broker-maintenance-quotes p { margin:5px 0 0; color:#667787; font-size:13px; }.broker-maintenance-quote-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }.broker-maintenance-quote-list article { display:grid; gap:6px; padding:13px; border:1px solid #d5e6e2; border-radius:12px; background:#fff; }.broker-maintenance-quote-list article>b { color:#263441; }.broker-maintenance-quote-list span,.broker-maintenance-quote-list small { color:#637787; font-size:12px; }.broker-maintenance-quote-list button { justify-self:start; margin-top:4px; }.broker-quote-form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; padding-top:4px; }.broker-quote-form label { display:grid; gap:5px; color:#526273; font-size:12px; font-weight:800; }.broker-quote-form input,.broker-quote-form select { width:100%; min-height:40px; box-sizing:border-box; padding:9px 10px; border:1px solid #cadbd8; border-radius:9px; background:#fff; color:#273441; font:inherit; font-weight:600; }.broker-quote-form .secondary-btn { align-self:end; min-height:40px; }
 :root[data-theme="dark"] .broker-maintenance-quotes { border-color:rgba(119,231,224,.2); background:#16132a; }:root[data-theme="dark"] .broker-maintenance-quotes p,:root[data-theme="dark"] .broker-maintenance-quote-list span,:root[data-theme="dark"] .broker-maintenance-quote-list small { color:#c1bbd4; }:root[data-theme="dark"] .broker-maintenance-quote-list article { border-color:rgba(198,181,255,.22); background:#211b3c; }:root[data-theme="dark"] .broker-maintenance-quote-list article>b { color:#fff; }:root[data-theme="dark"] .broker-quote-form label { color:#d8d0e9; }:root[data-theme="dark"] .broker-quote-form input,:root[data-theme="dark"] .broker-quote-form select { border-color:rgba(198,181,255,.25); color:#f5f1ff; background:#211b3c; }
 @media (max-width: 820px) { .broker-maintenance-quote-list,.broker-quote-form { grid-template-columns:1fr; }.broker-quote-form .secondary-btn { width:100%; } }
+
+/* Debe ir después de la grilla genérica de formularios: Cartolas tiene una
+   composición operativa propia y no puede comprimirse en cuatro columnas. */
+.finance-grid:has(.finance-bank-upload-form) .finance-bank-upload-form { grid-template-columns: minmax(0, 1fr) !important; align-items: stretch !important; }

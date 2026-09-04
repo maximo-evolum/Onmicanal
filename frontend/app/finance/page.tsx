@@ -78,7 +78,7 @@ type NuboxResourceKind = "documento" | "productos" | "referencias";
 type NuboxResourcePanel = { documentId: string; title: string; value: unknown };
 type BankStatementAccountInput = { bankKey: string; accountAlias: string; accountType: string; accountLast4: string };
 type BankStatementQueueItem = { id: string; preview: FinanceBankStatementPreview; rows: Array<Record<string, unknown>>; account: BankStatementAccountInput };
-type BankStatementUploadProgress = { total: number; processed: number; ready: number; failed: number; currentFile: string; finished: boolean };
+type BankStatementUploadProgress = { phase: "REVIEW" | "IMPORT"; total: number; processed: number; ready: number; failed: number; currentFile: string; finished: boolean };
 
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
   { key: "resumen", label: "Resumen financiero", module: "finance_analytics", detail: "Cartera, flujo esperado y estado de la operacion." },
@@ -614,12 +614,12 @@ function FinanceWorkspace() {
     setSaving(true);
     const selectedFiles = files.slice(0, 10);
     setBankStatementUploadIssues([]);
-    setBankStatementUploadProgress({ total: selectedFiles.length, processed: 0, ready: 0, failed: 0, currentFile: selectedFiles[0]?.name || "", finished: false });
+    setBankStatementUploadProgress({ phase: "REVIEW", total: selectedFiles.length, processed: 0, ready: 0, failed: 0, currentFile: selectedFiles[0]?.name || "", finished: false });
     try {
       const ready: BankStatementQueueItem[] = [];
       const errors: Array<{ fileName: string; detail: string }> = [];
       for (const [index, file] of selectedFiles.entries()) {
-        setBankStatementUploadProgress({ total: selectedFiles.length, processed: index, ready: ready.length, failed: errors.length, currentFile: file.name, finished: false });
+        setBankStatementUploadProgress({ phase: "REVIEW", total: selectedFiles.length, processed: index, ready: ready.length, failed: errors.length, currentFile: file.name, finished: false });
         try {
           const preview = await previewFinanceBankStatementFile(file, bankStatementForm);
           if (!preview.sourceRows.length) throw new Error("No se detectaron movimientos.");
@@ -627,7 +627,7 @@ function FinanceWorkspace() {
         } catch (error) {
           errors.push({ fileName: file.name, detail: error instanceof Error ? error.message : "No se pudo leer el archivo." });
         }
-        setBankStatementUploadProgress({ total: selectedFiles.length, processed: index + 1, ready: ready.length, failed: errors.length, currentFile: file.name, finished: index + 1 === selectedFiles.length });
+        setBankStatementUploadProgress({ phase: "REVIEW", total: selectedFiles.length, processed: index + 1, ready: ready.length, failed: errors.length, currentFile: file.name, finished: index + 1 === selectedFiles.length });
       }
       if (ready.length) setBankStatementQueue((current) => [...current, ...ready]);
       setBankStatementUploadIssues(errors);
@@ -647,13 +647,15 @@ function FinanceWorkspace() {
     const importable = bankStatementQueue.filter((item) => !item.preview.duplicate?.blocked);
     if (!importable.length) return setMessage("No se puede importar: las cartolas preparadas ya fueron cargadas anteriormente. Quítalas de la lista o selecciona archivos nuevos.");
     setSaving(true);
+    setBankStatementUploadProgress({ phase: "IMPORT", total: importable.length, processed: 0, ready: 0, failed: 0, currentFile: importable[0]?.preview.sourceFile || "", finished: false });
     try {
       let imported = 0;
       let duplicateRows = 0;
       let requiresReview = 0;
       const pending: BankStatementQueueItem[] = [];
       const errors: string[] = [];
-      for (const item of importable) {
+      for (const [index, item] of importable.entries()) {
+        setBankStatementUploadProgress({ phase: "IMPORT", total: importable.length, processed: index, ready: imported, failed: errors.length, currentFile: item.preview.sourceFile, finished: false });
         try {
           const result = await importFinanceBankStatement({ sourceFile: item.preview.sourceFile, fileFingerprint: item.preview.fileFingerprint, rows: item.rows, ...item.account });
           imported += result.imported;
@@ -663,6 +665,7 @@ function FinanceWorkspace() {
           pending.push(item);
           errors.push(`${item.preview.sourceFile}: ${error instanceof Error ? error.message : "no se pudo importar"}`);
         }
+        setBankStatementUploadProgress({ phase: "IMPORT", total: importable.length, processed: index + 1, ready: imported, failed: errors.length, currentFile: item.preview.sourceFile, finished: index + 1 === importable.length });
       }
       setBankStatementQueue([...bankStatementQueue.filter((item) => item.preview.duplicate?.blocked), ...pending]);
       setMessage(errors.length
@@ -864,6 +867,10 @@ function FinanceWorkspace() {
   }
 
   const canManageFinance = ["OWNER", "ADMIN", "SUPER_ADMIN"].includes(String(agent?.role || "").toUpperCase());
+  const bankStatementProgressPercent = bankStatementUploadProgress?.total
+    ? Math.round((bankStatementUploadProgress.processed / bankStatementUploadProgress.total) * 100)
+    : 0;
+  const bankStatementBusy = Boolean(bankStatementUploadProgress && !bankStatementUploadProgress.finished);
 
   return (
     <ModuleGate moduleKey="finance_analytics">
@@ -930,20 +937,17 @@ function FinanceWorkspace() {
           {activeTab === "sii" ? <section className="finance-grid"><article className="finance-card finance-form"><span className="finance-eyebrow">Etapa 2 · SII / DTE</span><h2>Incorporar documentos tributarios electrónicos</h2><p>Importa DTE XML reales emitidos o recibidos. EVOLUM identifica automáticamente si corresponden a una factura de cliente o a una cuenta por pagar, usando el RUT configurado para la empresa.</p><div className="finance-note"><strong>{siiStatus?.configured ? "Configuración SII registrada" : "Configuración SII pendiente"}</strong><span>{siiStatus?.message || "Revisando configuración tributaria..."}</span>{siiStatus?.companyRut ? <span>RUT configurado: {siiStatus.companyRut} · Ambiente: {siiStatus.environment === "production" ? "Producción" : "Certificación"}</span> : null}</div>{!siiStatus?.manualDteImportReady ? <button type="button" className="primary-btn" onClick={() => window.location.assign("/connections")}>Configurar SII en Centro de Conexiones</button> : <><label className="finance-upload">Seleccionar uno o más DTE XML<input type="file" accept=".xml,text/xml,application/xml" multiple onChange={previewSiiDtes} disabled={saving} /></label><p className="finance-muted">No se emite, anula ni envía ningún DTE desde esta pantalla. La automatización con el SII queda bloqueada hasta contar con certificado y autorización externa vigentes.</p></>}{siiPreview ? <div className="finance-note"><strong>Vista previa: {siiPreview.summary.total} DTE</strong><span>{siiPreview.summary.customerDocuments} de clientes · {money(siiPreview.summary.customerAmount)}</span><span>{siiPreview.summary.supplierDocuments} de proveedores · {money(siiPreview.summary.supplierAmount)}</span><span>{siiPreview.summary.review ? `${siiPreview.summary.review} requieren revisión.` : "Todos están asociados al RUT configurado."}</span><button type="button" className="primary-btn" onClick={importSiiDtes} disabled={saving}>Incorporar DTE revisados</button></div> : null}</article><article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Validación previa</span><h2>Documentos detectados</h2></div>{siiPreview ? <span>{siiPreview.documents.length} XML</span> : null}</div>{siiPreview ? <div className="finance-migration-table"><div><span>Documento</span><span>Contraparte</span><span>Monto</span><span>Destino</span></div>{siiPreview.documents.map((document) => <div key={document.fingerprint} className={document.needsReview ? "needs-review" : ""}><span>{document.documentTypeName} · {document.documentNumber}</span><span>{document.partyName}<small>{document.partyRut || "RUT por revisar"}</small></span><span>{money(document.amount)}</span><span>{document.needsReview ? "Revisar" : document.side === "SUPPLIER" ? "Cuenta por pagar" : "Factura de cliente"}</span></div>)}</div> : <p className="finance-empty">Configura el RUT tributario y selecciona DTE XML para verlos aquí antes de importar.</p>}</article></section> : null}
 
           {activeTab === "cartolas" ? <section className="finance-grid">
-            <article className="finance-card finance-form">
-              <span className="finance-eyebrow">Importación multi-banco</span>
-              <h2>Importar una o más cartolas</h2>
-              <p>Selecciona varias cartolas a la vez. EVOLUM identifica si son CSV, TXT, Excel, XML/HTML bancario o PDF con texto y las adapta a una tabla de movimientos antes de importarlas.</p>
-              <label>Banco predeterminado de las cartolas<select value={bankStatementForm.bankKey} onChange={(event) => setBankStatementForm({ ...bankStatementForm, bankKey: event.target.value })}><option value="">Selecciona un banco</option>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name} · CMF {bank.cmfCode}</option>)}</select></label>
-              <input placeholder="Nombre visible de la cuenta (ej. Recaudación)" value={bankStatementForm.accountAlias} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountAlias: event.target.value })} />
-              <label>Tipo de cuenta<select value={bankStatementForm.accountType} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountType: event.target.value })}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label>
-              <input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos (opcional)" value={bankStatementForm.accountLast4} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} />
-              <label className="finance-upload">Seleccionar una o más cartolas<input type="file" accept=".csv,.txt,.xlsx,.xlsm,.pdf,text/csv,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple onChange={previewBankStatement} disabled={saving} /></label>
-              <p className="finance-muted">Formatos compatibles: CSV, TXT delimitado, Excel (.xlsx/.xlsm), exportaciones XML/HTML y PDF con texto seleccionable. Puedes agregar hasta 10 archivos; si son de bancos o cuentas distintas, ajústalos en su tarjeta de revisión.</p>
-              {bankStatementUploadProgress ? <section className="finance-upload-progress" aria-live="polite"><div><strong>{bankStatementUploadProgress.finished ? "Revisión de archivos finalizada" : "Revisando cartolas"}</strong><span>{bankStatementUploadProgress.processed} de {bankStatementUploadProgress.total} archivo(s) · {bankStatementUploadProgress.ready} listos · {bankStatementUploadProgress.failed} con observaciones</span></div><progress value={bankStatementUploadProgress.processed} max={bankStatementUploadProgress.total}> {bankStatementUploadProgress.processed} de {bankStatementUploadProgress.total} </progress>{!bankStatementUploadProgress.finished && bankStatementUploadProgress.currentFile ? <small>Analizando: {bankStatementUploadProgress.currentFile}</small> : null}{bankStatementUploadIssues.length ? <ul>{bankStatementUploadIssues.map((issue) => <li key={`${issue.fileName}-${issue.detail}`}><b>{issue.fileName}</b><span>{issue.detail}</span></li>)}</ul> : null}</section> : null}
-              <button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>
-              {bankStatementQueue.length ? <div className="finance-note"><strong>{bankStatementQueue.length} cartola(s) preparada(s)</strong><span>Las cartolas repetidas se bloquean antes de importar. Los duplicados parciales se omiten y las filas incompletas quedan en revisión.</span><button type="button" className="primary-btn" disabled={saving || !bankStatementQueue.some((item) => !item.preview.duplicate?.blocked)} onClick={importBankStatements}>Incorporar {bankStatementQueue.filter((item) => !item.preview.duplicate?.blocked).length} cartola(s) nueva(s)</button></div> : null}
-              <hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form>
+            <article className="finance-card finance-form finance-bank-upload-form">
+              <div className="finance-bank-upload-intro"><span className="finance-eyebrow">Importación multi-banco</span><h2>Importar una o más cartolas</h2><p>Selecciona varias cartolas a la vez. EVOLUM las revisa antes de incorporarlas a conciliación.</p></div>
+              <div className="finance-bank-account-form"><label>Banco predeterminado<select value={bankStatementForm.bankKey} onChange={(event) => setBankStatementForm({ ...bankStatementForm, bankKey: event.target.value })}><option value="">Selecciona un banco</option>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name} · CMF {bank.cmfCode}</option>)}</select></label><label>Nombre de la cuenta<input placeholder="Ej. Recaudación" value={bankStatementForm.accountAlias} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountAlias: event.target.value })} /></label><label>Tipo de cuenta<select value={bankStatementForm.accountType} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountType: event.target.value })}><option>Cuenta corriente</option><option>Cuenta vista</option><option>Cuenta ahorro</option><option>Otra</option></select></label><label>Últimos 4 dígitos<input inputMode="numeric" maxLength={4} placeholder="Opcional" value={bankStatementForm.accountLast4} onChange={(event) => setBankStatementForm({ ...bankStatementForm, accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} /></label></div>
+              <section className="finance-bank-upload-control">
+                <label className="finance-upload">Seleccionar una o más cartolas<input type="file" accept=".csv,.txt,.xlsx,.xlsm,.pdf,text/csv,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple onChange={previewBankStatement} disabled={saving || bankStatementBusy} /></label>
+                <p className="finance-muted">CSV, TXT, Excel, XML/HTML bancario y PDF con texto. Máximo 10 archivos por selección.</p>
+                {bankStatementUploadProgress ? <section className="finance-upload-progress" aria-live="polite"><div className="finance-upload-progress-heading"><div><strong>{bankStatementUploadProgress.phase === "IMPORT" ? (bankStatementUploadProgress.finished ? "Importación finalizada" : "Incorporando cartolas") : (bankStatementUploadProgress.finished ? "Revisión finalizada" : "Revisando cartolas")}</strong><small>{bankStatementUploadProgress.phase === "IMPORT" ? "Los movimientos se están guardando de forma segura." : "Cada archivo se valida antes de incorporarlo."}</small></div><b>{bankStatementProgressPercent}%</b></div><div className="finance-upload-progress-track" role="progressbar" aria-valuenow={bankStatementProgressPercent} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${bankStatementProgressPercent}%` }} /></div><span>{bankStatementUploadProgress.processed} de {bankStatementUploadProgress.total} archivo(s) · {bankStatementUploadProgress.ready} listos · {bankStatementUploadProgress.failed} con observaciones</span>{!bankStatementUploadProgress.finished && bankStatementUploadProgress.currentFile ? <small className="finance-upload-current">Procesando: {bankStatementUploadProgress.currentFile}</small> : null}{bankStatementUploadIssues.length ? <ul>{bankStatementUploadIssues.map((issue) => <li key={`${issue.fileName}-${issue.detail}`}><b>{issue.fileName}</b><span>{issue.detail}</span></li>)}</ul> : null}</section> : null}
+                {bankStatementQueue.length ? <div className="finance-bank-import-ready"><div><strong>{bankStatementQueue.length} cartola(s) preparada(s)</strong><span>Las repetidas se bloquean antes de importar; duplicados parciales y filas incompletas quedan en revisión.</span></div><button type="button" className="primary-btn" disabled={saving || bankStatementBusy || !bankStatementQueue.some((item) => !item.preview.duplicate?.blocked)} onClick={importBankStatements}>{bankStatementBusy && bankStatementUploadProgress?.phase === "IMPORT" ? "Incorporando..." : `Incorporar ${bankStatementQueue.filter((item) => !item.preview.duplicate?.blocked).length} cartola(s) nueva(s)`}</button></div> : null}
+                <button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>
+              </section>
+              <section className="finance-bank-manual"><div><h3>Registrar movimiento manual</h3><p>Úsalo sólo si el movimiento no viene en una cartola.</p></div><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving || bankStatementBusy}>Agregar movimiento</button></form></section>
             </article>
             <article className="finance-card">
               <div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliación</span><h2>Cartolas preparadas y movimientos cargados</h2></div><span>{records.length} movimientos</span></div>
