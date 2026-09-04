@@ -31,6 +31,7 @@ import {
   MAX_BANK_STATEMENT_FILE_BYTES,
   MAX_BANK_STATEMENT_ROWS,
   bankMovementFingerprint,
+  detectBankStatementFileFormat,
   normalizeBankStatementRows,
   readBankStatementFile,
   summarizeBankStatementRows,
@@ -884,9 +885,9 @@ financeRouter.get("/finance/banks/catalog", async (req, res) => {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
     res.json({
       banks: CHILEAN_FINANCIAL_INSTITUTIONS,
-      supportedFormats: ["CSV", "XLSX"],
+      supportedFormats: ["CSV", "TXT delimitado", "XLSX/XLSM", "Excel XML/HTML", "PDF con texto"],
       maxRows: MAX_BANK_STATEMENT_ROWS,
-      note: "Puedes importar cartolas exportadas por cualquier banco del catálogo CMF. La conexión automática por API depende de la autorización de cada banco."
+      note: "Puedes importar cartolas exportadas por cualquier banco del catálogo CMF. Los PDF deben contener texto seleccionable; una cartola escaneada se deriva a revisión humana. La conexión automática por API depende de la autorización de cada banco."
     });
   } catch (error) {
     console.error("Finance bank catalog error:", error);
@@ -897,6 +898,7 @@ financeRouter.get("/finance/banks/catalog", async (req, res) => {
 financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GROUPS.MANAGERS), bankStatementUpload.single("file"), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const format = detectBankStatementFileFormat(req.file);
     const sourceRows = await readBankStatementFile(req.file);
     const rows = normalizeBankStatementRows(sourceRows, req.body || {}, { limit: MAX_BANK_STATEMENT_ROWS });
     if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos en la cartola." });
@@ -919,6 +921,8 @@ financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GRO
     const summary = withBankStatementNet(summarizeBankStatementRows(rows));
     res.json({
       sourceFile,
+      detectedFormat: format.label,
+      conversion: format.conversion,
       fileFingerprint,
       maxRows: MAX_BANK_STATEMENT_ROWS,
       account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },

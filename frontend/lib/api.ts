@@ -953,6 +953,8 @@ export type FinanceBankStatementAccount = { bank: string; bankKey: string; cmfCo
 export type FinanceBankStatementPreview = {
   sourceFile: string;
   fileFingerprint?: string;
+  detectedFormat?: string;
+  conversion?: string;
   maxRows: number;
   account: FinanceBankStatementAccount;
   summary: { totalRows: number; reviewRows: number; credits: number; debits: number; net: number };

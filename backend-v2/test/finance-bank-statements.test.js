@@ -4,7 +4,9 @@ import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import {
   bankMovementFingerprint,
+  detectBankStatementFileFormat,
   normalizeBankStatementRows,
+  parsePdfBankStatementText,
   readBankStatementFile,
   summarizeBankStatementRows,
   withBankStatementNet
@@ -110,4 +112,39 @@ test("recupera una exportación XML bancaria con extensión Excel", async () => 
   assert.equal(row.transactionDate, "2026-09-04");
   assert.equal(row.direction, "CREDIT");
   assert.equal(row.amount, 425000);
+});
+
+test("detecta el contenido real aunque la extensión de la cartola sea engañosa", () => {
+  const xml = detectBankStatementFileFormat({ originalname: "cartola-abril.xlsx", buffer: Buffer.from("<?xml version=\"1.0\"?><Workbook><Table /></Workbook>") });
+  const text = detectBankStatementFileFormat({ originalname: "cartola.txt", buffer: Buffer.from("Fecha;Glosa;Monto\n01/09/2026;Pago cliente;250.000") });
+  const pdf = detectBankStatementFileFormat({ originalname: "cartola.pdf", buffer: Buffer.from("%PDF-1.7\n") });
+
+  assert.equal(xml.key, "LEGACY_SPREADSHEET");
+  assert.equal(text.key, "DELIMITED_TEXT");
+  assert.equal(pdf.key, "PDF");
+});
+
+test("lee texto delimitado aunque el banco lo haya nombrado como Excel", async () => {
+  const sourceRows = await readBankStatementFile({
+    originalname: "cartola-renombrada.xlsx",
+    buffer: Buffer.from("Fecha;Glosa;Monto;Cargo/Abono\n05/09/2026;Pago cliente;620.000;A", "utf8")
+  });
+  const [row] = normalizeBankStatementRows(sourceRows, { bankKey: "bancoestado" });
+
+  assert.equal(sourceRows.length, 1);
+  assert.equal(row.transactionDate, "2026-09-05");
+  assert.equal(row.direction, "CREDIT");
+  assert.equal(row.amount, 620000);
+});
+
+test("convierte texto de una cartola PDF en movimientos revisables", () => {
+  const rows = parsePdfBankStatementText(`Cartola cuenta corriente\n02/09/2026 Transferencia cliente factura 145 ABONO $ 1.250.000\n03/09/2026 Pago proveedor logística CARGO $ 450.000`);
+  const normalized = normalizeBankStatementRows(rows, { bankKey: "bancoestado", accountAlias: "Recaudación" });
+
+  assert.equal(rows.length, 2);
+  assert.equal(normalized[0].transactionDate, "2026-09-02");
+  assert.equal(normalized[0].direction, "CREDIT");
+  assert.equal(normalized[0].amount, 1250000);
+  assert.equal(normalized[1].direction, "DEBIT");
+  assert.equal(normalized[1].amount, 450000);
 });

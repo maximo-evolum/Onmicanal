@@ -226,7 +226,7 @@ function rowsToObjects(rows) {
     .filter((row) => Object.values(row).some((value) => cleanText(value)));
 }
 
-function parseDelimitedText(text) {
+export function parseDelimitedText(text) {
   const source = String(text || "").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
   const delimiter = detectDelimiter(source);
   const rows = [];
@@ -407,7 +407,7 @@ export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION
   if (file.buffer.length > maxBytes) throw new Error(`El archivo supera el límite de ${Math.round(maxBytes / (1024 * 1024))} MB para una revisión segura.`);
   const name = cleanText(file.originalname || file.name).toLocaleLowerCase("es");
   if (/\.(xlsx|xlsm)$/i.test(name)) return parseSpreadsheet(file.buffer);
-  if (/\.csv$/i.test(name)) return parseDelimitedText(file.buffer.toString("utf8"));
+  if (/\.(csv|txt)$/i.test(name)) return parseDelimitedText(decodeSpreadsheetText(file.buffer));
   throw new Error("Usa un archivo CSV o Excel (.xlsx). Los PDF e imágenes se adjuntan en Documentos para revisión humana.");
 }
 

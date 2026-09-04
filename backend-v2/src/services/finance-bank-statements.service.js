@@ -1,9 +1,93 @@
 import { createHash } from "node:crypto";
+import pdfParse from "pdf-parse";
 import { getChileanFinancialInstitution } from "../lib/finance-integrations.js";
 import { readHistoricalFinanceFile } from "./finance-migration.service.js";
 
 export const MAX_BANK_STATEMENT_ROWS = 1000;
 export const MAX_BANK_STATEMENT_FILE_BYTES = 12 * 1024 * 1024;
+
+function fileName(file) {
+  return cleanText(file?.originalname || file?.name, "cartola");
+}
+
+function looksLikeDelimitedText(source) {
+  const sample = String(source || "").replace(/^\uFEFF/, "").trim();
+  if (!sample || /[\u0000-\u0008\u000E-\u001F]/.test(sample)) return false;
+  const lines = sample.split(/\r?\n/).filter(Boolean).slice(0, 5);
+  return lines.some((line) => [";", ",", "\t"].some((separator) => line.split(separator).length >= 2));
+}
+
+// La extensión no es suficiente: algunos bancos descargan HTML/XML con nombre
+// .xlsx. Detectamos el contenido antes de delegar el parseo.
+export function detectBankStatementFileFormat(file) {
+  const buffer = Buffer.isBuffer(file?.buffer) ? file.buffer : Buffer.from(file?.buffer || "");
+  const prefix = buffer.subarray(0, 1024).toString("utf8").replace(/^\uFEFF/, "").trimStart();
+  const name = fileName(file).toLocaleLowerCase("es");
+  if (buffer.subarray(0, 5).toString("ascii") === "%PDF-") {
+    return { key: "PDF", label: "PDF con texto", conversion: "Se extraerá la tabla de movimientos para revisión." };
+  }
+  if (buffer[0] === 0x50 && buffer[1] === 0x4b) {
+    return { key: "SPREADSHEET", label: /\.xlsm$/i.test(name) ? "Excel habilitado para macros" : "Libro de Excel", conversion: "Lectura directa de la planilla." };
+  }
+  if (/^<(?:\?xml|!doctype\s+html|\/?(?:html|table)|(?:[\w-]+:)?Workbook)\b/i.test(prefix)) {
+    return { key: "LEGACY_SPREADSHEET", label: "Exportación XML/HTML de Excel", conversion: "Se adaptará a una tabla de movimientos." };
+  }
+  if (looksLikeDelimitedText(prefix)) {
+    return { key: "DELIMITED_TEXT", label: /\.txt$/i.test(name) ? "Archivo de texto delimitado" : "CSV o texto delimitado", conversion: "Se adaptará a una tabla de movimientos." };
+  }
+  return { key: "UNKNOWN", label: "Formato no reconocido", conversion: "Requiere una exportación compatible." };
+}
+
+function normalizePdfNumber(value) {
+  return parseNumber(String(value || "").replace(/\s/g, ""));
+}
+
+function extractPdfAmountTokens(line) {
+  return [...String(line || "").matchAll(/\(?-?\$?\s*(?:\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:,\d+)?)\)?/g)]
+    .map((match) => ({ raw: match[0], amount: normalizePdfNumber(match[0]), index: match.index ?? 0 }))
+    .filter((item) => item.amount > 0);
+}
+
+function pdfDirectionMarker(value) {
+  const marker = normalizeKey(value);
+  if (/(^|_)(abono|haber|credito|credit|ingreso|deposito|deposit)(_|$)/.test(marker)) return "ABONO";
+  if (/(^|_)(cargo|debe|debito|egreso|retiro|comision|impuesto)(_|$)/.test(marker)) return "CARGO";
+  return "";
+}
+
+// Un PDF con texto puede variar mucho entre bancos. Esta conversión es
+// deliberadamente conservadora: sólo genera una fila cuando reconoce fecha,
+// monto y una glosa. PDFs escaneados o maquetados como imagen quedan para
+// revisión, evitando inventar movimientos financieros.
+export function parsePdfBankStatementText(text) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n").map((line) => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const rows = [];
+  for (const line of lines) {
+    const dateMatch = line.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/);
+    if (!dateMatch) continue;
+    const amounts = extractPdfAmountTokens(line.replace(dateMatch[0], " "));
+    if (!amounts.length) continue;
+    const marker = pdfDirectionMarker(line);
+    // El número de comprobante puede estar intercalado en la misma línea.
+    // Priorizamos el importe monetario de mayor magnitud y lo dejamos siempre
+    // en la vista previa para que la persona valide antes de importarlo.
+    const amountToken = [...amounts].sort((left, right) => right.amount - left.amount)[0];
+    const description = line
+      .replace(dateMatch[0], " ")
+      .replace(/\(?-?\$?\s*(?:\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:,\d+)?)\)?/g, " ")
+      .replace(/\b(?:abono|haber|credito|cr[eé]dito|ingreso|dep[oó]sito|cargo|debe|d[eé]bito|egreso|retiro)\b/gi, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    if (description.length < 3) continue;
+    rows.push({
+      Fecha: dateMatch[1],
+      Descripción: description.slice(0, 400),
+      Monto: amountToken.raw,
+      "Cargo/Abono": marker
+    });
+  }
+  return rows;
+}
 
 function cleanText(value, fallback = "") {
   const normalized = String(value ?? "").trim();
@@ -178,8 +262,29 @@ export function summarizeBankStatementRows(rows) {
 }
 
 export async function readBankStatementFile(file) {
-  if (!file?.buffer?.length) throw new Error("Selecciona una cartola CSV o Excel para revisar.");
+  if (!file?.buffer?.length) throw new Error("Selecciona una cartola CSV, Excel, TXT o PDF con texto para revisar.");
   if (file.buffer.length > MAX_BANK_STATEMENT_FILE_BYTES) throw new Error("La cartola supera el límite de 12 MB para una importación segura.");
+  const format = detectBankStatementFileFormat(file);
+  if (format.key === "PDF") {
+    const parsed = await pdfParse(file.buffer);
+    const rows = parsePdfBankStatementText(parsed.text);
+    if (!rows.length) {
+      throw new Error("El PDF no contiene una tabla de movimientos legible. Si es una cartola escaneada o una imagen, expórtala desde el banco como CSV/Excel o súbela a Documentos para revisión humana.");
+    }
+    return rows;
+  }
+  if (format.key === "UNKNOWN") {
+    throw new Error("No se reconoció el contenido del archivo. Usa CSV, TXT delimitado, Excel (.xlsx/.xlsm) o un PDF que contenga texto seleccionable.");
+  }
+  // Las exportaciones XML/HTML suelen llevar extensión .xls/.xlsx. También
+  // puede ocurrir lo inverso: un CSV con nombre .xlsx. Forzamos el lector
+  // correcto según el contenido, no según el nombre entregado por el banco.
+  if (format.key === "LEGACY_SPREADSHEET" || format.key === "SPREADSHEET") {
+    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.xlsx` }, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES });
+  }
+  if (format.key === "DELIMITED_TEXT") {
+    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.csv` }, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES });
+  }
   return readHistoricalFinanceFile(file, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES });
 }
 
