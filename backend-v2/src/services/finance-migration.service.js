@@ -315,7 +315,11 @@ function decodeSpreadsheetText(buffer) {
     }
     return swapped.toString("utf16le");
   }
-  return raw.toString("utf8").replace(/\u0000/g, "");
+  const utf8 = raw.toString("utf8").replace(/\u0000/g, "");
+  // CSV de bancos chilenos suele venir en Windows-1252/Latin-1. Si UTF-8
+  // produjo caracteres de reemplazo, la variante Latin-1 preserva los
+  // encabezados con tildes y permite reconocer sus columnas.
+  return utf8.includes("\uFFFD") ? raw.toString("latin1").replace(/\u0000/g, "") : utf8;
 }
 
 function parseLegacySpreadsheet(buffer) {

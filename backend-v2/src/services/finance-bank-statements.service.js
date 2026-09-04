@@ -113,6 +113,34 @@ function getValue(row, aliases) {
   return "";
 }
 
+// Exportaciones de bancos no siempre conservan el encabezado literal. Por
+// ejemplo, CSV codificados en Windows-1252 pueden terminar como
+// "DESCRIPCI_N MOVIMIENTO" al ser leídos por otro sistema. Este respaldo sólo
+// usa nombres de columna, nunca intenta adivinar desde el monto.
+function getValueByHeaderPattern(row, patterns) {
+  const entries = Object.entries(row || {});
+  for (const pattern of patterns) {
+    const found = entries.find(([key, value]) => pattern.test(normalizeKey(key)) && cleanText(value));
+    if (found) return cleanText(found[1]);
+  }
+  return "";
+}
+
+function bankStatementDescription(row) {
+  return getValue(row, [
+    "descripcion", "descripción", "descripcion_movimiento", "descripción movimiento", "descripcion de movimiento",
+    "glosa", "glosa_movimiento", "detalle", "detalle_movimiento", "movimiento", "concepto", "narrativa", "description"
+  ]) || getValueByHeaderPattern(row, [
+    /^descripci.*movimiento/, /^glosa.*movimiento/, /^detalle.*movimiento/,
+    /^descripci/, /^glosa/, /^detalle/, /^concepto/, /^narrativa/
+  ]);
+}
+
+function bankStatementDirectionMarker(row) {
+  return getValue(row, ["cargo_abono", "cargo/abono", "tipo_movimiento", "tipo", "debe_haber", "naturaleza", "signo"])
+    || getValueByHeaderPattern(row, [/^cargo.*abono/, /^debe.*haber/, /^tipo.*movimiento/, /^naturaleza/, /^signo/]);
+}
+
 function parseNumber(value) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const source = cleanText(value)
@@ -175,7 +203,7 @@ function sourceAmount(row) {
   // Santander usa una sola columna MONTO y una marca CARGO/ABONO: A es un
   // abono y C un cargo. El importe puede venir con o sin signo, por lo que la
   // marca tiene prioridad cuando está disponible.
-  const marker = normalizeKey(getValue(row, ["cargo_abono", "cargo/abono", "tipo_movimiento", "tipo", "debe_haber"]));
+  const marker = normalizeKey(bankStatementDirectionMarker(row));
   if (/^(a|abono|haber|credito|credit|ingreso|deposito|cr)(_|$)/.test(marker)) {
     return { signedAmount: Math.abs(parsedAmount), direction: "CREDIT", directionSource: "Marca Cargo/Abono" };
   }
@@ -212,7 +240,7 @@ export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MA
   return cappedRows.map((rawRow, index) => {
     const row = rawRow && typeof rawRow === "object" && !Array.isArray(rawRow) ? rawRow : {};
     const transactionDate = parseDate(getValue(row, ["fecha", "fecha_movimiento", "fecha transaccion", "fecha_transaccion", "fecha operacion", "fecha_operacion", "fecha_valor", "date", "transaction_date"]));
-    const description = getValue(row, ["descripcion", "descripción", "descripcion_movimiento", "descripción movimiento", "glosa", "detalle", "movimiento", "concepto", "narrativa", "description"]);
+    const description = bankStatementDescription(row);
     const reference = getValue(row, ["referencia", "reference", "comprobante", "folio", "nro_operacion", "numero_operacion", "número operación", "id_movimiento", "numero_documento", "n_documento", "n documento", "n° documento"]);
     const payerName = getValue(row, ["contraparte", "nombre_contraparte", "ordenante", "beneficiario", "pagador", "titular", "payer", "counterparty"]);
     const rut = getValue(row, ["rut", "rut_contraparte", "rut_cliente", "rut_proveedor", "tax_id"]);

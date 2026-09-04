@@ -66,21 +66,29 @@ function bankStatementFileFingerprint(buffer) {
   return buffer?.length ? createHash("sha256").update(buffer).digest("hex") : "";
 }
 
-function bankStatementDuplicatePayload({ sourceFile, totalRows, validRows, duplicateRows, existingBatch = null }) {
+function isReprocessableEmptyBankStatement(existingBatch) {
+  if (!existingBatch) return false;
+  const data = financeRecordData(existingBatch);
+  return Number(data.importedRows || 0) === 0 && Number(data.reviewRows || 0) > 0;
+}
+
+function bankStatementDuplicatePayload({ sourceFile, totalRows, validRows, duplicateRows, existingBatch = null, reprocessable = false }) {
   const data = existingBatch ? financeRecordData(existingBatch) : {};
   const existingSourceFile = cleanText(data.sourceFile || existingBatch?.title, "una cartola anterior");
   const importedAt = cleanText(data.importedAt || existingBatch?.createdAt);
   const byFile = Boolean(existingBatch);
   return {
-    blocked: byFile || (validRows > 0 && duplicateRows >= validRows),
-    reason: byFile ? "FILE_ALREADY_IMPORTED" : "MOVEMENTS_ALREADY_IMPORTED",
+    blocked: !reprocessable && (byFile || (validRows > 0 && duplicateRows >= validRows)),
+    reason: reprocessable ? "REPROCESSABLE_EMPTY_IMPORT" : byFile ? "FILE_ALREADY_IMPORTED" : "MOVEMENTS_ALREADY_IMPORTED",
     sourceFile,
     existingSourceFile,
     importedAt: importedAt || null,
     totalRows,
     validRows,
     duplicateRows,
-    message: byFile
+    message: reprocessable
+      ? `La cartola ${sourceFile} tuvo una carga anterior sin movimientos válidos. Puedes reprocesarla con el lector actualizado.`
+      : byFile
       ? `La cartola ${sourceFile} ya fue incorporada anteriormente como ${existingSourceFile}.`
       : `Todos los movimientos válidos de ${sourceFile} ya existen en Finance OS.`
   };
@@ -915,8 +923,9 @@ financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GRO
     }).filter(Boolean));
     const validRows = rows.filter((row) => !row.needsReview);
     const duplicateRows = validRows.filter((row) => knownFingerprints.has(row.fingerprint)).length;
+    const reprocessable = isReprocessableEmptyBankStatement(existingBatch);
     const duplicate = (existingBatch || (validRows.length && duplicateRows >= validRows.length))
-      ? bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: validRows.length, duplicateRows, existingBatch })
+      ? bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: validRows.length, duplicateRows, existingBatch, reprocessable })
       : null;
     const summary = withBankStatementNet(summarizeBankStatementRows(rows));
     res.json({
@@ -951,7 +960,8 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
       fileFingerprint ? prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_statement" }, select: { id: true, title: true, createdAt: true, data: true }, take: 2000, orderBy: { createdAt: "desc" } }) : Promise.resolve([])
     ]);
     const existingBatch = fileFingerprint ? existingBatches.find((record) => cleanText(financeRecordData(record).fileFingerprint) === fileFingerprint) || null : null;
-    if (existingBatch) {
+    const reprocessable = isReprocessableEmptyBankStatement(existingBatch);
+    if (existingBatch && !reprocessable) {
       return res.status(409).json({ error: `La cartola ${sourceFile} ya fue importada anteriormente.`, duplicateCartola: bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: rows.filter((row) => !row.needsReview).length, duplicateRows: 0, existingBatch }) });
     }
     const knownFingerprints = new Set(existingMovements.map((record) => {
@@ -979,6 +989,12 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
       return res.status(409).json({ error: `La cartola ${sourceFile} está repetida: todos sus movimientos válidos ya existen en Finance OS.`, duplicateCartola: bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: sourceValidRows, duplicateRows }) });
     }
     const importedAt = new Date().toISOString();
+    const previousExceptions = reprocessable
+      ? await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, data: true }, take: 5000 })
+      : [];
+    const exceptionIdsToResolve = previousExceptions
+      .filter((record) => cleanText(financeRecordData(record).importBatchId) === existingBatch?.id)
+      .map((record) => record.id);
     const result = await prisma.$transaction(async (tx) => {
       const batch = await tx.industryRecord.create({
         data: {
@@ -1036,6 +1052,18 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
             }
           }))
         });
+      }
+      if (reprocessable && existingBatch) {
+        await tx.industryRecord.update({
+          where: { id: existingBatch.id },
+          data: { status: "REPROCESSED", data: { ...financeRecordData(existingBatch), reprocessedAt: importedAt, reprocessedByBatchId: batch.id } }
+        });
+        if (exceptionIdsToResolve.length) {
+          await tx.industryRecord.updateMany({
+            where: { id: { in: exceptionIdsToResolve } },
+            data: { status: "RESOLVED" }
+          });
+        }
       }
       return { batch, imported: validRows.length, requiresReview: reviewRows.length };
     });

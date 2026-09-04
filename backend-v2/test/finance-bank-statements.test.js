@@ -82,6 +82,29 @@ test("reconoce la plantilla Santander con carátula previa y marca Cargo/Abono",
   assert.equal(rows[1].branch, "Principal");
 });
 
+test("reconoce descripción y cargo/abono aunque el encabezado Santander venga con codificación dañada", () => {
+  const [row] = normalizeBankStatementRows([
+    { Fecha: "01/01/2026", "DESCRIPCI_N MOVIMIENTO": "PAGO PROVEEDOR LOGÍSTICA", Monto: "405.683", "CARGO/ABONO": "C" },
+    { Fecha: "02/01/2026", "DESCRIPCI_N MOVIMIENTO": "TRANSFERENCIA CLIENTE FACTURA 105", Monto: "1.250.000", "CARGO/ABONO": "A" }
+  ], { bankKey: "santander_chile", accountAlias: "Cuenta principal" });
+
+  assert.equal(row.description, "PAGO PROVEEDOR LOGÍSTICA");
+  assert.equal(row.direction, "DEBIT");
+  assert.equal(row.movementType, "CARGO");
+  assert.equal(row.needsReview, false);
+});
+
+test("conserva encabezados Santander codificados en Windows-1252", async () => {
+  const csv = "MONTO;DESCRIPCIÓN MOVIMIENTO;FECHA;N° DOCUMENTO;CARGO/ABONO\n515.000;PAGO CLIENTE FACTURA 300;06/01/2026;300;A";
+  const sourceRows = await readBankStatementFile({ originalname: "cartola-santander.csv", buffer: Buffer.from(csv, "latin1") });
+  const [row] = normalizeBankStatementRows(sourceRows, { bankKey: "santander_chile" });
+
+  assert.equal(row.description, "PAGO CLIENTE FACTURA 300");
+  assert.equal(row.reference, "300");
+  assert.equal(row.direction, "CREDIT");
+  assert.equal(row.needsReview, false);
+});
+
 test("recupera una cartola XLSX con metadatos de libro incompletos", async () => {
   const zip = new JSZip();
   zip.file("xl/worksheets/sheet1.xml", `<?xml version="1.0" encoding="UTF-8"?>
