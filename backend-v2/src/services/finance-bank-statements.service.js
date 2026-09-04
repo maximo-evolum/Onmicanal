@@ -84,21 +84,21 @@ function normalizedAccount(input = {}) {
 function sourceAmount(row) {
   const debit = getValue(row, ["cargo", "debe", "debito", "débito", "egreso", "retiro", "withdrawal", "debit"]);
   const credit = getValue(row, ["abono", "haber", "credito", "crédito", "ingreso", "deposito", "depósito", "deposit", "credit"]);
-  if (debit) return { signedAmount: -Math.abs(parseNumber(debit)), direction: "DEBIT" };
-  if (credit) return { signedAmount: Math.abs(parseNumber(credit)), direction: "CREDIT" };
+  if (debit) return { signedAmount: -Math.abs(parseNumber(debit)), direction: "DEBIT", directionSource: "Columna Cargo" };
+  if (credit) return { signedAmount: Math.abs(parseNumber(credit)), direction: "CREDIT", directionSource: "Columna Abono" };
   const rawAmount = getValue(row, ["monto", "importe", "amount", "valor", "monto_movimiento", "importe_movimiento"]);
   const parsedAmount = parseNumber(rawAmount);
   // Santander usa una sola columna MONTO y una marca CARGO/ABONO: A es un
   // abono y C un cargo. El importe puede venir con o sin signo, por lo que la
   // marca tiene prioridad cuando está disponible.
   const marker = normalizeKey(getValue(row, ["cargo_abono", "cargo/abono", "tipo_movimiento", "tipo", "debe_haber"]));
-  if (["a", "abono", "haber", "credito", "credit", "ingreso", "deposito"].includes(marker)) {
-    return { signedAmount: Math.abs(parsedAmount), direction: "CREDIT" };
+  if (/^(a|abono|haber|credito|credit|ingreso|deposito|cr)(_|$)/.test(marker)) {
+    return { signedAmount: Math.abs(parsedAmount), direction: "CREDIT", directionSource: "Marca Cargo/Abono" };
   }
-  if (["c", "cargo", "debe", "debito", "egreso", "retiro", "debit"].includes(marker)) {
-    return { signedAmount: -Math.abs(parsedAmount), direction: "DEBIT" };
+  if (/^(c|cargo|debe|debito|egreso|retiro|debit|db|d)(_|$)/.test(marker)) {
+    return { signedAmount: -Math.abs(parsedAmount), direction: "DEBIT", directionSource: "Marca Cargo/Abono" };
   }
-  return { signedAmount: parsedAmount, direction: parsedAmount < 0 ? "DEBIT" : "CREDIT" };
+  return { signedAmount: parsedAmount, direction: parsedAmount < 0 ? "DEBIT" : "CREDIT", directionSource: "Signo del monto" };
 }
 
 export function classifyBankMovement({ description = "", reference = "", direction = "" } = {}) {
@@ -133,7 +133,7 @@ export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MA
     const payerName = getValue(row, ["contraparte", "nombre_contraparte", "ordenante", "beneficiario", "pagador", "titular", "payer", "counterparty"]);
     const rut = getValue(row, ["rut", "rut_contraparte", "rut_cliente", "rut_proveedor", "tax_id"]);
     const balance = parseNumber(getValue(row, ["saldo", "saldo_contable", "saldo_disponible", "balance"]));
-    const { signedAmount, direction } = sourceAmount(row);
+    const { signedAmount, direction, directionSource } = sourceAmount(row);
     const amount = Math.abs(signedAmount);
     const reviewReasons = [];
     if (!transactionDate) reviewReasons.push("fecha del movimiento");
@@ -152,6 +152,8 @@ export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MA
       amount,
       signedAmount,
       direction,
+      movementType: direction === "DEBIT" ? "CARGO" : "ABONO",
+      directionSource,
       movementKind: classifyBankMovement({ description, reference, direction }),
       balance: balance || null,
       branch: getValue(row, ["sucursal", "oficina", "branch"]) || null,

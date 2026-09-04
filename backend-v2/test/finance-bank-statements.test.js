@@ -20,8 +20,12 @@ test("normaliza una cartola bancaria chilena con cargos, abonos y saldo", () => 
   assert.equal(rows[0].bank, "BancoEstado");
   assert.equal(rows[0].cmfCode, "012");
   assert.equal(rows[0].direction, "CREDIT");
+  assert.equal(rows[0].movementType, "ABONO");
+  assert.equal(rows[0].directionSource, "Columna Abono");
   assert.equal(rows[0].amount, 1250000);
   assert.equal(rows[1].direction, "DEBIT");
+  assert.equal(rows[1].movementType, "CARGO");
+  assert.equal(rows[1].directionSource, "Columna Cargo");
   assert.equal(rows[1].signedAmount, -450000);
   assert.equal(rows[1].balance, 800000);
   assert.equal(rows[0].needsReview, false);
@@ -68,6 +72,8 @@ test("reconoce la plantilla Santander con carátula previa y marca Cargo/Abono",
   assert.equal(rows[0].description, "PAGO CLIENTE FACTURA 105");
   assert.equal(rows[0].reference, "105");
   assert.equal(rows[0].direction, "CREDIT");
+  assert.equal(rows[0].movementType, "ABONO");
+  assert.equal(rows[0].directionSource, "Marca Cargo/Abono");
   assert.equal(rows[0].movementKind, "INCOME");
   assert.equal(rows[1].direction, "DEBIT");
   assert.equal(rows[1].signedAmount, -450000);

@@ -1072,6 +1072,7 @@ a {
 .finance-table { display: grid; gap: 8px; max-height: 510px; overflow: auto; }
 .finance-table > div { display: flex; justify-content: space-between; gap: 14px; padding: 12px; border: 1px solid rgba(148, 163, 184, .16); border-radius: 11px; background: rgba(4, 8, 20, .42); }
 .finance-table > div > div { display: grid; gap: 4px; min-width: 0; }.finance-table span { color: #aeb9d1; font-size: 12px; }.finance-table > div > b { color: #69e5d0; white-space: nowrap; }
+.finance-movement-type { display: inline-flex; align-items: center; width: fit-content; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; }.finance-movement-type.credit { color: #057b66; background: #d8f8ee; }.finance-movement-type.debit { color: #a5443e; background: #ffe4df; }.finance-movement-type.review { color: #815d13; background: #fff0c9; }.finance-movement-row.credit { border-left: 3px solid #25b69c; }.finance-movement-row.debit { border-left: 3px solid #e77868; }.finance-movement-row small { color: #758291; font-size: 11px; }.finance-table > div > b.finance-movement-amount.debit { color: #c75248; }.finance-table > div > b.finance-movement-amount.credit { color: #14856f; }
 .finance-empty { padding: 18px 0; color: #9da9c3; }
 
 .finance-suggestions { display: grid; gap: 11px; }
