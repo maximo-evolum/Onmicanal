@@ -1406,7 +1406,11 @@ financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(R
       prisma.industryRecord.findMany({ where: { id: { in: requestedInvoiceIds }, tenantId: req.tenantId, recordType: "finance_invoice" } })
     ]);
     if (!movement || invoices.length !== requestedInvoiceIds.length) return res.status(404).json({ error: "Movimiento o factura no encontrados" });
-    if (String(movement.status || "").toUpperCase() === "MATCHED") return res.status(409).json({ error: "Este movimiento ya fue conciliado" });
+    const movementStatus = String(movement.status || "").toUpperCase();
+    if (movementStatus === "MATCHED") return res.status(409).json({ error: "Este movimiento ya fue conciliado" });
+    if (["REVIEW", "REJECTED"].includes(movementStatus)) {
+      return res.status(409).json({ error: "Este movimiento está en revisión humana. Resuelve la excepción antes de intentar conciliarlo nuevamente." });
+    }
 
     const movementData = financeRecordData(movement);
     const movementKind = String(movementData.movementKind || "").toUpperCase();

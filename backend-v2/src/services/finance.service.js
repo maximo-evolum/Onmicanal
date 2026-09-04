@@ -294,7 +294,10 @@ export async function getFinanceReconciliationSuggestions({ tenantId, movementId
     // Solo un abono externo puede liquidar una cuenta por cobrar. Comisiones,
     // egresos y traspasos propios se conservan para control, pero no se
     // proponen como pago de cliente.
-    if (status === "MATCHED" || String(movementData.direction || "").toUpperCase() === "DEBIT" || ["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(kind)) continue;
+    // Un movimiento ya conciliado o enviado a revisión no debe reaparecer como
+    // una sugerencia activa. La revisión conserva el caso en Excepciones hasta
+    // que una persona lo resuelva expresamente.
+    if (["MATCHED", "REVIEW", "REJECTED"].includes(status) || String(movementData.direction || "").toUpperCase() === "DEBIT" || ["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(kind)) continue;
 
     const scored = openInvoices.map((invoice) => scoreFinanceReconciliation(invoice, movement))
       .filter((candidate) => candidate.confidence >= 35)
