@@ -952,9 +952,11 @@ export type ChileanBank = { key: string; name: string; cmfCode: string };
 export type FinanceBankStatementAccount = { bank: string; bankKey: string; cmfCode: string; accountAlias: string; accountType: string; accountLast4: string | null };
 export type FinanceBankStatementPreview = {
   sourceFile: string;
+  fileFingerprint?: string;
   maxRows: number;
   account: FinanceBankStatementAccount;
   summary: { totalRows: number; reviewRows: number; credits: number; debits: number; net: number };
+  duplicate?: { blocked: boolean; reason: string; sourceFile: string; existingSourceFile: string; importedAt: string | null; totalRows: number; validRows: number; duplicateRows: number; message: string } | null;
   rows: Array<Record<string, unknown>>;
   sourceRows: Array<Record<string, unknown>>;
 };
@@ -1114,7 +1116,7 @@ export function previewFinanceBankStatementFile(file: File, account: { bankKey: 
   return request<FinanceBankStatementPreview>("/finance/bank-statements/preview-file", { method: "POST", body: data });
 }
 
-export function importFinanceBankStatement(input: { sourceFile: string; rows: Array<Record<string, unknown>>; bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceBankStatementPreview["summary"] }> {
+export function importFinanceBankStatement(input: { sourceFile: string; fileFingerprint?: string; rows: Array<Record<string, unknown>>; bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceBankStatementPreview["summary"] }> {
   return request("/finance/bank-statements/import", { method: "POST", body: JSON.stringify(input) });
 }
 

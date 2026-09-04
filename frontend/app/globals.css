@@ -15399,6 +15399,8 @@ textarea:focus {
 .finance-bank-statement-preview { margin: 14px 0; padding: 16px; border: 1px solid #dce9e5; border-radius: 15px; background: #fbfefd; box-shadow: none; }
 .finance-bank-statement-preview h3 { margin: 0 0 3px; font-size: 15px; color: #172836; overflow-wrap: anywhere; }
 .finance-bank-statement-preview .finance-card-heading { margin-bottom: 12px; }
+.finance-bank-statement-duplicate { border-color: #e8bd7a; background: #fff8eb; color: #764813; }
+.finance-bank-statement-duplicate strong { color: #8d5411; }
 .finance-bank-statement-account { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(170px, 1fr) minmax(130px, .6fr); gap: 10px; margin: 0 0 12px; }
 .finance-bank-statement-account label { display: grid; gap: 5px; color: #50616a; font-size: 12px; font-weight: 700; }
 .finance-bank-statement-account input,.finance-bank-statement-account select { min-width: 0; }

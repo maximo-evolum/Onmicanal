@@ -635,6 +635,8 @@ function FinanceWorkspace() {
 
   async function importBankStatements() {
     if (!bankStatementQueue.length) return;
+    const importable = bankStatementQueue.filter((item) => !item.preview.duplicate?.blocked);
+    if (!importable.length) return setMessage("No se puede importar: las cartolas preparadas ya fueron cargadas anteriormente. Quítalas de la lista o selecciona archivos nuevos.");
     setSaving(true);
     try {
       let imported = 0;
@@ -642,9 +644,9 @@ function FinanceWorkspace() {
       let requiresReview = 0;
       const pending: BankStatementQueueItem[] = [];
       const errors: string[] = [];
-      for (const item of bankStatementQueue) {
+      for (const item of importable) {
         try {
-          const result = await importFinanceBankStatement({ sourceFile: item.preview.sourceFile, rows: item.rows, ...item.account });
+          const result = await importFinanceBankStatement({ sourceFile: item.preview.sourceFile, fileFingerprint: item.preview.fileFingerprint, rows: item.rows, ...item.account });
           imported += result.imported;
           duplicateRows += result.duplicateRows;
           requiresReview += result.requiresReview;
@@ -653,7 +655,7 @@ function FinanceWorkspace() {
           errors.push(`${item.preview.sourceFile}: ${error instanceof Error ? error.message : "no se pudo importar"}`);
         }
       }
-      setBankStatementQueue(pending);
+      setBankStatementQueue([...bankStatementQueue.filter((item) => item.preview.duplicate?.blocked), ...pending]);
       setMessage(errors.length
         ? `${imported} movimientos incorporados. Quedaron ${pending.length} cartola(s) pendientes: ${errors.join(" · ")}`
         : `${imported} movimientos incorporados desde las cartolas seleccionadas. ${duplicateRows} duplicados se omitieron y ${requiresReview} fila(s) quedaron para revisión.`);
@@ -930,13 +932,14 @@ function FinanceWorkspace() {
               <label className="finance-upload">Seleccionar una o más cartolas CSV o Excel<input type="file" accept=".csv,text/csv,.xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple onChange={previewBankStatement} disabled={saving} /></label>
               <p className="finance-muted">Puedes agregar hasta 10 archivos por selección. Si corresponden a bancos o cuentas distintas, ajusta el banco y cuenta en su tarjeta de revisión.</p>
               <button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>
-              {bankStatementQueue.length ? <div className="finance-note"><strong>{bankStatementQueue.length} cartola(s) preparada(s)</strong><span>Importarás solamente las filas que confirmes. Los duplicados se omiten y las filas incompletas quedan en revisión.</span><button type="button" className="primary-btn" disabled={saving} onClick={importBankStatements}>Incorporar {bankStatementQueue.length} cartola(s)</button></div> : null}
+              {bankStatementQueue.length ? <div className="finance-note"><strong>{bankStatementQueue.length} cartola(s) preparada(s)</strong><span>Las cartolas repetidas se bloquean antes de importar. Los duplicados parciales se omiten y las filas incompletas quedan en revisión.</span><button type="button" className="primary-btn" disabled={saving || !bankStatementQueue.some((item) => !item.preview.duplicate?.blocked)} onClick={importBankStatements}>Incorporar {bankStatementQueue.filter((item) => !item.preview.duplicate?.blocked).length} cartola(s) nueva(s)</button></div> : null}
               <hr /><h3>Registrar movimiento manual</h3><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving}>Agregar movimiento</button></form>
             </article>
             <article className="finance-card">
               <div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliación</span><h2>Cartolas preparadas y movimientos cargados</h2></div><span>{records.length} movimientos</span></div>
               {bankStatementQueue.map((item) => <article className="finance-bank-statement-preview" key={item.id}>
                 <div className="finance-card-heading"><div><h3>{item.preview.sourceFile}</h3><small>{item.preview.summary.totalRows} filas · Abonos {money(item.preview.summary.credits)} · Cargos {money(item.preview.summary.debits)}</small></div><button type="button" className="finance-link-button" disabled={saving} onClick={() => setBankStatementQueue((current) => current.filter((queued) => queued.id !== item.id))}>Quitar</button></div>
+                {item.preview.duplicate?.blocked ? <div className="finance-note finance-bank-statement-duplicate"><strong>Cartola repetida: importación bloqueada</strong><span>{item.preview.duplicate.message}</span><span>{item.preview.duplicate.duplicateRows} de {item.preview.duplicate.validRows} movimientos válidos ya estaban registrados.</span></div> : null}
                 <div className="finance-bank-statement-account"><label>Banco<select value={item.account.bankKey} onChange={(event) => updateQueuedBankStatement(item.id, { bankKey: event.target.value })}>{chileanBanks.map((bank) => <option key={bank.key} value={bank.key}>{bank.name}</option>)}</select></label><input placeholder="Nombre de cuenta" value={item.account.accountAlias} onChange={(event) => updateQueuedBankStatement(item.id, { accountAlias: event.target.value })} /><input inputMode="numeric" maxLength={4} placeholder="Últimos 4 dígitos" value={item.account.accountLast4} onChange={(event) => updateQueuedBankStatement(item.id, { accountLast4: event.target.value.replace(/\D/g, "").slice(-4) })} /></div>
                 {item.preview.summary.reviewRows ? <p className="finance-muted">{item.preview.summary.reviewRows} fila(s) quedarán en Excepciones para revisión humana.</p> : null}
                 <div className="finance-migration-table"><div><span>Fecha</span><span>Descripción</span><span>Monto</span><span>Estado</span></div>{item.preview.rows.slice(0, 6).map((row) => <div key={`${item.id}-${String(row.rowNumber)}`} className={row.needsReview ? "needs-review" : ""}><span>{shortDate(row.transactionDate)}</span><span>{financeLabel(row.description)}</span><span>{money(row.amount)}</span><span>{row.needsReview ? "Revisar" : row.direction === "DEBIT" ? "Cargo" : "Abono"}</span></div>)}</div>

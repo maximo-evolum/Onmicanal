@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { MODULES } from "../lib/modules.js";
@@ -60,6 +60,30 @@ const bankStatementUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_BANK_STATEMENT_FILE_BYTES, files: 1 }
 });
+
+function bankStatementFileFingerprint(buffer) {
+  return buffer?.length ? createHash("sha256").update(buffer).digest("hex") : "";
+}
+
+function bankStatementDuplicatePayload({ sourceFile, totalRows, validRows, duplicateRows, existingBatch = null }) {
+  const data = existingBatch ? financeRecordData(existingBatch) : {};
+  const existingSourceFile = cleanText(data.sourceFile || existingBatch?.title, "una cartola anterior");
+  const importedAt = cleanText(data.importedAt || existingBatch?.createdAt);
+  const byFile = Boolean(existingBatch);
+  return {
+    blocked: byFile || (validRows > 0 && duplicateRows >= validRows),
+    reason: byFile ? "FILE_ALREADY_IMPORTED" : "MOVEMENTS_ALREADY_IMPORTED",
+    sourceFile,
+    existingSourceFile,
+    importedAt: importedAt || null,
+    totalRows,
+    validRows,
+    duplicateRows,
+    message: byFile
+      ? `La cartola ${sourceFile} ya fue incorporada anteriormente como ${existingSourceFile}.`
+      : `Todos los movimientos válidos de ${sourceFile} ya existen en Finance OS.`
+  };
+}
 const siiDteUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_SII_DTE_FILE_BYTES, files: MAX_SII_DTE_FILES }
@@ -876,12 +900,30 @@ financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GRO
     const sourceRows = await readBankStatementFile(req.file);
     const rows = normalizeBankStatementRows(sourceRows, req.body || {}, { limit: MAX_BANK_STATEMENT_ROWS });
     if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos en la cartola." });
+    const sourceFile = cleanText(req.file?.originalname, "cartola-bancaria");
+    const fileFingerprint = bankStatementFileFingerprint(req.file?.buffer);
+    const [existingBatches, existingMovements] = await Promise.all([
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_statement" }, select: { id: true, title: true, createdAt: true, data: true }, orderBy: { createdAt: "desc" }, take: 2000 }),
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { data: true }, orderBy: { createdAt: "desc" }, take: 10000 })
+    ]);
+    const existingBatch = existingBatches.find((record) => cleanText(financeRecordData(record).fileFingerprint) === fileFingerprint) || null;
+    const knownFingerprints = new Set(existingMovements.map((record) => {
+      const data = financeRecordData(record);
+      return cleanText(data.fingerprint) || bankMovementFingerprint(data);
+    }).filter(Boolean));
+    const validRows = rows.filter((row) => !row.needsReview);
+    const duplicateRows = validRows.filter((row) => knownFingerprints.has(row.fingerprint)).length;
+    const duplicate = (existingBatch || (validRows.length && duplicateRows >= validRows.length))
+      ? bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: validRows.length, duplicateRows, existingBatch })
+      : null;
     const summary = withBankStatementNet(summarizeBankStatementRows(rows));
     res.json({
-      sourceFile: cleanText(req.file?.originalname, "cartola-bancaria"),
+      sourceFile,
+      fileFingerprint,
       maxRows: MAX_BANK_STATEMENT_ROWS,
       account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },
       summary,
+      duplicate,
       rows: rows.slice(0, 100),
       sourceRows: sourceRows.slice(0, MAX_BANK_STATEMENT_ROWS)
     });
@@ -898,13 +940,16 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
     const rows = normalizeBankStatementRows(sourceRows, req.body || {}, { limit: MAX_BANK_STATEMENT_ROWS });
     if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos para importar." });
     const sourceFile = cleanText(req.body?.sourceFile, "cartola-bancaria").slice(0, 180);
+    const fileFingerprint = cleanText(req.body?.fileFingerprint).slice(0, 128);
     const summary = withBankStatementNet(summarizeBankStatementRows(rows));
-    const existingMovements = await prisma.industryRecord.findMany({
-      where: { tenantId: req.tenantId, recordType: "bank_movement" },
-      select: { data: true },
-      take: 10000,
-      orderBy: { createdAt: "desc" }
-    });
+    const [existingMovements, existingBatches] = await Promise.all([
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { data: true }, take: 10000, orderBy: { createdAt: "desc" } }),
+      fileFingerprint ? prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_statement" }, select: { id: true, title: true, createdAt: true, data: true }, take: 2000, orderBy: { createdAt: "desc" } }) : Promise.resolve([])
+    ]);
+    const existingBatch = fileFingerprint ? existingBatches.find((record) => cleanText(financeRecordData(record).fileFingerprint) === fileFingerprint) || null : null;
+    if (existingBatch) {
+      return res.status(409).json({ error: `La cartola ${sourceFile} ya fue importada anteriormente.`, duplicateCartola: bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: rows.filter((row) => !row.needsReview).length, duplicateRows: 0, existingBatch }) });
+    }
     const knownFingerprints = new Set(existingMovements.map((record) => {
       const data = financeRecordData(record);
       return cleanText(data.fingerprint) || bankMovementFingerprint(data);
@@ -925,6 +970,10 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
       seenInFile.add(row.fingerprint);
       validRows.push(row);
     }
+    const sourceValidRows = rows.filter((row) => !row.needsReview).length;
+    if (sourceValidRows && duplicateRows >= sourceValidRows) {
+      return res.status(409).json({ error: `La cartola ${sourceFile} está repetida: todos sus movimientos válidos ya existen en Finance OS.`, duplicateCartola: bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: sourceValidRows, duplicateRows }) });
+    }
     const importedAt = new Date().toISOString();
     const result = await prisma.$transaction(async (tx) => {
       const batch = await tx.industryRecord.create({
@@ -935,6 +984,7 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
           status: "IMPORTED",
           data: {
             sourceFile,
+            fileFingerprint: fileFingerprint || null,
             importedAt,
             importedById: req.user?.id || null,
             account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },
