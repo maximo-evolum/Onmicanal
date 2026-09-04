@@ -4,6 +4,7 @@ import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import {
   bankMovementFingerprint,
+  detectBankStatementInstitution,
   detectBankStatementFileFormat,
   normalizeBankStatementRows,
   parsePdfBankStatementText,
@@ -80,6 +81,29 @@ test("reconoce la plantilla Santander con carátula previa y marca Cargo/Abono",
   assert.equal(rows[1].direction, "DEBIT");
   assert.equal(rows[1].signedAmount, -450000);
   assert.equal(rows[1].branch, "Principal");
+});
+
+test("identifica automáticamente Banco Santander desde la carátula de un Excel", async () => {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Cartola");
+  sheet.addRow(["Banco Santander Chile"]);
+  sheet.addRow(["Cuenta corriente", "000-1234567-8"]);
+  sheet.addRow([]);
+  sheet.addRow(["Fecha", "Descripción", "Monto", "Cargo/Abono"]);
+  sheet.addRow(["03/09/2026", "Abono cliente", "450.000", "A"]);
+  const file = { originalname: "Cartola septiembre.xlsx", buffer: Buffer.from(await workbook.xlsx.writeBuffer()) };
+  const sourceRows = await readBankStatementFile(file);
+  const detection = await detectBankStatementInstitution(file, sourceRows);
+
+  assert.equal(detection.institution?.key, "santander_chile");
+  assert.equal(detection.method, "CARTOLA");
+});
+
+test("deja una cartola sin marca bancaria en revisión sin inventar su banco", () => {
+  const [row] = normalizeBankStatementRows([{ Fecha: "03/09/2026", Descripción: "Abono cliente", Monto: "450.000", "Cargo/Abono": "A" }]);
+  assert.equal(row.bank, "Banco por identificar");
+  assert.equal(row.needsReview, true);
+  assert.ok(row.reviewReasons.includes("banco de origen"));
 });
 
 test("reconoce descripción y cargo/abono aunque el encabezado Santander venga con codificación dañada", () => {

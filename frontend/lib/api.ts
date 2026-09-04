@@ -955,6 +955,7 @@ export type FinanceBankStatementPreview = {
   fileFingerprint?: string;
   detectedFormat?: string;
   conversion?: string;
+  bankDetection?: { detected: boolean; method: string; message: string };
   maxRows: number;
   account: FinanceBankStatementAccount;
   summary: { totalRows: number; reviewRows: number; credits: number; debits: number; net: number };

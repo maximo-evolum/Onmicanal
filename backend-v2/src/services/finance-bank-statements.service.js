@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import pdfParse from "pdf-parse";
-import { getChileanFinancialInstitution } from "../lib/finance-integrations.js";
+import ExcelJS from "exceljs";
+import { CHILEAN_FINANCIAL_INSTITUTIONS, getChileanFinancialInstitution } from "../lib/finance-integrations.js";
 import { readHistoricalFinanceFile } from "./finance-migration.service.js";
 
 export const MAX_BANK_STATEMENT_ROWS = 1000;
@@ -103,6 +104,99 @@ function normalizeKey(value) {
     .replace(/^_+|_+$/g, "");
 }
 
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function bankAliases(institution) {
+  const name = normalizeKey(institution?.name);
+  const shortened = name
+    .replace(/^(?:banco|bank)_/, "")
+    .replace(/_(?:chile|agencia_chile)$/, "");
+  const manual = {
+    bancoestado: ["banco_estado", "bancoestado"],
+    bci: ["bci", "banco_bci"],
+    santander_chile: ["banco_santander", "santander_chile", "santander"],
+    itau_chile: ["banco_itau", "itau_chile", "itau"],
+    scotiabank_chile: ["scotiabank", "scotiabank_chile"],
+    banco_de_chile: ["banco_de_chile"],
+    banco_bice: ["banco_bice", "bice"],
+    banco_falabella: ["banco_falabella", "falabella"],
+    banco_ripley: ["banco_ripley", "ripley"],
+    banco_consorcio: ["banco_consorcio", "consorcio"],
+    tanner_banco_digital: ["tanner", "tanner_banco_digital"],
+    tenpo_bank_chile: ["tenpo", "tenpo_bank"],
+    hsbc_chile: ["hsbc", "hsbc_chile"],
+    btg_pactual_chile: ["btg", "btg_pactual"],
+    banco_internacional: ["banco_internacional"],
+    jpmorgan_chile: ["jpmorgan", "jp_morgan"],
+    china_construction_bank_chile: ["china_construction_bank"],
+    bank_of_china_chile: ["bank_of_china"]
+  };
+  return unique([name, shortened.length >= 4 ? shortened : "", ...(manual[institution?.key] || [])]);
+}
+
+function institutionInText(value, { requireStrongName = false } = {}) {
+  const source = normalizeKey(value);
+  if (!source) return null;
+  for (const institution of CHILEAN_FINANCIAL_INSTITUTIONS) {
+    const aliases = bankAliases(institution);
+    const fullName = normalizeKey(institution.name);
+    const found = aliases.find((alias) => new RegExp(`(^|_)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:_|$)`, "i").test(source));
+    if (!found) continue;
+    // En una glosa puede aparecer el nombre de otro banco (por ejemplo, una
+    // transferencia a Santander). Fuera de metadatos sólo aceptamos el nombre
+    // completo o una referencia explícita a banco/CMF.
+    const explicitBank = /(^|_)(?:banco|bank|institucion|entidad|cmf)(?:_|$)/.test(source);
+    if (!requireStrongName || found === fullName || explicitBank) return institution;
+  }
+  return null;
+}
+
+function valuesFromRows(rows, limit = 40) {
+  return (Array.isArray(rows) ? rows : []).slice(0, limit).flatMap((row) => Object.entries(row || {}).map(([key, value]) => ({ key: normalizeKey(key), value: cleanText(value) })));
+}
+
+async function bankStatementFileText(file) {
+  const buffer = Buffer.isBuffer(file?.buffer) ? file.buffer : Buffer.from(file?.buffer || "");
+  if (!buffer.length) return "";
+  const format = detectBankStatementFileFormat(file);
+  if (format.key === "SPREADSHEET") {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      return (workbook.worksheets || []).slice(0, 2).flatMap((sheet) => {
+        const lines = [];
+        sheet.eachRow({ includeEmpty: false }, (row, index) => {
+          if (index <= 45) lines.push(row.values.slice(1).map((value) => String(value?.text ?? value ?? "")).join(" "));
+        });
+        return lines;
+      }).join("\n");
+    } catch {
+      return "";
+    }
+  }
+  return `${buffer.toString("utf8")}\n${buffer.toString("latin1")}`.slice(0, 120000);
+}
+
+// Primero busca el banco en campos estructurados y carátulas del archivo.
+// Sólo deja la selección manual como salida excepcional cuando la cartola no
+// entrega ninguna marca bancaria verificable.
+export async function detectBankStatementInstitution(file, rows = []) {
+  const rowValues = valuesFromRows(rows);
+  const structured = rowValues.find((item) => /^(?:banco|bank|institucion|entidad|entidad_financiera|cmf)$/.test(item.key));
+  const structuredInstitution = structured ? institutionInText(structured.value) : null;
+  if (structuredInstitution) return { institution: structuredInstitution, method: "METADATOS" };
+
+  const fileInstitution = institutionInText(fileName(file));
+  if (fileInstitution) return { institution: fileInstitution, method: "NOMBRE_DE_ARCHIVO" };
+
+  const fileText = await bankStatementFileText(file);
+  const contentInstitution = institutionInText(fileText, { requireStrongName: true });
+  if (contentInstitution) return { institution: contentInstitution, method: "CARTOLA" };
+  return { institution: null, method: "NO_IDENTIFICADO" };
+}
+
 function getValue(row, aliases) {
   const entries = Object.entries(row || {});
   for (const alias of aliases) {
@@ -181,8 +275,17 @@ function safeSourceRow(row) {
 
 function normalizedAccount(input = {}) {
   const institution = getChileanFinancialInstitution(input.bankKey || input.bank || input.cmfCode);
-  if (!institution) throw new Error("Selecciona un banco del catálogo CMF antes de importar la cartola.");
   const last4 = String(input.accountLast4 || "").replace(/\D/g, "").slice(-4);
+  if (!institution) {
+    return {
+      bank: "Banco por identificar",
+      bankKey: "",
+      cmfCode: "",
+      accountAlias: cleanText(input.accountAlias || input.alias, "Cuenta sin nombre").slice(0, 100),
+      accountType: cleanText(input.accountType, "Cuenta corriente").slice(0, 60),
+      accountLast4: last4 || null
+    };
+  }
   return {
     bank: institution.name,
     bankKey: institution.key,
@@ -248,6 +351,7 @@ export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MA
     const { signedAmount, direction, directionSource } = sourceAmount(row);
     const amount = Math.abs(signedAmount);
     const reviewReasons = [];
+    if (!account.bankKey) reviewReasons.push("banco de origen");
     if (!transactionDate) reviewReasons.push("fecha del movimiento");
     if (!amount) reviewReasons.push("monto");
     if (!description) reviewReasons.push("descripción o glosa");

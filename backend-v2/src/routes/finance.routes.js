@@ -31,6 +31,7 @@ import {
   MAX_BANK_STATEMENT_FILE_BYTES,
   MAX_BANK_STATEMENT_ROWS,
   bankMovementFingerprint,
+  detectBankStatementInstitution,
   detectBankStatementFileFormat,
   normalizeBankStatementRows,
   readBankStatementFile,
@@ -908,7 +909,11 @@ financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GRO
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
     const format = detectBankStatementFileFormat(req.file);
     const sourceRows = await readBankStatementFile(req.file);
-    const rows = normalizeBankStatementRows(sourceRows, req.body || {}, { limit: MAX_BANK_STATEMENT_ROWS });
+    const bankDetection = await detectBankStatementInstitution(req.file, sourceRows);
+    const rows = normalizeBankStatementRows(sourceRows, {
+      ...(req.body || {}),
+      bankKey: bankDetection.institution?.key || cleanText(req.body?.bankKey)
+    }, { limit: MAX_BANK_STATEMENT_ROWS });
     if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos en la cartola." });
     const sourceFile = cleanText(req.file?.originalname, "cartola-bancaria");
     const fileFingerprint = bankStatementFileFingerprint(req.file?.buffer);
@@ -932,6 +937,13 @@ financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GRO
       sourceFile,
       detectedFormat: format.label,
       conversion: format.conversion,
+      bankDetection: {
+        detected: Boolean(bankDetection.institution),
+        method: bankDetection.method,
+        message: bankDetection.institution
+          ? `Banco identificado automáticamente: ${bankDetection.institution.name}.`
+          : "No se pudo identificar el banco desde el archivo. Selecciónalo sólo para esta cartola antes de incorporarla."
+      },
       fileFingerprint,
       maxRows: MAX_BANK_STATEMENT_ROWS,
       account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },
@@ -950,6 +962,7 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
     const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    if (!cleanText(req.body?.bankKey)) return res.status(400).json({ error: "No se pudo identificar el banco de esta cartola. Selecciónalo en la tarjeta de revisión antes de incorporarla." });
     const rows = normalizeBankStatementRows(sourceRows, req.body || {}, { limit: MAX_BANK_STATEMENT_ROWS });
     if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos para importar." });
     const sourceFile = cleanText(req.body?.sourceFile, "cartola-bancaria").slice(0, 180);

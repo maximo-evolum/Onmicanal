@@ -15408,6 +15408,17 @@ textarea:focus {
 .finance-bank-statement-account { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(170px, 1fr) minmax(130px, .6fr); gap: 10px; margin: 0 0 12px; }
 .finance-bank-statement-account label { display: grid; gap: 5px; color: #50616a; font-size: 12px; font-weight: 700; }
 .finance-bank-statement-account input,.finance-bank-statement-account select { min-width: 0; }
+.finance-bank-automation-note { margin: 0; }
+.finance-bank-detected { display: grid; gap: 3px; padding: 11px 12px; border: 1px solid #a9ddd4; border-radius: 11px; background: #f0fcf9; color: #17685f; }
+.finance-bank-detected strong { font-size: .9rem; color: #0f5852; }
+.finance-bank-detected span { font-size: .78rem; color: #39766f; }
+.finance-imported-movements { margin-top: 0; }
+html.dark .finance-bank-detected,
+[data-theme="dark"] .finance-bank-detected { background: color-mix(in srgb, var(--card) 80%, #0b9c99 20%); border-color: color-mix(in srgb, var(--border) 65%, #0b9c99 35%); }
+html.dark .finance-bank-detected strong,
+[data-theme="dark"] .finance-bank-detected strong { color: #9ee8df; }
+html.dark .finance-bank-detected span,
+[data-theme="dark"] .finance-bank-detected span { color: #82bdb7; }
 @media (max-width: 700px) { .finance-bank-statement-preview { padding: 13px; }.finance-bank-statement-account { grid-template-columns: 1fr; }.finance-bank-statement-preview .finance-card-heading { flex-direction: column; }.finance-bank-statement-preview .finance-link-button { width: 100%; } }
 .finance-migration-preview .finance-migration-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }.finance-migration-quality-table > div { grid-template-columns: 54px 92px minmax(220px, 1.45fr) 115px 105px minmax(220px, 1.1fr); min-width: 920px; }.finance-migration-quality-table small { display: block; margin-top: 3px; color: #8a6832; font-size: 11px; line-height: 1.35; }.finance-migration-quality-table > div.has-warning { background: #fffdf5; }.finance-migration-quality-table > div.has-warning b { color: #8a6832; }
 @media (max-width: 900px) { .finance-payables-workspace, .finance-migration-workspace { grid-template-columns: 1fr; }.finance-payable-kpis { grid-template-columns: 1fr; }.finance-migration-kpis,.finance-migration-preview .finance-migration-kpis { grid-template-columns: repeat(2, minmax(0,1fr)); }.finance-payables-table article { grid-template-columns: minmax(180px, 1fr) auto; }.finance-payables-table article > :nth-child(2), .finance-payables-table article > :nth-child(3) { grid-row: 2; }.finance-payables-table article > button { grid-column: 2; grid-row: 1 / span 2; } }
