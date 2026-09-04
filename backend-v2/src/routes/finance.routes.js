@@ -342,6 +342,21 @@ financeRouter.get("/finance/documents", async (req, res) => {
         status: state.status,
         issueDate: data.issueDate || record.createdAt,
         dueDate: data.dueDate || null,
+        documentType: cleanText(data.documentType || data.documentTypeName, party.side === "SUPPLIER" ? "Documento de proveedor" : "Factura de cliente"),
+        documentTypeCode: cleanText(data.documentTypeCode) || null,
+        netAmount: safeAmount(data.netAmount),
+        vatAmount: safeAmount(data.vatAmount),
+        totalAmount: state.amount,
+        currency: cleanText(data.currency, "CLP"),
+        paymentMethod: cleanText(data.paymentMethod) || null,
+        paymentIntermediary: cleanText(data.paymentIntermediary) || null,
+        commissionAmount: safeAmount(data.commissionAmount),
+        settlementReference: cleanText(data.settlementReference) || null,
+        creditNotesTotal: safeAmount(data.creditNotesTotal),
+        debitNotesTotal: safeAmount(data.debitNotesTotal),
+        referenceDocumentType: cleanText(data.referenceDocumentType) || null,
+        referenceDocumentNumber: cleanText(data.referenceDocumentNumber) || null,
+        referenceDocumentDate: data.referenceDocumentDate || null,
         amount: state.amount,
         balance: state.balance,
         paidAmount: Math.max(0, state.amount - state.balance),
@@ -737,8 +752,9 @@ financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGER
     const importableRows = [];
     let duplicateRows = 0;
     for (const row of rows) {
-      if (!row.needsReview && (knownFingerprints.has(row.fingerprint) || seenFingerprints.has(row.fingerprint))) { duplicateRows += 1; continue; }
-      seenFingerprints.add(row.fingerprint);
+      const hasStableIdentity = Boolean(cleanText(row.documentNumber) && cleanText(row.partyName) && safeAmount(row.amount) > 0);
+      if (hasStableIdentity && (knownFingerprints.has(row.fingerprint) || seenFingerprints.has(row.fingerprint))) { duplicateRows += 1; continue; }
+      if (hasStableIdentity) seenFingerprints.add(row.fingerprint);
       importableRows.push(row);
     }
     const batch = await prisma.$transaction(async (tx) => {
@@ -758,16 +774,34 @@ financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGER
           direction: row.kind === "PAYABLE" ? "PURCHASE" : "SALE",
           documentNumber: row.documentNumber,
           invoiceNumber: row.kind === "RECEIVABLE" ? row.documentNumber : undefined,
+          documentType: row.documentType,
+          documentTypeCode: row.documentTypeCode,
           customerName: row.kind === "RECEIVABLE" ? row.partyName : undefined,
           supplierName: row.kind === "PAYABLE" ? row.partyName : undefined,
           clientRut: row.kind === "RECEIVABLE" ? row.rut : undefined,
           supplierRut: row.kind === "PAYABLE" ? row.rut : undefined,
+          partyName: row.partyName,
+          partyRut: row.rut,
           category: row.category,
+          netAmount: row.netAmount,
+          vatAmount: row.vatAmount,
           amount: row.amount,
+          totalAmount: row.totalAmount || row.amount,
           balance: row.balance,
           paidAmount: row.paidAmount,
           issueDate: row.issueDate,
           dueDate: row.dueDate,
+          paymentDate: row.paymentDate,
+          paymentMethod: row.paymentMethod,
+          paymentIntermediary: row.paymentIntermediary,
+          commissionAmount: row.commissionAmount,
+          settlementReference: row.settlementReference,
+          creditNotesTotal: row.creditNotesTotal,
+          debitNotesTotal: row.debitNotesTotal,
+          referenceDocumentType: row.referenceDocumentType,
+          referenceDocumentNumber: row.referenceDocumentNumber,
+          referenceDocumentDate: row.referenceDocumentDate,
+          currency: row.currency,
           status: row.status,
           source: "historical_migration",
           sourceFile,
@@ -1112,7 +1146,8 @@ financeRouter.post("/finance/sii/dte/import", requireRole(ROLE_GROUPS.MANAGERS),
             customerName: isSupplier ? undefined : document.partyName, customerRut: isSupplier ? undefined : document.partyRut,
             clientName: isSupplier ? undefined : document.partyName, clientRut: isSupplier ? undefined : document.partyRut,
             supplierName: isSupplier ? document.partyName : undefined, supplierRut: isSupplier ? document.partyRut : undefined,
-            rut: document.partyRut, issueDate: document.issueDate, amount: document.amount, balance: isAdjustment ? 0 : document.amount, paidAmount: 0, currency: "CLP", importedAt
+            rut: document.partyRut, issueDate: document.issueDate, netAmount: document.netAmount, vatAmount: document.vatAmount,
+            amount: document.amount, totalAmount: document.amount, balance: isAdjustment ? 0 : document.amount, paidAmount: 0, currency: "CLP", importedAt
           }
         };
       }) });
@@ -1404,6 +1439,13 @@ financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(R
             movementId: movement.id,
             confidence: Math.min(...suggestions.map((suggestion) => suggestion.confidence)),
             matchReasons: suggestions.flatMap((suggestion) => suggestion.reasons),
+            matchEvidence: suggestions.flatMap((suggestion) => suggestion.evidence || []),
+            matchLimitations: [...new Set(suggestions.flatMap((suggestion) => suggestion.limitations || []))],
+            recommendation: suggestions.some((suggestion) => suggestion.recommendedAction === "REVISAR_MANUALMENTE")
+              ? "REVISAR_MANUALMENTE"
+              : suggestions.every((suggestion) => suggestion.recommendedAction === "LISTA_PARA_APROBACION")
+                ? "LISTA_PARA_APROBACION"
+                : "VALIDAR_ANTES_DE_CONFIRMAR",
             difference: Math.abs(totalBalance - movementAmount),
             reconciliationType: invoices.length > 1 ? "GROUPED_PAYMENT" : (movementAmount < totalBalance ? "PARTIAL_PAYMENT" : "EXACT_PAYMENT"),
             approvedAt: now.toISOString(),
@@ -1447,7 +1489,7 @@ financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(R
       return { reconciliation: created, invoices: updatedInvoices };
     });
 
-    await recordAuditLog(req, "FINANCE_RECONCILIATION_APPROVED", "finance_reconciliation", result.reconciliation.id, { invoiceIds: invoices.map((invoice) => invoice.id), movementId: movement.id, grouped: invoices.length > 1 });
+    await recordAuditLog(req, "FINANCE_RECONCILIATION_APPROVED", "finance_reconciliation", result.reconciliation.id, { invoiceIds: invoices.map((invoice) => invoice.id), movementId: movement.id, grouped: invoices.length > 1, confidence: Math.min(...suggestions.map((suggestion) => suggestion.confidence)), reasons: suggestions.flatMap((suggestion) => suggestion.reasons) });
     res.status(201).json({ reconciliation: result.reconciliation, invoices: result.invoices, remainingBalance: Math.max(0, totalBalance - movementAmount), confidence: Math.min(...suggestions.map((suggestion) => suggestion.confidence)), reasons: suggestions.flatMap((suggestion) => suggestion.reasons) });
   } catch (error) {
     console.error("Approve finance reconciliation error:", error);

@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { parseSiiDteFiles, sanitizeSiiDteDocuments, summarizeSiiDteDocuments } from "../src/services/finance-sii-dte.service.js";
 
-function dteXml({ emitterRut, receiverRut, folio = "101", total = "1250000", type = "33", reference = "" } = {}) {
-  return `<?xml version="1.0" encoding="ISO-8859-1"?><DTE><Documento ID="F101"><Encabezado><IdDoc><TipoDTE>${type}</TipoDTE><Folio>${folio}</Folio><FchEmis>2026-09-03</FchEmis></IdDoc><Emisor><RUTEmisor>${emitterRut}</RUTEmisor><RznSoc>Servicios Andinos SpA</RznSoc></Emisor><Receptor><RUTRecep>${receiverRut}</RUTRecep><RznSocRecep>Comercial Norte Ltda.</RznSocRecep></Receptor><Totales><MntTotal>${total}</MntTotal></Totales></Encabezado>${reference}</Documento></DTE>`;
+function dteXml({ emitterRut, receiverRut, folio = "101", total = "1250000", net = "1050420", vat = "199580", type = "33", reference = "" } = {}) {
+  return `<?xml version="1.0" encoding="ISO-8859-1"?><DTE><Documento ID="F101"><Encabezado><IdDoc><TipoDTE>${type}</TipoDTE><Folio>${folio}</Folio><FchEmis>2026-09-03</FchEmis></IdDoc><Emisor><RUTEmisor>${emitterRut}</RUTEmisor><RznSoc>Servicios Andinos SpA</RznSoc></Emisor><Receptor><RUTRecep>${receiverRut}</RUTRecep><RznSocRecep>Comercial Norte Ltda.</RznSocRecep></Receptor><Totales><MntNeto>${net}</MntNeto><IVA>${vat}</IVA><MntTotal>${total}</MntTotal></Totales></Encabezado>${reference}</Documento></DTE>`;
 }
 
 test("clasifica un DTE emitido como documento por cobrar", () => {
@@ -14,6 +14,8 @@ test("clasifica un DTE emitido como documento por cobrar", () => {
   assert.equal(document.side, "CUSTOMER");
   assert.equal(document.partyName, "Comercial Norte Ltda.");
   assert.equal(document.amount, 1250000);
+  assert.equal(document.netAmount, 1050420);
+  assert.equal(document.vatAmount, 199580);
   assert.equal(document.needsReview, false);
 });
 

@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { createHash } from "node:crypto";
+import { normalizeFinanceDocumentData, validateFinanceDocumentData } from "./finance-document.service.js";
 
 const MAX_MIGRATION_ROWS = 500;
 const MAX_MIGRATION_FILE_BYTES = 8 * 1024 * 1024;
@@ -70,6 +71,90 @@ function historicalStatus({ sourceStatus, amount, balance, paidAmount, dueDate, 
 
 function safeSourceRow(row) {
   return Object.fromEntries(Object.entries(row || {}).slice(0, 80).map(([key, value]) => [String(key).slice(0, 100), String(value ?? "").slice(0, 500)]));
+}
+
+function normalizeRut(value) {
+  return cleanText(value).replace(/\./g, "").replace(/\s/g, "").toUpperCase();
+}
+
+function isValidChileanRut(value) {
+  const rut = normalizeRut(value);
+  const match = rut.match(/^(\d{7,8})-?([0-9K])$/);
+  if (!match) return false;
+  let factor = 2;
+  let sum = 0;
+  for (const digit of [...match[1]].reverse()) {
+    sum += Number(digit) * factor;
+    factor = factor === 7 ? 2 : factor + 1;
+  }
+  const verifier = 11 - (sum % 11);
+  const expected = verifier === 11 ? "0" : verifier === 10 ? "K" : String(verifier);
+  return expected === match[2];
+}
+
+function sourceStatusSuggestsPaid(status) {
+  return /(pagad|paid|cobrad|settled|cerrad)/.test(normalizeKey(status));
+}
+
+function sourceStatusSuggestsOpen(status) {
+  return /(pendiente|abiert|open|por_cobrar|por_pagar|vencid)/.test(normalizeKey(status));
+}
+
+function dateBefore(left, right) {
+  if (!left || !right) return false;
+  return new Date(`${left}T12:00:00.000Z`) < new Date(`${right}T12:00:00.000Z`);
+}
+
+function canDetectHistoricalDuplicate(row) {
+  return Boolean(cleanText(row?.documentNumber) && cleanText(row?.partyName) && Number(row?.amount) > 0);
+}
+
+// El análisis de calidad no corrige datos silenciosamente: explica por qué una
+// fila requiere revisión y deja los duplicados visibles antes de importar.
+export function assessHistoricalFinanceQuality(rows) {
+  const normalizedRows = Array.isArray(rows) ? rows : [];
+  const fingerprints = new Map();
+  for (const row of normalizedRows) {
+    if (!canDetectHistoricalDuplicate(row)) continue;
+    const current = fingerprints.get(row.fingerprint) || [];
+    current.push(row.rowNumber);
+    fingerprints.set(row.fingerprint, current);
+  }
+
+  return normalizedRows.map((row) => {
+    const reviewReasons = [...(Array.isArray(row.reviewReasons) ? row.reviewReasons : [])];
+    const warnings = [];
+    const adjustedTotal = Math.max(0, Number(row.amount || 0) - Number(row.creditNotesTotal || 0) + Number(row.debitNotesTotal || 0));
+    const paidAndBalance = Number(row.paidAmount || 0) + Number(row.balance || 0);
+    // La primera ocurrencia queda disponible para importar; sólo las
+    // posteriores se consideran duplicadas y se omiten de forma segura.
+    const duplicateOfRows = (fingerprints.get(row.fingerprint) || []).filter((rowNumber) => rowNumber < row.rowNumber);
+
+    if (row.rut && !isValidChileanRut(row.rut)) reviewReasons.push("RUT con formato o dígito verificador inválido");
+    if (!row.rut) warnings.push("Sin RUT: el matching automático tendrá menor precisión");
+    if (dateBefore(row.dueDate, row.issueDate)) reviewReasons.push("vencimiento anterior a la fecha de emisión");
+    if (dateBefore(row.paymentDate, row.issueDate)) reviewReasons.push("fecha de pago anterior a la fecha de emisión");
+    if (Math.abs(paidAndBalance - adjustedTotal) > 1) reviewReasons.push("saldo y monto pagado no coinciden con el total ajustado");
+    if (sourceStatusSuggestsPaid(row.sourceStatus) && Number(row.balance || 0) > 1) reviewReasons.push("estado de origen indica pagado, pero mantiene saldo pendiente");
+    if (sourceStatusSuggestsOpen(row.sourceStatus) && adjustedTotal > 0 && Number(row.balance || 0) === 0) warnings.push("Estado de origen abierto, pero saldo informado es cero");
+    if (duplicateOfRows.length) warnings.push(`Duplicado dentro del archivo: fila(s) ${duplicateOfRows.join(", ")}`);
+
+    const uniqueReasons = [...new Set(reviewReasons)];
+    const uniqueWarnings = [...new Set(warnings)];
+    const score = Math.max(0, 100 - (uniqueReasons.length * 30) - (uniqueWarnings.length * 8));
+    return {
+      ...row,
+      needsReview: uniqueReasons.length > 0,
+      reviewReasons: uniqueReasons,
+      duplicateInSource: duplicateOfRows.length > 0,
+      duplicateOfRows,
+      quality: {
+        score,
+        status: uniqueReasons.length ? "REVIEW" : duplicateOfRows.length ? "DUPLICATE" : uniqueWarnings.length ? "WARNING" : "READY",
+        warnings: uniqueWarnings
+      }
+    };
+  });
 }
 
 export function historicalFinanceFingerprint(input = {}) {
@@ -190,7 +275,7 @@ export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION
 
 export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit = MAX_MIGRATION_ROWS } = {}) {
   if (!Array.isArray(rows)) return [];
-  return rows.slice(0, Math.max(1, Math.min(Number(limit) || MAX_MIGRATION_ROWS, MAX_MIGRATION_ROWS))).map((rawRow, index) => {
+  const normalized = rows.slice(0, Math.max(1, Math.min(Number(limit) || MAX_MIGRATION_ROWS, MAX_MIGRATION_ROWS))).map((rawRow, index) => {
     const row = rawRow && typeof rawRow === "object" && !Array.isArray(rawRow) ? rawRow : {};
     const supplierName = readValue(row, ["proveedor", "supplier", "beneficiario", "vendor", "razon_social_proveedor", "nombre_proveedor"]);
     const customerName = readValue(row, ["cliente", "customer", "deudor", "razon_social", "razon_social_cliente", "nombre_cliente"]);
@@ -198,19 +283,63 @@ export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit =
     const kind = supplierName || /(pagar|egreso|proveedor|purchase|payable)/.test(kindHint) ? "PAYABLE" : "RECEIVABLE";
     const partyName = kind === "PAYABLE" ? supplierName : customerName;
     const documentNumber = readValue(row, ["folio", "numero", "nro", "n_documento", "documento", "factura", "invoice_number", "numero_factura"]);
-    const amount = parseAmount(readValue(row, ["monto", "monto_total", "total", "importe", "valor", "debe", "amount"]));
+    const netAmount = parseAmount(readValue(row, ["monto_neto", "neto", "net_amount", "net"]));
+    const vatAmount = parseAmount(readValue(row, ["iva", "monto_iva", "vat", "tax", "impuesto"]));
+    const suppliedAmount = parseAmount(readValue(row, ["monto", "monto_total", "total", "importe", "valor", "debe", "amount"]));
+    const amount = suppliedAmount || Math.max(0, netAmount + vatAmount);
     const rawBalance = readValue(row, ["saldo", "saldo_pendiente", "pendiente", "por_cobrar", "por_pagar", "balance"]);
     const rawPaid = readValue(row, ["pagado", "monto_pagado", "abonado", "pago", "paid_amount"]);
-    const paidAmount = parseAmount(rawPaid);
+    const suppliedPaidAmount = parseAmount(rawPaid);
+    const paidAmount = rawPaid ? suppliedPaidAmount : (rawBalance ? Math.max(0, amount - parseAmount(rawBalance)) : 0);
     const balance = rawBalance ? parseAmount(rawBalance) : Math.max(0, amount - paidAmount);
     const issueDate = parseDate(readValue(row, ["fecha_emision", "emision", "fecha_documento", "fecha", "issue_date"]));
     const dueDate = parseDate(readValue(row, ["fecha_vencimiento", "vencimiento", "vence", "due_date"]));
+    const paymentDate = parseDate(readValue(row, ["fecha_pago", "fecha_de_pago", "payment_date", "paid_at"]));
     const sourceStatus = readValue(row, ["estado", "status", "situacion", "estado_pago"]);
+    const documentType = readValue(row, ["tipo_documento", "tipo_doc", "document_type", "tipo"]);
+    const currency = readValue(row, ["moneda", "currency", "divisa"]);
+    const paymentMethod = readValue(row, ["medio_pago", "forma_pago", "payment_method", "medio_de_pago"]);
+    const paymentIntermediary = readValue(row, ["intermediario", "pasarela", "payment_intermediary", "webpay", "transbank"]);
+    const commissionAmount = parseAmount(readValue(row, ["comision", "monto_comision", "commission", "fee"]));
+    const settlementReference = readValue(row, ["liquidacion", "referencia_liquidacion", "settlement_reference", "liquidation_reference"]);
+    const creditNotesTotal = parseAmount(readValue(row, ["notas_credito", "nota_credito", "credit_notes", "credit_note_amount"]));
+    const debitNotesTotal = parseAmount(readValue(row, ["notas_debito", "nota_debito", "debit_notes", "debit_note_amount"]));
+    const referenceDocumentType = readValue(row, ["tipo_documento_referencia", "reference_document_type", "tipo_referencia"]);
+    const referenceDocumentNumber = readValue(row, ["folio_referencia", "documento_referencia", "reference_document_number", "reference_number"]);
+    const referenceDocumentDate = parseDate(readValue(row, ["fecha_documento_referencia", "reference_document_date", "reference_date"]));
     const status = historicalStatus({ sourceStatus, amount, balance, paidAmount, dueDate, now });
     const missing = [];
     if (!documentNumber) missing.push("número o folio");
     if (!partyName) missing.push(kind === "PAYABLE" ? "proveedor" : "cliente");
     if (!amount) missing.push("monto");
+    if (!issueDate) missing.push("fecha de emisión");
+    const documentData = normalizeFinanceDocumentData({
+      documentNumber,
+      documentType,
+      partyName,
+      partyRut: readValue(row, ["rut", "rut_cliente", "rut_proveedor", "tax_id"]),
+      netAmount,
+      vatAmount,
+      amount,
+      paidAmount,
+      balance,
+      issueDate,
+      dueDate,
+      paymentDate,
+      paymentMethod,
+      paymentIntermediary,
+      commissionAmount,
+      settlementReference,
+      creditNotesTotal,
+      debitNotesTotal,
+      referenceDocumentType,
+      referenceDocumentNumber,
+      referenceDocumentDate,
+      currency,
+      documentSide: kind === "PAYABLE" ? "SUPPLIER" : "CUSTOMER"
+    }, kind === "PAYABLE" ? "finance_payable" : "finance_invoice", { today: issueDate || new Date(now).toISOString().slice(0, 10) });
+    const financeValidation = validateFinanceDocumentData(documentData);
+    for (const error of financeValidation.errors) if (!missing.includes(error)) missing.push(error);
     const source = safeSourceRow(row);
     const fingerprint = historicalFinanceFingerprint({ kind, documentNumber, rut: readValue(row, ["rut", "rut_cliente", "rut_proveedor", "tax_id"]), amount, issueDate, partyName });
     return {
@@ -222,11 +351,10 @@ export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit =
       partyName,
       rut: readValue(row, ["rut", "rut_cliente", "rut_proveedor", "tax_id"]),
       category: readValue(row, ["categoria", "category", "centro_costo", "concepto", "glosa"]),
-      amount,
-      paidAmount: Math.min(amount, paidAmount),
-      balance: Math.min(amount, balance),
-      issueDate,
-      dueDate,
+      ...documentData,
+      amount: documentData.amount,
+      paidAmount: Math.min(documentData.amount, documentData.paidAmount),
+      balance: Math.min(Math.max(0, financeValidation.adjustedAmount), documentData.balance),
       status,
       sourceStatus,
       fingerprint,
@@ -235,6 +363,7 @@ export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit =
       source
     };
   });
+  return assessHistoricalFinanceQuality(normalized);
 }
 
 export function summarizeHistoricalFinanceRows(rows) {
@@ -244,12 +373,18 @@ export function summarizeHistoricalFinanceRows(rows) {
   let openReceivables = 0;
   let openPayables = 0;
   let reviewRows = 0;
+  let duplicateRows = 0;
+  let readyRows = 0;
+  let qualityScoreTotal = 0;
   for (const row of normalizedRows) {
     byStatus[row.status] = (byStatus[row.status] || 0) + 1;
     byKind[row.kind] = (byKind[row.kind] || 0) + 1;
     if (row.kind === "PAYABLE") openPayables += row.balance || 0;
     else openReceivables += row.balance || 0;
     if (row.needsReview) reviewRows += 1;
+    if (row.duplicateInSource) duplicateRows += 1;
+    if (!row.needsReview && !row.duplicateInSource) readyRows += 1;
+    qualityScoreTotal += Number(row.quality?.score ?? (row.needsReview ? 50 : 100));
   }
   return {
     totalRows: normalizedRows.length,
@@ -257,7 +392,10 @@ export function summarizeHistoricalFinanceRows(rows) {
     byStatus,
     byKind,
     openReceivables,
-    openPayables
+    openPayables,
+    duplicateRows,
+    readyRows,
+    averageQualityScore: normalizedRows.length ? Math.round(qualityScoreTotal / normalizedRows.length) : 0
   };
 }
 

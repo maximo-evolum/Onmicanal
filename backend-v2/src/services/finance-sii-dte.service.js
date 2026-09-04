@@ -82,6 +82,8 @@ function parseDocument(xml, { companyRut, sourceFile = "dte.xml" } = {}) {
   const receiverRut = normalizeRut(tag(receiver, "RUTRecep"));
   const emitterName = tag(emitter, "RznSoc", "Emisor sin razón social");
   const receiverName = tag(receiver, "RznSocRecep", "Receptor sin razón social");
+  const netAmount = safeNumber(tag(totals, "MntNeto"));
+  const vatAmount = safeNumber(tag(totals, "IVA"));
   const amount = safeNumber(tag(totals, "MntTotal"));
   const normalizedCompanyRut = normalizeRut(companyRut);
   const reviewReasons = [];
@@ -107,6 +109,8 @@ function parseDocument(xml, { companyRut, sourceFile = "dte.xml" } = {}) {
     emitterName,
     receiverRut,
     receiverName,
+    netAmount,
+    vatAmount,
     amount,
     referenceDocumentType: tag(reference, "TpoDocRef") || null,
     referenceDocumentNumber: tag(reference, "FolioRef") || null,
@@ -145,6 +149,8 @@ export function sanitizeSiiDteDocuments(documents, { companyRut } = {}) {
     const documentTypeCode = cleanText(document.documentTypeCode).slice(0, 6);
     const documentNumber = cleanText(document.documentNumber).slice(0, 80);
     const issueDate = validDate(document.issueDate);
+    const netAmount = safeNumber(document.netAmount);
+    const vatAmount = safeNumber(document.vatAmount);
     const amount = safeNumber(document.amount);
     const referenceDocumentType = cleanText(document.referenceDocumentType).slice(0, 10) || null;
     const referenceDocumentNumber = cleanText(document.referenceDocumentNumber).slice(0, 80) || null;
@@ -161,7 +167,7 @@ export function sanitizeSiiDteDocuments(documents, { companyRut } = {}) {
     const receiverName = cleanText(document.receiverName, "Receptor sin razón social").slice(0, 180);
     return {
       sourceFile: cleanText(document.sourceFile, "dte.xml").slice(0, 180), documentTypeCode, documentTypeName, documentNumber, issueDate,
-      emitterRut, emitterName, receiverRut, receiverName, amount, currency: "CLP", side,
+      emitterRut, emitterName, receiverRut, receiverName, netAmount, vatAmount, amount, currency: "CLP", side,
       referenceDocumentType, referenceDocumentNumber, referenceDocumentDate,
       partyName: side === "CUSTOMER" ? receiverName : side === "SUPPLIER" ? emitterName : "Contraparte por revisar",
       partyRut: side === "CUSTOMER" ? receiverRut : side === "SUPPLIER" ? emitterRut : null,

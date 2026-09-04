@@ -842,6 +842,12 @@ export type FinanceReconciliationSuggestion = {
   level: "HIGH" | "MEDIUM" | "LOW";
   reasons: string[];
   amountDifference: number;
+  evidence: Array<{ code: string; label: string; weight: number; detail: string }>;
+  limitations: string[];
+  recommendedAction: "LISTA_PARA_APROBACION" | "VALIDAR_ANTES_DE_CONFIRMAR" | "REVISAR_MANUALMENTE" | string;
+  explanation: string;
+  candidateCount?: number;
+  alternatives?: Array<{ invoiceId: string; documentNumber: string; partyName: string; confidence: number; amountDifference: number; reasons: string[] }>;
 };
 
 export function getFinanceOverview(): Promise<FinanceOverview> {
@@ -874,6 +880,21 @@ export type FinanceDocument = {
   status: string;
   issueDate: string;
   dueDate: string | null;
+  documentType: string;
+  documentTypeCode: string | null;
+  netAmount: number;
+  vatAmount: number;
+  totalAmount: number;
+  currency: string;
+  paymentMethod: string | null;
+  paymentIntermediary: string | null;
+  commissionAmount: number;
+  settlementReference: string | null;
+  creditNotesTotal: number;
+  debitNotesTotal: number;
+  referenceDocumentType: string | null;
+  referenceDocumentNumber: string | null;
+  referenceDocumentDate: string | null;
   amount: number;
   balance: number;
   paidAmount: number;
@@ -920,6 +941,9 @@ export type FinanceMigrationPreview = {
     byKind: Record<string, number>;
     openReceivables: number;
     openPayables: number;
+    duplicateRows: number;
+    readyRows: number;
+    averageQualityScore: number;
   };
   rows: Array<Record<string, unknown>>;
   sourceRows?: Array<Record<string, unknown>>;
@@ -945,6 +969,8 @@ export type FinanceSiiDte = {
   receiverRut: string;
   receiverName: string;
   amount: number;
+  netAmount: number;
+  vatAmount: number;
   currency: string;
   side: "CUSTOMER" | "SUPPLIER" | null;
   partyName: string;

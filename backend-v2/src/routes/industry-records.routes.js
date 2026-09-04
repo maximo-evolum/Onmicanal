@@ -14,6 +14,7 @@ import { redactMetadataForRole } from "../lib/metadata-access.js";
 import { runWorkflowsForEvent } from "./workflows.routes.js";
 import { runFinancePostIngestionAnalysis } from "../services/finance-automation.service.js";
 import { canMutateFinanceRecord, financeActionForRecordMutation } from "../services/finance-security.service.js";
+import { normalizeFinanceDocumentData, validateFinanceDocumentData } from "../services/finance-document.service.js";
 
 export const industryRecordsRouter = Router();
 
@@ -120,6 +121,10 @@ function cleanText(value, fallback = "") {
 
 function normalizeRecordType(value) {
   return cleanText(value, "property").toLowerCase().replace(/\s+/g, "_");
+}
+
+function isFinanceDocumentRecord(recordType) {
+  return ["finance_invoice", "finance_payable"].includes(recordType);
 }
 
 async function assertRecordModule(req, recordType) {
@@ -401,7 +406,14 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
       if (!user) return res.status(400).json({ error: "Usuario asignado no pertenece a este cliente" });
     }
 
-    const normalizedData = normalizeMetadata(req.body?.data, {});
+    let normalizedData = normalizeMetadata(req.body?.data, {});
+    if (isFinanceDocumentRecord(recordType)) {
+      normalizedData = normalizeFinanceDocumentData(normalizedData, recordType);
+      const financeValidation = validateFinanceDocumentData(normalizedData);
+      if (!financeValidation.ok) {
+        return res.status(422).json({ error: `Completa o corrige: ${financeValidation.errors.join(", ")}.`, financeValidation });
+      }
+    }
     const automatedSchema = await ensureAutomatedMetadataDraft({
       tenantId: req.tenantId,
       industry: req.tenant?.industry,
@@ -486,7 +498,14 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       }
       data.assignedToId = assignedToId;
     }
-    const nextMetadata = req.body?.data !== undefined ? normalizeMetadata(req.body.data, {}) : existing.data;
+    let nextMetadata = req.body?.data !== undefined ? normalizeMetadata(req.body.data, {}) : existing.data;
+    if (isFinanceDocumentRecord(existing.recordType) && req.body?.data !== undefined) {
+      nextMetadata = normalizeFinanceDocumentData(mergeMetadata(existing.data, nextMetadata), existing.recordType);
+      const financeValidation = validateFinanceDocumentData(nextMetadata);
+      if (!financeValidation.ok) {
+        return res.status(422).json({ error: `Completa o corrige: ${financeValidation.errors.join(", ")}.`, financeValidation });
+      }
+    }
     const evaluation = await evaluateRecordMetadata(req.tenantId, existing.recordType, nextMetadata);
     if (evaluation.blocking) {
       return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });
@@ -525,7 +544,14 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
     }
 
     const patch = normalizeMetadata(req.body?.metadata ?? req.body?.data, {});
-    const nextMetadata = mergeMetadata(existing.data, patch);
+    let nextMetadata = mergeMetadata(existing.data, patch);
+    if (isFinanceDocumentRecord(existing.recordType)) {
+      nextMetadata = normalizeFinanceDocumentData(nextMetadata, existing.recordType);
+      const financeValidation = validateFinanceDocumentData(nextMetadata);
+      if (!financeValidation.ok) {
+        return res.status(422).json({ error: `Completa o corrige: ${financeValidation.errors.join(", ")}.`, financeValidation });
+      }
+    }
     const evaluation = await evaluateRecordMetadata(req.tenantId, existing.recordType, nextMetadata);
     if (evaluation.blocking) {
       return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });

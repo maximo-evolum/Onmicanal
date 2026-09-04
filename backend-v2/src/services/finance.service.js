@@ -69,36 +69,53 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
   const movementAmount = Math.abs(numberOf(movementData.amount));
   const difference = Math.abs(financial.balance - movementAmount);
   const reasons = [];
+  const evidence = [];
+  const limitations = [];
   let score = 0;
+
+  const addEvidence = (code, label, weight, detail) => {
+    reasons.push(label);
+    evidence.push({ code, label, weight, detail });
+  };
 
   if (financial.balance > 0 && difference <= 1) {
     score += 62;
-    reasons.push("Monto exacto");
+    addEvidence("EXACT_AMOUNT", "Monto exacto", 62, `El abono coincide con el saldo pendiente (${financial.balance}).`);
   } else if (financial.balance > 0 && difference / financial.balance <= 0.01) {
     score += 50;
-    reasons.push("Monto muy cercano");
+    addEvidence("NEAR_AMOUNT", "Monto muy cercano", 50, `La diferencia es ${difference}, dentro de una tolerancia máxima de 1%.`);
   } else if (financial.balance > 0 && movementAmount > 0 && movementAmount < financial.balance) {
     score += 24;
-    reasons.push("Posible pago parcial");
+    addEvidence("PARTIAL_AMOUNT", "Posible pago parcial", 24, `El abono cubre ${movementAmount} de un saldo pendiente de ${financial.balance}.`);
+  } else if (financial.balance > 0) {
+    limitations.push(`El monto no cuadra: diferencia de ${difference} respecto del saldo pendiente.`);
   }
 
   const reference = `${movementData.reference || ""} ${movement.title || ""}`;
   const invoiceNumber = invoiceData.invoiceNumber || invoiceData.number || invoice.title;
   if (invoiceNumber && normalizeText(reference).includes(normalizeText(invoiceNumber))) {
     score += 18;
-    reasons.push("Referencia de factura");
+    addEvidence("INVOICE_REFERENCE", "Referencia de factura", 18, `La referencia bancaria contiene “${invoiceNumber}”.`);
+  } else {
+    limitations.push("La cartola no contiene una referencia verificable al folio del documento.");
   }
 
   const invoiceRut = invoiceData.clientRut || invoiceData.customerRut || invoiceData.rut || invoiceData.partyRut;
   if (invoiceRut && movementData.rut && normalizeText(invoiceRut) === normalizeText(movementData.rut)) {
     score += 12;
-    reasons.push("RUT coincidente");
+    addEvidence("RUT_MATCH", "RUT coincidente", 12, `El RUT de la contraparte coincide con ${invoiceRut}.`);
+  } else if (invoiceRut && !movementData.rut) {
+    limitations.push("El movimiento bancario no informa RUT de contraparte.");
+  } else if (invoiceRut && movementData.rut) {
+    limitations.push("El RUT informado por el movimiento no coincide con el documento.");
   }
 
   const customerName = invoiceData.customerName || invoiceData.clientName || invoiceData.customer || invoiceData.partyName || invoice.title;
   if (sharesTerm(customerName, movementData.payerName || movementData.counterparty || reference)) {
     score += 10;
-    reasons.push("Cliente o razon social coincidente");
+    addEvidence("PARTY_MATCH", "Cliente o razon social coincidente", 10, `La descripción del abono coincide con ${customerName}.`);
+  } else {
+    limitations.push("No se encontró coincidencia clara de razón social en la descripción bancaria.");
   }
 
   const movementDate = dateOf(movementData.transactionDate || movementData.date);
@@ -106,18 +123,37 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
     const days = Math.abs(financial.dueDate.getTime() - movementDate.getTime()) / DAY_MS;
     if (days <= 10) {
       score += 5;
-      reasons.push("Fecha compatible");
+      addEvidence("DATE_MATCH", "Fecha compatible", 5, `El movimiento ocurrió a ${Math.round(days)} día(s) del vencimiento.`);
+    } else {
+      limitations.push(`La fecha del movimiento está a ${Math.round(days)} día(s) del vencimiento.`);
     }
+  } else if (!movementDate) {
+    limitations.push("El movimiento no informa fecha para validar cercanía al vencimiento.");
   }
+
+  const confidence = Math.min(99, Math.round(score));
+  const partial = movementAmount > 0 && movementAmount < financial.balance;
+  const overpayment = movementAmount > financial.balance + 1;
+  const recommendedAction = overpayment || partial || confidence < 80
+    ? "REVISAR_MANUALMENTE"
+    : confidence >= 95
+      ? "LISTA_PARA_APROBACION"
+      : "VALIDAR_ANTES_DE_CONFIRMAR";
 
   return {
     invoiceId: invoice.id,
     movementId: movement.id,
-    confidence: Math.min(99, Math.round(score)),
+    confidence,
     difference,
-    partial: movementAmount > 0 && movementAmount < financial.balance,
-    overpayment: movementAmount > financial.balance + 1,
+    partial,
+    overpayment,
     reasons,
+    evidence,
+    limitations: [...new Set(limitations)],
+    recommendedAction,
+    explanation: evidence.length
+      ? `${evidence.length} evidencia(s) respaldan la sugerencia; ${limitations.length} aspecto(s) deben considerarse antes de confirmar.`
+      : "No hay evidencia suficiente para proponer una conciliación automática.",
     invoice,
     movement
   };
@@ -294,9 +330,29 @@ export async function getFinanceReconciliationSuggestions({ tenantId, movementId
         grouped: true,
         invoiceIds: grouped.group.map((candidate) => candidate.invoice.id),
         invoices: grouped.group.map((candidate) => candidate.invoice),
-        reasons: ["Pago agrupado", "Monto exacto entre documentos", ...grouped.group.flatMap((candidate) => candidate.reasons.filter((reason) => reason !== "Monto exacto")).slice(0, 3)]
+        reasons: ["Pago agrupado", "Monto exacto entre documentos", ...grouped.group.flatMap((candidate) => candidate.reasons.filter((reason) => reason !== "Monto exacto")).slice(0, 3)],
+        evidence: [
+          { code: "GROUPED_PAYMENT", label: "Pago agrupado", weight: 40, detail: `El abono cubre exactamente ${grouped.group.length} documentos.` },
+          ...grouped.group.flatMap((candidate) => candidate.evidence.filter((item) => item.code !== "EXACT_AMOUNT")).slice(0, 4)
+        ],
+        limitations: [],
+        recommendedAction: "VALIDAR_ANTES_DE_CONFIRMAR",
+        explanation: "El monto coincide con un grupo de documentos. Confirma que pertenecen al mismo pagador antes de aplicar la conciliación."
       };
     }
+    const selectedInvoiceIds = new Set(best.grouped ? best.invoiceIds : [best.invoice.id]);
+    const alternatives = scored
+      .filter((candidate) => !selectedInvoiceIds.has(candidate.invoice.id))
+      .slice(0, 3)
+      .map((candidate) => ({
+        invoiceId: candidate.invoice.id,
+        documentNumber: dataOf(candidate.invoice).invoiceNumber || dataOf(candidate.invoice).documentNumber || candidate.invoice.title,
+        partyName: dataOf(candidate.invoice).customerName || dataOf(candidate.invoice).clientName || dataOf(candidate.invoice).partyName || "Contraparte sin nombre",
+        confidence: candidate.confidence,
+        amountDifference: candidate.difference,
+        reasons: candidate.reasons
+      }));
+    best = { ...best, candidateCount: scored.length, alternatives };
     results.push(best);
   }
 

@@ -23,6 +23,10 @@ test("Finance OS prioriza una coincidencia con monto, referencia, RUT y fecha", 
   assert.equal(result.partial, false);
   assert.ok(result.reasons.includes("Monto exacto"));
   assert.ok(result.reasons.includes("Referencia de factura"));
+  assert.equal(result.recommendedAction, "LISTA_PARA_APROBACION");
+  assert.ok(result.evidence.some((item) => item.code === "EXACT_AMOUNT"));
+  assert.ok(result.evidence.some((item) => item.code === "RUT_MATCH"));
+  assert.equal(result.limitations.length, 0);
 });
 
 test("Finance OS identifica pagos parciales y facturas vencidas", () => {
@@ -39,6 +43,8 @@ test("Finance OS identifica pagos parciales y facturas vencidas", () => {
   assert.equal(state.status, "OVERDUE");
   assert.equal(result.partial, true);
   assert.ok(result.reasons.includes("Posible pago parcial"));
+  assert.equal(result.recommendedAction, "REVISAR_MANUALMENTE");
+  assert.ok(result.limitations.some((item) => /fecha/i.test(item)));
 });
 
 test("usa los campos reales de cliente importados desde DTE y reconoce un abono mayor como diferencia", () => {
@@ -51,6 +57,8 @@ test("usa los campos reales de cliente importados desde DTE y reconoce un abono 
   assert.equal(result.overpayment, true);
   assert.ok(result.reasons.includes("RUT coincidente"));
   assert.ok(result.reasons.includes("Cliente o razon social coincidente"));
+  assert.equal(result.recommendedAction, "REVISAR_MANUALMENTE");
+  assert.ok(result.limitations.some((item) => /monto no cuadra/i.test(item)));
 });
 
 test("segmenta la cobranza por antigüedad sin mezclar monitoreo y mora", () => {
