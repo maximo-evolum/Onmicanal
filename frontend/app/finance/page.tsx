@@ -9,6 +9,7 @@ import {
   analyzeFinanceAgents,
   approveFinanceReconciliation,
   createIndustryRecord,
+  deleteFinanceBankStatement,
   downloadFinanceNuboxDocument,
   generateFinanceCollectionCases,
   getFinanceCustomers,
@@ -22,6 +23,7 @@ import {
   getFinancePlan,
   getFinanceAgentWorkspace,
   getFinanceBankCatalog,
+  getFinanceBankStatements,
   getFinanceOpenBankingStatus,
   getFinanceMonthlyClosePreview,
   getFinancePlanning,
@@ -52,6 +54,7 @@ import {
   type FinanceAgentWorkspace,
   type ChileanBank,
   type FinanceBankStatementPreview,
+  type FinanceBankStatementBatch,
   type FinanceOpenBankingStatus,
   type FinanceMonthlyClosePreview,
   type FinancePlanning,
@@ -241,6 +244,7 @@ function FinanceWorkspace() {
   const [financeDocuments, setFinanceDocuments] = useState<FinanceDocument[]>([]);
   const [chileanBanks, setChileanBanks] = useState<ChileanBank[]>([]);
   const [bankStatementQueue, setBankStatementQueue] = useState<BankStatementQueueItem[]>([]);
+  const [bankStatementBatches, setBankStatementBatches] = useState<FinanceBankStatementBatch[]>([]);
   const [bankStatementUploadProgress, setBankStatementUploadProgress] = useState<BankStatementUploadProgress | null>(null);
   const [bankStatementUploadIssues, setBankStatementUploadIssues] = useState<Array<{ fileName: string; detail: string }>>([]);
   const [bankStatementForm, setBankStatementForm] = useState<BankStatementAccountInput>({ bankKey: "", accountAlias: "", accountType: "Cuenta corriente", accountLast4: "" });
@@ -303,9 +307,10 @@ function FinanceWorkspace() {
       if (activeTab === "facturas") setFinanceDocuments((await getFinanceDocuments(documentFilter)).documents);
       if (activeTab === "sii") setSiiStatus(await getFinanceSiiStatus());
       if (activeTab === "cartolas") {
-        const [movements, catalog] = await Promise.all([getIndustryRecords("bank_movement"), getFinanceBankCatalog()]);
+        const [movements, catalog, bankStatements] = await Promise.all([getIndustryRecords("bank_movement"), getFinanceBankCatalog(), getFinanceBankStatements()]);
         setRecords(movements);
         setChileanBanks(catalog.banks || []);
+        setBankStatementBatches(bankStatements.statements || []);
         setBankStatementForm((current) => current.bankKey || !catalog.banks?.length ? current : { ...current, bankKey: catalog.banks[0].key });
       }
       if (activeTab === "banca_abierta") {
@@ -676,6 +681,23 @@ function FinanceWorkspace() {
     finally { setSaving(false); }
   }
 
+  async function removeBankStatement(batch: FinanceBankStatementBatch) {
+    if (!batch.canDelete) return setMessage(batch.deleteBlockReason || "Esta cartola no puede eliminarse.");
+    const confirmed = window.confirm(`Eliminar la cartola “${batch.sourceFile}”?\n\nSe eliminarán ${batch.movements} movimiento(s) aún no conciliados y ${batch.exceptions} excepción(es) asociada(s). Esta acción no se puede deshacer.`);
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      const result = await deleteFinanceBankStatement(batch.id);
+      setBankStatementQueue((current) => current.filter((item) => item.preview.sourceFile !== batch.sourceFile));
+      setMessage(`Cartola eliminada correctamente. Se quitaron ${result.deleted.movements} movimiento(s) y ${result.deleted.exceptions} excepción(es) asociada(s).`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo eliminar la cartola.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function prepareOpenBankingConsent() {
     if (!openBankingForm.bankKey) return setMessage("Selecciona el banco que el titular autorizará.");
     setSaving(true);
@@ -951,6 +973,13 @@ function FinanceWorkspace() {
             </article>
             <article className="finance-card">
               <div className="finance-card-heading"><div><span className="finance-eyebrow">Conciliación</span><h2>Cartolas preparadas y movimientos cargados</h2></div><span>{records.length} movimientos</span></div>
+              {bankStatementBatches.length ? <section className="finance-bank-statement-history" aria-label="Cartolas importadas">
+                <div className="finance-bank-statement-history-heading"><div><h3>Cartolas ya incorporadas</h3><p>Si una carga tiene datos incorrectos, puedes eliminarla antes de conciliar sus movimientos.</p></div><span>{bankStatementBatches.length} importada(s)</span></div>
+                <div className="finance-bank-statement-history-list">{bankStatementBatches.map((batch) => <article className="finance-bank-statement-history-item" key={batch.id}>
+                  <div className="finance-bank-statement-history-main"><strong>{batch.sourceFile}</strong><span>{batch.account?.bank || "Banco no informado"}{batch.account?.accountAlias ? ` · ${batch.account.accountAlias}` : ""} · Importada {shortDate(batch.importedAt)}</span><small>{batch.movements} movimiento(s) · {batch.exceptions} excepción(es){batch.summary ? ` · Abonos ${money(batch.summary.credits)} · Cargos ${money(batch.summary.debits)}` : ""}</small></div>
+                  <div className="finance-bank-statement-history-actions"><span className={`finance-bank-statement-state ${batch.canDelete ? "is-removable" : "is-protected"}`}>{batch.canDelete ? "Sin conciliar" : "Protegida"}</span><button type="button" className="finance-danger-button" disabled={saving || !batch.canDelete} title={batch.deleteBlockReason || "Eliminar cartola y sus movimientos no conciliados"} onClick={() => void removeBankStatement(batch)}>Eliminar cartola</button>{!batch.canDelete ? <small>{batch.deleteBlockReason}</small> : null}</div>
+                </article>)}</div>
+              </section> : <p className="finance-empty finance-bank-history-empty">Aún no hay cartolas importadas. Cuando incorpores una, podrás revisarla o eliminarla desde aquí antes de conciliar.</p>}
               {bankStatementQueue.map((item) => <article className="finance-bank-statement-preview" key={item.id}>
                 <div className="finance-card-heading"><div><h3>{item.preview.sourceFile}</h3><small>{item.preview.detectedFormat || "Cartola detectada"} · {item.preview.summary.totalRows} filas · Abonos {money(item.preview.summary.credits)} · Cargos {money(item.preview.summary.debits)}</small>{item.preview.conversion ? <small className="finance-file-conversion">{item.preview.conversion}</small> : null}</div><button type="button" className="finance-link-button" disabled={saving} onClick={() => setBankStatementQueue((current) => current.filter((queued) => queued.id !== item.id))}>Quitar</button></div>
                 {item.preview.duplicate ? <div className={`finance-note finance-bank-statement-duplicate ${item.preview.duplicate.blocked ? "" : "is-reprocessable"}`}><strong>{item.preview.duplicate.blocked ? "Cartola repetida: importación bloqueada" : "Carga anterior sin movimientos válidos"}</strong><span>{item.preview.duplicate.message}</span>{item.preview.duplicate.blocked ? <span>{item.preview.duplicate.duplicateRows} de {item.preview.duplicate.validRows} movimientos válidos ya estaban registrados.</span> : <span>Al incorporarla, la carga anterior quedará marcada como reprocesada y sus excepciones técnicas se resolverán.</span>}</div> : null}

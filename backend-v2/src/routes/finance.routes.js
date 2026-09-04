@@ -1082,6 +1082,105 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
   }
 });
 
+// Una cartola importada puede revertirse solamente antes de que alguno de sus
+// movimientos haya sido conciliado. Así se corrige una carga errónea sin
+// borrar evidencia contable ya aplicada a documentos de clientes.
+financeRouter.get("/finance/bank-statements", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const [batches, movements, exceptions] = await Promise.all([
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_statement" }, orderBy: { createdAt: "desc" }, take: 500 }),
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { id: true, status: true, data: true }, take: 10000 }),
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, status: true, data: true }, take: 10000 })
+    ]);
+
+    const statements = batches
+      .map((batch) => {
+        const data = financeRecordData(batch);
+        const sourceFile = cleanText(data.sourceFile);
+        if (!sourceFile) return null;
+        const relatedMovements = movements.filter((movement) => cleanText(financeRecordData(movement).importBatchId) === batch.id);
+        const relatedExceptions = exceptions.filter((exception) => cleanText(financeRecordData(exception).importBatchId) === batch.id);
+        const reconciledMovements = relatedMovements.filter((movement) => {
+          const movementData = financeRecordData(movement);
+          return String(movement.status || "").toUpperCase() === "MATCHED" || Boolean(movementData.reconciliationId || movementData.reconciledAt);
+        });
+        const status = String(batch.status || "").toUpperCase();
+        const canDelete = !reconciledMovements.length && !["DELETED", "REPROCESSED"].includes(status);
+        return {
+          id: batch.id,
+          sourceFile,
+          title: batch.title,
+          status: batch.status,
+          createdAt: batch.createdAt,
+          importedAt: cleanText(data.importedAt || batch.createdAt),
+          account: data.account || null,
+          summary: data.summary || null,
+          importedRows: Number(data.importedRows || relatedMovements.length || 0),
+          duplicateRows: Number(data.duplicateRows || 0),
+          reviewRows: Number(data.reviewRows || relatedExceptions.length || 0),
+          movements: relatedMovements.length,
+          exceptions: relatedExceptions.length,
+          reconciledMovements: reconciledMovements.length,
+          canDelete,
+          deleteBlockReason: canDelete ? null : reconciledMovements.length
+            ? "Esta cartola tiene movimientos conciliados y no puede eliminarse para proteger la trazabilidad contable."
+            : "Esta cartola fue reemplazada o ya no está disponible para eliminar."
+        };
+      })
+      .filter(Boolean);
+    res.json({ statements });
+  } catch (error) {
+    console.error("List bank statements error:", error);
+    res.status(500).json({ error: "No se pudieron cargar las cartolas importadas." });
+  }
+});
+
+financeRouter.delete("/finance/bank-statements/:id", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const batch = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "bank_statement" } });
+    if (!batch) return res.status(404).json({ error: "Cartola no encontrada." });
+    const batchData = financeRecordData(batch);
+    if (!cleanText(batchData.sourceFile)) return res.status(409).json({ error: "Sólo se pueden eliminar cartolas cargadas manualmente. Las sincronizaciones automáticas se administran desde su conexión bancaria." });
+    if (["DELETED", "REPROCESSED"].includes(String(batch.status || "").toUpperCase())) return res.status(409).json({ error: "Esta cartola ya fue reemplazada o eliminada." });
+
+    const [movements, exceptions] = await Promise.all([
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { id: true, status: true, data: true }, take: 10000 }),
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, data: true }, take: 10000 })
+    ]);
+    const movementIds = movements
+      .filter((movement) => cleanText(financeRecordData(movement).importBatchId) === batch.id)
+      .map((movement) => movement.id);
+    const reconciled = movements.filter((movement) => {
+      if (!movementIds.includes(movement.id)) return false;
+      const movementData = financeRecordData(movement);
+      return String(movement.status || "").toUpperCase() === "MATCHED" || Boolean(movementData.reconciliationId || movementData.reconciledAt);
+    });
+    if (reconciled.length) {
+      return res.status(409).json({ error: `No se puede eliminar la cartola porque tiene ${reconciled.length} movimiento(s) conciliado(s). Revierte primero esas conciliaciones para conservar la trazabilidad.` });
+    }
+    const exceptionIds = exceptions
+      .filter((exception) => cleanText(financeRecordData(exception).importBatchId) === batch.id)
+      .map((exception) => exception.id);
+    await prisma.$transaction(async (tx) => {
+      if (exceptionIds.length) await tx.industryRecord.deleteMany({ where: { id: { in: exceptionIds }, tenantId: req.tenantId } });
+      if (movementIds.length) await tx.industryRecord.deleteMany({ where: { id: { in: movementIds }, tenantId: req.tenantId } });
+      await tx.industryRecord.delete({ where: { id: batch.id } });
+    });
+    await recordAuditLog(req, "FINANCE_BANK_STATEMENT_DELETED", "bank_statement", batch.id, {
+      sourceFile: cleanText(batchData.sourceFile),
+      deletedMovements: movementIds.length,
+      deletedExceptions: exceptionIds.length
+    });
+    await createTenantNotification({ tenantId: req.tenantId, type: "FINANCE_BANK_STATEMENT_DELETED", title: "Cartola eliminada", body: `Se eliminó ${cleanText(batchData.sourceFile)} junto con ${movementIds.length} movimiento(s) no conciliados.`, href: "/finance?tab=cartolas" });
+    res.json({ ok: true, deleted: { statementId: batch.id, movements: movementIds.length, exceptions: exceptionIds.length } });
+  } catch (error) {
+    console.error("Delete bank statement error:", error);
+    res.status(500).json({ error: "No se pudo eliminar la cartola." });
+  }
+});
+
 // Banca abierta no solicita ni almacena la clave bancaria del usuario. La
 // cuenta se vincula en el proveedor autorizado y este devuelve movimientos al
 // callback asociado al caseId de EVOLUM.

@@ -17658,3 +17658,74 @@ html[data-theme="dark"] .realty-capture-section { background: color-mix(in srgb,
 /* Debe ir después de la grilla genérica de formularios: Cartolas tiene una
    composición operativa propia y no puede comprimirse en cuatro columnas. */
 .finance-grid:has(.finance-bank-upload-form) .finance-bank-upload-form { grid-template-columns: minmax(0, 1fr) !important; align-items: stretch !important; }
+
+/* Historial de cartolas: permite corregir una carga antes de que forme parte
+   de una conciliación confirmada. */
+.finance-bank-statement-history {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--primary) 22%);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--card) 92%, var(--primary) 8%);
+}
+.finance-bank-statement-history-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 13px;
+}
+.finance-bank-statement-history-heading h3 { margin: 0 0 4px; font-size: 1rem; }
+.finance-bank-statement-history-heading p { margin: 0; color: var(--muted); font-size: .85rem; max-width: 680px; }
+.finance-bank-statement-history-heading > span { color: var(--muted); font-size: .78rem; white-space: nowrap; }
+.finance-bank-statement-history-list { display: grid; gap: 10px; }
+.finance-bank-statement-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 15px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+}
+.finance-bank-statement-history-main { min-width: 0; display: grid; gap: 3px; }
+.finance-bank-statement-history-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.finance-bank-statement-history-main span,
+.finance-bank-statement-history-main small { color: var(--muted); font-size: .8rem; }
+.finance-bank-statement-history-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; max-width: 420px; }
+.finance-bank-statement-history-actions > small { width: 100%; color: var(--muted); font-size: .74rem; text-align: right; }
+.finance-bank-statement-state { border-radius: 999px; padding: 5px 8px; font-size: .72rem; font-weight: 800; white-space: nowrap; }
+.finance-bank-statement-state.is-removable { background: color-mix(in srgb, #0b9c99 14%, var(--card)); color: #087b78; }
+.finance-bank-statement-state.is-protected { background: color-mix(in srgb, #d99013 16%, var(--card)); color: #9a6100; }
+.finance-danger-button {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, #dc3c4c 65%, var(--border));
+  border-radius: 10px;
+  padding: 8px 11px;
+  background: color-mix(in srgb, #dc3c4c 10%, var(--card));
+  color: #bd2737;
+  font: inherit;
+  font-size: .8rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+.finance-danger-button:hover:not(:disabled) { background: #dc3c4c; border-color: #dc3c4c; color: #fff; }
+.finance-danger-button:disabled { cursor: not-allowed; opacity: .55; }
+.finance-bank-history-empty { margin: 18px 0; }
+html.dark .finance-bank-statement-history,
+[data-theme="dark"] .finance-bank-statement-history { background: color-mix(in srgb, var(--card) 82%, var(--primary) 18%); }
+html.dark .finance-danger-button,
+[data-theme="dark"] .finance-danger-button { color: #ff9da8; background: color-mix(in srgb, #dc3c4c 16%, var(--card)); }
+html.dark .finance-bank-statement-state.is-removable,
+[data-theme="dark"] .finance-bank-statement-state.is-removable { color: #83e4dc; }
+html.dark .finance-bank-statement-state.is-protected,
+[data-theme="dark"] .finance-bank-statement-state.is-protected { color: #ffd57b; }
+
+@media (max-width: 720px) {
+  .finance-bank-statement-history { padding: 14px; }
+  .finance-bank-statement-history-heading,
+  .finance-bank-statement-history-item { align-items: flex-start; flex-direction: column; }
+  .finance-bank-statement-history-actions { justify-content: flex-start; max-width: none; width: 100%; }
+  .finance-bank-statement-history-actions > small { text-align: left; }
+}

@@ -962,6 +962,24 @@ export type FinanceBankStatementPreview = {
   rows: Array<Record<string, unknown>>;
   sourceRows: Array<Record<string, unknown>>;
 };
+export type FinanceBankStatementBatch = {
+  id: string;
+  sourceFile: string;
+  title: string;
+  status: string;
+  createdAt: string;
+  importedAt: string;
+  account: FinanceBankStatementAccount | null;
+  summary: FinanceBankStatementPreview["summary"] | null;
+  importedRows: number;
+  duplicateRows: number;
+  reviewRows: number;
+  movements: number;
+  exceptions: number;
+  reconciledMovements: number;
+  canDelete: boolean;
+  deleteBlockReason: string | null;
+};
 export type FinanceSiiDte = {
   sourceFile: string;
   documentTypeCode: string;
@@ -1120,6 +1138,14 @@ export function previewFinanceBankStatementFile(file: File, account: { bankKey: 
 
 export function importFinanceBankStatement(input: { sourceFile: string; fileFingerprint?: string; rows: Array<Record<string, unknown>>; bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceBankStatementPreview["summary"] }> {
   return request("/finance/bank-statements/import", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getFinanceBankStatements(): Promise<{ statements: FinanceBankStatementBatch[] }> {
+  return request("/finance/bank-statements");
+}
+
+export function deleteFinanceBankStatement(id: string): Promise<{ ok: true; deleted: { statementId: string; movements: number; exceptions: number } }> {
+  return request(`/finance/bank-statements/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export function getFinanceOpenBankingStatus(): Promise<FinanceOpenBankingStatus> {
