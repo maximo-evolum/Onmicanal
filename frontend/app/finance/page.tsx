@@ -62,6 +62,7 @@ import {
   type FinanceSiiPreview,
   type FinanceSiiStatus,
   type FinanceCustomer,
+  type FinanceDocumentCoverage,
   type FinanceCollectionPortfolioRow,
   type FinanceDocument,
   type FinanceIntegration,
@@ -70,7 +71,8 @@ import {
   type FinanceReconciliationSuggestion,
   type IndustryRecord,
   updateFinanceAgentPolicy,
-  syncFinanceNubox
+  syncFinanceNubox,
+  syncFinanceNuboxHistory
 } from "@/lib/api";
 import { useAgentSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
@@ -242,6 +244,7 @@ function FinanceWorkspace() {
   const [migrationSourceFile, setMigrationSourceFile] = useState("");
   const [agentPolicy, setAgentPolicy] = useState<FinanceAgentPolicy | null>(null);
   const [financeDocuments, setFinanceDocuments] = useState<FinanceDocument[]>([]);
+  const [financeDocumentCoverage, setFinanceDocumentCoverage] = useState<FinanceDocumentCoverage | null>(null);
   const [chileanBanks, setChileanBanks] = useState<ChileanBank[]>([]);
   const [bankStatementQueue, setBankStatementQueue] = useState<BankStatementQueueItem[]>([]);
   const [bankStatementBatches, setBankStatementBatches] = useState<FinanceBankStatementBatch[]>([]);
@@ -270,6 +273,13 @@ function FinanceWorkspace() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncingNubox, setSyncingNubox] = useState(false);
+  const [nuboxSyncPeriod, setNuboxSyncPeriod] = useState(() => new Date().toISOString().slice(0, 7));
+  const [nuboxHistoryStartPeriod, setNuboxHistoryStartPeriod] = useState(() => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 11);
+    return date.toISOString().slice(0, 7);
+  });
+  const [nuboxHistoryEndPeriod, setNuboxHistoryEndPeriod] = useState(() => new Date().toISOString().slice(0, 7));
   const [message, setMessage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [invoiceForm, setInvoiceForm] = useState({ number: "", client: "", rut: "", documentType: "Factura de cliente", issueDate: new Date().toISOString().slice(0, 10), dueDate: "", netAmount: "", vatAmount: "", amount: "", currency: "CLP", paymentMethod: "", paymentIntermediary: "", commissionAmount: "", settlementReference: "", referenceDocumentType: "", referenceDocumentNumber: "" });
@@ -304,7 +314,11 @@ function FinanceWorkspace() {
     setMessage(null);
     try {
       if (activeTab === "resumen") setOverview(await getFinanceOverview());
-      if (activeTab === "facturas") setFinanceDocuments((await getFinanceDocuments(documentFilter)).documents);
+      if (activeTab === "facturas") {
+        const response = await getFinanceDocuments(documentFilter);
+        setFinanceDocuments(response.documents);
+        setFinanceDocumentCoverage(response.coverage);
+      }
       if (activeTab === "sii") setSiiStatus(await getFinanceSiiStatus());
       if (activeTab === "cartolas") {
         const [movements, catalog, bankStatements] = await Promise.all([getIndustryRecords("bank_movement"), getFinanceBankCatalog(), getFinanceBankStatements()]);
@@ -888,11 +902,25 @@ function FinanceWorkspace() {
   async function synchronizeNubox() {
     setSyncingNubox(true);
     try {
-      const result = await syncFinanceNubox();
-      setMessage(result.pending ? (result.message || "Ya existe una sincronización en curso.") : `Nubox sincronizado: ${result.created || 0} nuevos y ${result.updated || 0} actualizados.`);
+      const result = await syncFinanceNubox(nuboxSyncPeriod);
+      setMessage(result.pending ? (result.message || "Ya existe una sincronización en curso.") : `Nubox sincronizado para ${nuboxSyncPeriod}: ${result.created || 0} nuevos y ${result.updated || 0} actualizados.`);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo sincronizar Nubox.");
+    } finally {
+      setSyncingNubox(false);
+    }
+  }
+
+  async function synchronizeNuboxHistory() {
+    if (!nuboxHistoryStartPeriod || !nuboxHistoryEndPeriod) return setMessage("Selecciona el período inicial y final del historial.");
+    setSyncingNubox(true);
+    try {
+      const result = await syncFinanceNuboxHistory(nuboxHistoryStartPeriod, nuboxHistoryEndPeriod);
+      setMessage(`Historial Nubox procesado: ${result.succeeded}/${result.periods} mes(es), ${result.created} nuevos y ${result.updated} actualizados.${result.failed ? ` ${result.failed} período(s) requieren revisión.` : ""}`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo sincronizar el historial de Nubox.");
     } finally {
       setSyncingNubox(false);
     }
@@ -940,6 +968,7 @@ function FinanceWorkspace() {
                 <label className="finance-document-status-filter"><span>Estado</span><select value={documentStatusFilter} onChange={(event) => setDocumentStatusFilter(event.target.value as FinanceDocumentStatusFilter)}><option value="all">Todos los estados</option><option value="paid">Pagadas</option><option value="cancelled">Canceladas</option><option value="pending">Pendientes</option><option value="overdue">Vencidas</option></select></label>
                 <button type="button" className="secondary-btn finance-clear-document-filters" disabled={!documentQuery && documentStatusFilter === "all"} onClick={() => { setDocumentQuery(""); setDocumentStatusFilter("all"); }}>Limpiar filtros</button>
               </div>
+              <FinanceDocumentCoverageNotice coverage={financeDocumentCoverage} selected={documentFilter} onOpenMigration={() => selectTab("migracion")} onOpenSii={() => selectTab("sii")} />
               <FinanceDocumentsTable documents={financeDocuments} documentFilter={documentFilter} query={documentQuery} statusFilter={documentStatusFilter} saving={saving} openActionId={openActionId} selectedDocument={selectedDocument} nuboxResourcePanel={nuboxResourcePanel} onToggleActions={setOpenActionId} onSelect={(document) => { setSelectedDocument(document); setNuboxResourcePanel(null); }} onCloseDetail={() => { setSelectedDocument(null); setNuboxResourcePanel(null); }} onRegisterReceipt={registerInvoiceReceipt} onPrepareReminder={(document) => prepareReminder({ key: document.partyRut?.replace(/[^0-9kK]/g, "") || document.partyName.toLocaleLowerCase("es"), name: document.partyName, rut: document.partyRut, documents: 0, openDocuments: 0, overdueDocuments: 0, dueSoonAmount: 0, overdueAmount: 0, totalDebt: 0, oldestInvoiceDate: null, averagePaymentDays: null, reminders: 0, lastReminderAt: null, latestCaseId: null, reminderStatus: "" })} onDuplicate={duplicateInvoice} onCopy={copyFinanceText} onOpenNuboxResource={openNuboxResource} onDownloadNubox={downloadNuboxResource} onOpenCollections={() => selectTab("cobranza")} onOpenPayables={() => selectTab("pagos")} />
             </article>
             <form className="finance-card finance-form finance-document-entry" onSubmit={createInvoice}>
@@ -1067,7 +1096,7 @@ function FinanceWorkspace() {
               <span className="finance-eyebrow">Automatización segura</span>
               <h2>Sincronización Nubox</h2>
               <p>Cuando Nubox esté conectado, EVOLUM actualiza las facturas en segundo plano y prepara el análisis para revisión humana. No confirma pagos, no modifica el ERP ni envía cobranzas.</p>
-              {canManageFinance ? <button className="primary-btn" type="button" disabled={syncingNubox} onClick={synchronizeNubox}>{syncingNubox ? "Sincronizando..." : "Sincronizar ahora"}</button> : <div className="finance-note">Solo una cuenta administradora puede iniciar una sincronización manual.</div>}
+              {canManageFinance ? <div className="finance-sync-controls"><label>Período a consultar en Nubox<input type="month" value={nuboxSyncPeriod} max={new Date().toISOString().slice(0, 7)} onChange={(event) => setNuboxSyncPeriod(event.target.value)} disabled={syncingNubox} /></label><button className="primary-btn" type="button" disabled={syncingNubox || !nuboxSyncPeriod} onClick={synchronizeNubox}>{syncingNubox ? "Sincronizando..." : "Sincronizar período"}</button><div className="finance-history-sync"><strong>Traer historial de ventas</strong><div><label>Desde<input type="month" value={nuboxHistoryStartPeriod} max={nuboxHistoryEndPeriod || new Date().toISOString().slice(0, 7)} onChange={(event) => setNuboxHistoryStartPeriod(event.target.value)} disabled={syncingNubox} /></label><label>Hasta<input type="month" value={nuboxHistoryEndPeriod} min={nuboxHistoryStartPeriod} max={new Date().toISOString().slice(0, 7)} onChange={(event) => setNuboxHistoryEndPeriod(event.target.value)} disabled={syncingNubox} /></label></div><button className="secondary-btn" type="button" disabled={syncingNubox || !nuboxHistoryStartPeriod || !nuboxHistoryEndPeriod} onClick={synchronizeNuboxHistory}>{syncingNubox ? "Procesando..." : "Sincronizar historial"}</button></div><small>Nubox v1 entrega ventas por período. Las facturas de proveedores se incorporan con DTE XML o migración histórica; una cartola no puede crear documentos tributarios.</small></div> : <div className="finance-note">Solo una cuenta administradora puede iniciar una sincronización manual.</div>}
               <div className="finance-sync-history"><h3>Historial reciente</h3>{financeSyncHistory.slice(0, 5).map((entry) => <div key={entry.id}><b className={entry.action === "NUBOX_SALES_SYNC_FAILED" ? "is-error" : "is-success"}>{entry.action === "NUBOX_SALES_SYNCED" ? "Sincronización completada" : entry.action === "NUBOX_SALES_SYNC_FAILED" ? "Sincronización con incidencia" : "Análisis preparado"}</b><span>{shortDate(entry.createdAt)}</span></div>)}{!financeSyncHistory.length && !loading ? <p className="finance-empty">Aún no hay sincronizaciones registradas.</p> : null}</div>
             </article>
           </section> : null}
@@ -1076,6 +1105,25 @@ function FinanceWorkspace() {
       </div>
     </ModuleGate>
   );
+}
+
+function FinanceDocumentCoverageNotice({ coverage, selected, onOpenMigration, onOpenSii }: { coverage: FinanceDocumentCoverage | null; selected: "all" | "customers" | "suppliers"; onOpenMigration: () => void; onOpenSii: () => void }) {
+  if (!coverage) return null;
+  const selectedSides = selected === "all" ? [coverage.customers, coverage.suppliers] : [selected === "suppliers" ? coverage.suppliers : coverage.customers];
+  const total = selectedSides.reduce((sum, side) => sum + side.total, 0);
+  const label = selected === "all" ? "clientes y proveedores" : selected === "suppliers" ? "proveedores" : "clientes";
+  const dates = selectedSides.flatMap((side) => [side.oldestIssueDate, side.newestIssueDate]).filter((date): date is string => Boolean(date)).sort();
+  const hasDocuments = total > 0;
+  const range = hasDocuments && dates.length
+    ? `${shortDate(dates[0])} a ${shortDate(dates.at(-1) || dates[0])}`
+    : null;
+  return <aside className={`finance-document-coverage ${hasDocuments ? "" : "is-empty"}`} aria-live="polite">
+    <div>
+      <strong>{hasDocuments ? `Cobertura actual: ${total} documento(s) de ${label}` : `No hay documentos de ${label} cargados`}</strong>
+      <span>{range ? `Período disponible: ${range}.` : `Una cartola contiene movimientos bancarios; no crea facturas históricas por sí sola.`}</span>
+    </div>
+    {!hasDocuments || selected === "all" ? <div className="finance-document-coverage-actions"><button type="button" onClick={onOpenMigration}>Importar historial Excel</button><button type="button" onClick={onOpenSii}>Importar DTE XML</button></div> : null}
+  </aside>;
 }
 
 function FinanceDocumentsTable({ documents, documentFilter, query, statusFilter, saving, openActionId, selectedDocument, nuboxResourcePanel, onToggleActions, onSelect, onCloseDetail, onRegisterReceipt, onPrepareReminder, onDuplicate, onCopy, onOpenNuboxResource, onDownloadNubox, onOpenCollections, onOpenPayables }: { documents: FinanceDocument[]; documentFilter: "all" | "customers" | "suppliers"; query: string; statusFilter: FinanceDocumentStatusFilter; saving: boolean; openActionId: string | null; selectedDocument: FinanceDocument | null; nuboxResourcePanel: NuboxResourcePanel | null; onToggleActions: (id: string | null) => void; onSelect: (document: FinanceDocument) => void; onCloseDetail: () => void; onRegisterReceipt: (document: FinanceDocument) => void; onPrepareReminder: (document: FinanceDocument) => void; onDuplicate: (document: FinanceDocument) => void; onCopy: (value: string, successMessage: string) => void; onOpenNuboxResource: (document: FinanceDocument, resource: NuboxResourceKind) => void; onDownloadNubox: (document: FinanceDocument, format: "pdf" | "xml") => void; onOpenCollections: () => void; onOpenPayables: () => void }) {

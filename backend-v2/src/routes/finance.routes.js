@@ -24,6 +24,7 @@ import {
   getNuboxSaleDetails,
   getNuboxSaleReferences,
   issueNuboxSales,
+  syncNuboxHistoryForTenant,
   syncNuboxForTenant
 } from "../services/finance-sync.service.js";
 import { MAX_MIGRATION_FILE_BYTES, MAX_MIGRATION_ROWS, historicalFinanceFingerprint, normalizeHistoricalFinanceRows, readHistoricalFinanceFile, summarizeHistoricalFinanceRows } from "../services/finance-migration.service.js";
@@ -260,6 +261,31 @@ function financeParty(record) {
   };
 }
 
+function financeDocumentCoverage(documents) {
+  const bySide = { CUSTOMER: [], SUPPLIER: [] };
+  for (const document of documents) {
+    if (bySide[document.side]) bySide[document.side].push(document);
+  }
+  const summarize = (items) => {
+    const dates = items
+      .map((item) => new Date(item.issueDate || item.createdAt))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .sort((a, b) => a.getTime() - b.getTime());
+    const bySource = {};
+    for (const item of items) {
+      const source = cleanText(item.source, "registro manual");
+      bySource[source] = (bySource[source] || 0) + 1;
+    }
+    return {
+      total: items.length,
+      oldestIssueDate: dates[0]?.toISOString() || null,
+      newestIssueDate: dates.at(-1)?.toISOString() || null,
+      sources: bySource
+    };
+  };
+  return { customers: summarize(bySide.CUSTOMER), suppliers: summarize(bySide.SUPPLIER) };
+}
+
 function financePartyKey({ name, rut }) {
   return cleanText(rut).replace(/[^0-9kK]/g, "") || cleanText(name).toLocaleLowerCase("es");
 }
@@ -359,10 +385,10 @@ financeRouter.get("/finance/documents", async (req, res) => {
     const now = new Date();
     const records = await prisma.industryRecord.findMany({
       where: { tenantId: req.tenantId, recordType: { in: recordTypes } },
-      orderBy: { updatedAt: "desc" },
+      orderBy: { createdAt: "desc" },
       take: 1000
     });
-    const documents = records.map((record) => {
+    const allDocuments = records.map((record) => {
       const data = financeRecordData(record);
       const party = financeParty(record);
       const state = party.side === "SUPPLIER" ? payableState(record, now) : invoiceState(record, now);
@@ -395,11 +421,16 @@ financeRouter.get("/finance/documents", async (req, res) => {
         balance: state.balance,
         paidAmount: Math.max(0, state.amount - state.balance),
         nuboxDocument: cleanText(data.source).toLowerCase() === "nubox" && Boolean(cleanText(data.nuboxDocumentId)),
+        source: cleanText(data.source, "registro manual"),
         createdAt: record.createdAt,
         updatedAt: record.updatedAt
       };
-    }).filter((document) => requestedType === "all" || (requestedType === "customers" ? document.side === "CUSTOMER" : document.side === "SUPPLIER"));
-    res.json({ documents });
+    });
+    const coverage = financeDocumentCoverage(allDocuments);
+    const documents = allDocuments
+      .filter((document) => requestedType === "all" || (requestedType === "customers" ? document.side === "CUSTOMER" : document.side === "SUPPLIER"))
+      .sort((left, right) => new Date(right.issueDate).getTime() - new Date(left.issueDate).getTime());
+    res.json({ documents, coverage });
   } catch (error) {
     console.error("Finance documents error:", error);
     res.status(500).json({ error: "No se pudo cargar el portal de documentos financieros." });
@@ -1532,6 +1563,24 @@ financeRouter.get("/finance/reconciliation-suggestions", async (req, res) => {
   } catch (error) {
     console.error("Finance suggestions error:", error);
     res.status(500).json({ error: "No se pudieron calcular sugerencias de conciliacion" });
+  }
+});
+
+financeRouter.post("/finance/sync/nubox/history", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
+    const result = await syncNuboxHistoryForTenant({
+      tenantId: req.tenantId,
+      startPeriod: cleanText(req.body?.startPeriod),
+      endPeriod: cleanText(req.body?.endPeriod),
+      limit: req.body?.limit,
+      source: "finance_workspace_history"
+    });
+    res.status(result.failed ? 207 : 200).json(result);
+  } catch (error) {
+    console.error("Finance Nubox historical sync error:", error);
+    const message = error instanceof Error ? error.message : "No se pudo sincronizar el historial de Nubox.";
+    res.status(/per[ií]odo|meses|faltan|configurad/i.test(message) ? 400 : 502).json({ error: message });
   }
 });
 

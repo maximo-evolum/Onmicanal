@@ -25,6 +25,20 @@ function validPeriod(period) {
   return /^\d{4}-(0[1-9]|1[0-2])$/.test(period);
 }
 
+function periodsBetween(startPeriod, endPeriod, maxPeriods = 24) {
+  if (!validPeriod(startPeriod) || !validPeriod(endPeriod)) throw new Error("Los períodos deben tener formato AAAA-MM.");
+  const [startYear, startMonth] = startPeriod.split("-").map(Number);
+  const [endYear, endMonth] = endPeriod.split("-").map(Number);
+  const start = startYear * 12 + startMonth - 1;
+  const end = endYear * 12 + endMonth - 1;
+  if (end < start) throw new Error("El período final no puede ser anterior al período inicial.");
+  if ((end - start) + 1 > maxPeriods) throw new Error(`Puedes sincronizar hasta ${maxPeriods} meses históricos por vez.`);
+  return Array.from({ length: (end - start) + 1 }, (_, index) => {
+    const value = start + index;
+    return `${Math.floor(value / 12)}-${String((value % 12) + 1).padStart(2, "0")}`;
+  });
+}
+
 function nuboxBaseUrl() {
   const configured = String(env.nuboxApiBaseUrl || "").trim();
   if (!configured) throw new Error("Falta configurar NUBOX_API_BASE_URL en el servidor.");
@@ -302,6 +316,33 @@ export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), l
     }).catch(() => null);
     throw lastError;
   });
+}
+
+// La API v1 de Nubox consulta ventas por período. Ejecutar los meses uno a uno
+// conserva la idempotencia, auditoría y análisis de cada lote histórico.
+export async function syncNuboxHistoryForTenant({ tenantId, startPeriod, endPeriod, limit = 100, source = "finance_history" } = {}) {
+  if (!tenantId) throw new Error("tenantId es requerido para sincronizar Nubox.");
+  const periods = periodsBetween(startPeriod, endPeriod);
+  const results = [];
+  for (const period of periods) {
+    try {
+      results.push(await syncNuboxForTenant({ tenantId, period, limit, source, maxAttempts: 2 }));
+    } catch (error) {
+      results.push({ ok: false, period, error: error instanceof Error ? error.message : "No se pudo sincronizar el período." });
+    }
+  }
+  const succeeded = results.filter((result) => result.ok).length;
+  return {
+    ok: succeeded === periods.length,
+    startPeriod,
+    endPeriod,
+    periods: periods.length,
+    succeeded,
+    failed: periods.length - succeeded,
+    created: results.reduce((total, result) => total + (Number(result.created) || 0), 0),
+    updated: results.reduce((total, result) => total + (Number(result.updated) || 0), 0),
+    results
+  };
 }
 
 export async function syncAllActiveNuboxTenants({ period = currentPeriod(), limit = 100 } = {}) {

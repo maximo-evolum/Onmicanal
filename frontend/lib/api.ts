@@ -899,8 +899,13 @@ export type FinanceDocument = {
   balance: number;
   paidAmount: number;
   nuboxDocument?: boolean;
+  source?: string;
   createdAt: string;
   updatedAt: string;
+};
+export type FinanceDocumentCoverage = {
+  customers: { total: number; oldestIssueDate: string | null; newestIssueDate: string | null; sources: Record<string, number> };
+  suppliers: { total: number; oldestIssueDate: string | null; newestIssueDate: string | null; sources: Record<string, number> };
 };
 
 export type FinanceNuboxDocumentResource = {
@@ -1047,7 +1052,7 @@ export function getFinanceCustomers(): Promise<{ customers: FinanceCustomer[] }>
   return request("/finance/customers");
 }
 
-export function getFinanceDocuments(type: "all" | "customers" | "suppliers" = "all"): Promise<{ documents: FinanceDocument[] }> {
+export function getFinanceDocuments(type: "all" | "customers" | "suppliers" = "all"): Promise<{ documents: FinanceDocument[]; coverage: FinanceDocumentCoverage }> {
   return request(`/finance/documents?type=${encodeURIComponent(type)}`);
 }
 
@@ -1199,6 +1204,13 @@ export function syncFinanceNubox(period?: string): Promise<{ ok?: boolean; pendi
   return request("/finance/sync/nubox", {
     method: "POST",
     body: JSON.stringify(period ? { period } : {})
+  });
+}
+
+export function syncFinanceNuboxHistory(startPeriod: string, endPeriod: string): Promise<{ ok: boolean; periods: number; succeeded: number; failed: number; created: number; updated: number; results: Array<{ period: string; ok?: boolean; error?: string }> }> {
+  return request("/finance/sync/nubox/history", {
+    method: "POST",
+    body: JSON.stringify({ startPeriod, endPeriod })
   });
 }
 
