@@ -137,6 +137,10 @@ async function assertRecordModule(req, recordType) {
 }
 
 function assertFinanceRecordMutation(req, res, recordType) {
+  if (["finance_reconciliation", "finance_invoice_receipt"].includes(recordType)) {
+    res.status(409).json({ error: "Este registro conserva saldos y trazabilidad. Utiliza las acciones financieras de registrar cobro, conciliar o revertir; no se modifica directamente." });
+    return false;
+  }
   const action = financeActionForRecordMutation(recordType);
   if (!action || canMutateFinanceRecord(req.user?.role, recordType)) return true;
   console.warn("[FINANCE_RECORD_MUTATION_FORBIDDEN]", {

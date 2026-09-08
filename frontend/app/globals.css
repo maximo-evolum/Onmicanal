@@ -16930,10 +16930,19 @@ html[data-theme="dark"] .realty-capture-section { background: color-mix(in srgb,
   padding-right: 7px;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+  -ms-overflow-style: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #7d91a8 transparent;
 }
-.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar { display: none; }
+.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar { display: block; width: 7px; }
+.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar-thumb { background: #7d91a8; border-radius: 10px; }
+.finance-bank-selection { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+.finance-bank-statement-preview h3 label { display: flex; align-items: center; gap: 10px; }
+.finance-bank-selection input[type="checkbox"], .finance-bank-statement-preview input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; }
+.finance-row-review { display: block; margin-top: 5px; color: #976019; }
+.finance-bank-statement-preview > .primary-btn { margin-top: 14px; }
+.finance-bank-statement-preview .finance-migration-table > div { grid-template-columns: 110px minmax(240px, 2fr) minmax(130px, .8fr) minmax(180px, 1fr); min-width: 720px; }
+.finance-bank-statement-preview .finance-migration-table > div > span { overflow-wrap: anywhere; }
 .evolum-unified-nav .evolum-nav-group-links a {
   min-height: 39px !important;
   padding-block: 5px !important;
@@ -17762,3 +17771,43 @@ html.dark .finance-bank-statement-state.is-protected,
   .finance-bank-statement-history-actions { justify-content: flex-start; max-width: none; width: 100%; }
   .finance-bank-statement-history-actions > small { text-align: left; }
 }
+.finance-context-panel { margin: 0 0 18px; padding: 16px; border: 1px solid var(--border, #d6e1e1); border-radius: 14px; background: var(--card, #f5f9f8); color: var(--text, #263b40); }
+.finance-context-controls { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(145px, .65fr) minmax(220px, 1.5fr) minmax(130px, .65fr); align-items: end; gap: 14px; }
+.finance-context-controls label, .finance-context-controls > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; font-size: 13px; }
+.finance-context-controls input, .finance-context-controls select { box-sizing: border-box; width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid var(--border, #c9d8d8); border-radius: 8px; color: inherit; background: var(--card, #fff); }
+.finance-context-panel p, .finance-coverage-details { margin: 10px 0 0; font-size: 12px; line-height: 1.5; }
+.finance-coverage-details summary { cursor: pointer; font-weight: 600; }
+.finance-coverage-sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.finance-coverage-sources > div { display: flex; flex-direction: column; gap: 5px; border-left: 3px solid #0c949b; padding-left: 10px; }
+@media (max-width: 900px) { .finance-context-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 580px) { .finance-context-controls, .finance-coverage-sources { grid-template-columns: minmax(0, 1fr); } }
+/* Durable bank imports: readable history, independent of the preview queue. */
+.finance-saved-imports { grid-column: 1 / -1; min-width: 0; }
+.finance-saved-import-list { display: grid; gap: 12px; }
+.finance-saved-import { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--text); }
+.finance-saved-import > div:first-child { display: grid; gap: 6px; flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.finance-saved-import span, .finance-saved-import small { color: var(--text-muted); }
+.finance-saved-import p { margin: 0; }
+.finance-saved-import-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.finance-saved-import-actions button { min-height: 40px; white-space: normal; }
+.finance-bank-review { min-width: 0; margin-top: 16px; color: var(--text); }
+.finance-bank-mapping { border: 1px solid var(--border); padding: 14px; border-radius: 12px; }
+.finance-bank-mapping summary { cursor: pointer; font-weight: 650; }
+.finance-bank-mapping-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+.finance-bank-review label { display: grid; gap: 6px; font-size: 13px; }
+.finance-bank-review select, .finance-bank-review input { width: 100%; min-width: 0; min-height: 40px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 9px; padding: 8px; }
+.finance-review-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 14px 0; }
+.finance-review-toolbar > label:first-child { flex: 1 1 260px; }
+.finance-review-toolbar button { min-height: 38px; }
+.finance-review-table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+.finance-review-table-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.finance-review-table-wrap th, .finance-review-table-wrap td { text-align: left; vertical-align: top; padding: 12px 10px; border-bottom: 1px solid var(--border); }
+.finance-review-table-wrap th { background: var(--card-soft); color: var(--text-strong); }
+.finance-review-table-wrap td { min-width: 80px; }
+.finance-review-table-wrap td:nth-child(3) { min-width: 220px; overflow-wrap: anywhere; }
+.finance-review-table-wrap small { display: block; color: var(--text-muted); margin-top: 4px; }
+.finance-review-row-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 150px; }
+.finance-review-source { padding: 12px; background: var(--card-soft); border-radius: 10px; }
+.finance-review-source dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.finance-review-source dt { font-weight: 650; color: var(--text-muted); }
+.finance-review-source dd { margin: 4px 0 0; overflow-wrap: anywhere; }

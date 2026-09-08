@@ -1,3 +1,5 @@
+import { findAllFinanceRecords } from "./finance-integrity.service.js";
+import { filterFinanceContext } from "./finance-context.service.js";
 import { prisma } from "../lib/db.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -27,8 +29,44 @@ function normalizeText(value) {
 }
 
 function sharesTerm(left, right) {
-  const leftTerms = new Set(normalizeText(left).split(" ").filter((term) => term.length > 2));
-  return normalizeText(right).split(" ").some((term) => term.length > 2 && leftTerms.has(term));
+  const generic = new Set(["spa", "ltda", "limitada", "sociedad", "anonima", "empresa", "empresas", "comercial", "chile", "pago", "abono", "transferencia", "transf", "los", "las", "del"]);
+  const meaningful = (value) => normalizeText(value).split(" ").filter((term) => term.length > 2 && !generic.has(term));
+  const leftTerms = new Set(meaningful(left));
+  return meaningful(right).some((term) => leftTerms.has(term));
+}
+
+const normalizedRut = (value) => String(value || "").replace(/[^0-9k]/gi, "").toUpperCase();
+const invoiceParty = (data) => normalizedRut(data.clientRut || data.customerRut || data.rut || data.partyRut)
+  || normalizeText(data.customerName || data.clientName || data.partyName);
+
+export function sameFinanceInvoiceParty(invoices) {
+  const parties = invoices.map((invoice) => invoiceParty(dataOf(invoice)));
+  return parties.length > 0 && Boolean(parties[0]) && parties.every((party) => party === parties[0]);
+}
+
+export function hasFinanceIdentityEvidence(candidate) {
+  return candidate.evidence.some((item) => ["RUT_MATCH", "INVOICE_REFERENCE", "PARTY_MATCH"].includes(item.code));
+}
+
+// Estos controles se comparten entre sugerencia y aprobación. Los anticipos
+// requieren su propio expediente; no se imputan a una factura futura.
+export function financeReconciliationBlockers(invoice, movement) {
+  const doc = dataOf(invoice);
+  const bank = dataOf(movement);
+  const blockers = [];
+  if (String(doc.currency || "CLP").toUpperCase() !== String(bank.currency || "CLP").toUpperCase()) blockers.push("La factura y el movimiento están expresados en monedas distintas; requiere revisión cambiaria.");
+  const issue = dateOf(doc.issueDate || doc.emissionDate);
+  const paid = dateOf(bank.transactionDate || bank.date);
+  if (!issue) blockers.push("El documento no tiene fecha de emisión verificable.");
+  if (!paid) blockers.push("El movimiento no tiene fecha verificable.");
+  if (issue && paid && paid.toISOString().slice(0, 10) < issue.toISOString().slice(0, 10)) blockers.push("El abono es anterior a la emisión del documento. Debe revisarse como anticipo, no como pago de esta factura.");
+  if (!["CREDIT", "ABONO"].includes(String(bank.direction || bank.movementType || "").toUpperCase())) blockers.push("No se ha identificado un abono bancario externo.");
+  if (["ANNULLED", "CANCELLED", "REJECTED", "ANULADA"].includes(String(invoice.status || doc.status || "").toUpperCase())) blockers.push("El documento está anulado o rechazado.");
+  if (invoice.recordType === "finance_payable" || [doc.documentSide, doc.direction].some((side) => ["SUPPLIER", "PURCHASE"].includes(String(side || "").toUpperCase()))) blockers.push("Un documento de proveedor no es una cuenta por cobrar a un cliente.");
+  if ([doc, bank].some((data) => data.demoOnly === true || Boolean(data.trainingRun) || data.isDemo === true || data.isSimulated === true || ["demo", "seed", "simulation"].includes(String(data.source || "").toLowerCase()))) blockers.push("Los datos de demostración no se concilian con documentos operativos.");
+  const rut = normalizedRut(doc.clientRut || doc.customerRut || doc.rut || doc.partyRut);
+  if (rut && bank.rut && rut !== normalizedRut(bank.rut)) blockers.push("El RUT del pagador es distinto del cliente; requiere identificar el pago por cuenta de terceros.");
+  return blockers;
 }
 
 export function getInvoiceFinancialState(invoice, now = new Date()) {
@@ -70,7 +108,8 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
   const difference = Math.abs(financial.balance - movementAmount);
   const reasons = [];
   const evidence = [];
-  const limitations = [];
+  const blockers = financeReconciliationBlockers(invoice, movement);
+  const limitations = [...blockers];
   let score = 0;
 
   const addEvidence = (code, label, weight, detail) => {
@@ -91,9 +130,9 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
     limitations.push(`El monto no cuadra: diferencia de ${difference} respecto del saldo pendiente.`);
   }
 
-  const reference = `${movementData.reference || ""} ${movement.title || ""}`;
+  const reference = `${movementData.reference || ""} ${movementData.description || ""} ${movement.title || ""}`;
   const invoiceNumber = invoiceData.invoiceNumber || invoiceData.number || invoice.title;
-  if (invoiceNumber && normalizeText(reference).includes(normalizeText(invoiceNumber))) {
+  if (invoiceNumber && ` ${normalizeText(reference)} `.includes(` ${normalizeText(invoiceNumber)} `)) {
     score += 18;
     addEvidence("INVOICE_REFERENCE", "Referencia de factura", 18, `La referencia bancaria contiene “${invoiceNumber}”.`);
   } else {
@@ -101,7 +140,7 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
   }
 
   const invoiceRut = invoiceData.clientRut || invoiceData.customerRut || invoiceData.rut || invoiceData.partyRut;
-  if (invoiceRut && movementData.rut && normalizeText(invoiceRut) === normalizeText(movementData.rut)) {
+  if (invoiceRut && movementData.rut && normalizedRut(invoiceRut) === normalizedRut(movementData.rut)) {
     score += 12;
     addEvidence("RUT_MATCH", "RUT coincidente", 12, `El RUT de la contraparte coincide con ${invoiceRut}.`);
   } else if (invoiceRut && !movementData.rut) {
@@ -131,7 +170,7 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
     limitations.push("El movimiento no informa fecha para validar cercanía al vencimiento.");
   }
 
-  const confidence = Math.min(99, Math.round(score));
+  const confidence = blockers.length ? 0 : Math.min(99, Math.round(score));
   const partial = movementAmount > 0 && movementAmount < financial.balance;
   const overpayment = movementAmount > financial.balance + 1;
   const recommendedAction = overpayment || partial || confidence < 80
@@ -144,6 +183,8 @@ export function scoreFinanceReconciliation(invoice, movement, now = new Date()) 
     invoiceId: invoice.id,
     movementId: movement.id,
     confidence,
+    eligible: blockers.length === 0,
+    blockers,
     difference,
     partial,
     overpayment,
@@ -164,13 +205,14 @@ function agingBucket(dueDate, now = new Date()) {
   return ({ POR_VENCER: "No vencida", "1_7": "1-7 dias", "8_30": "8-30 dias", "31_60": "31-60 dias", "61_90": "61-90 dias", MAS_90: "+90 dias" })[code] || "No vencida";
 }
 
-export async function getFinanceOverview({ tenantId, now = new Date() }) {
+export async function getFinanceOverview({ tenantId, now = new Date(), context = null }) {
   const types = ["finance_invoice", "bank_statement", "bank_movement", "finance_reconciliation", "finance_exception", "finance_collection_case"];
-  const records = await prisma.industryRecord.findMany({
+  const sourceRecords = await findAllFinanceRecords(prisma, {
     where: { tenantId, recordType: { in: types } },
     orderBy: { updatedAt: "desc" },
     take: 1000
   });
+  const records = filterFinanceContext(sourceRecords, context);
   const grouped = Object.fromEntries(types.map((type) => [type, records.filter((record) => record.recordType === type)]));
   const invoices = grouped.finance_invoice;
   const movements = grouped.bank_movement;
@@ -277,17 +319,20 @@ export async function getFinanceOverview({ tenantId, now = new Date() }) {
   };
 }
 
-export async function getFinanceReconciliationSuggestions({ tenantId, movementId = null, limit = 30 }) {
+export async function getFinanceReconciliationSuggestions({ tenantId, movementId = null, limit = 30, context = null }) {
   const [invoices, movements] = await Promise.all([
-    prisma.industryRecord.findMany({ where: { tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" }, take: 500 }),
-    prisma.industryRecord.findMany({ where: { tenantId, recordType: "bank_movement", ...(movementId ? { id: movementId } : {}) }, orderBy: { updatedAt: "desc" }, take: 500 })
+    findAllFinanceRecords(prisma, { where: { tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" }, take: 500 }),
+    findAllFinanceRecords(prisma, { where: { tenantId, recordType: "bank_movement", ...(movementId ? { id: movementId } : {}) }, orderBy: { updatedAt: "desc" }, take: 500 })
   ]);
-  const openInvoices = invoices.filter((invoice) => getInvoiceFinancialState(invoice).status !== "PAID");
+  const eligibleRecords = filterFinanceContext([...invoices, ...movements], context, { documentMode: "outstanding" });
+  const eligibleIds = new Set(eligibleRecords.map((record) => record.id));
+  const openInvoices = invoices.filter((invoice) => eligibleIds.has(invoice.id) && getInvoiceFinancialState(invoice).status !== "PAID");
   const maxResults = Math.max(1, Math.min(Number(limit) || 30, 200));
   const serializable = (record) => ({ id: record.id, title: record.title, data: dataOf(record), status: record.status });
   const results = [];
 
   for (const movement of movements) {
+    if (!eligibleIds.has(movement.id)) continue;
     const movementData = dataOf(movement);
     const status = String(movement.status || movementData.status || "UNRECONCILED").toUpperCase();
     const kind = String(movementData.movementKind || "").toUpperCase();
@@ -300,7 +345,7 @@ export async function getFinanceReconciliationSuggestions({ tenantId, movementId
     if (["MATCHED", "REVIEW", "REJECTED"].includes(status) || String(movementData.direction || "").toUpperCase() === "DEBIT" || ["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(kind)) continue;
 
     const scored = openInvoices.map((invoice) => scoreFinanceReconciliation(invoice, movement))
-      .filter((candidate) => candidate.confidence >= 35)
+      .filter((candidate) => candidate.eligible && candidate.confidence >= 35 && hasFinanceIdentityEvidence(candidate))
       .sort((left, right) => right.confidence - left.confidence);
     if (!scored.length) continue;
 
@@ -315,9 +360,10 @@ export async function getFinanceReconciliationSuggestions({ tenantId, movementId
         const candidates = [pool[first], pool[second]];
         for (let third = second + 1; third < pool.length + 1; third += 1) {
           const group = third < pool.length ? [...candidates, pool[third]] : candidates;
+          if (!sameFinanceInvoiceParty(group.map((candidate) => candidate.invoice))) continue;
           const total = group.reduce((sum, candidate) => sum + getInvoiceFinancialState(candidate.invoice).balance, 0);
           if (Math.abs(total - movementAmount) <= 1) {
-            const confidence = Math.min(99, Math.max(88, Math.round(group.reduce((sum, candidate) => sum + candidate.confidence, 0) / group.length)));
+            const confidence = Math.min(99, Math.round(group.reduce((sum, candidate) => sum + candidate.confidence, 0) / group.length));
             grouped = { group, total, confidence };
             break;
           }
@@ -338,7 +384,7 @@ export async function getFinanceReconciliationSuggestions({ tenantId, movementId
           { code: "GROUPED_PAYMENT", label: "Pago agrupado", weight: 40, detail: `El abono cubre exactamente ${grouped.group.length} documentos.` },
           ...grouped.group.flatMap((candidate) => candidate.evidence.filter((item) => item.code !== "EXACT_AMOUNT")).slice(0, 4)
         ],
-        limitations: [],
+        limitations: [...new Set(grouped.group.flatMap((candidate) => candidate.limitations))],
         recommendedAction: "VALIDAR_ANTES_DE_CONFIRMAR",
         explanation: "El monto coincide con un grupo de documentos. Confirma que pertenecen al mismo pagador antes de aplicar la conciliación."
       };

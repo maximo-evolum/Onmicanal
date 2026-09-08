@@ -850,12 +850,35 @@ export type FinanceReconciliationSuggestion = {
   alternatives?: Array<{ invoiceId: string; documentNumber: string; partyName: string; confidence: number; amountDifference: number; reasons: string[] }>;
 };
 
-export function getFinanceOverview(): Promise<FinanceOverview> {
-  return request<FinanceOverview>("/finance/overview");
+export type FinanceWorkspaceContext = { period: string; accountKey: string; currency: string };
+export type FinanceContextCoverage = {
+  context: FinanceWorkspaceContext;
+  company: { id: string; name: string };
+  accounts: Array<{ key: string; bank: string; alias: string; last4: string; identification: string }>;
+  sources: Record<"movements" | "customers" | "suppliers", { count: number; from: string | null; to: string | null; status: string }>;
+  statements: number; complete: boolean; warnings: string[]; documentScope: string;
+};
+
+function financeContextQuery(context?: Partial<FinanceWorkspaceContext>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(context || {})) if (value) query.set(key, value);
+  return query.toString();
 }
 
-export function getFinanceReconciliationSuggestions(): Promise<{ suggestions: FinanceReconciliationSuggestion[] }> {
-  return request<{ suggestions: FinanceReconciliationSuggestion[] }>("/finance/reconciliation-suggestions");
+export function getFinanceContextCoverage(context: FinanceWorkspaceContext): Promise<FinanceContextCoverage> {
+  return request(`/finance/workspace-context?${financeContextQuery(context)}`);
+}
+
+export function getFinanceWorkspaceRecords(type: "bank_movement" | "finance_exception", context: FinanceWorkspaceContext): Promise<{ records: IndustryRecord[] }> {
+  return request(`/finance/workspace-records?type=${type}&${financeContextQuery(context)}`);
+}
+
+export function getFinanceOverview(context?: FinanceWorkspaceContext): Promise<FinanceOverview> {
+  return request<FinanceOverview>(`/finance/overview?${financeContextQuery(context)}`);
+}
+
+export function getFinanceReconciliationSuggestions(context?: FinanceWorkspaceContext): Promise<{ suggestions: FinanceReconciliationSuggestion[] }> {
+  return request<{ suggestions: FinanceReconciliationSuggestion[] }>(`/finance/reconciliation-suggestions?${financeContextQuery(context)}`);
 }
 
 export function approveFinanceReconciliation(movementId: string, invoiceId: string, invoiceIds?: string[]): Promise<{ reconciliation: IndustryRecord; invoices: IndustryRecord[] }> {
@@ -863,6 +886,18 @@ export function approveFinanceReconciliation(movementId: string, invoiceId: stri
     method: "POST",
     body: JSON.stringify({ invoiceId, invoiceIds })
   });
+}
+
+export type FinanceAllocationPage = { page: number; pages: number; total: number; records: Array<IndustryRecord & { financial?: { balance: number } }> };
+export function getFinanceAllocationWorkspace(context: FinanceWorkspaceContext, kind: string, page: number, search: string): Promise<FinanceAllocationPage> {
+  const query = new URLSearchParams({ ...context, kind, page: String(page), search });
+  return request(`/finance/reconciliation-workspace?${query}`);
+}
+export function applyManualFinanceAllocation(movementId: string, allocations: Array<{ invoiceId: string; amount: number }>, reason: string): Promise<{ reconciliation: IndustryRecord }> {
+  return request(`/finance/reconciliations/${encodeURIComponent(movementId)}/allocate`, { method: "POST", body: JSON.stringify({ allocations, reason }) });
+}
+export function reverseFinanceReconciliation(id: string, reason: string): Promise<{ reconciliation: IndustryRecord; alreadyReversed: boolean }> {
+  return request(`/finance/reconciliations/${encodeURIComponent(id)}/reverse`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
 export function generateFinanceCollectionCases(): Promise<{ created: number; cases: IndustryRecord[] }> {
@@ -956,6 +991,13 @@ export type FinanceMigrationPreview = {
 export type ChileanBank = { key: string; name: string; cmfCode: string };
 export type FinanceBankStatementAccount = { bank: string; bankKey: string; cmfCode: string; accountAlias: string; accountType: string; accountLast4: string | null };
 export type FinanceBankStatementPreview = {
+  reviewConfig?: BankReviewConfig;
+  columns?: string[];
+  fields?: Array<{ key: string; label: string }>;
+  totalSourceRows?: number;
+  excludedRows?: number;
+  jobId: string;
+  revision: number;
   sourceFile: string;
   fileFingerprint?: string;
   detectedFormat?: string;
@@ -969,6 +1011,7 @@ export type FinanceBankStatementPreview = {
   sourceRows: Array<Record<string, unknown>>;
 };
 export type FinanceBankStatementBatch = {
+  importJobId?: string | null;
   id: string;
   sourceFile: string;
   title: string;
@@ -1052,8 +1095,8 @@ export function getFinanceCustomers(): Promise<{ customers: FinanceCustomer[] }>
   return request("/finance/customers");
 }
 
-export function getFinanceDocuments(type: "all" | "customers" | "suppliers" = "all"): Promise<{ documents: FinanceDocument[]; coverage: FinanceDocumentCoverage }> {
-  return request(`/finance/documents?type=${encodeURIComponent(type)}`);
+export function getFinanceDocuments(type: "all" | "customers" | "suppliers" = "all", context?: FinanceWorkspaceContext): Promise<{ documents: FinanceDocument[]; coverage: FinanceDocumentCoverage }> {
+  return request(`/finance/documents?type=${encodeURIComponent(type)}&${financeContextQuery(context)}`);
 }
 
 export function getFinanceNuboxDocument(id: string): Promise<{ sale: Record<string, unknown> }> {
@@ -1142,12 +1185,58 @@ export function previewFinanceBankStatementFile(file: File, account: { bankKey: 
   return request<FinanceBankStatementPreview>("/finance/bank-statements/preview-file", { method: "POST", body: data });
 }
 
-export function importFinanceBankStatement(input: { sourceFile: string; fileFingerprint?: string; rows: Array<Record<string, unknown>>; bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceBankStatementPreview["summary"] }> {
+export function importFinanceBankStatement(input: { jobId: string; revision: number }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceBankStatementPreview["summary"] }> {
   return request("/finance/bank-statements/import", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function getFinanceBankStatements(): Promise<{ statements: FinanceBankStatementBatch[] }> {
-  return request("/finance/bank-statements");
+export type FinanceBankImportJob = {
+  id: string; sourceFile: string; status: "RECEIVED" | "PROCESSING" | "READY" | "FAILED" | "IMPORTED" | "CANCELLED";
+  revision: number; updatedAt: string; createdAt: string; error: string | null; recoverable: boolean;
+};
+export function getFinanceBankImportJobs(cursor?: string): Promise<{ jobs: FinanceBankImportJob[]; nextCursor: string | null }> {
+  return request(`/finance/bank-import-jobs${cursor ? "?cursor=" + encodeURIComponent(cursor) : ""}`);
+}
+export function getFinanceBankImportJob(id: string): Promise<{ job: FinanceBankImportJob; preview: FinanceBankStatementPreview | null }> {
+  return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}`);
+}
+export function reanalyzeFinanceBankImport(id: string, account?: { bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }, review?: { revision: number; reviewConfig: BankReviewConfig }): Promise<FinanceBankStatementPreview> {
+  return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}/reanalyze`, { method: "POST", body: JSON.stringify({ account, ...review }) });
+}
+export type BankReviewConfig = { mapping: Record<string, string>; excludedRows: Array<{ dataRow: number; reason: string }> };
+export type BankReviewRow = { dataRow: number; transactionDate: string | null; description: string; reference: string; rut: string; amount: number; movementType: string; needsReview: boolean; reviewReasons: string[]; excluded: boolean; exclusionReason: string | null; duplicate?: boolean; origin?: { kind: string; row: number | null; sheet: string | null }; source: Record<string, unknown> };
+export type BankReviewPage = { revision: number; page: number; pageSize: number; total: number; totalSourceRows: number; pages: number; rows: BankReviewRow[] };
+export type BankMappingTemplate = { id: string; name: string; bankKey: string; columns: string[]; mapping: Record<string, string> };
+export function getBankReviewPage(id: string, query: { revision: number; page: number; filter: string; search: string }): Promise<BankReviewPage> {
+  return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}/rows?${new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]))}`);
+}
+export function getBankMappingTemplates(): Promise<{ templates: BankMappingTemplate[] }> { return request("/finance/bank-mapping-templates"); }
+export function saveBankMappingTemplate(input: { jobId: string; revision: number; name: string }): Promise<{ template: BankMappingTemplate }> {
+  return request("/finance/bank-mapping-templates", { method: "POST", body: JSON.stringify(input) });
+}
+export function deleteBankMappingTemplate(id: string): Promise<{ ok: boolean }> { return request(`/finance/bank-mapping-templates/${encodeURIComponent(id)}`, { method: "DELETE" }); }
+export async function downloadBankReview(id: string, query: { revision: number; filter: string; search: string }): Promise<Blob> {
+  const params = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]));
+  const response = await fetch(`${API_BASE_URL}/finance/bank-import-jobs/${encodeURIComponent(id)}/export?${params}`, { headers: buildHeaders(), credentials: "include", cache: "no-store" });
+  if (!response.ok) { let message = "No se pudo exportar la revisión."; try { message = (await response.json()).error || message; } catch {} throw new Error(message); }
+  return response.blob();
+}
+export function cancelFinanceBankImport(id: string): Promise<{ job: FinanceBankImportJob }> {
+  return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}/cancel`, { method: "POST" });
+}
+export async function downloadFinanceBankOriginal(id: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/finance/bank-import-jobs/${encodeURIComponent(id)}/original`, {
+    headers: buildHeaders(), cache: "no-store", credentials: "include"
+  });
+  if (!response.ok) {
+    let message = "No se pudo descargar la cartola original.";
+    try { message = (await response.json())?.error || message; } catch {}
+    throw new Error(message);
+  }
+  return response.blob();
+}
+
+export function getFinanceBankStatements(context?: FinanceWorkspaceContext): Promise<{ statements: FinanceBankStatementBatch[] }> {
+  return request(`/finance/bank-statements?${financeContextQuery(context)}`);
 }
 
 export function deleteFinanceBankStatement(id: string): Promise<{ ok: true; deleted: { statementId: string; movements: number; exceptions: number } }> {

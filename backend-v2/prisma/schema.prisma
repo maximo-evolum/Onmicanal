@@ -96,6 +96,9 @@ model Tenant {
   channelConfigs          TenantChannelConfig[]
   onboardingImports       TenantOnboardingImport[]
   industryRecords         IndustryRecord[]
+  financeBankOriginals    FinanceBankOriginal[]
+  financeBankImportJobs   FinanceBankImportJob[]
+  financeBankMappingTemplates FinanceBankMappingTemplate[]
   mobilePushDevices       MobilePushDevice[]
   brokerOwners            BrokerOwner[]
   brokerProperties        BrokerProperty[]
@@ -329,6 +332,70 @@ model CustomIndustryTemplate {
   updatedAt DateTime @updatedAt
 
   @@index([isActive, name])
+}
+
+model FinanceBankOriginal {
+  id        String   @id @default(cuid())
+  tenantId  String
+  sha256    String
+  content   Bytes
+  size      Int
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  jobs      FinanceBankImportJob[]
+
+  @@unique([tenantId, sha256])
+  @@unique([id, tenantId])
+}
+
+model FinanceBankImportJob {
+  id          String   @id @default(cuid())
+  tenantId    String
+  originalId  String
+  sourceFile  String
+  createdById String?
+  status      String   @default("RECEIVED")
+  revision    Int      @default(0)
+  runToken    String?
+  account     Json?
+  periodRange Json?
+  reviewConfig Json?
+  error       String?
+  batchId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  original    FinanceBankOriginal @relation(fields: [originalId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  revisions   FinanceBankImportRevision[]
+
+  @@index([tenantId, status, createdAt])
+  @@unique([tenantId, batchId])
+}
+
+model FinanceBankImportRevision {
+  id        String   @id @default(cuid())
+  jobId     String
+  revision  Int
+  status    String
+  preview   Json?
+  error     String?
+  createdAt DateTime @default(now())
+  job       FinanceBankImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, revision])
+}
+
+model FinanceBankMappingTemplate {
+  id String @id @default(cuid())
+  tenantId String
+  name String
+  bankKey String
+  columns Json
+  mapping Json
+  createdById String?
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@unique([tenantId, bankKey, name])
 }
 
 model IndustryRecord {

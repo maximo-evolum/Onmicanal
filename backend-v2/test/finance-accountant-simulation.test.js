@@ -15,11 +15,11 @@ function parseCsv(content) {
 }
 
 function invoice(number, customerName, rut, amount, dueDate) {
-  return { id: `invoice-${number}`, title: `Factura ${number} ${customerName}`, status: "OPEN", data: { invoiceNumber: number, customerName, rut, amount, balance: amount, dueDate } };
+  return { id: `invoice-${number}`, title: `Factura ${number} ${customerName}`, status: "OPEN", data: { invoiceNumber: number, customerName, rut, amount, balance: amount, issueDate: "2026-06-01", dueDate } };
 }
 
 function movement(row) {
-  return { id: `movement-${row.referencia}`, title: row.descripcion, status: "PENDING", data: { transactionDate: row.fecha, date: row.fecha, amount: Number(row.monto), reference: row.referencia, rut: row.rut, payerName: row.pagador } };
+  return { id: `movement-${row.referencia}`, title: row.descripcion, status: "PENDING", data: { direction: "CREDIT", transactionDate: row.fecha, date: row.fecha, amount: Number(row.monto), reference: row.referencia, rut: row.rut, payerName: row.pagador } };
 }
 
 test("simulación contador: una cartola produce conciliaciones, pago parcial y revisión humana", async () => {

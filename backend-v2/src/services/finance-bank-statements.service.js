@@ -4,7 +4,7 @@ import ExcelJS from "exceljs";
 import { CHILEAN_FINANCIAL_INSTITUTIONS, getChileanFinancialInstitution } from "../lib/finance-integrations.js";
 import { readHistoricalFinanceFile } from "./finance-migration.service.js";
 
-export const MAX_BANK_STATEMENT_ROWS = 1000;
+export const MAX_BANK_STATEMENT_ROWS = 5000;
 export const MAX_BANK_STATEMENT_FILE_BYTES = 12 * 1024 * 1024;
 
 function fileName(file) {
@@ -299,8 +299,8 @@ function normalizedAccount(input = {}) {
 function sourceAmount(row) {
   const debit = getValue(row, ["cargo", "debe", "debito", "débito", "egreso", "retiro", "withdrawal", "debit"]);
   const credit = getValue(row, ["abono", "haber", "credito", "crédito", "ingreso", "deposito", "depósito", "deposit", "credit"]);
-  if (debit) return { signedAmount: -Math.abs(parseNumber(debit)), direction: "DEBIT", directionSource: "Columna Cargo" };
-  if (credit) return { signedAmount: Math.abs(parseNumber(credit)), direction: "CREDIT", directionSource: "Columna Abono" };
+  if (parseNumber(debit) !== 0) return { signedAmount: -Math.abs(parseNumber(debit)), direction: "DEBIT", directionSource: "Columna Cargo" };
+  if (parseNumber(credit) !== 0) return { signedAmount: Math.abs(parseNumber(credit)), direction: "CREDIT", directionSource: "Columna Abono" };
   const rawAmount = getValue(row, ["monto", "importe", "amount", "valor", "monto_movimiento", "importe_movimiento"]);
   const parsedAmount = parseNumber(rawAmount);
   // Santander usa una sola columna MONTO y una marca CARGO/ABONO: A es un
@@ -339,7 +339,13 @@ export function bankMovementFingerprint(input = {}) {
 
 export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MAX_BANK_STATEMENT_ROWS } = {}) {
   const account = normalizedAccount(accountInput);
-  const cappedRows = Array.isArray(rows) ? rows.slice(0, Math.max(1, Math.min(Number(limit) || MAX_BANK_STATEMENT_ROWS, MAX_BANK_STATEMENT_ROWS))) : [];
+  const maxRows = Math.max(1, Math.min(Number(limit) || MAX_BANK_STATEMENT_ROWS, MAX_BANK_STATEMENT_ROWS));
+  if (Array.isArray(rows) && rows.length > maxRows) {
+    const error = new Error(`La cartola contiene ${rows.length} movimientos y el límite por archivo es ${maxRows}. No se importó ni recortó ningún movimiento. Divide el archivo antes de continuar.`);
+    error.status = 400;
+    throw error;
+  }
+  const cappedRows = Array.isArray(rows) ? rows : [];
   return cappedRows.map((rawRow, index) => {
     const row = rawRow && typeof rawRow === "object" && !Array.isArray(rawRow) ? rawRow : {};
     const transactionDate = parseDate(getValue(row, ["fecha", "fecha_movimiento", "fecha transaccion", "fecha_transaccion", "fecha operacion", "fecha_operacion", "fecha_valor", "date", "transaction_date"]));
@@ -412,12 +418,12 @@ export async function readBankStatementFile(file) {
   // puede ocurrir lo inverso: un CSV con nombre .xlsx. Forzamos el lector
   // correcto según el contenido, no según el nombre entregado por el banco.
   if (format.key === "LEGACY_SPREADSHEET" || format.key === "SPREADSHEET") {
-    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.xlsx` }, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES });
+    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.xlsx` }, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES, includeOrigin: true });
   }
   if (format.key === "DELIMITED_TEXT") {
-    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.csv` }, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES });
+    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.csv` }, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES, includeOrigin: true });
   }
-  return readHistoricalFinanceFile(file, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES });
+  return readHistoricalFinanceFile(file, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES, includeOrigin: true });
 }
 
 export function withBankStatementNet(summary) {

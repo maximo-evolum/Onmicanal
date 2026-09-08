@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { financeAgingSegment, getInvoiceFinancialState, scoreFinanceReconciliation } from "../src/services/finance.service.js";
+import { financeAgingSegment, getInvoiceFinancialState, scoreFinanceReconciliation, financeReconciliationBlockers, sameFinanceInvoiceParty, hasFinanceIdentityEvidence } from "../src/services/finance.service.js";
 
 const NOW = new Date("2026-07-25T12:00:00.000Z");
 
@@ -9,13 +9,13 @@ test("Finance OS prioriza una coincidencia con monto, referencia, RUT y fecha", 
     id: "invoice-1",
     title: "Factura FAC-1520 ABC Ltda.",
     status: "OPEN",
-    data: { invoiceNumber: "FAC-1520", customerName: "ABC Ltda.", rut: "76.123.456-7", amount: 895000, balance: 895000, dueDate: "2026-07-22" }
+    data: { invoiceNumber: "FAC-1520", customerName: "ABC Ltda.", rut: "76.123.456-7", amount: 895000, balance: 895000, issueDate: "2026-07-01", dueDate: "2026-07-22" }
   };
   const movement = {
     id: "movement-1",
     title: "Abono ABC",
     status: "PENDING",
-    data: { amount: 895000, date: "2026-07-24", reference: "Pago FAC-1520", rut: "76.123.456-7", payerName: "ABC Ltda." }
+    data: { direction: "CREDIT", amount: 895000, date: "2026-07-24", reference: "Pago FAC-1520", rut: "76.123.456-7", payerName: "ABC Ltda." }
   };
 
   const result = scoreFinanceReconciliation(invoice, movement, NOW);
@@ -66,4 +66,73 @@ test("segmenta la cobranza por antigüedad sin mezclar monitoreo y mora", () => 
   assert.equal(financeAgingSegment(new Date("2026-07-21T00:00:00.000Z"), NOW).code, "1_7");
   assert.equal(financeAgingSegment(new Date("2026-06-10T00:00:00.000Z"), NOW).code, "31_60");
   assert.equal(financeAgingSegment(new Date("2026-03-01T00:00:00.000Z"), NOW).code, "MAS_90");
+});
+
+function videoCase(doc = {}, bank = {}) {
+  return [
+    { id: "invoice", status: "OPEN", data: { invoiceNumber: "8809", customerName: "Comercial Patagonia Chile SpA", issueDate: "2026-08-01", dueDate: "2026-08-15", amount: 100000, balance: 100000, ...doc } },
+    { id: "movement", data: { direction: "CREDIT", date: "2026-08-15", amount: 100000, reference: "Pago 8809", payerName: "Comercial Patagonia Chile SpA", ...bank } }
+  ];
+}
+
+test("video: febrero no concilia una factura emitida en agosto aunque coincidan monto y folio", () => {
+  const [doc, bank] = videoCase({}, { date: "2026-02-15" });
+  const result = scoreFinanceReconciliation(doc, bank);
+  assert.equal(result.eligible, false);
+  assert.equal(result.confidence, 0);
+  assert.ok(financeReconciliationBlockers(doc, bank).some((reason) => reason.includes("anterior")));
+});
+
+test("video: Chile, Comercial y SpA no identifican a un cliente", () => {
+  const result = scoreFinanceReconciliation(...videoCase({}, { payerName: "Comercial Atacama Chile SpA" }));
+  assert.ok(!result.evidence.some((item) => item.code === "PARTY_MATCH"));
+});
+
+test("un monto coincidente por sí solo no identifica la factura que paga el movimiento", () => {
+  const result = scoreFinanceReconciliation(...videoCase({}, { reference: "", payerName: "Otra empresa" }));
+  assert.equal(result.eligible, true);
+  assert.equal(hasFinanceIdentityEvidence(result), false);
+});
+
+test("un folio no coincide con otro folio que solamente lo contiene", () => {
+  const result = scoreFinanceReconciliation(...videoCase({ invoiceNumber: "88" }, { reference: "Pago 8809" }));
+  assert.ok(!result.evidence.some((item) => item.code === "INVOICE_REFERENCE"));
+});
+
+test("la glosa también aporta referencia y el RUT se compara sin puntos ni guion", () => {
+  const result = scoreFinanceReconciliation(...videoCase({ rut: "77.123.456-K" }, { rut: "77123456k", reference: "", description: "Pago factura 8809" }));
+  assert.equal(result.eligible, true);
+  assert.ok(result.evidence.some((item) => item.code === "RUT_MATCH"));
+  assert.ok(result.evidence.some((item) => item.code === "INVOICE_REFERENCE"));
+});
+
+test("faltan fechas, dirección o existe un cargo: no propone ni autoriza pago de cliente", () => {
+  for (const [docPatch, bankPatch] of [[{ issueDate: "" }, {}], [{}, { date: "" }], [{}, { direction: "" }], [{}, { direction: "DEBIT" }]]) {
+    const result = scoreFinanceReconciliation(...videoCase(docPatch, bankPatch));
+    assert.equal(result.eligible, false);
+    assert.equal(result.confidence, 0);
+  }
+});
+
+test("documentos de proveedores y registros explícitamente demo no se concilian como ventas", () => {
+  for (const patch of [{ documentSide: "SUPPLIER" }, { direction: "PURCHASE" }, { demoOnly: true }, { trainingRun: "training-2026" }]) {
+    assert.equal(scoreFinanceReconciliation(...videoCase(patch)).eligible, false);
+  }
+  const [doc, bank] = videoCase();
+  doc.status = "ANNULLED";
+  assert.equal(scoreFinanceReconciliation(doc, bank).eligible, false);
+});
+
+test("el mismo día es elegible y el RUT contrario requiere aclaración", () => {
+  assert.equal(scoreFinanceReconciliation(...videoCase({ issueDate: "2026-08-15" })).eligible, true);
+  assert.equal(scoreFinanceReconciliation(...videoCase({ rut: "77123456K" }, { rut: "762223334" })).eligible, false);
+});
+
+test("los pagos agrupados no suman documentos de distintos clientes", () => {
+  const [first] = videoCase({ rut: "77.123.456-K" });
+  const [same] = videoCase({ rut: "77123456k" });
+  const [different] = videoCase({ rut: "76.222.333-4" });
+  assert.equal(sameFinanceInvoiceParty([first, same]), true);
+  assert.equal(sameFinanceInvoiceParty([first, different]), false);
+  assert.equal(sameFinanceInvoiceParty([{ data: {} }, { data: {} }]), false);
 });

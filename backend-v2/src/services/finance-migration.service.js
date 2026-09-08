@@ -205,7 +205,7 @@ function headerScore(row) {
   }, 0);
 }
 
-function rowsToObjects(rows) {
+function rowsToObjects(rows, origin = null) {
   if (!Array.isArray(rows) || rows.length < 2) return [];
   const searchLimit = Math.min(rows.length - 1, 40);
   let headerIndex = 0;
@@ -220,13 +220,15 @@ function rowsToObjects(rows) {
   // Dos columnas conocidas bastan para formatos simples; para una carátula
   // con texto libre mantenemos la primera fila, que será revisada aguas abajo.
   if (bestScore < 2) headerIndex = 0;
-  const headers = rows[headerIndex].map((header, index) => cleanText(header, `Columna ${index + 1}`));
+  const used = new Set(["__financeOrigin"]);
+  const headers = Array.from(rows[headerIndex], (header, index) => { const name = cleanText(header, `Columna ${index + 1}`); let unique = used.has(name) ? `${name} [${index + 1}]` : name; while (used.has(unique)) unique += "_"; used.add(unique); return unique; });
   return rows.slice(headerIndex + 1)
-    .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])))
-    .filter((row) => Object.values(row).some((value) => cleanText(value)));
+    .map((row, index) => ({ values: Object.fromEntries(headers.map((header, col) => [header, row[col] ?? ""])), row: row.__sourceRow || headerIndex + index + 2 }))
+    .filter((entry) => Object.values(entry.values).some((value) => cleanText(value)))
+    .map((entry) => origin ? { ...entry.values, __financeOrigin: { ...origin, row: origin.kind === "parsed" ? null : entry.row } } : entry.values);
 }
 
-export function parseDelimitedText(text) {
+export function parseDelimitedText(text, options = {}) {
   const source = String(text || "").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
   const delimiter = detectDelimiter(source);
   const rows = [];
@@ -245,37 +247,37 @@ export function parseDelimitedText(text) {
       currentValue = "";
     } else if (char === "\n" && !quoted) {
       currentRow.push(currentValue.trim());
-      if (currentRow.some(Boolean)) rows.push(currentRow);
+      rows.push(currentRow);
       currentRow = [];
       currentValue = "";
     } else currentValue += char;
   }
   currentRow.push(currentValue.trim());
   if (currentRow.some(Boolean)) rows.push(currentRow);
-  return rowsToObjects(rows);
+  return rowsToObjects(rows, options.includeOrigin ? { kind: "csv-record", sheet: null } : null);
 }
 
-async function parseSpreadsheet(buffer) {
+async function parseSpreadsheet(buffer, options = {}) {
   try {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
     const sheets = Array.isArray(workbook.worksheets) ? workbook.worksheets : [];
     const sheet = sheets.find((candidate) => candidate.actualRowCount > 1) || sheets[0];
-    if (!sheet) return parseSpreadsheetFallback(buffer);
+    if (!sheet) return parseSpreadsheetFallback(buffer, options);
     const rawRows = [];
-    sheet.eachRow({ includeEmpty: false }, (row) => rawRows.push(row.values.slice(1).map(valueFromSheetCell)));
-    const rows = rowsToObjects(rawRows);
+    sheet.eachRow({ includeEmpty: false }, (row) => { const values = row.values.slice(1).map(valueFromSheetCell); values.__sourceRow = row.number; rawRows.push(values); });
+    const rows = rowsToObjects(rawRows, options.includeOrigin ? { kind: "sheet", sheet: sheet.name } : null);
     // Un libro con metadatos incompletos puede abrirse sin error pero no
     // exponer hojas a ExcelJS. La segunda lectura evita devolver una cartola
     // vacía cuando el XML de la hoja sí contiene movimientos.
-    return rows.length ? rows : parseSpreadsheetFallback(buffer);
+    return rows.length ? rows : parseSpreadsheetFallback(buffer, options);
   } catch (primaryError) {
     // Algunos bancos generan archivos XLSX válidos para Excel pero con el
     // catálogo de hojas incompleto. ExcelJS no siempre los abre; se intenta
     // una lectura segura de la primera hoja antes de pedir al usuario que lo
     // vuelva a exportar.
     try {
-      return await parseSpreadsheetFallback(buffer);
+      return await parseSpreadsheetFallback(buffer, options);
     } catch {
       const detail = primaryError instanceof Error ? primaryError.message : "";
       if (/sheets|workbook|zip|central directory/i.test(detail)) {
@@ -357,7 +359,7 @@ function parseOdsSpreadsheet(source) {
   return rowsToObjects(rawRows);
 }
 
-async function parseSpreadsheetFallback(buffer) {
+async function parseSpreadsheetFallback(buffer, options = {}) {
   let zip;
   try {
     zip = await JSZip.loadAsync(buffer);
@@ -401,17 +403,18 @@ async function parseSpreadsheetFallback(buffer) {
       row[targetIndex] = value;
       fallbackIndex = targetIndex + 1;
     }
+    row.__sourceRow = Number(rowMatch[0].match(/<row\b[^>]*\br="(\d+)"/i)?.[1]) || null;
     if (row.some((value) => cleanText(value))) rawRows.push(row);
   }
-  return rowsToObjects(rawRows);
+  return rowsToObjects(rawRows, options.includeOrigin ? { kind: "sheet", sheet: worksheet.name } : null);
 }
 
-export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION_FILE_BYTES } = {}) {
+export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION_FILE_BYTES, includeOrigin = false } = {}) {
   if (!file?.buffer?.length) throw new Error("Selecciona un archivo con datos para revisar.");
   if (file.buffer.length > maxBytes) throw new Error(`El archivo supera el límite de ${Math.round(maxBytes / (1024 * 1024))} MB para una revisión segura.`);
   const name = cleanText(file.originalname || file.name).toLocaleLowerCase("es");
-  if (/\.(xlsx|xlsm)$/i.test(name)) return parseSpreadsheet(file.buffer);
-  if (/\.(csv|txt)$/i.test(name)) return parseDelimitedText(decodeSpreadsheetText(file.buffer));
+  if (/\.(xlsx|xlsm)$/i.test(name)) return parseSpreadsheet(file.buffer, { includeOrigin });
+  if (/\.(csv|txt)$/i.test(name)) return parseDelimitedText(decodeSpreadsheetText(file.buffer), { includeOrigin });
   throw new Error("Usa un archivo CSV o Excel (.xlsx). Los PDF e imágenes se adjuntan en Documentos para revisión humana.");
 }
 

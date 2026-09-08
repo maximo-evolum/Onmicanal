@@ -4,6 +4,42 @@ import { buildFinanceMonthlyClosePreview, validFinancePeriod } from "../src/serv
 
 const base = { tenantId: "tenant-demo", createdAt: "2026-09-05T12:00:00.000Z" };
 
+test("un período vacío requiere acreditar sus datos antes de cerrar", () => {
+  const preview = buildFinanceMonthlyClosePreview([], "2026-01");
+  assert.equal(preview.status, "REQUIRES_REVIEW");
+  assert.equal(preview.blockers[0].type, "SIN_DATOS_DEL_PERIODO");
+});
+
+test("acepta las fechas Date que devuelve Prisma para excepciones administrativas", () => {
+  const preview = buildFinanceMonthlyClosePreview([{ ...base, id: "manual", recordType: "finance_exception", status: "OPEN", createdAt: new Date("2026-09-05T12:00:00Z"), data: {} }], "2026-09");
+  assert.equal(preview.metrics.openExceptions, 1);
+});
+
+test("una excepción de cartola histórica pertenece al mes del movimiento y no al de carga", () => {
+  const records = [{ ...base, id: "error", recordType: "finance_exception", status: "OPEN",
+    data: { importBatchId: "batch", movement: { transactionDate: "2026-01-02" } } }];
+  assert.equal(buildFinanceMonthlyClosePreview(records, "2026-01").metrics.openExceptions, 1);
+  assert.equal(buildFinanceMonthlyClosePreview(records, "2026-09").metrics.openExceptions, 0);
+});
+
+test("la conciliación y su excepción usan la fecha del movimiento enlazado", () => {
+  const records = [
+    { ...base, id: "movement", recordType: "bank_movement", status: "MATCHED", data: { transactionDate: "2026-01-02", amount: 1000, direction: "CREDIT" } },
+    { ...base, id: "rec", recordType: "finance_reconciliation", status: "APPROVED", data: { movementId: "movement" } },
+    { ...base, id: "error", recordType: "finance_exception", status: "OPEN", data: { movementId: "movement" } }
+  ];
+  const preview = buildFinanceMonthlyClosePreview(records, "2026-01");
+  assert.equal(preview.metrics.reconciliations, 1);
+  assert.equal(preview.metrics.openExceptions, 1);
+  assert.equal(preview.status, "REQUIRES_REVIEW");
+});
+
+test("una excepción sin fecha operativa no se oculta usando la fecha de importación", () => {
+  const records = [{ ...base, id: "error", title: "Fila sin fecha", recordType: "finance_exception", status: "OPEN", data: { importBatchId: "batch", movement: {} } }];
+  const preview = buildFinanceMonthlyClosePreview(records, "2026-01");
+  assert.ok(preview.blockers.some((item) => item.type === "EXCEPCION_SIN_FECHA"));
+});
+
 test("consolida un período conciliado y lo deja listo para cierre", () => {
   const preview = buildFinanceMonthlyClosePreview([
     { ...base, id: "invoice", recordType: "finance_invoice", status: "PAID", data: { issueDate: "2026-09-02", invoiceNumber: "F-100", clientName: "Comercial Andes", amount: 1500000, balance: 0 } },

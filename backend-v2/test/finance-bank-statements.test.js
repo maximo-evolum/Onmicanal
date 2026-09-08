@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import {
+  MAX_BANK_STATEMENT_ROWS,
   bankMovementFingerprint,
   detectBankStatementInstitution,
   detectBankStatementFileFormat,
@@ -12,6 +13,19 @@ import {
   summarizeBankStatementRows,
   withBankStatementNet
 } from "../src/services/finance-bank-statements.service.js";
+
+test("no recorta una cartola de 1248 movimientos como la del Blueprint", () => {
+  const rows = Array.from({ length: 1248 }, (_, index) => ({ Fecha: "02/01/2026", Glosa: `Abono ${index}`, Abono: "1000" }));
+  const result = normalizeBankStatementRows(rows, { bankKey: "bancoestado" });
+  assert.equal(result.length, rows.length);
+  assert.equal(result.at(-1).description, "Abono 1247");
+});
+
+test("rechaza un archivo que supera el límite sin devolver una importación parcial", () => {
+  assert.throws(() => normalizeBankStatementRows(Array.from({ length: MAX_BANK_STATEMENT_ROWS + 1 }, () => ({}))),
+    (error) => error.status === 400 && /No se importó ni recortó/.test(error.message));
+  assert.throws(() => normalizeBankStatementRows([{}, {}], {}, { limit: 1 }), /contiene 2 movimientos/);
+});
 
 test("normaliza una cartola bancaria chilena con cargos, abonos y saldo", () => {
   const rows = normalizeBankStatementRows([
@@ -41,6 +55,16 @@ test("marca filas incompletas para revisión sin impedir que se revise el resto 
   const [row] = normalizeBankStatementRows([{ Fecha: "", Glosa: "Movimiento sin monto" }], { bankKey: "santander_chile" });
   assert.equal(row.needsReview, true);
   assert.deepEqual(row.reviewReasons, ["fecha del movimiento", "monto"]);
+});
+
+test("video: seleccionar banco elimina sólo esa causa de revisión y conserva abono, cargo y glosa", () => {
+  const source = [{ Fecha: "02/01/2026", "Descripción movimiento": "Transferencia recibida", Monto: 15133230, "Cargo/Abono": "A" }, { Fecha: "02/01/2026", "Descripción movimiento": "Pago proveedor", Monto: -4095683, "Cargo/Abono": "C" }];
+  const before = normalizeBankStatementRows(source, {});
+  assert.ok(before.every((row) => row.needsReview));
+  const after = normalizeBankStatementRows(source, { bankKey: "santander_chile" });
+  assert.ok(after.every((row) => !row.needsReview));
+  assert.deepEqual(after.map((row) => row.movementType), ["ABONO", "CARGO"]);
+  assert.deepEqual(after.map((row) => row.description), ["Transferencia recibida", "Pago proveedor"]);
 });
 
 test("lee una cartola Excel y mantiene una huella estable para evitar duplicados", async () => {

@@ -1,3 +1,6 @@
+import { applyFinanceAllocation, reverseFinanceAllocation, sendFinanceMovementToReview } from "../services/finance-allocation.service.js";
+import { BANK_REVIEW_FIELDS, bankReviewColumns, normalizeBankReviewRows, bankReviewPage, validateBankReviewConfig, exportBankReviewCsv } from "../services/finance-bank-review.service.js";
+import { ACTIVE_IMPORT_STATUSES, importJobView, createBankImportJob, analyzeBankImportJob, readBankImportPreview, getBankImportJob, cancelBankImportJob, bankImportConfirmation } from "../services/finance-import-jobs.service.js";
 import { Router } from "express";
 import multer from "multer";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
@@ -11,8 +14,7 @@ import {
   financeAgingSegment,
   getFinanceOverview,
   getFinanceReconciliationSuggestions,
-  getInvoiceFinancialState,
-  scoreFinanceReconciliation
+  getInvoiceFinancialState
 } from "../services/finance.service.js";
 import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions, updateFinanceAgentPolicy } from "../services/finance-agents.service.js";
 import { recordAuditLog } from "../lib/audit.js";
@@ -52,6 +54,10 @@ import { createFloidConsentCase, normalizeFloidTransactions } from "../services/
 import { getFinanceMonthlyClosePreview, validFinancePeriod } from "../services/finance-monthly-close.service.js";
 import { getFinancePlanning, validPlanningPeriod } from "../services/finance-planning.service.js";
 import { canPerformFinanceAction, FINANCE_ACTIONS, financeRoleCapabilities } from "../services/finance-security.service.js";
+
+import { FinanceOperationError, withFinanceWrite, findAllFinanceRecords } from "../services/finance-integrity.service.js";
+
+import { parseFinanceContext, buildFinanceContextCoverage, loadFinanceContextRecords, filterFinanceContext, restrictFinanceCoverage } from "../services/finance-context.service.js";
 
 export const financeRouter = Router();
 export const financePublicRouter = Router();
@@ -319,11 +325,39 @@ function nuboxRouteError(res, error, fallback) {
   return res.status(status).json({ error: error instanceof Error ? error.message : fallback });
 }
 
+
+financeRouter.get("/finance/workspace-context", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const context = parseFinanceContext(req.query);
+    const [movements, customers, suppliers] = await Promise.all([MODULES.FINANCE_BANK_SYNC, MODULES.FINANCE_INVOICES, MODULES.FINANCE_PAYABLES].map((module) => req.user?.role === "SUPER_ADMIN" ? true : ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant })));
+    if (context.accountKey && !movements) return res.status(403).json({ error: "No tienes acceso a cuentas bancarias en esta empresa." });
+    const records = await loadFinanceContextRecords(prisma, req.tenantId);
+    res.json({ ...restrictFinanceCoverage(buildFinanceContextCoverage(records, context), { movements, customers, suppliers }), company: { id: req.tenantId, name: req.tenant?.name || "Empresa actual" } });
+  } catch (error) {
+    res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo verificar la cobertura de datos." });
+  }
+});
+
+financeRouter.get("/finance/workspace-records", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const type = cleanText(req.query.type);
+    if (!["bank_movement", "finance_exception"].includes(type)) return res.status(400).json({ error: "Tipo de consulta no permitido." });
+    if (!(await requireFinanceModule(req, res, type === "bank_movement" ? MODULES.FINANCE_BANK_SYNC : MODULES.FINANCE_EXCEPTIONS))) return;
+    const context = parseFinanceContext(req.query);
+    const records = await loadFinanceContextRecords(prisma, req.tenantId);
+    res.json({ records: filterFinanceContext(records, context).filter((record) => record.recordType === type) });
+  } catch (error) {
+    res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudieron cargar los registros del período." });
+  }
+});
+
 financeRouter.get("/finance/overview", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
-    res.json(await getFinanceOverview({ tenantId: req.tenantId }));
+    res.json(await getFinanceOverview({ tenantId: req.tenantId, context: parseFinanceContext(req.query) }));
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Finance overview error:", error);
     res.status(500).json({ error: "No se pudo cargar el dashboard financiero" });
   }
@@ -383,12 +417,13 @@ financeRouter.get("/finance/documents", async (req, res) => {
       ...(includePayables ? ["finance_payable"] : [])
     ];
     const now = new Date();
-    const records = await prisma.industryRecord.findMany({
+    const records = await findAllFinanceRecords(prisma, {
       where: { tenantId: req.tenantId, recordType: { in: recordTypes } },
       orderBy: { createdAt: "desc" },
       take: 1000
     });
-    const allDocuments = records.map((record) => {
+    const context = parseFinanceContext(req.query);
+    const allDocuments = filterFinanceContext(records, context).map((record) => {
       const data = financeRecordData(record);
       const party = financeParty(record);
       const state = party.side === "SUPPLIER" ? payableState(record, now) : invoiceState(record, now);
@@ -432,6 +467,7 @@ financeRouter.get("/finance/documents", async (req, res) => {
       .sort((left, right) => new Date(right.issueDate).getTime() - new Date(left.issueDate).getTime());
     res.json({ documents, coverage });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Finance documents error:", error);
     res.status(500).json({ error: "No se pudo cargar el portal de documentos financieros." });
   }
@@ -935,28 +971,32 @@ financeRouter.get("/finance/banks/catalog", async (req, res) => {
   }
 });
 
-financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GROUPS.MANAGERS), bankStatementUpload.single("file"), async (req, res) => {
-  try {
-    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
-    const format = detectBankStatementFileFormat(req.file);
-    const sourceRows = await readBankStatementFile(req.file);
-    const bankDetection = await detectBankStatementInstitution(req.file, sourceRows);
-    const rows = normalizeBankStatementRows(sourceRows, {
-      ...(req.body || {}),
-      bankKey: bankDetection.institution?.key || cleanText(req.body?.bankKey)
-    }, { limit: MAX_BANK_STATEMENT_ROWS });
-    if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos en la cartola." });
-    const sourceFile = cleanText(req.file?.originalname, "cartola-bancaria");
-    const fileFingerprint = bankStatementFileFingerprint(req.file?.buffer);
+async function analyzeStoredBankStatement({ file, account, reviewConfig = {}, tenantId }) {
+    const format = detectBankStatementFileFormat(file);
+    const sourceRows = await readBankStatementFile(file);
+    const bankDetection = await detectBankStatementInstitution(file, sourceRows);
+    const allRows = normalizeBankReviewRows(sourceRows, {
+      ...(account || {}),
+      bankKey: bankDetection.institution?.key || cleanText(account?.bankKey)
+    }, reviewConfig);
+    const rows = allRows.filter((row) => !row.excluded);
+    if (!rows.length) throw new FinanceOperationError(400, "No hay movimientos incluidos. Cancela la carga si deseas excluir toda la cartola.");
+    const sourceFile = cleanText(file?.originalname, "cartola-bancaria");
+    const fileFingerprint = bankStatementFileFingerprint(file?.buffer);
     const [existingBatches, existingMovements] = await Promise.all([
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_statement" }, select: { id: true, title: true, createdAt: true, data: true }, orderBy: { createdAt: "desc" }, take: 2000 }),
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { data: true }, orderBy: { createdAt: "desc" }, take: 10000 })
+      findAllFinanceRecords(prisma, { where: { tenantId: tenantId, recordType: "bank_statement" }, select: { id: true, title: true, createdAt: true, data: true }, orderBy: { createdAt: "desc" }, take: 2000 }),
+      findAllFinanceRecords(prisma, { where: { tenantId: tenantId, recordType: "bank_movement" }, select: { id: true, data: true }, orderBy: { createdAt: "desc" }, take: 10000 })
     ]);
     const existingBatch = existingBatches.find((record) => cleanText(financeRecordData(record).fileFingerprint) === fileFingerprint) || null;
     const knownFingerprints = new Set(existingMovements.map((record) => {
       const data = financeRecordData(record);
       return cleanText(data.fingerprint) || bankMovementFingerprint(data);
     }).filter(Boolean));
+    const seen = new Set();
+    for (const row of allRows) {
+      row.duplicate = !row.excluded && !row.needsReview && (knownFingerprints.has(row.fingerprint) || seen.has(row.fingerprint));
+      if (!row.excluded && !row.needsReview) seen.add(row.fingerprint);
+    }
     const validRows = rows.filter((row) => !row.needsReview);
     const duplicateRows = validRows.filter((row) => knownFingerprints.has(row.fingerprint)).length;
     const reprocessable = isReprocessableEmptyBankStatement(existingBatch);
@@ -964,7 +1004,7 @@ financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GRO
       ? bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: validRows.length, duplicateRows, existingBatch, reprocessable })
       : null;
     const summary = withBankStatementNet(summarizeBankStatementRows(rows));
-    res.json({
+    return {
       sourceFile,
       detectedFormat: format.label,
       conversion: format.conversion,
@@ -979,34 +1019,175 @@ financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GRO
       maxRows: MAX_BANK_STATEMENT_ROWS,
       account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },
       summary,
+      reviewConfig: validateBankReviewConfig(reviewConfig, bankReviewColumns(sourceRows), sourceRows.length),
+      columns: bankReviewColumns(sourceRows),
+      fields: BANK_REVIEW_FIELDS.map(({ key, label }) => ({ key, label })),
+      totalSourceRows: sourceRows.length,
+      excludedRows: allRows.length - rows.length,
+      normalizedRows: allRows,
+      periodRange: { from: rows.map((row) => row.transactionDate).filter(Boolean).sort()[0] || null, to: rows.map((row) => row.transactionDate).filter(Boolean).sort().at(-1) || null },
       duplicate,
       rows: rows.slice(0, 100),
       sourceRows: sourceRows.slice(0, MAX_BANK_STATEMENT_ROWS)
+    };
+}
+
+function bankImportError(res, error) {
+  const status = error instanceof FinanceOperationError ? error.status : 500;
+  if (status === 500) console.error("Bank import job error:", error);
+  return res.status(status).json({ error: status === 500 ? "No se pudo acceder a la importación guardada. Comprueba la migración y vuelve a intentarlo." : error.message, ...(error.details || {}) });
+}
+
+function bankPreviewForClient(preview) {
+  if (!preview) return null;
+  const { normalizedRows: _normalized, sourceRows: _source, ...summary } = preview;
+  // Raw rows stay on the server. The UI queries the immutable revision in pages.
+  return { ...summary, sourceRows: [] };
+}
+
+financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), bankStatementUpload.single("file"), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const job = await createBankImportJob(prisma, { tenantId: req.tenantId, userId: req.user?.id, file: req.file, account: req.body });
+    if (job.status === "READY") return res.json(bankPreviewForClient((await readBankImportPreview(prisma, req.tenantId, job.id)).preview));
+    res.json(bankPreviewForClient(await analyzeBankImportJob(prisma, { tenantId: req.tenantId, id: job.id, analyze: analyzeStoredBankStatement })));
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.get("/finance/bank-import-jobs", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    if (!req.tenantId) throw new FinanceOperationError(403, "No se pudo determinar la empresa de la sesión.");
+    const cursor = cleanText(req.query.cursor);
+    if (cursor) await getBankImportJob(prisma, req.tenantId, cursor);
+    const jobs = await prisma.financeBankImportJob.findMany({
+      where: { tenantId: req.tenantId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 21, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
     });
+    res.json({ jobs: jobs.slice(0, 20).map((job) => importJobView(job)), nextCursor: jobs.length > 20 ? jobs[19].id : null });
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.get("/finance/bank-import-jobs/:id", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const result = await readBankImportPreview(prisma, req.tenantId, req.params.id);
+    res.json({ ...result, preview: bankPreviewForClient(result.preview) });
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.get("/finance/bank-import-jobs/:id/rows", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const { preview, job } = await readBankImportPreview(prisma, req.tenantId, req.params.id);
+    if (!preview || !["READY", "IMPORTED"].includes(job.status)) throw new FinanceOperationError(409, "La importación no tiene una revisión disponible.");
+    res.json(bankReviewPage(preview, req.query));
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.get("/finance/bank-import-jobs/:id/export", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const { preview, job } = await readBankImportPreview(prisma, req.tenantId, req.params.id);
+    if (!preview || !["READY", "IMPORTED"].includes(job.status)) throw new FinanceOperationError(409, "No hay una revisión disponible.");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.attachment(`revision-cartola-${job.revision}.csv`);
+    res.type("text/csv").send(exportBankReviewCsv(preview, req.query));
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.get("/finance/bank-mapping-templates", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    if (!req.tenantId) throw new FinanceOperationError(403, "Falta empresa en la sesión.");
+    const templates = await prisma.financeBankMappingTemplate.findMany({ where: { tenantId: req.tenantId }, orderBy: [{ bankKey: "asc" }, { name: "asc" }] });
+    res.json({ templates });
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.post("/finance/bank-mapping-templates", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const name = cleanText(req.body?.name).slice(0, 100);
+    if (name.length < 3) throw new FinanceOperationError(400, "Pon un nombre de al menos tres caracteres a la plantilla.");
+    const template = await withFinanceWrite(prisma, async (tx) => {
+      const { job, preview } = await bankImportConfirmation(tx, req.tenantId, req.body?.jobId, req.body?.revision);
+      if (!preview || job.status !== "READY") throw new FinanceOperationError(409, "Guarda la plantilla antes de incorporar la cartola.");
+      if (!preview.account?.bankKey || !Object.keys(preview.reviewConfig?.mapping || {}).length) throw new FinanceOperationError(400, "Confirma el banco y asigna al menos una columna antes de guardar la plantilla.");
+      if (await tx.financeBankMappingTemplate.count({ where: { tenantId: req.tenantId } }) >= 100) throw new FinanceOperationError(409, "Se alcanzó el máximo de 100 plantillas. Elimina alguna que ya no uses.");
+      return tx.financeBankMappingTemplate.create({ data: { tenantId: req.tenantId, name, bankKey: preview.account.bankKey, mapping: preview.reviewConfig.mapping, columns: preview.columns, createdById: req.user?.id || null } });
+    });
+    res.status(201).json({ template });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No se pudo leer la cartola bancaria.";
-    res.status(400).json({ error: message });
+    if (error?.code === "P2002") return res.status(409).json({ error: "Ya existe una plantilla con ese nombre para este banco. Usa otro nombre." });
+    bankImportError(res, error);
   }
+});
+
+financeRouter.delete("/finance/bank-mapping-templates/:id", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    if (!req.tenantId) throw new FinanceOperationError(403, "Falta empresa en la sesión.");
+    const deleted = await prisma.financeBankMappingTemplate.deleteMany({ where: { id: req.params.id, tenantId: req.tenantId } });
+    if (!deleted.count) throw new FinanceOperationError(404, "No se encontró la plantilla.");
+    res.json({ ok: true });
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.post("/finance/bank-import-jobs/:id/reanalyze", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    res.json(bankPreviewForClient(await analyzeBankImportJob(prisma, { tenantId: req.tenantId, id: req.params.id, account: req.body?.account, reviewConfig: req.body?.reviewConfig, expectedRevision: req.body?.revision, analyze: analyzeStoredBankStatement })));
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.post("/finance/bank-import-jobs/:id/cancel", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const job = await cancelBankImportJob(prisma, req.tenantId, req.params.id);
+    await recordAuditLog(req, "FINANCE_BANK_IMPORT_CANCELLED", "bank_import_job", job.id, {});
+    res.json({ job: importJobView(job) });
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.get("/finance/bank-import-jobs/:id/original", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const job = await getBankImportJob(prisma, req.tenantId, req.params.id, { original: true });
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.attachment(job.sourceFile);
+    res.type("application/octet-stream");
+    res.send(Buffer.from(job.original.content));
+  } catch (error) { bankImportError(res, error); }
 });
 
 financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
-    const sourceRows = Array.isArray(req.body?.rows) ? req.body.rows : [];
-    if (!cleanText(req.body?.bankKey)) return res.status(400).json({ error: "No se pudo identificar el banco de esta cartola. Selecciónalo en la tarjeta de revisión antes de incorporarla." });
-    const rows = normalizeBankStatementRows(sourceRows, req.body || {}, { limit: MAX_BANK_STATEMENT_ROWS });
-    if (!rows.length) return res.status(400).json({ error: "No se detectaron movimientos para importar." });
-    const sourceFile = cleanText(req.body?.sourceFile, "cartola-bancaria").slice(0, 180);
-    const fileFingerprint = cleanText(req.body?.fileFingerprint).slice(0, 128);
+    const { result, duplicateRows, summary } = await withFinanceWrite(prisma, async (tx) => {
+    const confirmation = await bankImportConfirmation(tx, req.tenantId, req.body?.jobId, req.body?.revision);
+    const job = confirmation.job;
+    if (confirmation.batch) {
+      const batch = confirmation.batch;
+      const data = financeRecordData(batch);
+      return { result: { batch, imported: Number(data.importedRows || 0), requiresReview: Number(data.reviewRows || 0) }, duplicateRows: Number(data.duplicateRows || 0), summary: data.summary };
+    }
+    const preview = confirmation.preview;
+    if (!cleanText(preview.account?.bankKey)) throw new FinanceOperationError(400, "Selecciona el banco en la revisión antes de incorporar la cartola.");
+    const rows = normalizeBankReviewRows(preview.sourceRows, preview.account, preview.reviewConfig || {}).filter((row) => !row.excluded);
+    if (!rows.length) throw new FinanceOperationError(400, "No se detectaron movimientos para importar.");
+    const sourceFile = job.sourceFile;
+    const fileFingerprint = preview.fileFingerprint;
     const summary = withBankStatementNet(summarizeBankStatementRows(rows));
     const [existingMovements, existingBatches] = await Promise.all([
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { data: true }, take: 10000, orderBy: { createdAt: "desc" } }),
-      fileFingerprint ? prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_statement" }, select: { id: true, title: true, createdAt: true, data: true }, take: 2000, orderBy: { createdAt: "desc" } }) : Promise.resolve([])
+      findAllFinanceRecords(tx, { where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { id: true, data: true }, take: 10000, orderBy: { createdAt: "desc" } }),
+      fileFingerprint ? findAllFinanceRecords(tx, { where: { tenantId: req.tenantId, recordType: "bank_statement" }, select: { id: true, title: true, createdAt: true, data: true }, take: 2000, orderBy: { createdAt: "desc" } }) : Promise.resolve([])
     ]);
     const existingBatch = fileFingerprint ? existingBatches.find((record) => cleanText(financeRecordData(record).fileFingerprint) === fileFingerprint) || null : null;
     const reprocessable = isReprocessableEmptyBankStatement(existingBatch);
     if (existingBatch && !reprocessable) {
-      return res.status(409).json({ error: `La cartola ${sourceFile} ya fue importada anteriormente.`, duplicateCartola: bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: rows.filter((row) => !row.needsReview).length, duplicateRows: 0, existingBatch }) });
+      { const failure = { error: `La cartola ${sourceFile} ya fue importada anteriormente.`, duplicateCartola: bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: rows.filter((row) => !row.needsReview).length, duplicateRows: 0, existingBatch }) }; throw new FinanceOperationError(409, failure.error, failure); }
     }
     const knownFingerprints = new Set(existingMovements.map((record) => {
       const data = financeRecordData(record);
@@ -1030,16 +1211,16 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
     }
     const sourceValidRows = rows.filter((row) => !row.needsReview).length;
     if (sourceValidRows && duplicateRows >= sourceValidRows) {
-      return res.status(409).json({ error: `La cartola ${sourceFile} está repetida: todos sus movimientos válidos ya existen en Finance OS.`, duplicateCartola: bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: sourceValidRows, duplicateRows }) });
+      { const failure = { error: `La cartola ${sourceFile} está repetida: todos sus movimientos válidos ya existen en Finance OS.`, duplicateCartola: bankStatementDuplicatePayload({ sourceFile, totalRows: rows.length, validRows: sourceValidRows, duplicateRows }) }; throw new FinanceOperationError(409, failure.error, failure); }
     }
     const importedAt = new Date().toISOString();
     const previousExceptions = reprocessable
-      ? await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, data: true }, take: 5000 })
+      ? await findAllFinanceRecords(tx, { where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, data: true }, take: 5000 })
       : [];
     const exceptionIdsToResolve = previousExceptions
       .filter((record) => cleanText(financeRecordData(record).importBatchId) === existingBatch?.id)
       .map((record) => record.id);
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await (async () => {
       const batch = await tx.industryRecord.create({
         data: {
           tenantId: req.tenantId,
@@ -1048,6 +1229,11 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
           status: "IMPORTED",
           data: {
             sourceFile,
+            importJobId: job.id,
+            importRevision: job.revision,
+            excludedSourceRows: preview.reviewConfig?.excludedRows || [],
+            columnMapping: preview.reviewConfig?.mapping || {},
+            originalId: job.originalId,
             fileFingerprint: fileFingerprint || null,
             importedAt,
             importedById: req.user?.id || null,
@@ -1110,17 +1296,22 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
         }
       }
       return { batch, imported: validRows.length, requiresReview: reviewRows.length };
+    })();
+      await tx.financeBankImportJob.update({ where: { id: job.id }, data: { status: "IMPORTED", batchId: result.batch.id, runToken: null } });
+      return { result, duplicateRows, summary };
     });
     await recordAuditLog(req, "FINANCE_BANK_STATEMENT_IMPORTED", "bank_statement", result.batch.id, {
-      sourceFile,
-      bankKey: rows[0].bankKey,
-      cmfCode: rows[0].cmfCode,
+      sourceFile: result.batch.data.sourceFile,
+      bankKey: result.batch.data.account.bankKey,
+      cmfCode: result.batch.data.account.cmfCode,
       imported: result.imported,
       duplicateRows,
       requiresReview: result.requiresReview
     });
     res.status(201).json({ ...result, duplicateRows, summary });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message, ...error.details });
+    if (error?.status === 400) return res.status(400).json({ error: error.message });
     console.error("Import bank statement error:", error);
     res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo importar la cartola bancaria." });
   }
@@ -1133,12 +1324,13 @@ financeRouter.get("/finance/bank-statements", requireRole(ROLE_GROUPS.STAFF), as
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
     const [batches, movements, exceptions] = await Promise.all([
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_statement" }, orderBy: { createdAt: "desc" }, take: 500 }),
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { id: true, status: true, data: true }, take: 10000 }),
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, status: true, data: true }, take: 10000 })
+      findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "bank_statement" }, orderBy: { createdAt: "desc" }, take: 500 }),
+      findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { id: true, status: true, data: true }, take: 10000 }),
+      findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, status: true, data: true }, take: 10000 })
     ]);
 
-    const statements = batches
+    const scopedBatchIds = new Set(filterFinanceContext([...batches, ...movements, ...exceptions], parseFinanceContext(req.query)).map((record) => record.id));
+    const statements = batches.filter((batch) => scopedBatchIds.has(batch.id))
       .map((batch) => {
         const data = financeRecordData(batch);
         const sourceFile = cleanText(data.sourceFile);
@@ -1154,6 +1346,7 @@ financeRouter.get("/finance/bank-statements", requireRole(ROLE_GROUPS.STAFF), as
         return {
           id: batch.id,
           sourceFile,
+          importJobId: data.importJobId || null,
           title: batch.title,
           status: batch.status,
           createdAt: batch.createdAt,
@@ -1175,6 +1368,7 @@ financeRouter.get("/finance/bank-statements", requireRole(ROLE_GROUPS.STAFF), as
       .filter(Boolean);
     res.json({ statements });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("List bank statements error:", error);
     res.status(500).json({ error: "No se pudieron cargar las cartolas importadas." });
   }
@@ -1443,17 +1637,22 @@ financeRouter.post("/finance/monthly-close", requireRole(ROLE_GROUPS.MANAGERS), 
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
     const period = cleanText(req.body?.period) || new Date().toISOString().slice(0, 7);
+    if (!validFinancePeriod(period)) return res.status(400).json({ error: "El período debe tener el formato AAAA-MM." });
     if (req.body?.confirmation !== "CERRAR") return res.status(400).json({ error: "Confirma el cierre con la palabra CERRAR." });
-    const preview = await getFinanceMonthlyClosePreview({ tenantId: req.tenantId, period });
-    if (preview.status !== "READY_TO_CLOSE") return res.status(409).json({ error: "El período tiene movimientos sin conciliar o excepciones abiertas. Resuélvelos antes de cerrarlo.", preview });
-    const existing = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_monthly_close" }, select: { id: true, data: true }, take: 500, orderBy: { createdAt: "desc" } });
-    if (existing.some((record) => cleanText(financeRecordData(record).period) === period)) return res.status(409).json({ error: "Este período ya tiene un cierre registrado." });
+    const { preview, close } = await withFinanceWrite(prisma, async (tx) => {
+    const preview = await getFinanceMonthlyClosePreview({ tenantId: req.tenantId, period, db: tx });
+    if (preview.status !== "READY_TO_CLOSE") { const failure = { error: "El período tiene movimientos sin conciliar o excepciones abiertas. Resuélvelos antes de cerrarlo.", preview }; throw new FinanceOperationError(409, failure.error, failure); }
+    const existing = await findAllFinanceRecords(tx, { where: { tenantId: req.tenantId, recordType: "finance_monthly_close" }, select: { id: true, data: true }, take: 500, orderBy: { createdAt: "desc" } });
+    if (existing.some((record) => cleanText(financeRecordData(record).period) === period)) { const failure = { error: "Este período ya tiene un cierre registrado." }; throw new FinanceOperationError(409, failure.error, failure); }
     const closedAt = new Date().toISOString();
-    const close = await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_monthly_close", title: `Cierre financiero ${period}`, status: "CLOSED", data: { ...preview, period, closedAt, closedById: req.user?.id || null, note: cleanText(req.body?.note) } } });
+    const close = await tx.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_monthly_close", title: `Cierre financiero ${period}`, status: "CLOSED", data: { ...preview, period, closedAt, closedById: req.user?.id || null, note: cleanText(req.body?.note) } } });
+      return { preview, close };
+    });
     await recordAuditLog(req, "FINANCE_MONTHLY_CLOSE_REGISTERED", "finance_monthly_close", close.id, { period, metrics: preview.metrics });
     await createTenantNotification({ tenantId: req.tenantId, type: "FINANCE_MONTHLY_CLOSE_READY", title: `Cierre financiero ${period} registrado`, body: "La fotografía del período quedó disponible para revisión administrativa y contable.", href: "/finance?tab=cierre" });
     res.status(201).json({ close, preview });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message, ...error.details });
     console.error("Finance monthly close error:", error);
     res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo registrar el cierre mensual." });
   }
@@ -1559,8 +1758,9 @@ financeRouter.get("/finance/reconciliation-suggestions", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
     const movementId = cleanText(req.query?.movementId) || null;
-    res.json({ suggestions: await getFinanceReconciliationSuggestions({ tenantId: req.tenantId, movementId }) });
+    res.json({ suggestions: await getFinanceReconciliationSuggestions({ tenantId: req.tenantId, movementId, context: parseFinanceContext(req.query) }) });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Finance suggestions error:", error);
     res.status(500).json({ error: "No se pudieron calcular sugerencias de conciliacion" });
   }
@@ -1635,133 +1835,74 @@ financeRouter.post("/finance/agents/analyze", requireRole(ROLE_GROUPS.STAFF), as
   }
 });
 
-financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
+financeRouter.get("/finance/reconciliation-workspace", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
-    const requestedInvoiceIds = [...new Set([
-      cleanText(req.body?.invoiceId),
-      ...(Array.isArray(req.body?.invoiceIds) ? req.body.invoiceIds.map((id) => cleanText(id)) : [])
-    ].filter(Boolean))].slice(0, 3);
-    if (!requestedInvoiceIds.length) return res.status(400).json({ error: "Selecciona al menos una factura para conciliar." });
-
-    const [movement, invoices] = await Promise.all([
-      prisma.industryRecord.findFirst({ where: { id: req.params.movementId, tenantId: req.tenantId, recordType: "bank_movement" } }),
-      prisma.industryRecord.findMany({ where: { id: { in: requestedInvoiceIds }, tenantId: req.tenantId, recordType: "finance_invoice" } })
-    ]);
-    if (!movement || invoices.length !== requestedInvoiceIds.length) return res.status(404).json({ error: "Movimiento o factura no encontrados" });
-    const movementStatus = String(movement.status || "").toUpperCase();
-    if (movementStatus === "MATCHED") return res.status(409).json({ error: "Este movimiento ya fue conciliado" });
-    if (["REVIEW", "REJECTED"].includes(movementStatus)) {
-      return res.status(409).json({ error: "Este movimiento está en revisión humana. Resuelve la excepción antes de intentar conciliarlo nuevamente." });
-    }
-
-    const movementData = financeRecordData(movement);
-    const movementKind = String(movementData.movementKind || "").toUpperCase();
-    if (String(movementData.direction || "").toUpperCase() === "DEBIT" || ["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(movementKind)) {
-      return res.status(400).json({ error: "Este movimiento no es un abono externo conciliable contra cuentas por cobrar." });
-    }
-    const movementAmount = Math.abs(Number(financeRecordData(movement).amount || 0));
-    if (!movementAmount) return res.status(400).json({ error: "El movimiento no tiene un monto conciliable." });
-    const invoiceStates = invoices.map((invoice) => ({ invoice, state: getInvoiceFinancialState(invoice) }));
-    const totalBalance = invoiceStates.reduce((sum, item) => sum + item.state.balance, 0);
-    if (movementAmount > totalBalance + 1) {
-      return res.status(400).json({ error: "El abono supera el saldo de los documentos seleccionados. Registra la diferencia como excepción antes de conciliar." });
-    }
-    if (invoices.length > 1 && Math.abs(totalBalance - movementAmount) > 1) {
-      return res.status(400).json({ error: "Una conciliación agrupada debe cuadrar exactamente. Para pagos parciales confirma una sola factura o revisa la excepción." });
-    }
-    const suggestions = invoices.map((invoice) => scoreFinanceReconciliation(invoice, movement));
-    const now = new Date();
-
-    const result = await prisma.$transaction(async (tx) => {
-      const created = await tx.industryRecord.create({
-        data: {
-          tenantId: req.tenantId,
-          recordType: "finance_reconciliation",
-          title: `${invoices.length > 1 ? `${invoices.length} documentos` : invoices[0].title} - ${movement.title}`.slice(0, 220),
-          status: "APPROVED",
-          data: {
-            invoiceId: invoices.length === 1 ? invoices[0].id : null,
-            invoiceIds: invoices.map((invoice) => invoice.id),
-            movementId: movement.id,
-            confidence: Math.min(...suggestions.map((suggestion) => suggestion.confidence)),
-            matchReasons: suggestions.flatMap((suggestion) => suggestion.reasons),
-            matchEvidence: suggestions.flatMap((suggestion) => suggestion.evidence || []),
-            matchLimitations: [...new Set(suggestions.flatMap((suggestion) => suggestion.limitations || []))],
-            recommendation: suggestions.some((suggestion) => suggestion.recommendedAction === "REVISAR_MANUALMENTE")
-              ? "REVISAR_MANUALMENTE"
-              : suggestions.every((suggestion) => suggestion.recommendedAction === "LISTA_PARA_APROBACION")
-                ? "LISTA_PARA_APROBACION"
-                : "VALIDAR_ANTES_DE_CONFIRMAR",
-            difference: Math.abs(totalBalance - movementAmount),
-            reconciliationType: invoices.length > 1 ? "GROUPED_PAYMENT" : (movementAmount < totalBalance ? "PARTIAL_PAYMENT" : "EXACT_PAYMENT"),
-            approvedAt: now.toISOString(),
-            approvedById: req.user?.id || null
-          }
-        }
-      });
-      await tx.industryRecord.update({
-        where: { id: movement.id },
-        data: { status: "MATCHED", data: { ...movementData, status: "MATCHED", reconciliationId: created.id, reconciledAt: now.toISOString(), reconciledById: req.user?.id || null } }
-      });
-      const updatedInvoices = [];
-      let remainingToApply = movementAmount;
-      for (const { invoice, state } of invoiceStates) {
-        const appliedAmount = Math.min(state.balance, remainingToApply);
-        remainingToApply = Math.max(0, remainingToApply - appliedAmount);
-        const remainingBalance = Math.max(0, state.balance - appliedAmount);
-        const invoiceData = financeRecordData(invoice);
-        const receipt = await tx.industryRecord.create({ data: {
-          tenantId: req.tenantId, recordType: "finance_invoice_receipt",
-          title: `Cobro conciliado ${invoiceData.invoiceNumber || invoice.title}`.slice(0, 220), status: "RECONCILED",
-          data: { invoiceId: invoice.id, amount: appliedAmount, paymentDate: movementData.transactionDate || now.toISOString().slice(0, 10), reference: movementData.reference || null, movementId: movement.id, reconciliationId: created.id, source: "bank_reconciliation", registeredById: req.user?.id || null }
-        } });
-        const updated = await tx.industryRecord.update({
-          where: { id: invoice.id },
-          data: {
-            status: remainingBalance === 0 ? "PAID" : "PARTIAL",
-            data: {
-              ...invoiceData,
-              balance: remainingBalance,
-              paidAmount: safeAmount(invoiceData.paidAmount) + appliedAmount,
-              status: remainingBalance === 0 ? "PAID" : "PARTIAL",
-              paidAt: remainingBalance === 0 ? now.toISOString() : invoiceData.paidAt || null,
-              lastReconciliationId: created.id,
-              history: [...financeHistory(invoiceData), { at: now.toISOString(), type: "BANK_RECONCILIATION_APPLIED", amount: appliedAmount, movementId: movement.id, reconciliationId: created.id, receiptId: receipt.id }]
-            }
-          }
-        });
-        updatedInvoices.push(updated);
-      }
-      return { reconciliation: created, invoices: updatedInvoices };
-    });
-
-    await recordAuditLog(req, "FINANCE_RECONCILIATION_APPROVED", "finance_reconciliation", result.reconciliation.id, { invoiceIds: invoices.map((invoice) => invoice.id), movementId: movement.id, grouped: invoices.length > 1, confidence: Math.min(...suggestions.map((suggestion) => suggestion.confidence)), reasons: suggestions.flatMap((suggestion) => suggestion.reasons) });
-    res.status(201).json({ reconciliation: result.reconciliation, invoices: result.invoices, remainingBalance: Math.max(0, totalBalance - movementAmount), confidence: Math.min(...suggestions.map((suggestion) => suggestion.confidence)), reasons: suggestions.flatMap((suggestion) => suggestion.reasons) });
+    const context = parseFinanceContext(req.query);
+    const kind = String(req.query.kind || "movements");
+    if (!["movements", "invoices", "history"].includes(kind)) throw new FinanceOperationError(400, "Vista no válida.");
+    const source = await loadFinanceContextRecords(prisma, req.tenantId);
+    const scoped = filterFinanceContext(source, context, { documentMode: "outstanding" });
+    let records = scoped.filter((row) => kind === "history" ? row.recordType === "finance_reconciliation" : kind === "invoices"
+      ? row.recordType === "finance_invoice" && getInvoiceFinancialState(row).balance > 0 && getInvoiceFinancialState(row).status !== "PAID"
+      : row.recordType === "bank_movement" && !["MATCHED", "DELETED", "REVIEW", "REJECTED"].includes(row.status));
+    const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const search = normalize(String(req.query.search || "").slice(0, 200));
+    if (search) records = records.filter((row) => { const d = financeRecordData(row); return normalize([row.title, d.description, d.reference, d.clientRut, d.customerRut, d.rut, d.clientName, d.customerName, d.invoiceNumber].join(" ")).includes(search); });
+    records.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || a.id.localeCompare(b.id));
+    const page = Math.max(1, Math.min(100000, Math.trunc(Number(req.query.page) || 1)));
+    res.json({ page, pages: Math.max(1, Math.ceil(records.length / 25)), total: records.length, records: records.slice((page - 1) * 25, page * 25).map((row) => row.recordType === "finance_invoice" ? { ...row, financial: getInvoiceFinancialState(row) } : row) });
   } catch (error) {
-    console.error("Approve finance reconciliation error:", error);
-    res.status(500).json({ error: "No se pudo aprobar la conciliacion" });
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Finance reconciliation workspace:", error);
+    res.status(500).json({ error: "No se pudo cargar la mesa de conciliación." });
   }
 });
 
-financeRouter.post("/finance/reconciliations/:movementId/reject", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+financeRouter.post("/finance/reconciliations/:movementId/approve", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
-    const movement = await prisma.industryRecord.findFirst({ where: { id: req.params.movementId, tenantId: req.tenantId, recordType: "bank_movement" } });
-    if (!movement) return res.status(404).json({ error: "Movimiento no encontrado" });
-    if (String(movement.status || "").toUpperCase() === "MATCHED") return res.status(409).json({ error: "Un movimiento conciliado no puede rechazarse" });
-    const detail = cleanText(req.body?.detail, "Sugerencia rechazada; requiere revisión humana.");
-    const data = financeRecordData(movement);
-    const result = await prisma.$transaction(async (tx) => {
-      const updatedMovement = await tx.industryRecord.update({ where: { id: movement.id }, data: { status: "REVIEW", data: { ...data, status: "REVIEW", reviewReason: detail, reviewedAt: new Date().toISOString() } } });
-      const exception = await tx.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_exception", title: `Revisión de movimiento ${movement.title}`.slice(0, 220), status: "OPEN", data: { type: "UNMATCHED_MOVEMENT", movementId: movement.id, detail, priority: "MEDIUM", suggestedBy: "finance_reconciliation" } } });
-      return { updatedMovement, exception };
-    });
-    await recordAuditLog(req, "FINANCE_RECONCILIATION_REJECTED", "bank_movement", movement.id, { detail, exceptionId: result.exception.id });
+    const invoiceIds = [...new Set([cleanText(req.body?.invoiceId), ...(Array.isArray(req.body?.invoiceIds) ? req.body.invoiceIds.map((id) => cleanText(id)) : [])].filter(Boolean))];
+    const result = await applyFinanceAllocation(prisma, { tenantId: req.tenantId, userId: req.user?.id, movementId: req.params.movementId, invoiceIds });
     res.status(201).json(result);
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message, ...error.details });
+    console.error("Approve finance reconciliation error:", error);
+    res.status(500).json({ error: "No se pudo aprobar la conciliación." });
+  }
+});
+
+financeRouter.post("/finance/reconciliations/:movementId/allocate", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.status(201).json(await applyFinanceAllocation(prisma, { tenantId: req.tenantId, userId: req.user?.id, movementId: req.params.movementId, allocations: req.body?.allocations, reason: req.body?.reason, manual: true }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Manual finance allocation:", error);
+    res.status(500).json({ error: "No se pudo aplicar la distribución." });
+  }
+});
+
+financeRouter.post("/finance/reconciliations/:id/reverse", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.json(await reverseFinanceAllocation(prisma, { tenantId: req.tenantId, userId: req.user?.id, reconciliationId: req.params.id, reason: req.body?.reason }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Reverse finance allocation:", error);
+    res.status(500).json({ error: "No se pudo revertir la conciliación." });
+  }
+});
+
+financeRouter.post("/finance/reconciliations/:movementId/reject", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    const detail = cleanText(req.body?.detail, "Sugerencia rechazada; requiere revisión humana.").slice(0, 1000);
+    res.status(201).json(await sendFinanceMovementToReview(prisma, { tenantId: req.tenantId, userId: req.user?.id, movementId: req.params.movementId, detail }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Reject finance reconciliation error:", error);
-    res.status(500).json({ error: "No se pudo rechazar la conciliación" });
+    res.status(500).json({ error: "No se pudo enviar el movimiento a revisión." });
   }
 });
 
