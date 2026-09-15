@@ -1,7 +1,16 @@
+import { bankPeriodImpact, bankPeriodRestrictions, assertBankPeriodsOpen, deleteBankStatementInOpenPeriods } from "../services/finance-bank-periods.service.js";
+import { closeFinancePeriod, reopenFinancePeriod, getFinancePeriodWorkspace } from "../services/finance-period-control.service.js";
 import { applyFinanceAllocation, reverseFinanceAllocation, sendFinanceMovementToReview } from "../services/finance-allocation.service.js";
 import { BANK_REVIEW_FIELDS, bankReviewColumns, normalizeBankReviewRows, bankReviewPage, validateBankReviewConfig, exportBankReviewCsv } from "../services/finance-bank-review.service.js";
 import { ACTIVE_IMPORT_STATUSES, importJobView, createBankImportJob, analyzeBankImportJob, readBankImportPreview, getBankImportJob, cancelBankImportJob, bankImportConfirmation } from "../services/finance-import-jobs.service.js";
 import { Router } from "express";
+import { readMovementLedger, movementLedgerCsv } from "../services/finance-movement-ledger.service.js";
+import { reviewMovementBatch } from "../services/finance-movement-bulk.service.js";
+import { movementLedgerExcel } from "../services/finance-movement-excel.service.js";
+import { readMovementTrace } from "../services/finance-movement-trace.service.js";
+import { assignMovementOwner, listMovementOwners } from "../services/finance-movement-owner.service.js";
+import { overviewMetricsCsv } from "../services/finance-overview-metrics.service.js";
+import { financeDocumentSide, financeParty, financeDocumentDate, financeDocumentAmounts } from "../services/finance-document-values.service.js";
 import multer from "multer";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { prisma } from "../lib/db.js";
@@ -17,6 +26,8 @@ import {
   getInvoiceFinancialState
 } from "../services/finance.service.js";
 import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions, updateFinanceAgentPolicy } from "../services/finance-agents.service.js";
+import { generateFinanceCollectionCases } from "../services/finance-agent-actions.service.js";
+import { updateCollectionCase, updateFinanceExceptionCase, prepareCollectionReminders, createAdministrativeException, collectionPartyKey, isCollectionCustomerInvoice } from "../services/finance-case-actions.service.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { createTenantNotification } from "../lib/notifications.js";
 import {
@@ -50,8 +61,8 @@ import {
   siiDteFingerprint,
   summarizeSiiDteDocuments
 } from "../services/finance-sii-dte.service.js";
-import { createFloidConsentCase, normalizeFloidTransactions } from "../services/finance-floid.service.js";
-import { getFinanceMonthlyClosePreview, validFinancePeriod } from "../services/finance-monthly-close.service.js";
+import { createFloidConsentCase } from "../services/finance-floid.service.js";
+import { importFloidBankMovements } from "../services/finance-external-imports.service.js";
 import { getFinancePlanning, validPlanningPeriod } from "../services/finance-planning.service.js";
 import { canPerformFinanceAction, FINANCE_ACTIONS, financeRoleCapabilities } from "../services/finance-security.service.js";
 
@@ -167,54 +178,22 @@ function secureWebhookSecretMatches(received) {
 
 async function findFloidConsent(caseId) {
   const candidates = await prisma.industryRecord.findMany({
-    where: { recordType: "finance_open_banking_consent", status: { in: ["PENDING", "PROCESSING"] } },
-    orderBy: { updatedAt: "desc" }, take: 1000
+    where: { recordType: "finance_open_banking_consent", data: { path: ["caseId"], equals: caseId } },
+    take: 2
   });
-  return candidates.find((record) => cleanText(financeRecordData(record).caseId) === cleanText(caseId)) || null;
+  if (candidates.length > 1) throw new FinanceOperationError(409, "Consentimiento ambiguo; requiere revisión.");
+  return candidates[0] || null;
 }
 
 async function importFloidMovements({ tenantId, consent, payload }) {
-  const consentData = financeRecordData(consent);
-  const normalized = normalizeFloidTransactions(payload, consentData.account || {});
-  if (!normalized.movements.length) throw new Error("Flöid no entregó movimientos para esta autorización.");
-  const existing = await prisma.industryRecord.findMany({ where: { tenantId, recordType: "bank_movement" }, select: { data: true }, take: 10000, orderBy: { createdAt: "desc" } });
-  const known = new Set(existing.map((record) => cleanText(financeRecordData(record).fingerprint) || bankMovementFingerprint(financeRecordData(record))).filter(Boolean));
-  const unique = [];
-  const review = [];
-  const seen = new Set();
-  let duplicates = 0;
-  for (const movement of normalized.movements) {
-    if (movement.needsReview) { review.push(movement); continue; }
-    if (known.has(movement.fingerprint) || seen.has(movement.fingerprint)) { duplicates += 1; continue; }
-    seen.add(movement.fingerprint);
-    unique.push(movement);
-  }
-  const importedAt = new Date().toISOString();
-  const result = await prisma.$transaction(async (tx) => {
-    const batch = await tx.industryRecord.create({ data: { tenantId, recordType: "bank_statement", title: `Banca abierta · ${normalized.caseId || consentData.caseId}`.slice(0, 220), status: "IMPORTED", data: { source: "floid_open_banking", consentId: consent.id, caseId: normalized.caseId || consentData.caseId, account: consentData.account, summary: normalized.summary, importedAt, importedRows: unique.length, duplicateRows: duplicates, reviewRows: review.length } } });
-    if (unique.length) await tx.industryRecord.createMany({ data: unique.map((movement) => ({ tenantId, recordType: "bank_movement", title: `${movement.transactionDate} · ${movement.description}`.slice(0, 220), status: "PENDING", data: { ...movement, source: "floid_open_banking", sourceBatchId: batch.id, consentId: consent.id, caseId: normalized.caseId || consentData.caseId, importedAt } })) });
-    if (review.length) await tx.industryRecord.createMany({ data: review.map((movement) => ({ tenantId, recordType: "finance_exception", title: `Revisar movimiento de banca abierta · ${movement.description}`.slice(0, 220), status: "OPEN", data: { type: "OPEN_BANKING_IMPORT_REVIEW", priority: "MEDIUM", detail: `Faltan: ${movement.reviewReasons.join(", ")}`, movement, consentId: consent.id, caseId: normalized.caseId || consentData.caseId } })) });
-    const updatedConsent = await tx.industryRecord.update({ where: { id: consent.id }, data: { status: "SYNCED", data: { ...consentData, lastSyncAt: importedAt, lastSyncSummary: { imported: unique.length, duplicates, requiresReview: review.length }, lastProviderStatus: normalized.status } } });
-    return { batch, consent: updatedConsent, imported: unique.length, duplicates, requiresReview: review.length };
-  });
-  return { ...result, summary: normalized.summary };
+  return importFloidBankMovements(prisma, { tenantId, consentId: consent.id, payload });
 }
 
 function financeHistory(data) {
-  return Array.isArray(data?.history) ? data.history.slice(-99) : [];
+  return Array.isArray(data?.history) ? data.history : [];
 }
 
-function financeCaseUpdate(input = {}) {
-  const status = cleanText(input.status).toUpperCase();
-  const allowedStatuses = new Set(["MONITORING", "PENDING", "CONTACTED", "PROMISE", "PAID", "ESCALATED", "CLOSED"]);
-  return {
-    ...(allowedStatuses.has(status) ? { status } : {}),
-    ...(cleanText(input.channel) ? { channel: cleanText(input.channel).toLowerCase() } : {}),
-    ...(cleanText(input.nextActionAt) ? { nextActionAt: cleanText(input.nextActionAt) } : {}),
-    ...(cleanText(input.promiseDueDate) ? { promiseDueDate: cleanText(input.promiseDueDate) } : {}),
-    ...(input.promiseAmount !== undefined && input.promiseAmount !== null && input.promiseAmount !== "" ? { promiseAmount: Number(input.promiseAmount) || 0 } : {})
-  };
-}
+
 
 function safeAmount(value) {
   const parsed = Number(value);
@@ -222,49 +201,7 @@ function safeAmount(value) {
 }
 
 function payableState(record, now = new Date()) {
-  const data = financeRecordData(record);
-  const amount = safeAmount(data.amount ?? data.total);
-  const balance = data.balance === undefined || data.balance === null || data.balance === ""
-    ? amount
-    : Math.min(amount, safeAmount(data.balance));
-  const status = String(record.status || data.status || "OPEN").toUpperCase();
-  const dueDate = data.dueDate ? new Date(String(data.dueDate)) : null;
-  const overdue = status !== "PAID" && dueDate && !Number.isNaN(dueDate.getTime()) && dueDate < now;
-  return { amount, balance, status: balance === 0 ? "PAID" : overdue ? "OVERDUE" : status, dueDate };
-}
-
-function normalizedDocumentSide(value) {
-  const candidate = cleanText(value).toUpperCase();
-  if (["SUPPLIER", "PROVIDER", "PAYABLE", "PURCHASE", "COMPRA", "PROVEEDOR", "EGRESO"].includes(candidate)) return "SUPPLIER";
-  if (["CUSTOMER", "CLIENT", "RECEIVABLE", "SALE", "VENTA", "CLIENTE", "INGRESO"].includes(candidate)) return "CUSTOMER";
-  return null;
-}
-
-// Compatibilidad con importaciones anteriores a finance_payable. La fuente y
-// los campos de contraparte definen el lado económico; no el nombre mostrado.
-function financeDocumentSide(record) {
-  if (record.recordType === "finance_payable") return "SUPPLIER";
-  const data = financeRecordData(record);
-  const hasSupplier = Boolean(cleanText(data.supplierName || data.supplier || data.providerName));
-  const hasCustomer = Boolean(cleanText(data.customerName || data.customer || data.clientName));
-  // Las importaciones antiguas pueden contener documentSide heredado como
-  // CUSTOMER aunque el registro solo traiga una contraparte proveedora. Los
-  // campos de contraparte son la fuente más específica cuando no hay ambigüedad.
-  if (hasSupplier && !hasCustomer) return "SUPPLIER";
-  if (hasCustomer && !hasSupplier) return "CUSTOMER";
-  const explicit = normalizedDocumentSide(data.documentSide || data.side || data.direction || data.kind || data.documentFlow || data.counterpartyType);
-  if (explicit) return explicit;
-  return "CUSTOMER";
-}
-
-function financeParty(record) {
-  const data = financeRecordData(record);
-  const isPayable = financeDocumentSide(record) === "SUPPLIER";
-  return {
-    side: isPayable ? "SUPPLIER" : "CUSTOMER",
-    name: cleanText(isPayable ? (data.supplierName || data.supplier || data.providerName) : (data.customerName || data.customer || data.clientName), isPayable ? "Proveedor sin nombre" : "Cliente sin nombre"),
-    rut: cleanText(isPayable ? (data.supplierRut || data.rut) : (data.clientRut || data.rut)) || null
-  };
+  return getInvoiceFinancialState(record, now);
 }
 
 function financeDocumentCoverage(documents) {
@@ -293,7 +230,7 @@ function financeDocumentCoverage(documents) {
 }
 
 function financePartyKey({ name, rut }) {
-  return cleanText(rut).replace(/[^0-9kK]/g, "") || cleanText(name).toLocaleLowerCase("es");
+  return collectionPartyKey({ name, rut });
 }
 
 function invoiceState(record, now = new Date()) {
@@ -342,8 +279,9 @@ financeRouter.get("/finance/workspace-context", async (req, res) => {
 financeRouter.get("/finance/workspace-records", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     const type = cleanText(req.query.type);
-    if (!["bank_movement", "finance_exception"].includes(type)) return res.status(400).json({ error: "Tipo de consulta no permitido." });
-    if (!(await requireFinanceModule(req, res, type === "bank_movement" ? MODULES.FINANCE_BANK_SYNC : MODULES.FINANCE_EXCEPTIONS))) return;
+    if (!["bank_movement", "finance_exception", "finance_collection_case"].includes(type)) return res.status(400).json({ error: "Tipo de consulta no permitido." });
+    const module = type === "bank_movement" ? MODULES.FINANCE_BANK_SYNC : type === "finance_collection_case" ? MODULES.FINANCE_COLLECTIONS : MODULES.FINANCE_EXCEPTIONS;
+    if (!(await requireFinanceModule(req, res, module))) return;
     const context = parseFinanceContext(req.query);
     const records = await loadFinanceContextRecords(prisma, req.tenantId);
     res.json({ records: filterFinanceContext(records, context).filter((record) => record.recordType === type) });
@@ -355,7 +293,9 @@ financeRouter.get("/finance/workspace-records", requireRole(ROLE_GROUPS.STAFF), 
 financeRouter.get("/finance/overview", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
-    res.json(await getFinanceOverview({ tenantId: req.tenantId, context: parseFinanceContext(req.query) }));
+    const overview = await getFinanceOverview({ tenantId: req.tenantId, context: parseFinanceContext(req.query) });
+    if (req.query.export === "csv") return res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="indicadores-financieros.csv"', "Cache-Control": "no-store" }).send(overviewMetricsCsv(overview, req.tenantId));
+    res.set("Cache-Control", "no-store").json(overview);
   } catch (error) {
     if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Finance overview error:", error);
@@ -363,10 +303,66 @@ financeRouter.get("/finance/overview", async (req, res) => {
   }
 });
 
+financeRouter.get("/finance/movement-ledger", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const exporting = ["csv", "xlsx"].includes(req.query.export);
+    const reconciliationAccess = req.user?.role === "SUPER_ADMIN" || await ensureTenantModuleEligibility({ tenantId: req.tenantId, module: MODULES.FINANCE_RECONCILIATION, tenant: req.tenant });
+    const result = await readMovementLedger(prisma, req.tenantId, req.query, { all: exporting, reconciliationAccess });
+    if (req.query.export === "xlsx") return res.set({ "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": 'attachment; filename="movimientos-financieros.xlsx"', "Cache-Control": "no-store" }).send(await movementLedgerExcel(result, req.query));
+    if (exporting) return res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="movimientos-financieros.csv"', "Cache-Control": "no-store" }).send(movementLedgerCsv(result));
+    res.set("Cache-Control", "no-store").json(result);
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Finance movement ledger error", error);
+    res.status(500).json({ error: "No se pudieron consultar los movimientos completos." });
+  }
+});
+
+financeRouter.post("/finance/movement-ledger/review", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC)) || !(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.json(await reviewMovementBatch(prisma, { ...req.body, tenantId: req.tenantId, userId: req.user?.id }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    res.status(500).json({ error: "No se pudo procesar el lote de revisión." });
+  }
+});
+
+financeRouter.get("/finance/movement-owners", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    res.set("Cache-Control", "no-store").json({ users: await listMovementOwners(prisma, req.tenantId) });
+  } catch { res.status(500).json({ error: "No se pudo consultar el personal de la empresa." }); }
+});
+
+financeRouter.post("/finance/movement-ledger/:id/owner", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.CONFIGURE), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    res.set("Cache-Control", "no-store").json(await assignMovementOwner(prisma, { tenantId: req.tenantId, userId: req.user.id, role: req.user.role, movementId: req.params.id, assignedToId: req.body?.assignedToId, expectedVersion: req.body?.expectedVersion, reason: req.body?.reason, operationKey: req.body?.operationKey }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    res.status(500).json({ error: "No se pudo confirmar la asignación. Reintenta sin cambiar los datos." });
+  }
+});
+
+financeRouter.get("/finance/movement-ledger/:id/history", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const allowed = async (module) => req.user?.role === "SUPER_ADMIN" || await ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant });
+    const access = { invoices: await allowed(MODULES.FINANCE_INVOICES), reconciliation: await allowed(MODULES.FINANCE_RECONCILIATION), exceptions: await allowed(MODULES.FINANCE_EXCEPTIONS) };
+    res.set("Cache-Control", "no-store").json(await readMovementTrace(prisma, { tenantId: req.tenantId, movementId: req.params.id, access, cursor: req.query.cursor ? String(req.query.cursor) : undefined }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Movement history error", error);
+    res.status(500).json({ error: "No se pudo consultar el historial del movimiento." });
+  }
+});
+
 financeRouter.get("/finance/customers", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
-    const invoices = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" }, take: 1000 });
+    const invoices = await findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" } });
     const customers = new Map();
     for (const invoice of invoices) {
       if (financeDocumentSide(invoice) !== "CUSTOMER") continue;
@@ -423,7 +419,7 @@ financeRouter.get("/finance/documents", async (req, res) => {
       take: 1000
     });
     const context = parseFinanceContext(req.query);
-    const allDocuments = filterFinanceContext(records, context).map((record) => {
+    const allDocuments = filterFinanceContext(records, context).filter((r) => includePayables || financeDocumentSide(r) !== "SUPPLIER").map((record) => {
       const data = financeRecordData(record);
       const party = financeParty(record);
       const state = party.side === "SUPPLIER" ? payableState(record, now) : invoiceState(record, now);
@@ -435,26 +431,29 @@ financeRouter.get("/finance/documents", async (req, res) => {
         partyName: party.name,
         partyRut: party.rut,
         status: state.status,
-        issueDate: data.issueDate || record.createdAt,
+        issueDate: financeDocumentDate(record) || null,
         dueDate: data.dueDate || null,
         documentType: cleanText(data.documentType || data.documentTypeName, party.side === "SUPPLIER" ? "Documento de proveedor" : "Factura de cliente"),
         documentTypeCode: cleanText(data.documentTypeCode) || null,
         netAmount: safeAmount(data.netAmount),
         vatAmount: safeAmount(data.vatAmount),
-        totalAmount: state.amount,
+        totalAmount: state.originalAmount,
         currency: cleanText(data.currency, "CLP"),
         paymentMethod: cleanText(data.paymentMethod) || null,
         paymentIntermediary: cleanText(data.paymentIntermediary) || null,
         commissionAmount: safeAmount(data.commissionAmount),
         settlementReference: cleanText(data.settlementReference) || null,
-        creditNotesTotal: safeAmount(data.creditNotesTotal),
-        debitNotesTotal: safeAmount(data.debitNotesTotal),
+        creditNotesTotal: state.creditNotes,
+        debitNotesTotal: state.debitNotes,
         referenceDocumentType: cleanText(data.referenceDocumentType) || null,
         referenceDocumentNumber: cleanText(data.referenceDocumentNumber) || null,
         referenceDocumentDate: data.referenceDocumentDate || null,
         amount: state.amount,
         balance: state.balance,
-        paidAmount: Math.max(0, state.amount - state.balance),
+        paidAmount: state.paidAmount,
+        includedInTotals: state.included,
+        qualityIssues: state.qualityIssues,
+        ...financeDocumentAmounts(record, now),
         nuboxDocument: cleanText(data.source).toLowerCase() === "nubox" && Boolean(cleanText(data.nuboxDocumentId)),
         source: cleanText(data.source, "registro manual"),
         createdAt: record.createdAt,
@@ -547,16 +546,18 @@ financeRouter.get("/finance/collections/portfolio", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS))) return;
     const [invoices, cases] = await Promise.all([
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" }, take: 1000 }),
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_collection_case" }, orderBy: { updatedAt: "desc" }, take: 1000 })
+      findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" } }),
+      findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "finance_collection_case" }, orderBy: { updatedAt: "desc" } })
     ]);
     const now = new Date();
     const rows = new Map();
     for (const invoice of invoices) {
+      if (!isCollectionCustomerInvoice(invoice)) continue;
       const data = financeRecordData(invoice);
       const party = financeParty(invoice);
       const key = financePartyKey(party);
       const state = invoiceState(invoice, now);
+      if (!state.included) continue;
       const row = rows.get(key) || {
         key,
         name: party.name,
@@ -600,7 +601,7 @@ financeRouter.get("/finance/collections/portfolio", async (req, res) => {
     }
     for (const collectionCase of cases) {
       const data = financeRecordData(collectionCase);
-      const party = { name: cleanText(data.customerName || data.customer || data.clientName, "Cliente sin nombre"), rut: cleanText(data.clientRut || data.rut) || null };
+      const party = { name: cleanText(data.customerName || data.customer || data.clientName, "Cliente sin nombre"), rut: cleanText(data.clientRut || data.customerRut || data.rut) || null };
       const key = financePartyKey(party);
       const row = rows.get(key);
       if (!row) continue;
@@ -632,85 +633,25 @@ financeRouter.get("/finance/collections/portfolio", async (req, res) => {
 financeRouter.post("/finance/invoices/:id/receipts", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.REGISTER), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
-    const invoice = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_invoice" } });
-    if (!invoice) return res.status(404).json({ error: "Factura no encontrada." });
-    const receiptAmount = safeAmount(req.body?.amount);
-    const current = invoiceState(invoice);
-    if (!receiptAmount) return res.status(400).json({ error: "Ingresa un monto de cobro válido." });
-    if (!current.balance) return res.status(409).json({ error: "Esta factura ya está pagada." });
-    if (receiptAmount > current.balance) return res.status(400).json({ error: "El cobro no puede superar el saldo pendiente." });
-    const now = new Date();
-    const reference = cleanText(req.body?.reference);
-    const paymentDate = cleanText(req.body?.paymentDate) || now.toISOString().slice(0, 10);
-    const remainingBalance = Math.max(0, current.balance - receiptAmount);
-    const result = await prisma.$transaction(async (tx) => {
-      const receipt = await tx.industryRecord.create({
-        data: {
-          tenantId: req.tenantId,
-          recordType: "finance_invoice_receipt",
-          title: `Cobro ${financeRecordData(invoice).invoiceNumber || invoice.title}`.slice(0, 220),
-          status: "REGISTERED",
-          data: { invoiceId: invoice.id, amount: receiptAmount, paymentDate, reference, registeredById: req.user?.id || null }
-        }
-      });
-      const data = financeRecordData(invoice);
-      const history = financeHistory(data);
-      const updatedInvoice = await tx.industryRecord.update({
-        where: { id: invoice.id },
-        data: {
-          status: remainingBalance === 0 ? "PAID" : "PARTIAL",
-          data: {
-            ...data,
-            balance: remainingBalance,
-            paidAmount: safeAmount(data.paidAmount) + receiptAmount,
-            status: remainingBalance === 0 ? "PAID" : "PARTIAL",
-            paidAt: remainingBalance === 0 ? now.toISOString() : data.paidAt || null,
-            history: [...history, { at: now.toISOString(), type: "RECEIPT_REGISTERED", amount: receiptAmount, reference, receiptId: receipt.id }]
-          }
-        }
-      });
-      return { receipt, invoice: updatedInvoice };
-    });
-    await recordAuditLog(req, "FINANCE_INVOICE_RECEIPT_REGISTERED", "finance_invoice", invoice.id, { receiptId: result.receipt.id, amount: receiptAmount, paymentDate });
-    res.status(201).json({ ...result, remainingBalance });
+    const result = await registerManualSettlement(prisma, { tenantId: req.tenantId, userId: req.user?.id, documentId: req.params.id, kind: "RECEIPT",
+      amount: req.body?.amount, paymentDate: req.body?.paymentDate, reference: req.body?.reference, idempotencyKey: req.body?.idempotencyKey });
+    res.status(result.replayed ? 200 : 201).json(result);
   } catch (error) {
-    console.error("Register finance invoice receipt error:", error);
-    res.status(500).json({ error: "No se pudo registrar el cobro de la factura." });
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Register manual receipt error:", error);
+    res.status(500).json({ error: "No se pudo registrar el cobro. Puedes reintentar la misma operación sin duplicarla." });
   }
 });
 
 // Prepara un borrador interno de recordatorio. El envío siempre queda fuera de
 // esta ruta y requiere canal, consentimiento y aprobación posterior.
-financeRouter.post("/finance/collections/portfolio/:partyKey/reminders", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+financeRouter.post("/finance/collections/portfolio/:partyKey/reminders", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS))) return;
-    const partyKey = cleanText(req.params.partyKey);
-    if (!partyKey) return res.status(400).json({ error: "Cliente inválido." });
-    const invoices = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" }, take: 1000 });
-    const selected = invoices.filter((invoice) => financePartyKey(financeParty(invoice)) === partyKey && invoiceState(invoice).balance > 0);
-    if (!selected.length) return res.status(404).json({ error: "No hay documentos abiertos para este cliente." });
-    const cases = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_collection_case", status: { notIn: ["PAID", "CLOSED"] } }, take: 1000 });
-    const existingByInvoice = new Map(cases.map((item) => [String(financeRecordData(item).invoiceId || ""), item]));
-    const now = new Date().toISOString();
-    const prepared = [];
-    for (const invoice of selected) {
-      const state = invoiceState(invoice);
-      const data = financeRecordData(invoice);
-      const party = financeParty(invoice);
-      const existing = existingByInvoice.get(invoice.id);
-      const segment = financeAgingSegment(state.dueDate, new Date());
-      const event = { at: now, type: "REMINDER_DRAFT_PREPARED", detail: `Borrador preparado para cartera ${segment.label}. No se envió ningún mensaje.`, userId: req.user?.id || null };
-      if (existing) {
-        const updated = await prisma.industryRecord.update({ where: { id: existing.id }, data: { data: { ...financeRecordData(existing), balance: state.balance, agingBucket: segment.label, agingCode: segment.code, daysPastDue: segment.daysPastDue, recommendedAction: segment.action, reminderStatus: "Recordatorio preparado", lastReminderAt: now, history: [...financeHistory(financeRecordData(existing)), event] } } });
-        prepared.push(updated);
-      } else {
-        const created = await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_collection_case", title: `Cobranza ${data.invoiceNumber || invoice.title}`.slice(0, 220), status: segment.code === "POR_VENCER" ? "MONITORING" : "PENDING", data: { invoiceId: invoice.id, invoiceNumber: data.invoiceNumber || invoice.title, customerName: party.name, clientRut: party.rut, balance: state.balance, agingBucket: segment.label, agingCode: segment.code, daysPastDue: segment.daysPastDue, recommendedAction: segment.action, channel: "manual", reminderStatus: "Recordatorio preparado", lastReminderAt: now, nextActionAt: now, history: [{ at: now, type: "CASE_CREATED", detail: `${segment.action}. Caso preparado para revisión humana.` }, event] } } });
-        prepared.push(created);
-      }
-    }
-    await recordAuditLog(req, "FINANCE_COLLECTION_REMINDERS_PREPARED", "finance_collection_case", req.tenantId, { partyKey, count: prepared.length });
-    res.status(201).json({ prepared, count: prepared.length });
+    const result = await prepareCollectionReminders(prisma, { tenantId: req.tenantId, userId: req.user?.id, partyKey: cleanText(req.params.partyKey) });
+    res.status(result.replayed ? 200 : 201).json(result);
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Prepare finance collection reminders error:", error);
     res.status(500).json({ error: "No se pudieron preparar los recordatorios." });
   }
@@ -719,14 +660,14 @@ financeRouter.post("/finance/collections/portfolio/:partyKey/reminders", require
 financeRouter.get("/finance/payables/summary", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_PAYABLES))) return;
-    const payables = await prisma.industryRecord.findMany({
+    const payables = await findAllFinanceRecords(prisma, {
       where: { tenantId: req.tenantId, recordType: "finance_payable" },
-      orderBy: { updatedAt: "desc" },
-      take: 1000
+      orderBy: { updatedAt: "desc" }
     });
     const now = new Date();
     const summary = payables.reduce((total, record) => {
       const state = payableState(record, now);
+      if (!state.included) return total;
       total.total += 1;
       total.registeredAmount += state.amount;
       total.pendingAmount += state.balance;
@@ -747,50 +688,13 @@ financeRouter.get("/finance/payables/summary", async (req, res) => {
 financeRouter.post("/finance/payables/:id/payments", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.REGISTER), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_PAYABLES))) return;
-    const payable = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_payable" } });
-    if (!payable) return res.status(404).json({ error: "Cuenta por pagar no encontrada." });
-    const paymentAmount = safeAmount(req.body?.amount);
-    if (!paymentAmount) return res.status(400).json({ error: "Ingresa un monto de pago válido." });
-    const state = payableState(payable);
-    if (!state.balance) return res.status(409).json({ error: "Esta cuenta ya se encuentra pagada." });
-    if (paymentAmount > state.balance) return res.status(400).json({ error: "El pago no puede superar el saldo pendiente." });
-    const now = new Date();
-    const paymentDate = cleanText(req.body?.paymentDate) || now.toISOString().slice(0, 10);
-    const reference = cleanText(req.body?.reference);
-    const nextBalance = Math.max(0, state.balance - paymentAmount);
-    const result = await prisma.$transaction(async (tx) => {
-      const payment = await tx.industryRecord.create({
-        data: {
-          tenantId: req.tenantId,
-          recordType: "finance_payable_payment",
-          title: `Pago ${payable.title}`.slice(0, 220),
-          status: "REGISTERED",
-          data: { payableId: payable.id, amount: paymentAmount, paymentDate, reference, registeredById: req.user?.id || null }
-        }
-      });
-      const data = financeRecordData(payable);
-      const history = Array.isArray(data.history) ? data.history.slice(-49) : [];
-      const updated = await tx.industryRecord.update({
-        where: { id: payable.id },
-        data: {
-          status: nextBalance === 0 ? "PAID" : "PARTIAL",
-          data: {
-            ...data,
-            balance: nextBalance,
-            paidAmount: safeAmount(data.paidAmount) + paymentAmount,
-            status: nextBalance === 0 ? "PAID" : "PARTIAL",
-            paidAt: nextBalance === 0 ? now.toISOString() : data.paidAt || null,
-            history: [...history, { at: now.toISOString(), type: "PAYMENT_REGISTERED", amount: paymentAmount, reference, paymentId: payment.id }]
-          }
-        }
-      });
-      return { payment, payable: updated };
-    });
-    await recordAuditLog(req, "FINANCE_PAYABLE_PAYMENT_REGISTERED", "finance_payable", payable.id, { paymentId: result.payment.id, amount: paymentAmount, paymentDate });
-    res.status(201).json({ ...result, remainingBalance: nextBalance });
+    const result = await registerManualSettlement(prisma, { tenantId: req.tenantId, userId: req.user?.id, documentId: req.params.id, kind: "PAYMENT",
+      amount: req.body?.amount, paymentDate: req.body?.paymentDate, reference: req.body?.reference, idempotencyKey: req.body?.idempotencyKey });
+    res.status(result.replayed ? 200 : 201).json(result);
   } catch (error) {
-    console.error("Register finance payable payment error:", error);
-    res.status(500).json({ error: "No se pudo registrar el pago a proveedor." });
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Register manual payment error:", error);
+    res.status(500).json({ error: "No se pudo registrar el pago. Puedes reintentar la misma operación sin duplicarla." });
   }
 });
 
@@ -803,7 +707,8 @@ financeRouter.post("/finance/migrations/preview", requireRole(ROLE_GROUPS.MANAGE
       maxRows: MAX_MIGRATION_ROWS,
       summary: summarizeHistoricalFinanceRows(rows),
       rows: rows.slice(0, 100),
-      sourceRows: req.body.rows.slice(0, MAX_MIGRATION_ROWS)
+      sourceRows: req.body.rows,
+      periodProtection: await documentImportRestrictions(prisma, req.tenantId, rows)
     });
   } catch (error) {
     console.error("Preview historical finance migration error:", error);
@@ -822,7 +727,8 @@ financeRouter.post("/finance/migrations/preview-file", requireRole(ROLE_GROUPS.M
       sourceFile: cleanText(req.file?.originalname, "migracion-historica"),
       summary: summarizeHistoricalFinanceRows(rows),
       rows: rows.slice(0, 100),
-      sourceRows: sourceRows.slice(0, MAX_MIGRATION_ROWS)
+      sourceRows,
+      periodProtection: await documentImportRestrictions(prisma, req.tenantId, rows)
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudo leer el archivo de migración.";
@@ -833,123 +739,11 @@ financeRouter.post("/finance/migrations/preview-file", requireRole(ROLE_GROUPS.M
 financeRouter.post("/finance/migrations/import", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_MIGRATION))) return;
-    const sourceFile = (cleanText(req.body?.sourceFile) || "migracion-historica.csv").slice(0, 180);
-    const rows = normalizeHistoricalFinanceRows(req.body?.rows, { limit: MAX_MIGRATION_ROWS });
-    if (!rows.length) return res.status(400).json({ error: "No se detectaron filas para importar." });
-    const summary = summarizeHistoricalFinanceRows(rows);
-    const importedAt = new Date().toISOString();
-    const existingDocuments = await prisma.industryRecord.findMany({
-      where: { tenantId: req.tenantId, recordType: { in: ["finance_invoice", "finance_payable"] } },
-      select: { data: true }, take: 10000, orderBy: { updatedAt: "desc" }
-    });
-    const knownFingerprints = new Set(existingDocuments.map((record) => {
-      const data = financeRecordData(record);
-      return cleanText(data.migrationFingerprint) || historicalFinanceFingerprint({
-        kind: data.documentSide === "SUPPLIER" ? "PAYABLE" : "RECEIVABLE", documentNumber: data.documentNumber || data.invoiceNumber,
-        rut: data.clientRut || data.customerRut || data.supplierRut || data.rut, amount: data.amount, issueDate: data.issueDate, partyName: data.customerName || data.clientName || data.supplierName
-      });
-    }).filter(Boolean));
-    const seenFingerprints = new Set();
-    const importableRows = [];
-    let duplicateRows = 0;
-    for (const row of rows) {
-      const hasStableIdentity = Boolean(cleanText(row.documentNumber) && cleanText(row.partyName) && safeAmount(row.amount) > 0);
-      if (hasStableIdentity && (knownFingerprints.has(row.fingerprint) || seenFingerprints.has(row.fingerprint))) { duplicateRows += 1; continue; }
-      if (hasStableIdentity) seenFingerprints.add(row.fingerprint);
-      importableRows.push(row);
-    }
-    const batch = await prisma.$transaction(async (tx) => {
-      const batchRecord = await tx.industryRecord.create({
-        data: {
-          tenantId: req.tenantId,
-          recordType: "finance_migration_batch",
-          title: `Migración histórica · ${sourceFile}`.slice(0, 220),
-          status: "COMPLETED",
-          data: { sourceFile, totalRows: rows.length, reviewRows: summary.reviewRows, duplicateRows, summary, importedAt, importedById: req.user?.id || null }
-        }
-      });
-      const records = [];
-      for (const row of importableRows) {
-        const historicalData = {
-          documentSide: row.documentSide,
-          direction: row.kind === "PAYABLE" ? "PURCHASE" : "SALE",
-          documentNumber: row.documentNumber,
-          invoiceNumber: row.kind === "RECEIVABLE" ? row.documentNumber : undefined,
-          documentType: row.documentType,
-          documentTypeCode: row.documentTypeCode,
-          customerName: row.kind === "RECEIVABLE" ? row.partyName : undefined,
-          supplierName: row.kind === "PAYABLE" ? row.partyName : undefined,
-          clientRut: row.kind === "RECEIVABLE" ? row.rut : undefined,
-          supplierRut: row.kind === "PAYABLE" ? row.rut : undefined,
-          partyName: row.partyName,
-          partyRut: row.rut,
-          category: row.category,
-          netAmount: row.netAmount,
-          vatAmount: row.vatAmount,
-          amount: row.amount,
-          totalAmount: row.totalAmount || row.amount,
-          balance: row.balance,
-          paidAmount: row.paidAmount,
-          issueDate: row.issueDate,
-          dueDate: row.dueDate,
-          paymentDate: row.paymentDate,
-          paymentMethod: row.paymentMethod,
-          paymentIntermediary: row.paymentIntermediary,
-          commissionAmount: row.commissionAmount,
-          settlementReference: row.settlementReference,
-          creditNotesTotal: row.creditNotesTotal,
-          debitNotesTotal: row.debitNotesTotal,
-          referenceDocumentType: row.referenceDocumentType,
-          referenceDocumentNumber: row.referenceDocumentNumber,
-          referenceDocumentDate: row.referenceDocumentDate,
-          currency: row.currency,
-          status: row.status,
-          source: "historical_migration",
-          sourceFile,
-          migrationBatchId: batchRecord.id,
-          migrationRow: row.rowNumber,
-          isHistorical: true,
-          needsReview: row.needsReview,
-          reviewReasons: row.reviewReasons,
-          sourceStatus: row.sourceStatus,
-          migrationFingerprint: row.fingerprint,
-          sourceRow: row.source
-        };
-        const created = await tx.industryRecord.create({
-          data: {
-            tenantId: req.tenantId,
-            recordType: row.needsReview ? "finance_exception" : row.recordType,
-            title: row.needsReview
-              ? `Revisar migración fila ${row.rowNumber} · ${row.partyName || "sin contraparte"}`.slice(0, 220)
-              : `${row.kind === "PAYABLE" ? "Cuenta por pagar" : "Factura"} ${row.documentNumber} · ${row.partyName}`.slice(0, 220),
-            status: row.needsReview ? "OPEN" : row.status,
-            data: row.needsReview
-              ? { type: "MIGRATION_REVIEW", detail: `Faltan: ${row.reviewReasons.join(", ")}`, priority: "MEDIUM", ...historicalData }
-              : historicalData
-          }
-        });
-        records.push(created);
-        // Un saldo histórico puede ser parcialmente o totalmente pagado. Se
-        // conserva un comprobante interno para que el saldo inicial sea
-        // auditable sin inventar una cartola bancaria ni un medio de pago.
-        if (!row.needsReview && row.paidAmount > 0) {
-          await tx.industryRecord.create({ data: {
-            tenantId: req.tenantId,
-            recordType: row.kind === "PAYABLE" ? "finance_payable_payment" : "finance_invoice_receipt",
-            title: `${row.kind === "PAYABLE" ? "Pago histórico" : "Cobro histórico"} ${row.documentNumber}`.slice(0, 220),
-            status: "MIGRATED",
-            data: { [row.kind === "PAYABLE" ? "payableId" : "invoiceId"]: created.id, amount: row.paidAmount, paymentDate: row.issueDate || importedAt.slice(0, 10), source: "historical_migration", migrationBatchId: batchRecord.id, migrationRow: row.rowNumber, note: "Saldo inicial importado; requiere respaldo externo si se necesita comprobante bancario." }
-          } });
-        }
-      }
-      await tx.industryRecord.update({ where: { id: batchRecord.id }, data: { data: { ...financeRecordData(batchRecord), importedRows: records.length, exceptionRows: summary.reviewRows } } });
-      return { batch: batchRecord, records };
-    });
-    await recordAuditLog(req, "FINANCE_HISTORICAL_MIGRATION_IMPORTED", "finance_migration_batch", batch.batch.id, { sourceFile, totalRows: rows.length, imported: batch.records.length, duplicateRows, summary });
-    res.status(201).json({ batch: batch.batch, summary, imported: batch.records.length, duplicateRows, requiresReview: summary.reviewRows });
+    res.status(201).json(await importHistoricalDocuments(prisma, { tenantId: req.tenantId, userId: req.user?.id, sourceFile: req.body?.sourceFile, rows: req.body?.rows }));
   } catch (error) {
-    console.error("Import historical finance migration error:", error);
-    res.status(500).json({ error: "No se pudo importar la migración histórica." });
+    if (error instanceof FinanceOperationError || error?.status) return res.status(error.status).json({ error: error.message, ...error.details });
+    console.error("Financial document import error:", error);
+    res.status(500).json({ error: "No se pudo incorporar el lote. No se confirmaron cambios parciales." });
   }
 });
 
@@ -1038,19 +832,20 @@ function bankImportError(res, error) {
   return res.status(status).json({ error: status === 500 ? "No se pudo acceder a la importación guardada. Comprueba la migración y vuelve a intentarlo." : error.message, ...(error.details || {}) });
 }
 
-function bankPreviewForClient(preview) {
+async function bankPreviewForClient(preview, tenantId) {
   if (!preview) return null;
   const { normalizedRows: _normalized, sourceRows: _source, ...summary } = preview;
   // Raw rows stay on the server. The UI queries the immutable revision in pages.
-  return { ...summary, sourceRows: [] };
+  const rows = (preview.normalizedRows || normalizeBankReviewRows(preview.sourceRows, preview.account, preview.reviewConfig || {})).filter((row) => !row.excluded);
+  return { ...summary, sourceRows: [], periodProtection: await bankPeriodRestrictions(prisma, tenantId, rows) };
 }
 
 financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), bankStatementUpload.single("file"), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
     const job = await createBankImportJob(prisma, { tenantId: req.tenantId, userId: req.user?.id, file: req.file, account: req.body });
-    if (job.status === "READY") return res.json(bankPreviewForClient((await readBankImportPreview(prisma, req.tenantId, job.id)).preview));
-    res.json(bankPreviewForClient(await analyzeBankImportJob(prisma, { tenantId: req.tenantId, id: job.id, analyze: analyzeStoredBankStatement })));
+    if (job.status === "READY") return res.json(await bankPreviewForClient((await readBankImportPreview(prisma, req.tenantId, job.id)).preview, req.tenantId));
+    res.json(await bankPreviewForClient(await analyzeBankImportJob(prisma, { tenantId: req.tenantId, id: job.id, analyze: analyzeStoredBankStatement }), req.tenantId));
   } catch (error) { bankImportError(res, error); }
 });
 
@@ -1072,7 +867,7 @@ financeRouter.get("/finance/bank-import-jobs/:id", requireRole(ROLE_GROUPS.MANAG
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
     const result = await readBankImportPreview(prisma, req.tenantId, req.params.id);
-    res.json({ ...result, preview: bankPreviewForClient(result.preview) });
+    res.json({ ...result, preview: await bankPreviewForClient(result.preview, req.tenantId) });
   } catch (error) { bankImportError(res, error); }
 });
 
@@ -1137,7 +932,7 @@ financeRouter.delete("/finance/bank-mapping-templates/:id", requireRole(ROLE_GRO
 financeRouter.post("/finance/bank-import-jobs/:id/reanalyze", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
-    res.json(bankPreviewForClient(await analyzeBankImportJob(prisma, { tenantId: req.tenantId, id: req.params.id, account: req.body?.account, reviewConfig: req.body?.reviewConfig, expectedRevision: req.body?.revision, analyze: analyzeStoredBankStatement })));
+    res.json(await bankPreviewForClient(await analyzeBankImportJob(prisma, { tenantId: req.tenantId, id: req.params.id, account: req.body?.account, reviewConfig: req.body?.reviewConfig, expectedRevision: req.body?.revision, analyze: analyzeStoredBankStatement }), req.tenantId));
   } catch (error) { bankImportError(res, error); }
 });
 
@@ -1220,6 +1015,8 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
     const exceptionIdsToResolve = previousExceptions
       .filter((record) => cleanText(financeRecordData(record).importBatchId) === existingBatch?.id)
       .map((record) => record.id);
+    // Lock old and revised months together in chronological order before any write.
+    await assertBankPeriodsOpen(tx, req.tenantId, [...rows, ...previousExceptions.filter((record) => exceptionIdsToResolve.includes(record.id))], job.sourceFile);
     const result = await (async () => {
       const batch = await tx.industryRecord.create({
         data: {
@@ -1298,15 +1095,9 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
       return { batch, imported: validRows.length, requiresReview: reviewRows.length };
     })();
       await tx.financeBankImportJob.update({ where: { id: job.id }, data: { status: "IMPORTED", batchId: result.batch.id, runToken: null } });
+      await tx.tenantAuditLog.create({ data: { tenantId: req.tenantId, actorUserId: req.user?.id || null, action: "FINANCE_BANK_STATEMENT_IMPORTED", entity: "bank_statement", entityId: result.batch.id,
+        metadata: { sourceFile: job.sourceFile, bankKey: preview.account.bankKey, imported: result.imported, duplicateRows, requiresReview: result.requiresReview, periods: bankPeriodImpact(rows).periods, reprocessedBatchId: reprocessable ? existingBatch?.id : null } } });
       return { result, duplicateRows, summary };
-    });
-    await recordAuditLog(req, "FINANCE_BANK_STATEMENT_IMPORTED", "bank_statement", result.batch.id, {
-      sourceFile: result.batch.data.sourceFile,
-      bankKey: result.batch.data.account.bankKey,
-      cmfCode: result.batch.data.account.cmfCode,
-      imported: result.imported,
-      duplicateRows,
-      requiresReview: result.requiresReview
     });
     res.status(201).json({ ...result, duplicateRows, summary });
   } catch (error) {
@@ -1323,12 +1114,16 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
 financeRouter.get("/finance/bank-statements", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
-    const [batches, movements, exceptions] = await Promise.all([
+    const [batches, movements, exceptions, closedControls, reconciliationHistory] = await Promise.all([
       findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "bank_statement" }, orderBy: { createdAt: "desc" }, take: 500 }),
       findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { id: true, status: true, data: true }, take: 10000 }),
-      findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, status: true, data: true }, take: 10000 })
+      findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, status: true, data: true } }),
+      prisma.financePeriodControl.findMany({ where: { tenantId: req.tenantId, status: "CLOSED" }, select: { period: true } }),
+      findAllFinanceRecords(prisma, { where: { tenantId: req.tenantId, recordType: "finance_reconciliation" }, select: { id: true, data: true } })
     ]);
 
+    const closedPeriods = new Set(closedControls.map((control) => control.period));
+    const historicalMovements = new Set(reconciliationHistory.map((record) => financeRecordData(record).movementId));
     const scopedBatchIds = new Set(filterFinanceContext([...batches, ...movements, ...exceptions], parseFinanceContext(req.query)).map((record) => record.id));
     const statements = batches.filter((batch) => scopedBatchIds.has(batch.id))
       .map((batch) => {
@@ -1342,7 +1137,10 @@ financeRouter.get("/finance/bank-statements", requireRole(ROLE_GROUPS.STAFF), as
           return String(movement.status || "").toUpperCase() === "MATCHED" || Boolean(movementData.reconciliationId || movementData.reconciledAt);
         });
         const status = String(batch.status || "").toUpperCase();
-        const canDelete = !reconciledMovements.length && !["DELETED", "REPROCESSED"].includes(status);
+        const impact = bankPeriodImpact([...relatedMovements, ...relatedExceptions]);
+        const closed = impact.periods.filter((period) => closedPeriods.has(period));
+        const hasHistory = relatedMovements.some((movement) => historicalMovements.has(movement.id));
+        const canDelete = !closed.length && !impact.undatedRows.length && !hasHistory && !reconciledMovements.length && !["DELETED", "REPROCESSED"].includes(status);
         return {
           id: batch.id,
           sourceFile,
@@ -1360,7 +1158,10 @@ financeRouter.get("/finance/bank-statements", requireRole(ROLE_GROUPS.STAFF), as
           exceptions: relatedExceptions.length,
           reconciledMovements: reconciledMovements.length,
           canDelete,
-          deleteBlockReason: canDelete ? null : reconciledMovements.length
+          deleteBlockReason: canDelete ? null : closed.length ? `Períodos cerrados: ${closed.join(", ")}. Solicita una reapertura autorizada.`
+            : impact.undatedRows.length ? "Hay filas sin fecha válida. Requieren revisión antes de modificar esta cartola."
+            : hasHistory ? "Existe historial de conciliaciones. La cartola debe conservarse como evidencia."
+            : reconciledMovements.length
             ? "Esta cartola tiene movimientos conciliados y no puede eliminarse para proteger la trazabilidad contable."
             : "Esta cartola fue reemplazada o ya no está disponible para eliminar."
         };
@@ -1377,43 +1178,9 @@ financeRouter.get("/finance/bank-statements", requireRole(ROLE_GROUPS.STAFF), as
 financeRouter.delete("/finance/bank-statements/:id", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
-    const batch = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "bank_statement" } });
-    if (!batch) return res.status(404).json({ error: "Cartola no encontrada." });
-    const batchData = financeRecordData(batch);
-    if (!cleanText(batchData.sourceFile)) return res.status(409).json({ error: "Sólo se pueden eliminar cartolas cargadas manualmente. Las sincronizaciones automáticas se administran desde su conexión bancaria." });
-    if (["DELETED", "REPROCESSED"].includes(String(batch.status || "").toUpperCase())) return res.status(409).json({ error: "Esta cartola ya fue reemplazada o eliminada." });
-
-    const [movements, exceptions] = await Promise.all([
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "bank_movement" }, select: { id: true, status: true, data: true }, take: 10000 }),
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_exception" }, select: { id: true, data: true }, take: 10000 })
-    ]);
-    const movementIds = movements
-      .filter((movement) => cleanText(financeRecordData(movement).importBatchId) === batch.id)
-      .map((movement) => movement.id);
-    const reconciled = movements.filter((movement) => {
-      if (!movementIds.includes(movement.id)) return false;
-      const movementData = financeRecordData(movement);
-      return String(movement.status || "").toUpperCase() === "MATCHED" || Boolean(movementData.reconciliationId || movementData.reconciledAt);
-    });
-    if (reconciled.length) {
-      return res.status(409).json({ error: `No se puede eliminar la cartola porque tiene ${reconciled.length} movimiento(s) conciliado(s). Revierte primero esas conciliaciones para conservar la trazabilidad.` });
-    }
-    const exceptionIds = exceptions
-      .filter((exception) => cleanText(financeRecordData(exception).importBatchId) === batch.id)
-      .map((exception) => exception.id);
-    await prisma.$transaction(async (tx) => {
-      if (exceptionIds.length) await tx.industryRecord.deleteMany({ where: { id: { in: exceptionIds }, tenantId: req.tenantId } });
-      if (movementIds.length) await tx.industryRecord.deleteMany({ where: { id: { in: movementIds }, tenantId: req.tenantId } });
-      await tx.industryRecord.delete({ where: { id: batch.id } });
-    });
-    await recordAuditLog(req, "FINANCE_BANK_STATEMENT_DELETED", "bank_statement", batch.id, {
-      sourceFile: cleanText(batchData.sourceFile),
-      deletedMovements: movementIds.length,
-      deletedExceptions: exceptionIds.length
-    });
-    await createTenantNotification({ tenantId: req.tenantId, type: "FINANCE_BANK_STATEMENT_DELETED", title: "Cartola eliminada", body: `Se eliminó ${cleanText(batchData.sourceFile)} junto con ${movementIds.length} movimiento(s) no conciliados.`, href: "/finance?tab=cartolas" });
-    res.json({ ok: true, deleted: { statementId: batch.id, movements: movementIds.length, exceptions: exceptionIds.length } });
+    res.json(await deleteBankStatementInOpenPeriods(prisma, { tenantId: req.tenantId, userId: req.user?.id, batchId: req.params.id }));
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message, ...error.details });
     console.error("Delete bank statement error:", error);
     res.status(500).json({ error: "No se pudo eliminar la cartola." });
   }
@@ -1470,11 +1237,11 @@ financePublicRouter.post("/finance/floid/webhook", async (req, res) => {
     const consent = await findFloidConsent(caseId);
     if (!consent) return res.status(404).json({ error: "Consentimiento no encontrado o ya procesado." });
     const result = await importFloidMovements({ tenantId: consent.tenantId, consent, payload: req.body || {} });
-    await prisma.tenantAuditLog.create({ data: { tenantId: consent.tenantId, action: "FINANCE_FLOID_WEBHOOK_IMPORTED", entity: "finance_open_banking_consent", entityId: consent.id, metadata: { caseId, imported: result.imported, duplicates: result.duplicates, requiresReview: result.requiresReview } } });
-    if (result.imported || result.requiresReview) await createTenantNotification({ tenantId: consent.tenantId, type: "OPEN_BANKING_SYNC_READY", title: "Movimientos bancarios disponibles", body: `${result.imported} movimiento(s) de banca abierta quedaron listos para conciliación${result.requiresReview ? ` y ${result.requiresReview} requieren revisión` : ""}.`, href: "/finance?tab=cartolas" });
+    if (!result.replay && (result.imported || result.requiresReview)) await createTenantNotification({ tenantId: consent.tenantId, type: "OPEN_BANKING_SYNC_READY", title: "Movimientos bancarios disponibles", body: `${result.imported} movimiento(s) de banca abierta quedaron listos para conciliación${result.requiresReview ? ` y ${result.requiresReview} requieren revisión` : ""}.`, href: "/finance?tab=cartolas" }).catch(() => null);
     res.status(202).json({ ok: true, imported: result.imported, duplicates: result.duplicates, requiresReview: result.requiresReview });
   } catch (error) {
     console.error("Floid webhook error:", error);
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message, details: error.details });
     res.status(400).json({ error: error instanceof Error ? error.message : "No se pudo procesar la respuesta de banca abierta." });
   }
 });
@@ -1510,7 +1277,7 @@ financeRouter.post("/finance/sii/dte/preview-files", requireRole(ROLE_GROUPS.MAN
     const sii = await siiConfigForTenant(req.tenantId);
     const documents = parseSiiDteFiles(req.files, { companyRut: sii.companyRut });
     if (!documents.length) return res.status(400).json({ error: "Selecciona al menos un DTE XML para revisar." });
-    res.json({ companyRut: sii.companyRut, environment: sii.environment, maxFiles: MAX_SII_DTE_FILES, summary: summarizeSiiDteDocuments(documents), documents });
+    res.json({ companyRut: sii.companyRut, environment: sii.environment, maxFiles: MAX_SII_DTE_FILES, summary: summarizeSiiDteDocuments(documents), documents, periodProtection: await documentImportRestrictions(prisma, req.tenantId, documents, "DTE") });
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se pudieron leer los DTE XML.";
     res.status(400).json({ error: message });
@@ -1521,84 +1288,11 @@ financeRouter.post("/finance/sii/dte/import", requireRole(ROLE_GROUPS.MANAGERS),
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
     const sii = await siiConfigForTenant(req.tenantId);
-    const documents = sanitizeSiiDteDocuments(req.body?.documents, { companyRut: sii.companyRut });
-    if (!documents.length) return res.status(400).json({ error: "No se detectaron DTE para importar." });
-    const summary = summarizeSiiDteDocuments(documents);
-    const existing = await prisma.industryRecord.findMany({
-      where: { tenantId: req.tenantId, recordType: { in: ["finance_invoice", "finance_payable"] } },
-      select: { data: true }, take: 10000, orderBy: { createdAt: "desc" }
-    });
-    const known = new Set(existing.map((record) => {
-      const data = financeRecordData(record);
-      return cleanText(data.siiDteFingerprint) || (data.emitterRut && data.receiverRut ? siiDteFingerprint(data) : "");
-    }).filter(Boolean));
-    const seen = new Set();
-    const valid = [];
-    const review = [];
-    let duplicates = 0;
-    for (const document of documents) {
-      if (document.needsReview) { review.push(document); continue; }
-      if (known.has(document.fingerprint) || seen.has(document.fingerprint)) { duplicates += 1; continue; }
-      seen.add(document.fingerprint);
-      valid.push(document);
-    }
-    const importedAt = new Date().toISOString();
-    const result = await prisma.$transaction(async (tx) => {
-      const batch = await tx.industryRecord.create({
-        data: { tenantId: req.tenantId, recordType: "finance_sii_import_batch", title: `Importación DTE SII · ${importedAt.slice(0, 10)}`, status: "COMPLETED", data: { companyRut: sii.companyRut, environment: sii.environment, importedAt, summary, importedRows: valid.length, duplicateRows: duplicates, reviewRows: review.length } }
-      });
-      if (valid.length) await tx.industryRecord.createMany({ data: valid.map((document) => {
-        const isSupplier = document.side === "SUPPLIER";
-        const isAdjustment = ["56", "61"].includes(String(document.documentTypeCode));
-        return {
-          tenantId: req.tenantId,
-          recordType: isAdjustment ? "finance_document_adjustment" : (isSupplier ? "finance_payable" : "finance_invoice"),
-          title: `${document.documentTypeName} ${document.documentNumber} · ${document.partyName}`.slice(0, 220),
-          status: isAdjustment ? "PENDING_LINK" : "OPEN",
-          data: {
-            source: "sii_dte_xml", siiDteFingerprint: document.fingerprint, siiImportBatchId: batch.id, sourceFile: document.sourceFile,
-            documentSide: document.side, direction: isAdjustment ? (document.documentTypeCode === "61" ? "CREDIT_NOTE" : "DEBIT_NOTE") : (isSupplier ? "PURCHASE" : "SALE"), documentNumber: document.documentNumber,
-            adjustmentType: isAdjustment ? (document.documentTypeCode === "61" ? "CREDIT_NOTE" : "DEBIT_NOTE") : undefined,
-            referenceDocumentType: document.referenceDocumentType, referenceDocumentNumber: document.referenceDocumentNumber, referenceDocumentDate: document.referenceDocumentDate,
-            invoiceNumber: isSupplier ? undefined : document.documentNumber, documentTypeCode: document.documentTypeCode, documentTypeName: document.documentTypeName,
-            emitterRut: document.emitterRut, emitterName: document.emitterName, receiverRut: document.receiverRut, receiverName: document.receiverName,
-            customerName: isSupplier ? undefined : document.partyName, customerRut: isSupplier ? undefined : document.partyRut,
-            clientName: isSupplier ? undefined : document.partyName, clientRut: isSupplier ? undefined : document.partyRut,
-            supplierName: isSupplier ? document.partyName : undefined, supplierRut: isSupplier ? document.partyRut : undefined,
-            rut: document.partyRut, issueDate: document.issueDate, netAmount: document.netAmount, vatAmount: document.vatAmount,
-            amount: document.amount, totalAmount: document.amount, balance: isAdjustment ? 0 : document.amount, paidAmount: 0, currency: "CLP", importedAt
-          }
-        };
-      }) });
-      const customerAdjustments = valid.filter((document) => document.side === "CUSTOMER" && ["56", "61"].includes(String(document.documentTypeCode)) && document.referenceDocumentNumber);
-      if (customerAdjustments.length) {
-        const invoices = await tx.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" }, take: 1000, orderBy: { updatedAt: "desc" } });
-        const adjustments = (await tx.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_document_adjustment" }, take: 1000, orderBy: { updatedAt: "desc" } }))
-          .filter((record) => financeRecordData(record).siiImportBatchId === batch.id);
-        for (const adjustment of adjustments) {
-          const adjustmentData = financeRecordData(adjustment);
-          const target = invoices.find((invoice) => String(financeRecordData(invoice).invoiceNumber || financeRecordData(invoice).documentNumber || "") === String(adjustmentData.referenceDocumentNumber || ""));
-          if (!target) continue;
-          const targetData = financeRecordData(target);
-          const isCredit = adjustmentData.adjustmentType === "CREDIT_NOTE";
-          const adjustmentAmount = safeAmount(adjustmentData.amount);
-          const current = getInvoiceFinancialState(target);
-          const nextBalance = isCredit ? Math.max(0, current.balance - adjustmentAmount) : current.balance + adjustmentAmount;
-          await tx.industryRecord.update({ where: { id: target.id }, data: { status: nextBalance === 0 ? "PAID" : target.status, data: { ...targetData, balance: nextBalance, creditNotesTotal: safeAmount(targetData.creditNotesTotal) + (isCredit ? adjustmentAmount : 0), debitNotesTotal: safeAmount(targetData.debitNotesTotal) + (isCredit ? 0 : adjustmentAmount), lastAdjustmentId: adjustment.id } } });
-          await tx.industryRecord.update({ where: { id: adjustment.id }, data: { status: "APPLIED", data: { ...adjustmentData, invoiceId: target.id, appliedAt: importedAt } } });
-        }
-      }
-      if (review.length) await tx.industryRecord.createMany({ data: review.map((document) => ({
-        tenantId: req.tenantId, recordType: "finance_exception", title: `Revisar DTE ${document.documentNumber || "sin folio"} · ${document.sourceFile}`.slice(0, 220), status: "OPEN",
-        data: { type: "SII_DTE_IMPORT_REVIEW", priority: "MEDIUM", detail: `Faltan: ${document.reviewReasons.join(", ")}`, source: "sii_dte_xml", siiImportBatchId: batch.id, document }
-      })) });
-      return { batch, imported: valid.length, requiresReview: review.length };
-    });
-    await recordAuditLog(req, "FINANCE_SII_DTE_IMPORTED", "finance_sii_import_batch", result.batch.id, { imported: result.imported, duplicates, requiresReview: result.requiresReview, companyRut: sii.companyRut, environment: sii.environment });
-    res.status(201).json({ ...result, duplicates, summary });
+    res.status(201).json(await importSiiDocuments(prisma, { tenantId: req.tenantId, userId: req.user?.id, sii, documents: req.body?.documents }));
   } catch (error) {
-    console.error("Finance SII DTE import error:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudieron importar los DTE." });
+    if (error instanceof FinanceOperationError || error?.status) return res.status(error.status).json({ error: error.message, ...error.details });
+    console.error("Financial document import error:", error);
+    res.status(500).json({ error: "No se pudo incorporar el lote. No se confirmaron cambios parciales." });
   }
 });
 
@@ -1625,36 +1319,34 @@ financeRouter.get("/finance/monthly-close/preview", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
     const period = cleanText(req.query?.period) || new Date().toISOString().slice(0, 7);
-    if (!validFinancePeriod(period)) return res.status(400).json({ error: "El período debe tener el formato AAAA-MM." });
-    res.json(await getFinanceMonthlyClosePreview({ tenantId: req.tenantId, period }));
+    res.json(await getFinancePeriodWorkspace(prisma, { tenantId: req.tenantId, period, snapshotId: cleanText(req.query?.snapshotId) || undefined }));
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Finance monthly close preview error:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo preparar el cierre mensual." });
+    res.status(500).json({ error: "No se pudo consultar el cierre mensual." });
   }
 });
 
 financeRouter.post("/finance/monthly-close", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.CLOSE_PERIOD), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
-    const period = cleanText(req.body?.period) || new Date().toISOString().slice(0, 7);
-    if (!validFinancePeriod(period)) return res.status(400).json({ error: "El período debe tener el formato AAAA-MM." });
-    if (req.body?.confirmation !== "CERRAR") return res.status(400).json({ error: "Confirma el cierre con la palabra CERRAR." });
-    const { preview, close } = await withFinanceWrite(prisma, async (tx) => {
-    const preview = await getFinanceMonthlyClosePreview({ tenantId: req.tenantId, period, db: tx });
-    if (preview.status !== "READY_TO_CLOSE") { const failure = { error: "El período tiene movimientos sin conciliar o excepciones abiertas. Resuélvelos antes de cerrarlo.", preview }; throw new FinanceOperationError(409, failure.error, failure); }
-    const existing = await findAllFinanceRecords(tx, { where: { tenantId: req.tenantId, recordType: "finance_monthly_close" }, select: { id: true, data: true }, take: 500, orderBy: { createdAt: "desc" } });
-    if (existing.some((record) => cleanText(financeRecordData(record).period) === period)) { const failure = { error: "Este período ya tiene un cierre registrado." }; throw new FinanceOperationError(409, failure.error, failure); }
-    const closedAt = new Date().toISOString();
-    const close = await tx.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "finance_monthly_close", title: `Cierre financiero ${period}`, status: "CLOSED", data: { ...preview, period, closedAt, closedById: req.user?.id || null, note: cleanText(req.body?.note) } } });
-      return { preview, close };
-    });
-    await recordAuditLog(req, "FINANCE_MONTHLY_CLOSE_REGISTERED", "finance_monthly_close", close.id, { period, metrics: preview.metrics });
-    await createTenantNotification({ tenantId: req.tenantId, type: "FINANCE_MONTHLY_CLOSE_READY", title: `Cierre financiero ${period} registrado`, body: "La fotografía del período quedó disponible para revisión administrativa y contable.", href: "/finance?tab=cierre" });
-    res.status(201).json({ close, preview });
+    const result = await closeFinancePeriod(prisma, { tenantId: req.tenantId, userId: req.user?.id, period: req.body?.period, confirmation: req.body?.confirmation, expectedVersion: req.body?.expectedVersion, note: req.body?.note || "" });
+    res.status(201).json(result);
   } catch (error) {
     if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message, ...error.details });
     console.error("Finance monthly close error:", error);
-    res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo registrar el cierre mensual." });
+    res.status(500).json({ error: "No se pudo registrar el cierre mensual." });
+  }
+});
+
+financeRouter.post("/finance/monthly-close/:period/reopen", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.REOPEN_PERIOD), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    res.json(await reopenFinancePeriod(prisma, { tenantId: req.tenantId, userId: req.user?.id, period: req.params.period, closeId: req.body?.closeId, confirmation: req.body?.confirmation, expectedVersion: req.body?.expectedVersion, reason: req.body?.reason }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Finance period reopening error:", error);
+    res.status(500).json({ error: "No se pudo reabrir el período." });
   }
 });
 
@@ -1748,6 +1440,7 @@ financeRouter.post("/finance/sync/nubox", requireRole(ROLE_GROUPS.MANAGERS), asy
     res.json(result);
   } catch (error) {
     console.error("Finance Nubox sync error:", error);
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message, details: error.details });
     const message = error instanceof Error ? error.message : "No se pudo sincronizar Nubox.";
     const configurationError = /faltan|configurad|per[ií]odo|url https/i.test(message);
     res.status(configurationError ? 400 : 502).json({ error: message });
@@ -1819,18 +1512,19 @@ financeRouter.patch("/finance/agents/policy", requireRole(ROLE_GROUPS.MANAGERS),
   }
 });
 
-financeRouter.post("/finance/agents/analyze", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+financeRouter.post("/finance/agents/analyze", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
-    const exceptionResult = await prepareFinanceAgentExceptions({ tenantId: req.tenantId });
-    const workspace = await getFinanceAgentWorkspace({ tenantId: req.tenantId });
+    const exceptionResult = await prepareFinanceAgentExceptions({ tenantId: req.tenantId, userId: req.user?.id });
+    const workspace = await getFinanceAgentWorkspace({ tenantId: req.tenantId }).catch(() => null);
     await recordAuditLog(req, "FINANCE_AGENTS_ANALYZED", "tenant_finance_agents", req.tenantId, {
       exceptionsPrepared: exceptionResult.created.length,
-      skipped: exceptionResult.skipped
-    });
-    res.json({ workspace, exceptionsPrepared: exceptionResult.created.length, exceptionsSkipped: exceptionResult.skipped });
+      skipped: exceptionResult.skipped, deferredCount: exceptionResult.deferred.length
+    }).catch(() => null);
+    res.json({ workspace, ...(!workspace ? { warning: "El resultado se guardó; no se pudo actualizar el resumen de agentes. Recarga la vista." } : {}), exceptionsPrepared: exceptionResult.created.length, exceptionsSkipped: exceptionResult.skipped, deferred: exceptionResult.deferred, analyzedMovements: exceptionResult.analyzedMovements });
   } catch (error) {
     console.error("Finance agents analysis error:", error);
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     res.status(500).json({ error: "No se pudo ejecutar el analisis de agentes financieros" });
   }
 });
@@ -1906,85 +1600,50 @@ financeRouter.post("/finance/reconciliations/:movementId/reject", requireRole(RO
   }
 });
 
-financeRouter.post("/finance/collection-cases/generate", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+financeRouter.post("/finance/collection-cases/generate", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS))) return;
-    const now = new Date();
-    const invoices = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_invoice" } });
-    const existingCases = await prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "finance_collection_case", status: { notIn: ["PAID", "CLOSED"] } } });
-    const existingInvoiceIds = new Set(existingCases.map((record) => String(financeRecordData(record).invoiceId || "")));
-    const created = [];
-
-    for (const invoice of invoices) {
-      const state = getInvoiceFinancialState(invoice, now);
-      if (state.status === "PAID" || existingInvoiceIds.has(invoice.id)) continue;
-      const data = financeRecordData(invoice);
-      const segment = financeAgingSegment(state.dueDate, now);
-      const record = await prisma.industryRecord.create({
-        data: {
-          tenantId: req.tenantId,
-          recordType: "finance_collection_case",
-          title: `Cobranza ${data.invoiceNumber || invoice.title}`.slice(0, 220),
-          status: segment.code === "POR_VENCER" ? "MONITORING" : "PENDING",
-          data: {
-            invoiceId: invoice.id,
-            invoiceNumber: data.invoiceNumber || invoice.title,
-            customerName: data.customerName || data.clientName || data.customer || "Cliente sin nombre",
-            clientRut: data.clientRut || data.customerRut || data.rut || null,
-            balance: state.balance,
-            agingBucket: segment.label,
-            agingCode: segment.code,
-            daysPastDue: segment.daysPastDue,
-            recommendedAction: segment.action,
-            channel: "manual",
-            nextActionAt: now.toISOString(),
-            history: [{ at: now.toISOString(), type: "CASE_CREATED", detail: `${segment.action}. Caso preparado para revisión humana.` }]
-          }
-        }
-      });
-      created.push(record);
-    }
-    await recordAuditLog(req, "FINANCE_COLLECTION_CASES_GENERATED", "finance_collection_case", req.tenantId, { count: created.length });
-    res.status(201).json({ created, count: created.length });
+    res.status(201).json(await generateFinanceCollectionCases(prisma, { tenantId: req.tenantId, userId: req.user?.id }));
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message, details: error.details });
     console.error("Generate finance collections error:", error);
     res.status(500).json({ error: "No se pudieron preparar los casos de cobranza" });
   }
 });
 
-financeRouter.patch("/finance/collection-cases/:id", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+financeRouter.patch("/finance/collection-cases/:id", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS))) return;
-    const record = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_collection_case" } });
-    if (!record) return res.status(404).json({ error: "Caso de cobranza no encontrado" });
-    const patch = financeCaseUpdate(req.body || {});
-    const status = patch.status || String(record.status || "PENDING").toUpperCase();
-    const now = new Date().toISOString();
-    const note = cleanText(req.body?.note);
-    const history = [...financeHistory(financeRecordData(record)), { at: now, type: "CASE_UPDATED", status, detail: note || "Caso actualizado manualmente.", userId: req.user?.id || null }];
-    const updated = await prisma.industryRecord.update({ where: { id: record.id }, data: { status, data: { ...financeRecordData(record), ...patch, status, history, updatedAt: now } } });
-    await recordAuditLog(req, "FINANCE_COLLECTION_CASE_UPDATED", "finance_collection_case", record.id, { status, note: note || null });
-    res.json({ case: updated });
+    res.json(await updateCollectionCase(prisma, { tenantId: req.tenantId, userId: req.user?.id, id: req.params.id, input: req.body || {}, canReopen: ["OWNER", "ADMIN", "SUPER_ADMIN"].includes(req.user?.role) }));
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Update finance collection case error:", error);
-    res.status(500).json({ error: "No se pudo actualizar el caso de cobranza" });
+    res.status(500).json({ error: "No se pudo actualizar el caso de cobranza." });
   }
 });
 
-financeRouter.patch("/finance/exceptions/:id", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+financeRouter.patch("/finance/exceptions/:id", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_EXCEPTIONS))) return;
-    const record = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_exception" } });
-    if (!record) return res.status(404).json({ error: "Excepción financiera no encontrada" });
-    const requestedStatus = cleanText(req.body?.status).toUpperCase();
-    const status = ["OPEN", "IN_REVIEW", "RESOLVED", "CLOSED"].includes(requestedStatus) ? requestedStatus : String(record.status || "OPEN").toUpperCase();
-    const resolution = cleanText(req.body?.resolution);
-    const now = new Date().toISOString();
-    const updated = await prisma.industryRecord.update({ where: { id: record.id }, data: { status, data: { ...financeRecordData(record), status, ...(resolution ? { resolution } : {}), ...(status === "RESOLVED" || status === "CLOSED" ? { resolvedAt: now, resolvedById: req.user?.id || null } : {}) } } });
-    await recordAuditLog(req, "FINANCE_EXCEPTION_UPDATED", "finance_exception", record.id, { status, resolution: resolution || null });
-    res.json({ exception: updated });
+    res.json(await updateFinanceExceptionCase(prisma, { tenantId: req.tenantId, userId: req.user?.id, id: req.params.id, input: req.body || {}, canReopen: ["OWNER", "ADMIN", "SUPER_ADMIN"].includes(req.user?.role) }));
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Update finance exception error:", error);
-    res.status(500).json({ error: "No se pudo actualizar la excepción financiera" });
+    res.status(500).json({ error: "No se pudo actualizar la excepción financiera." });
   }
 });
+
+financeRouter.post("/finance/exceptions", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_EXCEPTIONS))) return;
+    const result = await createAdministrativeException(prisma, { tenantId: req.tenantId, userId: req.user?.id, input: req.body || {} });
+    res.status(result.replayed ? 200 : 201).json(result);
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Create finance exception error:", error);
+    res.status(500).json({ error: "No se pudo crear la excepción." });
+  }
+});
+import { registerManualSettlement } from "../services/finance-manual-writes.service.js";
+import { importHistoricalDocuments, importSiiDocuments } from "../services/finance-document-imports.service.js";
+import { documentImportRestrictions } from "../services/finance-document-periods.service.js";

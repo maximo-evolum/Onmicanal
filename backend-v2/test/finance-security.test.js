@@ -16,6 +16,9 @@ test("Finance OS separa consulta, preparación y aprobación financiera", () => 
   assert.equal(canPerformFinanceAction("SELLER", FINANCE_ACTIONS.REGISTER), false);
   assert.equal(canPerformFinanceAction("ADMIN", FINANCE_ACTIONS.IMPORT_HISTORY), true);
   assert.equal(canPerformFinanceAction("SUPER_ADMIN", FINANCE_ACTIONS.CLOSE_PERIOD), true);
+  assert.equal(canPerformFinanceAction("ADMIN", FINANCE_ACTIONS.REOPEN_PERIOD), true);
+  assert.equal(canPerformFinanceAction("AGENT", FINANCE_ACTIONS.REOPEN_PERIOD), false);
+  assert.equal(canPerformFinanceAction("VIEWER", FINANCE_ACTIONS.REOPEN_PERIOD), false);
 });
 
 test("la matriz de capacidades no entrega aprobación a roles operativos", () => {

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { normalizeBankStatementRows, withBankStatementNet, summarizeBankStatementRows } from "./finance-bank-statements.service.js";
+import { FinanceOperationError } from "./finance-integrity.service.js";
 
 function cleanText(value, fallback = "") {
   const normalized = String(value ?? "").trim();
@@ -18,22 +19,28 @@ function sourceTransactions(payload) {
 }
 
 function safeNumber(value) {
-  const number = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(number) ? Math.max(0, number) : 0;
+  const raw = String(value ?? "0").trim() || "0";
+  const number = Number(raw);
+  if (!/^\d+(\.\d+)?$/.test(raw) || !Number.isSafeInteger(number) || number < 0) throw new FinanceOperationError(422, "Flöid entregó un monto inválido o ambiguo en CLP. No se importó el lote.");
+  return number;
 }
 
 // Flöid documenta `in` y `out` para las transacciones. Las transformamos al
 // formato común de cartolas, manteniendo el id externo solo como referencia
 // de deduplicación y sin conservar credenciales bancarias.
 export function normalizeFloidTransactions(payload, account = {}) {
+  const status = cleanText(payload?.status || payload?.code || payload?.data?.status, "SUCCESSFUL").toUpperCase();
+  if (!["SUCCESSFUL", "SUCCESS", "OK", "COMPLETED"].includes(status)) throw new FinanceOperationError(422, "La respuesta bancaria todavía no está completada correctamente.");
   const transactions = sourceTransactions(payload);
   const rows = transactions.map((transaction) => {
     const item = transaction && typeof transaction === "object" ? transaction : {};
     const incoming = safeNumber(item.in ?? item.credit ?? item.creditAmount);
     const outgoing = safeNumber(item.out ?? item.debit ?? item.debitAmount);
+    if (incoming && outgoing) throw new FinanceOperationError(422, "Un movimiento bancario contiene abono y cargo simultáneos; requiere revisión del origen.");
+    if (item.currency && String(item.currency).toUpperCase() !== "CLP") throw new FinanceOperationError(422, "La importación bancaria actual admite CLP; no se convirtió una moneda extranjera.");
     return {
       Fecha: item.date || item.transactionDate || item.createdAt || "",
-      Descripción: item.description || item.detail || item.name || "Movimiento bancario",
+      Descripción: item.description || item.detail || item.name || "",
       Abono: incoming || "",
       Cargo: outgoing || "",
       Saldo: item.balance || item.availableBalance || "",

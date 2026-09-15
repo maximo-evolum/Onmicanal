@@ -5,6 +5,8 @@ import { normalizeMetadata } from "../lib/metadata.js";
 import { createTenantNotification } from "../lib/notifications.js";
 import { withDistributedLock } from "../lib/redis.js";
 import { runFinancePostIngestionAnalysis } from "./finance-automation.service.js";
+import { collectNuboxSales, importNuboxDocuments, externalDocumentDate } from "./finance-external-imports.service.js";
+import { FinanceOperationError } from "./finance-integrity.service.js";
 
 const NUBOX_CHANNEL = "finance_nubox";
 
@@ -191,20 +193,12 @@ export async function issueNuboxSales({ tenantId, documents, idempotenceId }) {
   })).payload;
 }
 
-function salesFromPayload(payload) {
-  if (Array.isArray(payload)) return payload;
-  for (const key of ["content", "items", "data", "results"]) {
-    if (Array.isArray(payload?.[key])) return payload[key];
-  }
-  return [];
-}
-
 function invoiceFromSale(sale, period) {
   const source = sale && typeof sale === "object" ? sale : {};
   const client = source.client && typeof source.client === "object" ? source.client : {};
   const type = source.type && typeof source.type === "object" ? source.type : {};
   const emission = source.emissionStatus && typeof source.emissionStatus === "object" ? source.emissionStatus : {};
-  const balance = Math.max(0, Number.isFinite(Number(source.balance)) ? Number(source.balance) : Number(source.totalAmount) || 0);
+  const balance = Number(source.balance ?? source.totalAmount);
   const emitted = String(emission.name || "").toLowerCase();
   const status = source.dataCl?.annulled || emitted.includes("anulado") ? "ANNULLED" : emitted.includes("rechaz") ? "REJECTED" : balance === 0 ? "PAID" : "OPEN";
   const customerName = text(client.tradeName, "Cliente sin nombre");
@@ -217,39 +211,21 @@ function invoiceFromSale(sale, period) {
       source: "nubox", documentSide: "CUSTOMER", direction: "SALE", nuboxDocumentId: text(source.id), invoiceNumber,
       documentTypeCode: text(type.legalCode), documentTypeName: text(type.name, "Documento tributario"),
       customerName, customerRut: text(client.identification?.value), rut: text(client.identification?.value), clientRut: text(client.identification?.value),
-      customerActivity: text(client.mainActivity), amount: Number(source.totalAmount) || 0, balance,
+      customerActivity: text(client.mainActivity), amount: Number(source.totalAmount ?? NaN), balance,
       netAmount: Number(source.totalNetAmount) || 0, vatAmount: Number(source.totalTaxVatAmount) || 0,
-      exemptAmount: Number(source.totalExemptAmount) || 0, issueDate: text(source.emissionDate), dueDate: text(source.dueDate),
+      exemptAmount: Number(source.totalExemptAmount) || 0, issueDate: externalDocumentDate(source.emissionDate), dueDate: source.dueDate ? externalDocumentDate(source.dueDate) : "",
       emissionStatus: text(emission.name), emissionStatusDescription: text(emission.description), period, syncedAt: new Date().toISOString()
     }
   };
 }
 
 async function importNuboxSales({ tenantId, config, period, limit }) {
-  const result = await nuboxRequest(config, `/v1/sales?period=${encodeURIComponent(period)}&page=1&size=${limit}`);
-  const sales = salesFromPayload(result.payload).slice(0, limit);
-  const existing = await prisma.industryRecord.findMany({ where: { tenantId, recordType: "finance_invoice" }, select: { id: true, data: true } });
-  const existingByExternalId = new Map(existing.map((record) => [text(record.data?.nuboxDocumentId), record]).filter(([id]) => Boolean(id)));
-  let created = 0;
-  let updated = 0;
-  let ignored = 0;
-
-  for (const sale of sales) {
-    const invoice = invoiceFromSale(sale, period);
-    if (!invoice.externalDocumentId) { ignored += 1; continue; }
-    const current = existingByExternalId.get(invoice.externalDocumentId);
-    if (current) {
-      await prisma.industryRecord.update({ where: { id: current.id }, data: { title: invoice.title, status: invoice.status, data: { ...current.data, ...invoice.data } } });
-      updated += 1;
-    } else {
-      await prisma.industryRecord.create({ data: { tenantId, recordType: "finance_invoice", title: invoice.title, status: invoice.status, data: invoice.data } });
-      created += 1;
-    }
-  }
-  return { received: sales.length, total: result.total || sales.length, created, updated, ignored };
+  const sales = await collectNuboxSales((path) => nuboxRequest(config, path), { period, limit });
+  return importNuboxDocuments(prisma, { tenantId, configId: config.id, period, invoices: sales.map((sale) => invoiceFromSale(sale, period)) });
 }
 
 function retryable(error) {
+  if (error instanceof FinanceOperationError && error.status < 500) return false;
   const message = String(error?.message || "").toLocaleLowerCase("es");
   return !/credencial|x-api-key|authorization|url base|url https|faltan/.test(message);
 }
@@ -279,10 +255,17 @@ export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), l
     await updateStatus(config, { lastSyncStatus: "RUNNING", lastSyncStartedAt: new Date().toISOString(), lastSyncSource: source, lastSyncAttempts: 0 });
     let lastError = null;
     const attempts = Math.max(1, Math.min(3, Number(maxAttempts) || 3));
+    let performedAttempts = 0;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      performedAttempts = attempt;
+      let committed = null;
       try {
         const summary = await importNuboxSales({ tenantId, config, period, limit: Math.max(1, Math.min(100, Number(limit) || 100)) });
-        const analysis = await runFinancePostIngestionAnalysis({ tenantId, source: `nubox:${source}` });
+        committed = summary;
+        // Analysis is post-commit. Its failure must not re-import a committed
+        // batch or falsely tell the user that no documents were changed.
+        const analysis = await runFinancePostIngestionAnalysis({ tenantId, source: `nubox:${source}` })
+          .catch(() => ({ analyzed: false, requiresReview: true, reason: "ANALYSIS_FAILED_AFTER_IMPORT" }));
         const completedAt = new Date().toISOString();
         await updateStatus(config, {
           lastSyncedAt: completedAt, lastSyncCompletedAt: completedAt, lastSyncStatus: "OK", lastSyncAttempts: attempt,
@@ -294,13 +277,14 @@ export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), l
           await createTenantNotification({
             tenantId,
             title: "Nubox sincronizó documentos financieros",
-            body: `${summary.created} nuevos y ${summary.updated} actualizados. El análisis quedó preparado para revisión humana.`,
+            body: `${summary.created} nuevos y ${summary.updated} actualizados. ${analysis.analyzed ? "El análisis quedó preparado para revisión humana." : "El análisis automático quedó pendiente; los documentos sí se guardaron."}`,
             severity: "info", targetUrl: "/finance?tab=facturas",
             metadata: { notificationType: "finance", screen: "finance", provider: "nubox", source }
           }).catch(() => null);
         }
-        return { ok: true, period, attempts: attempt, coordinated, ...summary, analysis };
+        return { ok: true, period, attempts: attempt, coordinated, ...summary, analysis, ...(!analysis.analyzed ? { warning: "Los documentos se guardaron, pero el análisis automático quedó pendiente." } : analysis.requiresReview ? { warning: "Los documentos se guardaron. El análisis tiene pendientes por cierre de período, calidad de fechas o actualización del resumen; revisa su detalle." } : {}) };
       } catch (error) {
+        if (committed) return { ok: true, period, attempts: attempt, coordinated, ...committed, warning: "Los documentos se guardaron; no se pudo completar la actualización del estado de la conexión.", analysis: { analyzed: false, requiresReview: true } };
         lastError = error instanceof Error ? error : new Error("No se pudo sincronizar Nubox.");
         if (attempt < attempts && retryable(lastError)) await pause(attempt * 1_000);
         else break;
@@ -308,8 +292,8 @@ export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), l
     }
 
     const failedAt = new Date().toISOString();
-    await updateStatus(config, { lastSyncStatus: "ERROR", lastSyncAttempts: attempts, lastSyncError: lastError?.message || "Error desconocido", lastSyncCompletedAt: failedAt, lastSyncPeriod: period });
-    await audit(tenantId, "NUBOX_SALES_SYNC_FAILED", config.id, { source, period, attempts, error: lastError?.message || "Error desconocido" });
+    await updateStatus(config, { lastSyncStatus: "ERROR", lastSyncAttempts: performedAttempts, lastSyncError: lastError?.message || "Error desconocido", lastSyncCompletedAt: failedAt, lastSyncPeriod: period }).catch(() => null);
+    await audit(tenantId, "NUBOX_SALES_SYNC_FAILED", config.id, { source, period, attempts: performedAttempts, error: lastError?.message || "Error desconocido" });
     await createTenantNotification({
       tenantId, title: "No se pudo sincronizar Nubox", body: "La información existente no fue modificada. Revisa la conexión e inténtalo nuevamente.",
       severity: "warning", targetUrl: "/connections", metadata: { notificationType: "finance", screen: "connections", provider: "nubox", source }
@@ -367,7 +351,7 @@ export async function syncAllActiveNuboxTenants({ period = currentPeriod(), limi
 
 export async function financeSyncHistory({ tenantId, limit = 30 } = {}) {
   const entries = await prisma.tenantAuditLog.findMany({
-    where: { tenantId, action: { in: ["NUBOX_SALES_SYNCED", "NUBOX_SALES_SYNC_FAILED", "FINANCE_POST_INGESTION_ANALYZED"] } },
+    where: { tenantId, action: { in: ["NUBOX_SALES_SYNCED", "NUBOX_SALES_SYNC_FAILED", "FINANCE_POST_INGESTION_ANALYZED", "FINANCE_NUBOX_DOCUMENTS_IMPORTED"] } },
     orderBy: { createdAt: "desc" }, take: Math.min(100, Math.max(1, Number(limit) || 30))
   });
   return { generatedAt: new Date().toISOString(), entries };

@@ -1,6 +1,8 @@
 import { findAllFinanceRecords } from "./finance-integrity.service.js";
-import { filterFinanceContext } from "./finance-context.service.js";
+import { filterFinanceContext, parseFinanceContext } from "./finance-context.service.js";
+import { overviewReconciliationMetrics, overviewCollectionSchedule } from "./finance-overview-metrics.service.js";
 import { prisma } from "../lib/db.js";
+import { financeDocumentState, summarizeFinanceDocuments, financeDocumentSide } from "./finance-document-values.service.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -62,7 +64,9 @@ export function financeReconciliationBlockers(invoice, movement) {
   if (issue && paid && paid.toISOString().slice(0, 10) < issue.toISOString().slice(0, 10)) blockers.push("El abono es anterior a la emisión del documento. Debe revisarse como anticipo, no como pago de esta factura.");
   if (!["CREDIT", "ABONO"].includes(String(bank.direction || bank.movementType || "").toUpperCase())) blockers.push("No se ha identificado un abono bancario externo.");
   if (["ANNULLED", "CANCELLED", "REJECTED", "ANULADA"].includes(String(invoice.status || doc.status || "").toUpperCase())) blockers.push("El documento está anulado o rechazado.");
-  if (invoice.recordType === "finance_payable" || [doc.documentSide, doc.direction].some((side) => ["SUPPLIER", "PURCHASE"].includes(String(side || "").toUpperCase()))) blockers.push("Un documento de proveedor no es una cuenta por cobrar a un cliente.");
+  if (financeDocumentSide(invoice) === "SUPPLIER") blockers.push("Un documento de proveedor no es una cuenta por cobrar a un cliente.");
+  const state = financeDocumentState(invoice);
+  if (!state.included) blockers.push("El documento requiere revisión o está fuera de la cartera operativa.", ...state.qualityIssues);
   if ([doc, bank].some((data) => data.demoOnly === true || Boolean(data.trainingRun) || data.isDemo === true || data.isSimulated === true || ["demo", "seed", "simulation"].includes(String(data.source || "").toLowerCase()))) blockers.push("Los datos de demostración no se concilian con documentos operativos.");
   const rut = normalizedRut(doc.clientRut || doc.customerRut || doc.rut || doc.partyRut);
   if (rut && bank.rut && rut !== normalizedRut(bank.rut)) blockers.push("El RUT del pagador es distinto del cliente; requiere identificar el pago por cuenta de terceros.");
@@ -70,24 +74,7 @@ export function financeReconciliationBlockers(invoice, movement) {
 }
 
 export function getInvoiceFinancialState(invoice, now = new Date()) {
-  const data = dataOf(invoice);
-  const originalAmount = Math.max(0, numberOf(data.amount ?? data.total ?? data.value));
-  // El saldo operativo considera notas de crédito y débito ya vinculadas. No
-  // cambia el documento tributario original; solo evita cobrar un saldo que ya
-  // fue ajustado dentro del expediente financiero.
-  const creditNotes = Math.max(0, numberOf(data.creditNotesTotal ?? data.creditNoteAmount));
-  const debitNotes = Math.max(0, numberOf(data.debitNotesTotal ?? data.debitNoteAmount));
-  const amount = Math.max(0, originalAmount - creditNotes + debitNotes);
-  const storedBalance = data.balance === undefined || data.balance === null || data.balance === ""
-    ? amount
-    : Math.max(0, numberOf(data.balance));
-  const dueDate = dateOf(data.dueDate);
-  const rawStatus = String(invoice?.status || data.status || "OPEN").toUpperCase();
-  const status = rawStatus === "PAID" || storedBalance === 0
-    ? "PAID"
-    : (dueDate && dueDate < now ? "OVERDUE" : rawStatus === "PARTIAL" ? "PARTIAL" : "OPEN");
-
-  return { amount, originalAmount, creditNotes, debitNotes, balance: storedBalance, dueDate, status };
+  return financeDocumentState(invoice, now);
 }
 
 export function financeAgingSegment(dueDate, now = new Date()) {
@@ -205,16 +192,19 @@ function agingBucket(dueDate, now = new Date()) {
   return ({ POR_VENCER: "No vencida", "1_7": "1-7 dias", "8_30": "8-30 dias", "31_60": "31-60 dias", "61_90": "61-90 dias", MAS_90: "+90 dias" })[code] || "No vencida";
 }
 
-export async function getFinanceOverview({ tenantId, now = new Date(), context = null }) {
-  const types = ["finance_invoice", "bank_statement", "bank_movement", "finance_reconciliation", "finance_exception", "finance_collection_case"];
-  const sourceRecords = await findAllFinanceRecords(prisma, {
+export async function getFinanceOverview({ tenantId, now = new Date(), context = null, db = prisma }) {
+  context = parseFinanceContext(context || {});
+  const types = ["finance_invoice", "finance_payable", "finance_invoice_receipt", "bank_statement", "bank_movement", "finance_reconciliation", "finance_exception", "finance_collection_case"];
+  const sourceRecords = await findAllFinanceRecords(db, {
     where: { tenantId, recordType: { in: types } },
     orderBy: { updatedAt: "desc" },
     take: 1000
   });
-  const records = filterFinanceContext(sourceRecords, context);
+  const normalized = sourceRecords.map((r) => r.data?.sourceBatchId && !r.data.importBatchId ? { ...r, data: { ...r.data, importBatchId: r.data.sourceBatchId } } : r);
+  const records = filterFinanceContext(normalized, context);
   const grouped = Object.fromEntries(types.map((type) => [type, records.filter((record) => record.recordType === type)]));
-  const invoices = grouped.finance_invoice;
+  const documents = summarizeFinanceDocuments(records, now);
+  const invoices = documents.entries.filter((e) => e.side === "CUSTOMER" && e.state.included).map((e) => e.record);
   const movements = grouped.bank_movement;
   const reconciliations = grouped.finance_reconciliation;
   const exceptions = grouped.finance_exception;
@@ -238,13 +228,13 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
       if (state.status === "OVERDUE") overdue += state.balance;
     }
     const data = dataOf(invoice);
-    const issuedAt = dateOf(data.issueDate || invoice.createdAt);
+    const issuedAt = dateOf(data.issueDate);
     const paidAt = dateOf(data.paidAt);
-    if (state.status === "PAID" && issuedAt && paidAt) dsoValues.push(Math.max(0, (paidAt.getTime() - issuedAt.getTime()) / DAY_MS));
+    if (state.status === "PAID" && issuedAt && paidAt && paidAt >= issuedAt) dsoValues.push((paidAt.getTime() - issuedAt.getTime()) / DAY_MS);
   }
 
-  const unreconciled = movements.filter((record) => String(record.status || dataOf(record).status || "UNRECONCILED").toUpperCase() !== "MATCHED");
-  const approvedReconciliations = reconciliations.filter((record) => String(record.status).toUpperCase() === "APPROVED").length;
+  const reconciliationMetrics = overviewReconciliationMetrics(movements, normalized.filter((r) => r.recordType === "finance_reconciliation"), normalized);
+  const approvedReconciliations = reconciliationMetrics.matchedMovements;
   const openExceptions = exceptions.filter((record) => !["RESOLVED", "CLOSED"].includes(String(record.status).toUpperCase())).length;
   const criticalExceptions = exceptions.filter((record) => {
     const priority = String(dataOf(record).priority || "").toUpperCase();
@@ -252,15 +242,14 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
   }).length;
   const openCollections = collectionCases.filter((record) => !["PAID", "CLOSED"].includes(String(record.status).toUpperCase())).length;
   const promiseCollections = collectionCases.filter((record) => Boolean(dataOf(record).promiseDate || dataOf(record).promiseDueDate || dataOf(record).promiseAmount)).length;
-  const expectedNext30 = invoices.reduce((total, invoice) => {
-    const state = getInvoiceFinancialState(invoice, now);
-    if (state.status === "PAID" || !state.dueDate) return total;
-    const days = (state.dueDate.getTime() - now.getTime()) / DAY_MS;
-    return days >= 0 && days <= 30 ? total + state.balance : total;
-  }, 0);
+  const schedule = overviewCollectionSchedule(invoices, now, getInvoiceFinancialState);
+  const expectedNext30 = schedule.next30Days;
 
   return {
     generatedAt: now.toISOString(),
+    context, schedule,
+    documentQuality: summarizeFinanceDocuments(records.filter((r) => r.recordType === "finance_invoice" && financeDocumentSide(r) === "CUSTOMER"), now).excluded,
+    scopeNote: "Facturas de clientes emitidas en el período seleccionado, con saldos actuales. Monto ajustado = total original − notas de crédito + notas de débito vinculadas. Cobrado = monto ajustado − saldo; no equivale a cobros bancarios del mes. Se excluyen anuladas, notas independientes, proveedores y datos inconsistentes. La cuenta bancaria no filtra las facturas. No acredita cobertura ni reconstruye saldos históricos.",
     // Contract used by the Finance OS workspace. Keep the legacy kpis below
     // for backwards-compatible API consumers while exposing named domains.
     invoices: {
@@ -275,14 +264,10 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
     collection: {
       rate: issued ? Number(((paid / issued) * 100).toFixed(1)) : 0,
       dsoDays: dsoValues.length ? Math.round(dsoValues.reduce((sum, value) => sum + value, 0) / dsoValues.length) : 0,
+      dsoSampleSize: dsoValues.length,
       expectedNext30Days: expectedNext30
     },
-    reconciliation: {
-      totalMovements: movements.length,
-      matchedMovements: movements.length - unreconciled.length,
-      pendingMovements: unreconciled.length,
-      rate: movements.length ? Number((((movements.length - unreconciled.length) / movements.length) * 100).toFixed(1)) : 0
-    },
+    reconciliation: reconciliationMetrics,
     exceptions: { open: openExceptions, critical: criticalExceptions },
     collections: { open: openCollections, promises: promiseCollections },
     recent: { invoices: invoices.slice(0, 8), exceptions: exceptions.slice(0, 8), collectionCases: collectionCases.slice(0, 8) },
@@ -300,7 +285,7 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
       overdueRate: pending ? Number(((overdue / pending) * 100).toFixed(1)) : 0,
       dso: dsoValues.length ? Math.round(dsoValues.reduce((sum, value) => sum + value, 0) / dsoValues.length) : null,
       expectedNext30,
-      unreconciledMovements: unreconciled.length,
+      unreconciledMovements: reconciliationMetrics.pendingMovements,
       approvedReconciliations,
       openExceptions,
       openCollections
@@ -319,15 +304,16 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
   };
 }
 
-export async function getFinanceReconciliationSuggestions({ tenantId, movementId = null, limit = 30, context = null }) {
+export async function getFinanceReconciliationSuggestions({ tenantId, movementId = null, limit = 30, context = null, db = prisma }) {
   const [invoices, movements] = await Promise.all([
-    findAllFinanceRecords(prisma, { where: { tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" }, take: 500 }),
-    findAllFinanceRecords(prisma, { where: { tenantId, recordType: "bank_movement", ...(movementId ? { id: movementId } : {}) }, orderBy: { updatedAt: "desc" }, take: 500 })
+    findAllFinanceRecords(db, { where: { tenantId, recordType: "finance_invoice" }, orderBy: { updatedAt: "desc" } }),
+    findAllFinanceRecords(db, { where: { tenantId, recordType: "bank_movement", ...(movementId ? { id: movementId } : {}) }, orderBy: { updatedAt: "desc" } })
   ]);
   const eligibleRecords = filterFinanceContext([...invoices, ...movements], context, { documentMode: "outstanding" });
   const eligibleIds = new Set(eligibleRecords.map((record) => record.id));
   const openInvoices = invoices.filter((invoice) => eligibleIds.has(invoice.id) && getInvoiceFinancialState(invoice).status !== "PAID");
-  const maxResults = Math.max(1, Math.min(Number(limit) || 30, 200));
+  // null is reserved for internal full-universe analysis, not a UI page size.
+  const maxResults = limit === null ? Infinity : Math.max(1, Math.min(Number(limit) || 30, 200));
   const serializable = (record) => ({ id: record.id, title: record.title, data: dataOf(record), status: record.status });
   const results = [];
 
@@ -376,6 +362,7 @@ export async function getFinanceReconciliationSuggestions({ tenantId, movementId
         confidence: grouped.confidence,
         difference: Math.abs(grouped.total - movementAmount),
         partial: false,
+        overpayment: false,
         grouped: true,
         invoiceIds: grouped.group.map((candidate) => candidate.invoice.id),
         invoices: grouped.group.map((candidate) => candidate.invoice),

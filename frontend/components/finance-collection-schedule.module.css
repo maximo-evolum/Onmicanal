@@ -1,0 +1,9 @@
+.schedule { display:grid; gap:12px; color:inherit; min-width:0; }
+.schedule p { font-size:.85rem; line-height:1.5; margin:0; }
+.bars { height:120px; display:flex; gap:12px; align-items:end; }
+.bars > div { flex:1; min-width:0; height:100%; display:flex; flex-direction:column; justify-content:end; align-items:center; }
+.bars span { width:100%; background:linear-gradient(180deg,#6552a8,#0891b2); border-radius:6px 6px 0 0; }
+.bars small { flex-shrink:0; margin-top:5px; font-size:.65rem; }
+.table { overflow-x:auto; }
+.table table { width:100%; border-collapse:collapse; font-size:.75rem; }
+.table th,.table td { text-align:left; padding:8px; border-bottom:1px solid var(--border,#64748b); white-space:nowrap; }

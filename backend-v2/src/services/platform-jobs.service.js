@@ -7,6 +7,7 @@ import { getRedisClient } from "../lib/redis.js";
 import { runtimeAlertSnapshot } from "../lib/runtime-metrics.js";
 import { publishObservabilityAlerts } from "./observability-alerts.service.js";
 import { syncAllActiveNuboxTenants } from "./finance-sync.service.js";
+import { nuboxScheduledOutcome } from "./finance-external-imports.service.js";
 import { verifyPendingConnections } from "../routes/connections.routes.js";
 
 function boundedNumber(value, fallback, minimum, maximum) {
@@ -22,7 +23,7 @@ function runKeyFor(jobKey, intervalMs, now = new Date()) {
   return `${jobKey}:${Math.floor(now.getTime() / intervalMs)}`;
 }
 
-async function executeRecordedJob({ jobKey, intervalMs, task, now = new Date() }) {
+async function executeRecordedJob({ jobKey, intervalMs, task, outcome = () => ({ status: "COMPLETED", error: null }), now = new Date() }) {
   const runKey = runKeyFor(jobKey, intervalMs, now);
   // Las tareas se revisan cada minuto, pero cada ventana solo debe ejecutarse
   // una vez. Esta consulta evita registrar como error una colision esperada.
@@ -39,8 +40,9 @@ async function executeRecordedJob({ jobKey, intervalMs, task, now = new Date() }
 
   try {
     const details = await task();
-    await prisma.scheduledJobRun.update({ where: { id: run.id }, data: { status: "COMPLETED", finishedAt: new Date(), details } });
-    return { status: "COMPLETED", jobKey, runKey, details };
+    const completion = outcome(details);
+    await prisma.scheduledJobRun.update({ where: { id: run.id }, data: { ...completion, finishedAt: new Date(), details } });
+    return { ...completion, jobKey, runKey, details };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Error desconocido";
     await prisma.scheduledJobRun.update({ where: { id: run.id }, data: { status: "FAILED", finishedAt: new Date(), error: message } }).catch(() => null);
@@ -112,6 +114,7 @@ export async function runPlatformJobs({ now = new Date() } = {}) {
     financeSyncEnabled
       ? executeRecordedJob({
         jobKey: "finance-nubox-sync",
+        outcome: nuboxScheduledOutcome,
         intervalMs: financeSyncIntervalMs,
         now,
         task: () => syncAllActiveNuboxTenants({ limit: Math.max(1, Math.min(100, Number(process.env.FINANCE_NUBOX_SYNC_LIMIT) || 100)) })

@@ -6,6 +6,7 @@ export const FINANCE_ACTIONS = Object.freeze({
   REGISTER: "REGISTER",
   APPROVE_RECONCILIATION: "APPROVE_RECONCILIATION",
   CLOSE_PERIOD: "CLOSE_PERIOD",
+  REOPEN_PERIOD: "REOPEN_PERIOD",
   IMPORT_HISTORY: "IMPORT_HISTORY",
   CONFIGURE: "CONFIGURE"
 });
@@ -30,12 +31,14 @@ const FINANCE_RECORD_ACTIONS = Object.freeze({
   finance_sii_import_batch: FINANCE_ACTIONS.IMPORT_HISTORY,
   finance_reconciliation: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
   finance_monthly_close: FINANCE_ACTIONS.CLOSE_PERIOD,
+  finance_period_reopening: FINANCE_ACTIONS.REOPEN_PERIOD,
   finance_budget: FINANCE_ACTIONS.CONFIGURE,
   finance_open_banking_consent: FINANCE_ACTIONS.CONFIGURE,
   // Estas dos entidades representan trabajo preparatorio. Nunca ejecutan un
   // cobro, pago, conciliación o comunicación externa por sí mismas.
   finance_exception: FINANCE_ACTIONS.PREPARE,
-  finance_collection_case: FINANCE_ACTIONS.PREPARE
+  finance_collection_case: FINANCE_ACTIONS.PREPARE,
+  finance_reminder_batch: FINANCE_ACTIONS.PREPARE
 });
 
 function normalizeFinanceRecordType(recordType) {
@@ -65,7 +68,7 @@ export function canPerformFinanceAction(role, action) {
   const normalizedAction = String(action || "").toUpperCase();
   if (normalizedAction === FINANCE_ACTIONS.VIEW) return new Set([...STAFF, "VIEWER"]).has(normalizedRole);
   if (normalizedAction === FINANCE_ACTIONS.PREPARE) return STAFF.has(normalizedRole);
-  if ([FINANCE_ACTIONS.REGISTER, FINANCE_ACTIONS.APPROVE_RECONCILIATION, FINANCE_ACTIONS.CLOSE_PERIOD, FINANCE_ACTIONS.IMPORT_HISTORY, FINANCE_ACTIONS.CONFIGURE].includes(normalizedAction)) return MANAGERS.has(normalizedRole);
+  if ([FINANCE_ACTIONS.REGISTER, FINANCE_ACTIONS.APPROVE_RECONCILIATION, FINANCE_ACTIONS.CLOSE_PERIOD, FINANCE_ACTIONS.REOPEN_PERIOD, FINANCE_ACTIONS.IMPORT_HISTORY, FINANCE_ACTIONS.CONFIGURE].includes(normalizedAction)) return MANAGERS.has(normalizedRole);
   return false;
 }
 

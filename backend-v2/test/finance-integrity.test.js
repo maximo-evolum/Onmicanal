@@ -1,6 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { FinanceOperationError, withFinanceWrite, findAllFinanceRecords } from "../src/services/finance-integrity.service.js";
+
+test("clientes y resumen de proveedores usan lectura completa, no solo 1000 documentos", () => {
+  const source = readFileSync(new URL("../src/routes/finance.routes.js", import.meta.url), "utf8");
+  for (const route of ["/finance/customers", "/finance/payables/summary"]) {
+    const block = source.split(`financeRouter.get("${route}"`)[1].split("financeRouter.")[0];
+    assert.match(block, /await findAllFinanceRecords\(prisma,/);
+    assert.doesNotMatch(block, /await prisma\.industryRecord\.findMany/);
+  }
+});
+
+for (const count of [500, 1000, 1001, 1500]) {
+  test(`lectura de ${count} documentos incluye saldo final y conserva alcance de empresa`, async () => {
+    const records = Array.from({ length: count }, (_, index) => ({ id: String(index), data: { balance: index === count - 1 ? 9000 : 1 } }));
+    const db = { industryRecord: { findMany: async (query) => {
+      assert.deepEqual(query.where, { tenantId: "empresa-a", recordType: "finance_payable" });
+      const offset = query.cursor ? Number(query.cursor.id) + 1 : 0;
+      return records.slice(offset, offset + query.take);
+    } } };
+    const result = await findAllFinanceRecords(db, { where: { tenantId: "empresa-a", recordType: "finance_payable" }, orderBy: { updatedAt: "desc" } });
+    assert.equal(result.length, count);
+    assert.equal(result.reduce((sum, item) => sum + item.data.balance, 0), count - 1 + 9000);
+  });
+}
 
 test("las consultas de integridad incluyen los registros posteriores a la primera página", async () => {
   const data = Array.from({ length: 1248 }, (_, id) => ({ id: String(id) }));

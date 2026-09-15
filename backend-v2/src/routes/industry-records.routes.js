@@ -98,12 +98,16 @@ const RECORD_MODULES = Object.freeze({
   bank_statement: MODULES.FINANCE_BANK_SYNC,
   bank_movement: MODULES.FINANCE_BANK_SYNC,
   finance_reconciliation: MODULES.FINANCE_RECONCILIATION,
+  finance_monthly_close: MODULES.FINANCE_ANALYTICS,
+  finance_period_reopening: MODULES.FINANCE_ANALYTICS,
   finance_exception: MODULES.FINANCE_EXCEPTIONS,
   finance_collection_case: MODULES.FINANCE_COLLECTIONS,
+  finance_reminder_batch: MODULES.FINANCE_COLLECTIONS,
   finance_invoice_receipt: MODULES.FINANCE_INVOICES,
   finance_payable: MODULES.FINANCE_PAYABLES,
   finance_payable_payment: MODULES.FINANCE_PAYABLES,
-  finance_migration_batch: MODULES.FINANCE_MIGRATION
+  finance_migration_batch: MODULES.FINANCE_MIGRATION,
+  finance_opening_balance: MODULES.FINANCE_MIGRATION
 });
 
 // Estos expedientes tienen un flujo estricto en Broker OS. Evitamos que una
@@ -136,9 +140,21 @@ async function assertRecordModule(req, recordType) {
   return ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant });
 }
 
-function assertFinanceRecordMutation(req, res, recordType) {
-  if (["finance_reconciliation", "finance_invoice_receipt"].includes(recordType)) {
-    res.status(409).json({ error: "Este registro conserva saldos y trazabilidad. Utiliza las acciones financieras de registrar cobro, conciliar o revertir; no se modifica directamente." });
+function assertFinanceRecordMutation(req, res, recordType, existing) {
+  if (recordType === "bank_movement" && req.body?.assignedToId !== undefined && (req.body.assignedToId || null) !== (existing?.assignedToId || null)) {
+    res.status(409).json({ error: "Asigna el responsable desde el detalle del movimiento, con motivo e historial." });
+    return false;
+  }
+  if (["finance_exception", "finance_collection_case", "finance_reminder_batch"].includes(recordType)) {
+    res.status(409).json({ error: "Utiliza las acciones de Excepciones o Cobranza para conservar estados, períodos y trazabilidad. No se editan ni eliminan mediante la ficha genérica." });
+    return false;
+  }
+  if (recordType === "bank_statement" || (["bank_movement", "finance_exception"].includes(recordType) && (existing?.data?.importBatchId || req.body?.data?.importBatchId))) {
+    res.status(409).json({ error: "Los registros de una cartola se gestionan desde Cartolas y movimientos para proteger los períodos y conservar el archivo original." });
+    return false;
+  }
+  if (["finance_reconciliation", "finance_invoice_receipt", "finance_payable_payment", "finance_opening_balance", "finance_migration_batch", "finance_sii_import_batch", "finance_monthly_close", "finance_period_reopening"].includes(recordType)) {
+    res.status(409).json({ error: "Este registro conserva saldos y trazabilidad. Utiliza la acción correspondiente en Finanzas: registrar cobro, conciliar, revertir, cerrar o reabrir; no se modifica directamente." });
     return false;
   }
   const action = financeActionForRecordMutation(recordType);
@@ -395,6 +411,7 @@ industryRecordsRouter.delete("/industry-records/brokers/:userId", requireRole(RO
 
 industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
+    assertFinancialDraftScope(req.body?.expectedScope, req.tenantId, req.user?.id);
     const recordType = normalizeRecordType(req.body?.recordType);
     if (!assertFinanceRecordMutation(req, res, recordType)) return;
     if (!(await assertRecordModule(req, recordType))) {
@@ -411,6 +428,10 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
     }
 
     let normalizedData = normalizeMetadata(req.body?.data, {});
+    if (req.body?.idempotencyKey && isFinanceDocumentRecord(recordType)) {
+      financialDate(normalizedData.issueDate);
+      financialDate(normalizedData.dueDate);
+    }
     if (isFinanceDocumentRecord(recordType)) {
       normalizedData = normalizeFinanceDocumentData(normalizedData, recordType);
       const financeValidation = validateFinanceDocumentData(normalizedData);
@@ -435,22 +456,26 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
       return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });
     }
 
-    const record = await prisma.industryRecord.create({
+    const record = await writeManualFinanceRecord(prisma, { tenantId: req.tenantId, userId: req.user?.id, recordType: recordType, existing: undefined, nextData: normalizedData, nextStatus: cleanText(req.body?.status, "ACTIVE").toUpperCase(), operation: "CREATE",
+      idempotencyKey: req.body?.idempotencyKey, creationContext: { title, assignedToId },
+      write: (tx, persistedData) => tx.industryRecord.create({
       data: {
         tenantId: req.tenantId,
         recordType,
         title,
         status: cleanText(req.body?.status, "ACTIVE").toUpperCase(),
         assignedToId,
-        data: normalizedData,
+        data: persistedData || normalizedData,
         schemaVersion: evaluation.schemaVersion
       },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
+    }),
+      audit: { action: "INDUSTRY_RECORD_CREATED", metadata: { recordType: recordType } }
     });
-    await recordAuditLog(req, "INDUSTRY_RECORD_CREATED", recordType, record.id, { recordType, status: record.status });
+    if (!MANUAL_FINANCE_RECORDS.has(recordType)) await recordAuditLog(req, "INDUSTRY_RECORD_CREATED", recordType, record.id, { recordType, status: record.status });
     // Los workflows por evento trabajan en segundo plano lógico: si uno falla,
     // queda en su cola de errores y no se pierde la ficha recién creada.
-    const workflowDispatch = await runWorkflowsForEvent({
+    const workflowDispatch = record.manualReplayed ? { event: "record.created", matched: 0, replayed: true } : await runWorkflowsForEvent({
       tenantId: req.tenantId,
       event: "record.created",
       input: { recordType, status: record.status },
@@ -459,17 +484,18 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
     // Facturas y movimientos recién cargados quedan disponibles al instante.
     // El análisis se ejecuta aparte para no retrasar ni bloquear el guardado;
     // solo prepara sugerencias o excepciones según la política del tenant.
-    if (["finance_invoice", "bank_movement", "bank_statement"].includes(recordType)) {
+    if (!record.manualReplayed && ["finance_invoice", "bank_movement", "bank_statement"].includes(recordType)) {
       void runFinancePostIngestionAnalysis({ tenantId: req.tenantId, source: `record:${recordType}` })
         .catch((error) => console.warn("[FINANCE_POST_INGESTION_WARNING]", error?.message || error));
     }
-    res.status(201).json({
+    res.status(record.manualReplayed ? 200 : 201).json({
       ...(await redactRecordForViewer(req, record)),
       metadataValidation: metadataValidationResponse(evaluation),
       automatedSchema: automatedSchema ? { id: automatedSchema.id, label: automatedSchema.label, version: automatedSchema.version } : null,
       workflowDispatch
     });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Create industry record error:", error);
     res.status(500).json({ error: "No se pudo crear el registro del rubro" });
   }
@@ -481,7 +507,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
       where: { id: req.params.id, tenantId: req.tenantId }
     });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
-    if (!assertFinanceRecordMutation(req, res, existing.recordType)) return;
+    if (!assertFinanceRecordMutation(req, res, existing.recordType, existing)) return;
     if (!(await assertRecordModule(req, existing.recordType))) {
       return res.status(403).json({ error: `Modulo no habilitado para ${existing.recordType}` });
     }
@@ -517,12 +543,15 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
     if (req.body?.data !== undefined) data.data = nextMetadata;
     if (evaluation.schemaVersion) data.schemaVersion = evaluation.schemaVersion;
 
-    const record = await prisma.industryRecord.update({
+    const record = await writeManualFinanceRecord(prisma, { tenantId: req.tenantId, userId: req.user?.id, recordType: existing.recordType, existing: existing, nextData: data.data ?? existing.data, nextStatus: data.status ?? existing.status, operation: "UPDATE",
+      write: (tx) => tx.industryRecord.update({
       where: { id: existing.id },
       data,
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
+    }),
+      audit: { action: "INDUSTRY_RECORD_UPDATED", metadata: { recordType: existing.recordType } }
     });
-    await recordAuditLog(req, "INDUSTRY_RECORD_UPDATED", existing.recordType, record.id, { recordType: existing.recordType, status: record.status });
+    if (!MANUAL_FINANCE_RECORDS.has(existing.recordType)) await recordAuditLog(req, "INDUSTRY_RECORD_UPDATED", existing.recordType, record.id, { recordType: existing.recordType, status: record.status });
     const workflowDispatch = await runWorkflowsForEvent({
       tenantId: req.tenantId,
       event: "record.updated",
@@ -531,6 +560,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
     }).catch((error) => ({ event: "record.updated", matched: 0, error: error?.message || "dispatch_failed" }));
     res.json({ ...(await redactRecordForViewer(req, record)), metadataValidation: metadataValidationResponse(evaluation), workflowDispatch });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Update industry record error:", error);
     res.status(500).json({ error: "No se pudo actualizar el registro" });
   }
@@ -542,7 +572,7 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
       where: { id: req.params.id, tenantId: req.tenantId }
     });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
-    if (!assertFinanceRecordMutation(req, res, existing.recordType)) return;
+    if (!assertFinanceRecordMutation(req, res, existing.recordType, existing)) return;
     if (!(await assertRecordModule(req, existing.recordType))) {
       return res.status(403).json({ error: `Modulo no habilitado para ${existing.recordType}` });
     }
@@ -560,14 +590,18 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
     if (evaluation.blocking) {
       return res.status(422).json({ error: "Los metadatos no cumplen el esquema publicado", metadataValidation: metadataValidationResponse(evaluation) });
     }
-    const record = await prisma.industryRecord.update({
+    const record = await writeManualFinanceRecord(prisma, { tenantId: req.tenantId, userId: req.user?.id, recordType: existing.recordType, existing: existing, nextData: nextMetadata, nextStatus: existing.status, operation: "UPDATE",
+      write: (tx) => tx.industryRecord.update({
       where: { id: existing.id },
       data: { data: nextMetadata, ...(evaluation.schemaVersion ? { schemaVersion: evaluation.schemaVersion } : {}) },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
+    }),
+      audit: { action: "INDUSTRY_RECORD_METADATA_UPDATED", metadata: { recordType: existing.recordType } }
     });
-    await recordAuditLog(req, "INDUSTRY_RECORD_METADATA_UPDATED", existing.recordType, record.id, { recordType: existing.recordType });
+    if (!MANUAL_FINANCE_RECORDS.has(existing.recordType)) await recordAuditLog(req, "INDUSTRY_RECORD_METADATA_UPDATED", existing.recordType, record.id, { recordType: existing.recordType });
     res.json({ ...(await redactRecordForViewer(req, record)), metadataValidation: metadataValidationResponse(evaluation) });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Update industry metadata error:", error);
     res.status(500).json({ error: "No se pudieron actualizar los metadatos" });
   }
@@ -577,11 +611,16 @@ industryRecordsRouter.delete("/industry-records/:id", requireRole(ROLE_GROUPS.MA
   try {
     const existing = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
-    if (!assertFinanceRecordMutation(req, res, existing.recordType)) return;
-    await prisma.industryRecord.delete({ where: { id: existing.id } });
-    await recordAuditLog(req, "INDUSTRY_RECORD_DELETED", existing.recordType, existing.id, { recordType: existing.recordType, title: existing.title });
+    if (!assertFinanceRecordMutation(req, res, existing.recordType, existing)) return;
+    if (!(await assertRecordModule(req, existing.recordType))) return res.status(403).json({ error: "Módulo no habilitado para este registro." });
+    await writeManualFinanceRecord(prisma, { tenantId: req.tenantId, userId: req.user?.id, recordType: existing.recordType, existing, operation: "DELETE",
+      write: (tx) => tx.industryRecord.delete({ where: { id: existing.id } }),
+      audit: { action: "INDUSTRY_RECORD_DELETED", metadata: { recordType: existing.recordType, title: existing.title } }
+    });
+    if (!MANUAL_FINANCE_RECORDS.has(existing.recordType)) await recordAuditLog(req, "INDUSTRY_RECORD_DELETED", existing.recordType, existing.id, { recordType: existing.recordType, title: existing.title });
     res.json({ ok: true });
   } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Delete industry record error:", error);
     res.status(500).json({ error: "No se pudo eliminar el registro" });
   }
@@ -608,3 +647,5 @@ industryRecordsRouter.post("/industry-records/assignments/balance", requireRole(
     res.status(500).json({ error: "No se pudo calcular la asignacion" });
   }
 });
+import { MANUAL_FINANCE_RECORDS, writeManualFinanceRecord, financialDate, assertFinancialDraftScope } from "../services/finance-manual-writes.service.js";
+import { FinanceOperationError } from "../services/finance-integrity.service.js";

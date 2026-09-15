@@ -362,8 +362,8 @@ export default function ConnectionsPage() {
       setNotice(null);
       setConnectionActivity({ key: provider.key, stage: "Actualizando cuentas por cobrar...", progress: 74 });
       const result = await syncNuboxSales();
-      setConnectionActivity({ key: provider.key, stage: "Documentos sincronizados", progress: 100 });
-      setNotice({ type: "success", text: `Nubox sincronizado: ${result.created} nuevos y ${result.updated} actualizados.` });
+      setConnectionActivity({ key: provider.key, stage: result.pending ? "Sincronización ya en curso" : "Consulta finalizada", progress: result.pending ? 74 : 100 });
+      setNotice({ type: result.warning ? "error" : "success", text: result.pending ? (result.message || "Ya hay una sincronización en curso; espera su resultado.") : `Nubox sincronizado: ${result.created || 0} nuevos y ${result.updated || 0} actualizados.${result.warning ? ` Atención: ${result.warning}` : ""}` });
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "No se pudieron sincronizar los documentos de Nubox" });
     } finally {

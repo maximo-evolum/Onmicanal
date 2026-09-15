@@ -1,21 +1,41 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyFinanceAllocation, reverseFinanceAllocation, planFinanceAllocation, validateAllocationInput, sendFinanceMovementToReview } from "../src/services/finance-allocation.service.js";
+import { buildFinanceMonthlyClosePreview } from "../src/services/finance-monthly-close.service.js";
 
 const movement = (id = "m", amount = 100) => ({ id, tenantId: "a", recordType: "bank_movement", title: "Transferencia cliente", status: "PENDING", data: { amount, currency: "CLP", direction: "CREDIT", transactionDate: "2026-01-20", rut: "11111111-1" } });
+test("revisión masiva reintenta sin duplicar excepción ni auditoría", async () => {
+  const row = { ...movement(), updatedAt: "2026-01-20T00:00:00.000Z" }, db = database([row]); let audits = 0;
+  db.tenantAuditLog.create = async ({ data }) => { audits++; assert.equal(data.metadata.operationKey, "operation-test-0001"); return data; };
+  const args = { tenantId: "a", userId: "admin", movementId: "m", detail: "Verificar origen del pago", expectedVersion: row.updatedAt, operationKey: "operation-test-0001" };
+  await sendFinanceMovementToReview(db, args); assert.equal((await sendFinanceMovementToReview(db, args)).replayed, true);
+  assert.equal(db.rows.filter((r) => r.recordType === "finance_exception").length, 1); assert.equal(audits, 1);
+  await assert.rejects(sendFinanceMovementToReview(db, { ...args, detail: "Cambio de motivo" }), /otros datos/);
+});
+test("revisión masiva rechaza versión obsoleta sin escribir", async () => {
+  const db = database([{ ...movement(), updatedAt: "2026-01-20T00:00:00.000Z" }]);
+  await assert.rejects(sendFinanceMovementToReview(db, { tenantId: "a", userId: "admin", movementId: "m", detail: "Verificar origen", expectedVersion: "2026-01-19T00:00:00.000Z" }), /cambió/);
+  assert.equal(db.rows.length, 1); assert.equal(db.rows[0].status, "PENDING");
+});
 const invoice = (id = "i", amount = 100) => ({ id, tenantId: "a", recordType: "finance_invoice", title: `Factura ${id}`, status: "OPEN", data: { amount, balance: amount, paidAmount: 0, currency: "CLP", clientRut: "11111111-1", clientName: "Cliente de pruebas", issueDate: "2026-01-01" } });
 // Local transaction adapter with rollback and tenant/JSON filtering. PostgreSQL
 // serialization still requires integration tests against a disposable database.
 function database(initial) {
   let rows = structuredClone(initial); let seq = 0;
+  let controls = initial.filter((row) => row.recordType === "finance_monthly_close" && row.status === "CLOSED").map((row) => ({ tenantId: row.tenantId, period: row.data.period, status: "CLOSED", version: 1, lockVersion: 0, latestCloseId: row.id }));
   const matches = (row, where = {}) => Object.entries(where).every(([key, value]) => {
     if (value?.in) return value.in.includes(row[key]);
     if (value?.path) return value.path.reduce((obj, part) => obj?.[part], row[key]) === value.equals;
     return row[key] === value;
   });
-  const db = { get rows() { return rows; },
+  const db = { get rows() { return rows; }, get controls() { return controls; },
+    financePeriodControl: { upsert: async ({ where, create }) => {
+      let control = controls.find((row) => row.tenantId === where.tenantId_period.tenantId && row.period === where.tenantId_period.period);
+      if (!control) { control = structuredClone(create); controls.push(control); } else { control.lockVersion += 1; }
+      return structuredClone(control);
+    } },
     tenantAuditLog: { create: async ({ data }) => data },
-    $transaction: async (fn, opts) => { assert.equal(opts.isolationLevel, "Serializable"); const old = structuredClone(rows); try { return await fn(db); } catch (e) { rows = old; throw e; } },
+    $transaction: async (fn, opts) => { assert.equal(opts.isolationLevel, "Serializable"); const old = structuredClone(rows), oldControls = structuredClone(controls); try { return await fn(db); } catch (e) { rows = old; controls = oldControls; throw e; } },
     industryRecord: {
       findFirst: async ({ where }) => structuredClone(rows.find((row) => matches(row, where)) || null),
       findMany: async ({ where, take = 500, cursor, skip = 0 }) => { const found = rows.filter((row) => matches(row, where)).sort((a, b) => a.id.localeCompare(b.id)); const start = cursor ? found.findIndex((row) => row.id === cursor.id) + skip : 0; return structuredClone(found.slice(start, start + take)); },
@@ -26,6 +46,20 @@ function database(initial) {
 }
 const apply = (db, allocations = [{ invoiceId: "i", amount: 100 }], extras = {}) => applyFinanceAllocation(db, { tenantId: "a", userId: "admin", movementId: "m", allocations, reason: "Comprobante revisado con el cliente", manual: true, ...extras });
 const reverse = (db, id, extras = {}) => reverseFinanceAllocation(db, { tenantId: "a", userId: "admin", reconciliationId: id, reason: "Asignación incorrecta verificada", ...extras });
+
+test("el cierre acepta evidencia del escritor real y deja de aceptarla tras una reversa", async () => {
+  const db = database([movement(), invoice("i", 90), invoice("j", 70)]);
+  const result = await apply(db, [{ invoiceId: "i", amount: 60 }, { invoiceId: "j", amount: 40 }]);
+  const valid = buildFinanceMonthlyClosePreview(db.rows, "2026-01");
+  assert.equal(valid.status, "READY_TO_CLOSE"); assert.equal(valid.metrics.reconciliations, 1);
+  await reverse(db, result.reconciliation.id);
+  const reversed = buildFinanceMonthlyClosePreview(db.rows, "2026-01");
+  assert.equal(reversed.status, "REQUIRES_REVIEW"); assert.equal(reversed.metrics.reconciliations, 0);
+  assert.equal(reversed.metrics.unreconciledMovements, 1);
+  const reapplied = await apply(db, [{ invoiceId: "i", amount: 60 }, { invoiceId: "j", amount: 40 }]);
+  assert.notEqual(reapplied.reconciliation.id, result.reconciliation.id);
+  assert.equal(buildFinanceMonthlyClosePreview(db.rows, "2026-01").status, "READY_TO_CLOSE");
+});
 
 test("distribuye un abono parcialmente entre dos documentos y conserva montos explícitos", async () => {
   const db = database([movement(), invoice("i", 90), invoice("j", 70)]);
@@ -100,6 +134,7 @@ test("bloquea conciliaciones y reversas en períodos cerrados de la empresa", as
   const close = { id: "c", tenantId: "a", recordType: "finance_monthly_close", status: "CLOSED", data: { period: "2026-01" } };
   await assert.rejects(apply(database([movement(), invoice(), close])), /cerrado/);
   const db = database([movement(), invoice()]); const result = await apply(db); db.rows.push(close);
+  db.controls.find((row) => row.period === "2026-01").status = "CLOSED";
   await assert.rejects(reverse(db, result.reconciliation.id), /cerrado/);
   close.tenantId = "b"; await apply(database([movement(), invoice(), close]));
 });

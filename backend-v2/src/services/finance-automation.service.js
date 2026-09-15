@@ -10,16 +10,19 @@ import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions } from "./finan
 export async function runFinancePostIngestionAnalysis({ tenantId, source = "manual" } = {}) {
   if (!tenantId) return { analyzed: false, reason: "missing_tenant" };
 
-  const [exceptions, workspace] = await Promise.all([
-    prepareFinanceAgentExceptions({ tenantId }),
-    getFinanceAgentWorkspace({ tenantId })
-  ]);
+  const exceptions = await prepareFinanceAgentExceptions({ tenantId });
+  const workspace = await getFinanceAgentWorkspace({ tenantId }).catch(() => null);
 
-  const priorities = workspace.priority || [];
+  const priorities = workspace?.priority || [];
   const details = {
     source,
     exceptionsPrepared: exceptions.created.length,
     exceptionsSkipped: exceptions.skipped,
+    deferredCount: exceptions.deferred.length,
+    deferredByReason: exceptions.deferred.reduce((counts, item) => ({ ...counts, [item.reason]: (counts[item.reason] || 0) + 1 }), {}),
+    analyzedMovements: exceptions.analyzedMovements,
+    requiresReview: !workspace || exceptions.deferred.length > 0,
+    workspaceAvailable: Boolean(workspace),
     priorityCount: priorities.length,
     priorities: priorities.slice(0, 5).map((item) => item.agent),
     analyzedAt: new Date().toISOString()

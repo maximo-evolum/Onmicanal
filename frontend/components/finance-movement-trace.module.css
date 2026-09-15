@@ -1,0 +1,9 @@
+.panel { display:grid; gap:12px; margin-top:20px; padding-top:16px; border-top:1px solid var(--border,#64748b); white-space:normal; overflow-wrap:anywhere; }
+.panel h4 { margin:0; font-size:1rem; }
+.panel ul { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; list-style:none; margin:0; padding:0; }
+.panel ul button { width:100%; height:100%; text-align:left; }
+.panel button[aria-pressed="true"] { outline:2px solid currentColor; outline-offset:2px; }
+.panel article { display:grid; gap:10px; border:1px solid var(--border,#64748b); border-radius:12px; padding:16px; }
+.panel ol { display:grid; gap:12px; margin:0; padding-left:24px; }
+.panel li { line-height:1.5; }
+.panel button:focus-visible { outline:2px solid currentColor; outline-offset:3px; }

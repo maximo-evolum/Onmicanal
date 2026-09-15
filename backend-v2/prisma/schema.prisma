@@ -99,6 +99,7 @@ model Tenant {
   financeBankOriginals    FinanceBankOriginal[]
   financeBankImportJobs   FinanceBankImportJob[]
   financeBankMappingTemplates FinanceBankMappingTemplate[]
+  financePeriodControls      FinancePeriodControl[]
   mobilePushDevices       MobilePushDevice[]
   brokerOwners            BrokerOwner[]
   brokerProperties        BrokerProperty[]
@@ -396,6 +397,19 @@ model FinanceBankMappingTemplate {
   createdAt DateTime @default(now())
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   @@unique([tenantId, bankKey, name])
+}
+
+model FinancePeriodControl {
+  tenantId      String
+  period        String
+  status        String   @default("OPEN")
+  version       Int      @default(0)
+  lockVersion   Int      @default(0)
+  latestCloseId String?
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, period])
 }
 
 model IndustryRecord {

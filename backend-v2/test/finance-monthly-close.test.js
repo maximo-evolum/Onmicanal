@@ -29,7 +29,8 @@ test("la conciliación y su excepción usan la fecha del movimiento enlazado", (
     { ...base, id: "error", recordType: "finance_exception", status: "OPEN", data: { movementId: "movement" } }
   ];
   const preview = buildFinanceMonthlyClosePreview(records, "2026-01");
-  assert.equal(preview.metrics.reconciliations, 1);
+  assert.equal(preview.metrics.reconciliations, 0); // Missing reciprocal link and payment evidence.
+  assert.ok(preview.blockers.some((b) => b.type === "CONCILIACION_INCONSISTENTE"));
   assert.equal(preview.metrics.openExceptions, 1);
   assert.equal(preview.status, "REQUIRES_REVIEW");
 });
@@ -44,8 +45,9 @@ test("consolida un período conciliado y lo deja listo para cierre", () => {
   const preview = buildFinanceMonthlyClosePreview([
     { ...base, id: "invoice", recordType: "finance_invoice", status: "PAID", data: { issueDate: "2026-09-02", invoiceNumber: "F-100", clientName: "Comercial Andes", amount: 1500000, balance: 0 } },
     { ...base, id: "payable", recordType: "finance_payable", status: "PAID", data: { issueDate: "2026-09-03", documentNumber: "P-44", supplierName: "Proveedor Norte", category: "Servicios", amount: 300000, balance: 0 } },
-    { ...base, id: "movement", recordType: "bank_movement", status: "MATCHED", data: { transactionDate: "2026-09-04", description: "Transferencia Comercial Andes", direction: "CREDIT", amount: 1500000, reference: "F-100" } },
-    { ...base, id: "reconciliation", recordType: "finance_reconciliation", status: "APPROVED", data: { createdAt: "2026-09-04" } }
+    { ...base, id: "movement", recordType: "bank_movement", status: "MATCHED", data: { transactionDate: "2026-09-04", description: "Transferencia Comercial Andes", direction: "CREDIT", amount: 1500000, reference: "F-100", reconciliationId: "reconciliation" } },
+    { ...base, id: "reconciliation", recordType: "finance_reconciliation", status: "APPROVED", data: { movementId: "movement", amount: 1500000, allocations: [{ invoiceId: "invoice", amount: 1500000 }] } },
+    { ...base, id: "receipt", recordType: "finance_invoice_receipt", status: "RECONCILED", data: { movementId: "movement", reconciliationId: "reconciliation", invoiceId: "invoice", amount: 1500000 } }
   ], "2026-09");
 
   assert.equal(preview.status, "READY_TO_CLOSE");

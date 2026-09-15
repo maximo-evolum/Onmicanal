@@ -3,11 +3,9 @@ import { financeRecordData, getInvoiceFinancialState } from "./finance.service.j
 import { findAllFinanceRecords } from "./finance-integrity.service.js";
 import { filterFinanceContext } from "./finance-context.service.js";
 import { ACTIVE_IMPORT_STATUSES } from "./finance-import-jobs.service.js";
-
-function numberOf(value) {
-  const parsed = Number(String(value ?? "").replace(/[^0-9,.-]/g, "").replace(/\.(?=.*\.)/g, "").replace(",", "."));
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
-}
+import { classifyFinanceMovement } from "./finance-movement-classification.service.js";
+import { auditCloseReconciliations } from "./finance-close-reconciliation.service.js";
+import { financeDocumentDate, financeParty, summarizeFinanceDocuments } from "./finance-document-values.service.js";
 
 function cleanText(value, fallback = "") {
   const text = String(value ?? "").trim();
@@ -24,17 +22,18 @@ export function validFinancePeriod(period) {
 }
 
 function recordDate(record, recordsById = new Map(), visited = new Set()) {
+  if (["finance_invoice", "finance_payable"].includes(record.recordType)) return financeDocumentDate(record);
   const data = financeRecordData(record);
   if (visited.has(record.id)) return "";
   visited.add(record.id);
-  if (["finance_exception", "finance_reconciliation"].includes(record.recordType)) {
+  if (["finance_exception", "finance_reconciliation", "finance_invoice_receipt"].includes(record.recordType)) {
     const origin = recordsById.get(data.movementId);
-    if (origin) return recordDate(origin, recordsById, visited);
+    if (origin?.recordType === "bank_movement") return recordDate(origin, recordsById, visited);
     const movement = data.movement || {};
-    const sourceDate = data.transactionDate || data.operatingDate || movement.transactionDate || movement.date;
+    const sourceDate = data.transactionDate || data.operatingDate || data.paymentDate || movement.transactionDate || movement.date;
     if (sourceDate) return dateText(sourceDate);
     // A missing source date is unknown, not the upload month.
-    if (data.importBatchId || data.movementId) return "";
+    if (data.importBatchId || data.movementId || record.recordType === "finance_reconciliation" || record.recordType === "finance_invoice_receipt") return "";
   }
   return dateText(data.transactionDate || data.date || data.issueDate || data.paymentDate || data.createdAt || record.createdAt);
 }
@@ -47,21 +46,17 @@ function isOpenException(record) {
   return !["RESOLVED", "CLOSED"].includes(String(record.status || "").toUpperCase());
 }
 
-function isUnreconciledMovement(record) {
-  return !["MATCHED", "CLOSED"].includes(String(record.status || financeRecordData(record).status || "").toUpperCase());
-}
-
-function documentRow(record) {
+function documentRow(record, now) {
   const data = financeRecordData(record);
-  const invoice = record.recordType === "finance_invoice";
-  const state = getInvoiceFinancialState({ ...record, data: { ...data, amount: data.amount ?? data.total, balance: data.balance } });
-  const total = state.amount || numberOf(data.amount ?? data.total);
+  const party = financeParty(record), invoice = party.side === "CUSTOMER";
+  const state = getInvoiceFinancialState(record, now);
+  const total = state.amount;
   const balance = state.balance;
   return {
     fecha: recordDate(record),
     tipo: invoice ? "Ingreso por facturación" : "Egreso por proveedor",
     documento: cleanText(data.invoiceNumber || data.documentNumber || record.title),
-    contraparte: cleanText(invoice ? data.clientName : data.supplierName, "Sin contraparte"),
+    contraparte: party.name,
     categoria: cleanText(data.category, invoice ? "Ingresos por ventas" : "Gastos operacionales"),
     monto: total,
     saldo: balance,
@@ -69,54 +64,47 @@ function documentRow(record) {
   };
 }
 
-export function buildFinanceMonthlyClosePreview(records, period, now = new Date()) {
+export function buildFinanceMonthlyClosePreview(records, period, now = new Date(), evidenceRecords = records) {
   if (!validFinancePeriod(period)) throw new Error("El período debe tener el formato AAAA-MM.");
-  const recordsById = new Map(records.map((record) => [record.id, record]));
+  const recordsById = new Map(evidenceRecords.map((record) => [record.id, record]));
   const periodRecords = records.filter((record) => samePeriod(record, period, recordsById));
-  const invoices = periodRecords.filter((record) => record.recordType === "finance_invoice");
-  const payables = periodRecords.filter((record) => record.recordType === "finance_payable");
-  const movements = periodRecords.filter((record) => record.recordType === "bank_movement");
-  const reconciliations = periodRecords.filter((record) => record.recordType === "finance_reconciliation" && String(record.status || "").toUpperCase() === "APPROVED");
+  const documents = summarizeFinanceDocuments(periodRecords, now);
+  const invoices = documents.entries.filter((e) => e.side === "CUSTOMER" && e.state.included).map((e) => e.record);
+  const payables = documents.entries.filter((e) => e.side === "SUPPLIER" && e.state.included).map((e) => e.record);
+  const audit = auditCloseReconciliations(evidenceRecords, periodRecords.filter((record) => record.recordType === "bank_movement"), period, (record) => recordDate(record, recordsById), records);
+  const movements = audit.movements;
   const exceptions = records.filter((record) => record.recordType === "finance_exception" && isOpenException(record) && samePeriod(record, period, recordsById));
   const undatedExceptions = records.filter((record) => record.recordType === "finance_exception" && isOpenException(record) && !recordDate(record, recordsById));
-  const issued = invoices.reduce((total, record) => total + documentRow(record).monto, 0);
-  const collected = invoices.reduce((total, record) => {
-    const row = documentRow(record);
-    return total + Math.max(0, row.monto - row.saldo);
-  }, 0);
-  const registeredPayables = payables.reduce((total, record) => total + documentRow(record).monto, 0);
-  const paidPayables = payables.reduce((total, record) => {
-    const row = documentRow(record);
-    return total + Math.max(0, row.monto - row.saldo);
-  }, 0);
-  const incoming = movements.reduce((total, record) => {
-    const data = financeRecordData(record);
-    return String(data.direction || "").toUpperCase() === "DEBIT" ? total : total + numberOf(data.amount);
-  }, 0);
-  const outgoing = movements.reduce((total, record) => {
-    const data = financeRecordData(record);
-    return String(data.direction || "").toUpperCase() === "DEBIT" ? total + numberOf(data.amount) : total;
-  }, 0);
-  const unreconciled = movements.filter(isUnreconciledMovement);
+  const issued = documents.customers.issued, collected = documents.customers.paid;
+  const registeredPayables = documents.suppliers.issued, paidPayables = documents.suppliers.paid;
+  const classifiedMovements = movements.map((record) => ({ record, ...classifyFinanceMovement(financeRecordData(record)) }));
+  const incoming = classifiedMovements.reduce((total, item) => item.direction === "CREDIT" && item.amount !== null ? total + item.amount : total, 0);
+  const outgoing = classifiedMovements.reduce((total, item) => item.direction === "DEBIT" && item.amount !== null ? total + item.amount : total, 0);
+  const unclassified = classifiedMovements.filter((item) => item.amount === null || item.direction === "UNKNOWN");
+  const unreconciled = audit.unreconciled;
   const blockers = [
+    ...documents.issues.map((item) => ({ type: "DOCUMENTO_SALDO_INCONSISTENTE", id: `document-${item.id}`, title: item.title })),
+    ...audit.blockers,
+    ...unclassified.map(({ record, amount }) => ({ type: "MOVIMIENTO_CLASIFICACION_PENDIENTE", title: `${amount === null ? "Monto inválido o ausente" : "Tipo abono/cargo sin identificar"}: ${record.title || record.id}. Revisa el movimiento antes de cerrar.`, id: `classification-${record.id}` })),
     ...(!periodRecords.length ? [{ type: "SIN_DATOS_DEL_PERIODO", title: "No hay datos que acrediten la actividad del período. Revisa las cartolas y documentos antes de cerrar.", id: `coverage-${period}` }] : []),
     ...undatedExceptions.map((record) => ({ type: "EXCEPCION_SIN_FECHA", title: `No se puede determinar el período de la excepción: ${record.title || record.id}`, id: record.id })),
-    ...unreconciled.map((record) => ({ type: "MOVIMIENTO_SIN_CONCILIAR", title: record.title, id: record.id })),
+    ...unreconciled.filter((record) => !audit.inconsistentIds.has(record.id)).map((record) => ({ type: "MOVIMIENTO_SIN_CONCILIAR", title: record.title || record.id, id: record.id })),
     ...exceptions.map((record) => ({ type: "EXCEPCION_ABIERTA", title: record.title, id: record.id }))
   ];
   const rows = [
-    ...invoices.map(documentRow),
-    ...payables.map(documentRow),
-    ...movements.map((record) => {
+    ...invoices.map((record) => documentRow(record, now)),
+    ...payables.map((record) => documentRow(record, now)),
+    ...classifiedMovements.map(({ record, amount, direction }) => {
       const data = financeRecordData(record);
-      const debit = String(data.direction || "").toUpperCase() === "DEBIT";
-      return { fecha: recordDate(record), tipo: debit ? "Movimiento bancario - cargo" : "Movimiento bancario - abono", documento: cleanText(data.reference || record.title), contraparte: cleanText(data.counterparty || data.payerName, "Movimiento bancario"), categoria: debit ? "Egresos bancarios" : "Ingresos bancarios", monto: numberOf(data.amount), saldo: 0, estado: cleanText(record.status, "PENDIENTE") };
+      const debit = direction === "DEBIT", unknown = direction === "UNKNOWN";
+      return { fecha: recordDate(record), tipo: unknown ? "Movimiento bancario - por identificar" : debit ? "Movimiento bancario - cargo" : "Movimiento bancario - abono", documento: cleanText(data.reference || record.title), contraparte: cleanText(data.counterparty || data.payerName, "Movimiento bancario"), categoria: unknown ? "Sin clasificación" : debit ? "Egresos bancarios" : "Ingresos bancarios", monto: amount, saldo: 0, estado: amount === null || unknown || audit.inconsistentIds.has(record.id) ? "REQUIRES_REVIEW" : cleanText(record.status, "PENDIENTE") };
     })
   ].sort((left, right) => left.fecha.localeCompare(right.fecha));
   return {
     period,
     generatedAt: now.toISOString(),
     status: blockers.length ? "REQUIRES_REVIEW" : "READY_TO_CLOSE",
+    documentSummary: { customers: documents.customers, suppliers: documents.suppliers, excluded: documents.excluded },
     metrics: {
       issued,
       collected,
@@ -125,7 +113,10 @@ export function buildFinanceMonthlyClosePreview(records, period, now = new Date(
       incoming,
       outgoing,
       netBankFlow: incoming - outgoing,
-      reconciliations: reconciliations.length,
+      unclassifiedMovements: unclassified.length,
+      reconciliations: audit.validIds.size,
+      inconsistentReconciliations: audit.inconsistentMovements,
+      excludedMovements: audit.excludedMovements,
       unreconciledMovements: unreconciled.length,
       openExceptions: exceptions.length
     },
@@ -148,11 +139,13 @@ export function addPendingImportsToClose(preview, jobs) {
 
 export async function getFinanceMonthlyClosePreview({ tenantId, period, db = prisma }) {
   const records = await findAllFinanceRecords(db, {
-    where: { tenantId, recordType: { in: ["finance_invoice", "finance_payable", "bank_movement", "finance_reconciliation", "finance_exception"] } },
+    where: { tenantId, recordType: { in: ["finance_invoice", "finance_payable", "bank_movement", "finance_reconciliation", "finance_invoice_receipt", "finance_exception"] } },
   });
   // The current close is company-wide in CLP. Never sum foreign currencies as
   // pesos; account-specific and multicurrency closes need their own workflow.
   const jobs = await db.financeBankImportJob.findMany({ where: { tenantId, status: { in: ACTIVE_IMPORT_STATUSES } },
     select: { id: true, status: true, sourceFile: true, periodRange: true } });
-  return addPendingImportsToClose(buildFinanceMonthlyClosePreview(filterFinanceContext(records, { period: "", accountKey: "", currency: "CLP" }), period), jobs);
+  // Keep foreign-currency evidence available for detecting invalid links, but
+  // never include its amounts or unrelated approvals in this CLP close.
+  return addPendingImportsToClose(buildFinanceMonthlyClosePreview(filterFinanceContext(records, { period: "", accountKey: "", currency: "CLP" }), period, new Date(), records), jobs);
 }

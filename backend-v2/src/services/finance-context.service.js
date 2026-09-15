@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
+import { financeDocumentDate, financeDocumentSide } from "./finance-document-values.service.js";
 
 const dataOf = (record) => record?.data && typeof record.data === "object" ? record.data : {};
 const text = (value) => String(value ?? "").trim();
@@ -38,6 +39,7 @@ export function financeRecordAccount(record, index = new Map(), visited = new Se
 
 export function financeOperationalDate(record, index = new Map(), visited = new Set()) {
   if (!record || visited.has(record.id)) return "";
+  if (["finance_invoice", "finance_payable"].includes(record.recordType)) return financeDocumentDate(record);
   visited.add(record.id);
   const data = dataOf(record);
   const related = index.get(data.movementId);
@@ -90,10 +92,7 @@ export function buildFinanceContextCoverage(records, context) {
   if (context.accountKey && !accounts.has(context.accountKey)) throw new FinanceOperationError(404, "La cuenta seleccionada no pertenece a la empresa actual o ya no está disponible.");
   const selected = filterFinanceContext(records, context);
   const supplierDocument = (record) => {
-    const data = dataOf(record);
-    if (record.recordType === "finance_payable") return true;
-    if ((data.supplierName || data.supplier || data.providerName) && !(data.clientName || data.customerName || data.customer)) return true;
-    return [data.documentSide, data.direction, data.kind].some((value) => ["SUPPLIER", "PURCHASE", "PAYABLE"].includes(text(value).toUpperCase()));
+    return financeDocumentSide(record) === "SUPPLIER";
   };
   const source = (type) => {
     const rows = selected.filter((record) => type === "bank_movement" ? record.recordType === type

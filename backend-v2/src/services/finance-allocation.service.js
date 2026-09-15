@@ -1,4 +1,5 @@
 import { FinanceOperationError, withFinanceWrite, findAllFinanceRecords } from "./finance-integrity.service.js";
+import { assertFinancePeriodOpen } from "./finance-period-control.service.js";
 import { financeRecordData as dataOf, getInvoiceFinancialState, sameFinanceInvoiceParty, scoreFinanceReconciliation } from "./finance.service.js";
 
 const fail = (status, message) => { throw new FinanceOperationError(status, message); };
@@ -24,8 +25,7 @@ export async function assertReconciliationPeriodOpen(tx, tenantId, movement) {
   const data = dataOf(movement);
   const date = String(data.transactionDate || data.date || "").slice(0, 10);
   if (!/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) fail(400, "El movimiento necesita una fecha válida antes de conciliar o revertir.");
-  const closed = await tx.industryRecord.findFirst({ where: { tenantId, recordType: "finance_monthly_close", status: "CLOSED", data: { path: ["period"], equals: date.slice(0, 7) } } });
-  if (closed) fail(409, `El período ${date.slice(0, 7)} está cerrado. No se puede modificar esta conciliación.`);
+  await assertFinancePeriodOpen(tx, tenantId, date.slice(0, 7));
 }
 
 export function planFinanceAllocation(movement, invoices, allocations) {
@@ -139,17 +139,22 @@ export async function reverseFinanceAllocation(db, { tenantId, userId, reconcili
   });
 }
 
-export async function sendFinanceMovementToReview(db, { tenantId, userId, movementId, detail }) {
+export async function sendFinanceMovementToReview(db, { tenantId, userId, movementId, detail, expectedVersion, operationKey }) {
   return withFinanceWrite(db, async (tx) => {
     const movement = await tx.industryRecord.findFirst({ where: { id: movementId, tenantId, recordType: "bank_movement" } });
     if (!movement) fail(404, "Movimiento no encontrado.");
     const data = dataOf(movement);
-    if (["MATCHED", "REVIEW", "REJECTED", "DELETED"].includes(movement.status) || data.reconciliationId) fail(409, "El movimiento ya fue conciliado o enviado a revisión. Actualiza la vista.");
+    if (operationKey && data.reviewOperationKey === operationKey) {
+      if (data.reviewReason !== detail || data.reviewActorId !== userId) fail(409, "Este intento ya fue utilizado con otros datos.");
+      return { updatedMovement: movement, replayed: true };
+    }
+    if (expectedVersion && new Date(movement.updatedAt).toISOString() !== expectedVersion) fail(409, "El movimiento cambió desde la selección. Actualiza antes de reintentar.");
+    if (["MATCHED", "RECONCILED", "REVIEW", "REJECTED", "DELETED", "EXCLUDED"].includes(movement.status) || data.reconciliationId || data.excluded) fail(409, "El movimiento ya fue conciliado, excluido o enviado a revisión. Actualiza la vista.");
     await assertReconciliationPeriodOpen(tx, tenantId, movement);
     const now = new Date().toISOString();
-    const updatedMovement = await tx.industryRecord.update({ where: { id: movement.id }, data: { status: "REVIEW", data: { ...data, status: "REVIEW", reviewReason: detail, reviewedAt: now } } });
+    const updatedMovement = await tx.industryRecord.update({ where: { id: movement.id }, data: { status: "REVIEW", data: { ...data, status: "REVIEW", reviewReason: detail, reviewedAt: now, ...(operationKey ? { reviewOperationKey: operationKey, reviewActorId: userId } : {}) } } });
     const exception = await tx.industryRecord.create({ data: { tenantId, recordType: "finance_exception", title: `Revisión ${movement.title}`.slice(0, 220), status: "OPEN", data: { type: "UNMATCHED_MOVEMENT", movementId, detail, priority: "MEDIUM", suggestedBy: "finance_reconciliation" } } });
-    await tx.tenantAuditLog.create({ data: { tenantId, actorUserId: userId || null, action: "FINANCE_RECONCILIATION_REJECTED", entity: "bank_movement", entityId: movementId, metadata: { detail, exceptionId: exception.id } } });
+    await tx.tenantAuditLog.create({ data: { tenantId, actorUserId: userId || null, action: "FINANCE_RECONCILIATION_REJECTED", entity: "bank_movement", entityId: movementId, metadata: { detail, exceptionId: exception.id, ...(operationKey ? { operationKey, expectedVersion } : {}) } } });
     return { updatedMovement, exception };
   });
 }

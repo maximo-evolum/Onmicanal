@@ -24,6 +24,7 @@ const OFFLINE_QUEUE_KEY = "evolum_mobile_offline_queue_v1";
 const REQUEST_TIMEOUT_MS = 15000;
 
 type RequestOptions = {
+  allowCached?: boolean;
   queueWhenOffline?: boolean;
   timeoutMs?: number;
 };
@@ -202,13 +203,13 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
     response = await fetchWithTimeout(url, {
       ...init,
       headers: {
-        "Content-Type": "application/json",
+        ...(init?.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init?.headers || {})
       }
     }, options.timeoutMs);
   } catch {
-    if (isRead) {
+    if (isRead && options.allowCached !== false) {
       const cached = await readCachedResponse<T>(path);
       if (cached !== null) return cached;
     }
@@ -222,11 +223,11 @@ async function request<T>(path: string, init?: RequestInit, options: RequestOpti
   if (!response.ok) {
     const data = await response.json().catch(() => null);
     const message = data?.error || `Error ${response.status}`;
-    throw new Error(`${message} (${response.status} en ${path})`);
+    throw Object.assign(new Error(`${message} (${response.status} en ${path})`), { status: response.status });
   }
 
   const data = await response.json();
-  if (isRead) await cacheResponse(path, data);
+  if (isRead && options.allowCached !== false) await cacheResponse(path, data);
   return data;
 }
 
@@ -241,6 +242,37 @@ export async function checkApiHealth() {
   } catch {
     throw new Error(`Sin conexion desde el telefono hacia ${API_BASE_URL}`);
   }
+}
+
+export type MobileBankPreview = {
+  jobId: string; revision: number; sourceFile: string;
+  account: { bankKey: string };
+  summary: { totalRows: number; reviewRows: number; credits: number; debits: number };
+  duplicate?: { blocked: boolean; message: string } | null;
+  periodProtection?: { blocked: boolean; message: string };
+};
+export function createMobileFinanceInvoice(input: { number: string; customer: string; rut: string; amount: number; issueDate: string; dueDate: string; idempotencyKey: string; expectedScope?: { tenantId: string; userId: string } }): Promise<IndustryRecord> {
+  return request("/industry-records", { method: "POST", body: JSON.stringify({
+    recordType: "finance_invoice", title: `Factura ${input.number}`, status: "ISSUED", idempotencyKey: input.idempotencyKey, expectedScope: input.expectedScope,
+    data: { invoiceNumber: input.number, customerName: input.customer, rut: input.rut, amount: input.amount, balance: input.amount, currency: "CLP", issueDate: input.issueDate, dueDate: input.dueDate, source: "mobile_finance" }
+  }) });
+}
+export function previewMobileBankFile(file: { uri: string; name: string; mimeType?: string | null }): Promise<MobileBankPreview> {
+  const form = new FormData();
+  form.append("file", { uri: file.uri, name: file.name, type: file.mimeType || "application/octet-stream" } as unknown as Blob);
+  return request("/finance/bank-statements/preview-file", { method: "POST", body: form }, { timeoutMs: 120000 });
+}
+export function getMobileBankJobs(cursor?: string | null): Promise<{ jobs: Array<{ id: string; sourceFile: string; status: string }>; nextCursor: string | null }> {
+  return request(`/finance/bank-import-jobs${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`, undefined, { allowCached: false });
+}
+export function getMobileBankPreview(id: string): Promise<{ job: { status: string }; preview: MobileBankPreview | null }> {
+  return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}`, undefined, { allowCached: false });
+}
+export function getMobileBankRows(id: string, revision: number, page: number): Promise<{ rows: Array<Record<string, unknown>>; page: number; pages: number }> {
+  return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}/rows?revision=${revision}&page=${page}`, undefined, { allowCached: false });
+}
+export function confirmMobileBankImport(jobId: string, revision: number): Promise<{ imported: number; duplicateRows: number; requiresReview: number }> {
+  return request("/finance/bank-statements/import", { method: "POST", body: JSON.stringify({ jobId, revision }) }, { timeoutMs: 120000 });
 }
 
 export async function loginWithEmail(email: string, password?: string) {
@@ -503,19 +535,19 @@ export async function getFinanceAgentWorkspace(): Promise<FinanceAgentWorkspace>
   return request("/finance/agents");
 }
 
-export async function analyzeFinanceAgents(): Promise<{ workspace: FinanceAgentWorkspace; exceptionsPrepared: number; exceptionsSkipped: string | null }> {
+export async function analyzeFinanceAgents(): Promise<{ workspace: FinanceAgentWorkspace | null; warning?: string; exceptionsPrepared: number; exceptionsSkipped: string | null; deferred?: Array<{ id: string; reason: string }> }> {
   return request("/finance/agents/analyze", { method: "POST" });
 }
 
-export async function generateFinanceCollectionCases(): Promise<{ created: IndustryRecord[]; count: number }> {
+export async function generateFinanceCollectionCases(): Promise<{ created: IndustryRecord[]; count: number; deferred?: Array<{ id: string; reason: string }> }> {
   return request("/finance/collection-cases/generate", { method: "POST" });
 }
 
-export async function updateFinanceCollectionCase(id: string, input: { status?: string; channel?: string; nextActionAt?: string; promiseDueDate?: string; promiseAmount?: number | string; note?: string }) {
+export async function updateFinanceCollectionCase(id: string, input: { expectedVersion: number; status?: string; channel?: string; nextActionAt?: string; promiseDueDate?: string; promiseAmount?: number | string; note?: string }) {
   return request(`/finance/collection-cases/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
-export async function updateFinanceException(id: string, input: { status?: string; resolution?: string }) {
+export async function updateFinanceException(id: string, input: { expectedVersion: number; status?: string; resolution?: string }) {
   return request(`/finance/exceptions/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 

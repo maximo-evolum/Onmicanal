@@ -101,6 +101,7 @@ export function evaluateWorkflowConditions(conditions, context) {
 }
 
 async function applyWorkflowActions({ actions, tenantId, targetRecord, workflow, runId }) {
+  assertWorkflowFinancialSafety(actions, targetRecord);
   let currentTarget = targetRecord;
   const applied = [];
   for (const action of actions) {
@@ -155,6 +156,8 @@ async function applyWorkflowActions({ actions, tenantId, targetRecord, workflow,
   }
   return { applied, target: currentTarget };
 }
+
+import { assertWorkflowFinancialSafety } from "../services/finance-workflow-guard.service.js";
 
 async function runWorkflow({ req, workflow, input, target, rootRunId = null, attempt = 1, trigger = "manual" }) {
   const targetRecord = target.id

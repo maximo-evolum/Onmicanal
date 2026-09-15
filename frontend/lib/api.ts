@@ -821,10 +821,13 @@ export async function getIndustryRecords(type?: string): Promise<IndustryRecord[
 }
 
 export type FinanceOverview = {
+  documentQuality?: { inactive: number; adjustments: number; invalid: number };
+  context: FinanceWorkspaceContext; scopeNote: string;
+  schedule: { asOf: string; next30Days: number; undatedDocuments: number; basis: string; weeks: Array<{ label: string; from: string; to: string; amount: number; documents: number }> };
   generatedAt: string;
   invoices: { total: number; issued: number; paid: number; pending: number; overdue: number; pendingAmount: number; overdueAmount: number };
-  collection: { rate: number; dsoDays: number; expectedNext30Days: number };
-  reconciliation: { totalMovements: number; matchedMovements: number; pendingMovements: number; rate: number };
+  collection: { rate: number; dsoDays: number; dsoSampleSize: number; expectedNext30Days: number };
+  reconciliation: { totalMovements: number; matchedMovements: number; pendingMovements: number; rate: number; excludedMovements: number; inconsistentMovements: number; invalidDateMovements: number };
   exceptions: { open: number; critical: number };
   collections: { open: number; promises: number };
   aging: Array<{ label: string; amount: number; invoices: number }>;
@@ -851,6 +854,30 @@ export type FinanceReconciliationSuggestion = {
 };
 
 export type FinanceWorkspaceContext = { period: string; accountKey: string; currency: string };
+export type FinanceLedgerRow = { assignedToId: string; importRevision: string; confidenceScore: number | null; confidenceBand: string; confidenceLabel: string; id: string; version: string; date: string; description: string; amount: number | null; direction: string; status: string; reference: string; rut: string; payer: string; bank: string; account: string; last4: string; sourceFile: string; batchId: string; sourceRow: string; sourceSheet: string; reconciliationId: string; reasons: string[]; currency: string };
+export type FinanceLedger = { reconciliationAccess: boolean; records: FinanceLedgerRow[]; page: number; pages: number; pageSize: number; total: number; dateScope: "PERIOD" | "UNDATED"; undatedAvailable: number; scopeNotice: string; summary: { credits: number; debits: number; unclassified: number } };
+export function getFinanceMovementLedger(query: Record<string, string>): Promise<FinanceLedger> {
+  return request(`/finance/movement-ledger?${new URLSearchParams(query)}`);
+}
+export type FinanceMovementOwner = { id: string; name: string; isActive: boolean };
+export function getFinanceMovementOwners(): Promise<{ users: FinanceMovementOwner[] }> { return request("/finance/movement-owners"); }
+export function assignFinanceMovementOwner(id: string, input: { assignedToId: string | null; expectedVersion: string; reason: string; operationKey: string }): Promise<{ replayed: boolean }> {
+  return request(`/finance/movement-ledger/${encodeURIComponent(id)}/owner`, { method: "POST", body: JSON.stringify(input) });
+}
+export type FinanceMovementTrace = { movementId: string; access: { invoices: boolean; reconciliation: boolean; exceptions: boolean }; nextCursor: string | null;
+  events: Array<{ id: string; date: string; action: string; actor: string; reason: string; entityId: string }>;
+  records: Array<{ id: string; kind: string; title: string; status: string; date: string; amount: number | null; balance: number | null; currency: string; party: string; reference: string; reason: string; reversedAt: string; allocations: Array<{ invoiceId: string; amount: number }> }> };
+export function getFinanceMovementTrace(id: string, cursor?: string): Promise<FinanceMovementTrace> {
+  return request(`/finance/movement-ledger/${encodeURIComponent(id)}/history${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+}
+export function reviewFinanceMovementBatch(input: { items: Array<{ id: string; version: string }>; reason: string; operationKey: string }): Promise<{ results: Array<{ id: string; status: string; message: string }> }> {
+  return request("/finance/movement-ledger/review", { method: "POST", body: JSON.stringify(input) });
+}
+export async function exportFinanceMovementLedger(query: Record<string, string>, format: "csv" | "xlsx" = "csv"): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/finance/movement-ledger?${new URLSearchParams({ ...query, export: format })}`, { headers: buildHeaders(), credentials: "include", cache: "no-store" });
+  if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.error || "No se pudo exportar el listado."); }
+  return response.blob();
+}
 export type FinanceContextCoverage = {
   context: FinanceWorkspaceContext;
   company: { id: string; name: string };
@@ -869,12 +896,17 @@ export function getFinanceContextCoverage(context: FinanceWorkspaceContext): Pro
   return request(`/finance/workspace-context?${financeContextQuery(context)}`);
 }
 
-export function getFinanceWorkspaceRecords(type: "bank_movement" | "finance_exception", context: FinanceWorkspaceContext): Promise<{ records: IndustryRecord[] }> {
+export function getFinanceWorkspaceRecords(type: "bank_movement" | "finance_exception" | "finance_collection_case", context: FinanceWorkspaceContext): Promise<{ records: IndustryRecord[] }> {
   return request(`/finance/workspace-records?type=${type}&${financeContextQuery(context)}`);
 }
 
 export function getFinanceOverview(context?: FinanceWorkspaceContext): Promise<FinanceOverview> {
   return request<FinanceOverview>(`/finance/overview?${financeContextQuery(context)}`);
+}
+export async function exportFinanceOverview(context: FinanceWorkspaceContext): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/finance/overview?${new URLSearchParams({ ...context, export: "csv" })}`, { headers: buildHeaders(), credentials: "include", cache: "no-store" });
+  if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.error || "No se pudo exportar el resumen."); }
+  return response.blob();
 }
 
 export function getFinanceReconciliationSuggestions(context?: FinanceWorkspaceContext): Promise<{ suggestions: FinanceReconciliationSuggestion[] }> {
@@ -900,12 +932,14 @@ export function reverseFinanceReconciliation(id: string, reason: string): Promis
   return request(`/finance/reconciliations/${encodeURIComponent(id)}/reverse`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
-export function generateFinanceCollectionCases(): Promise<{ created: number; cases: IndustryRecord[] }> {
+export function generateFinanceCollectionCases(): Promise<{ created: IndustryRecord[]; count: number; deferred: Array<{ id: string; reason: string }>; analyzedInvoices: number }> {
   return request("/finance/collection-cases/generate", { method: "POST" });
 }
 
 export type FinanceCustomer = { key: string; name: string; rut: string | null; invoices: number; openInvoices: number; totalAmount: number; outstandingAmount: number; overdueAmount: number; lastActivityAt: string };
 export type FinanceDocument = {
+  includedInTotals?: boolean;
+  qualityIssues?: string[];
   id: string;
   recordType: "finance_invoice" | "finance_payable" | string;
   side: "CUSTOMER" | "SUPPLIER";
@@ -972,6 +1006,7 @@ export type FinancePayableSummary = {
   payables: IndustryRecord[];
 };
 export type FinanceMigrationPreview = {
+  periodProtection?: { periods: string[]; invalidRows: Array<string | number>; closedPeriods: string[]; blocked: boolean; message: string };
   maxRows: number;
   sourceFile?: string;
   summary: {
@@ -991,6 +1026,7 @@ export type FinanceMigrationPreview = {
 export type ChileanBank = { key: string; name: string; cmfCode: string };
 export type FinanceBankStatementAccount = { bank: string; bankKey: string; cmfCode: string; accountAlias: string; accountType: string; accountLast4: string | null };
 export type FinanceBankStatementPreview = {
+  periodProtection?: { periods: string[]; closedPeriods: string[]; undatedRows: Array<string | number>; blocked: boolean; message: string };
   reviewConfig?: BankReviewConfig;
   columns?: string[];
   fields?: Array<{ key: string; label: string }>;
@@ -1051,7 +1087,7 @@ export type FinanceSiiDte = {
   reviewReasons: string[];
 };
 export type FinanceSiiStatus = { configured: boolean; companyRut: string | null; environment: "certification" | "production"; certificateReference: string | null; manualDteImportReady: boolean; automationReady: boolean; message: string };
-export type FinanceSiiPreview = { companyRut: string; environment: string; maxFiles: number; summary: { total: number; review: number; customerDocuments: number; supplierDocuments: number; customerAmount: number; supplierAmount: number }; documents: FinanceSiiDte[] };
+export type FinanceSiiPreview = { periodProtection?: FinanceMigrationPreview["periodProtection"]; companyRut: string; environment: string; maxFiles: number; summary: { total: number; review: number; customerDocuments: number; supplierDocuments: number; customerAmount: number; supplierAmount: number }; documents: FinanceSiiDte[] };
 export type FinanceOpenBankingConsent = {
   id: string;
   status: string;
@@ -1071,12 +1107,17 @@ export type FinanceOpenBankingStatus = {
   message: string;
 };
 export type FinanceMonthlyClosePreview = {
+  documentSummary?: { customers: { pendingAmount: number }; suppliers: { pendingAmount: number }; excluded: { inactive: number; adjustments: number; invalid: number } };
   period: string;
   generatedAt: string;
+  snapshotId?: string | null;
+  periodControl?: { period: string; status: "OPEN" | "CLOSED"; version: number; latestCloseId: string | null; currency: string };
+  history?: Array<{ id: string; kind: "CLOSE" | "REOPEN"; at: string; userId: string | null; note: string; version: number | null; closeId: string; active: boolean }>;
+  protection?: { scope: string; message: string };
   status: "READY_TO_CLOSE" | "REQUIRES_REVIEW" | string;
-  metrics: { issued: number; collected: number; registeredPayables: number; paidPayables: number; incoming: number; outgoing: number; netBankFlow: number; reconciliations: number; unreconciledMovements: number; openExceptions: number };
+  metrics: { issued: number; collected: number; registeredPayables: number; paidPayables: number; incoming: number; outgoing: number; netBankFlow: number; unclassifiedMovements?: number; inconsistentReconciliations?: number; excludedMovements?: number; reconciliations: number; unreconciledMovements: number; openExceptions: number };
   blockers: Array<{ type: string; title: string; id: string }>;
-  rows: Array<{ fecha: string; tipo: string; documento: string; contraparte: string; categoria: string; monto: number; saldo: number; estado: string }>;
+  rows: Array<{ fecha: string; tipo: string; documento: string; contraparte: string; categoria: string; monto: number | null; saldo: number; estado: string }>;
 };
 export type FinancePlanning = {
   period: string;
@@ -1133,12 +1174,20 @@ export function getFinanceCollectionPortfolio(): Promise<{ portfolio: FinanceCol
   return request("/finance/collections/portfolio");
 }
 
-export function registerFinanceInvoiceReceipt(id: string, input: { amount: number; paymentDate?: string; reference?: string }): Promise<{ receipt: IndustryRecord; invoice: IndustryRecord; remainingBalance: number }> {
+export function registerFinanceInvoiceReceipt(id: string, input: { amount: number; paymentDate: string; reference?: string; idempotencyKey: string }): Promise<{ receipt: IndustryRecord; invoice: IndustryRecord; remainingBalance: number }> {
   return request(`/finance/invoices/${encodeURIComponent(id)}/receipts`, { method: "POST", body: JSON.stringify(input) });
 }
 
-export function prepareFinanceCollectionReminders(partyKey: string): Promise<{ prepared: IndustryRecord[]; count: number }> {
+export function prepareFinanceCollectionReminders(partyKey: string): Promise<{ prepared: IndustryRecord[]; count: number; replayed: boolean; originalCount?: number; deferred: Array<{ id: string; reason: string }> }> {
   return request(`/finance/collections/portfolio/${encodeURIComponent(partyKey)}/reminders`, { method: "POST" });
+}
+
+export function createFinanceAdministrativeException(input: { title: string; type: string; detail: string; idempotencyKey: string }): Promise<{ exception: IndustryRecord; replayed: boolean }> {
+  return request("/finance/exceptions", { method: "POST", body: JSON.stringify(input) });
+}
+export function saveFinanceCase(record: IndustryRecord, input: Record<string, unknown>): Promise<unknown> {
+  const kind = record.recordType === "finance_exception" ? "exceptions" : "collection-cases";
+  return request(`/finance/${kind}/${encodeURIComponent(record.id)}`, { method: "PATCH", body: JSON.stringify({ ...input, expectedVersion: Number(record.data?.workflowVersion || 0) }) });
 }
 
 export function getFinanceIntegrations(): Promise<{ integrations: FinanceIntegration[] }> {
@@ -1153,7 +1202,7 @@ export function getFinancePayables(): Promise<FinancePayableSummary> {
   return request<FinancePayableSummary>("/finance/payables/summary");
 }
 
-export function registerFinancePayablePayment(id: string, input: { amount: number; paymentDate?: string; reference?: string }): Promise<{ payment: IndustryRecord; payable: IndustryRecord; remainingBalance: number }> {
+export function registerFinancePayablePayment(id: string, input: { amount: number; paymentDate: string; reference?: string; idempotencyKey: string }): Promise<{ payment: IndustryRecord; payable: IndustryRecord; remainingBalance: number }> {
   return request(`/finance/payables/${encodeURIComponent(id)}/payments`, { method: "POST", body: JSON.stringify(input) });
 }
 
@@ -1251,12 +1300,16 @@ export function prepareFinanceOpenBankingConsent(input: { bankKey: string; accou
   return request("/finance/open-banking/consents", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function getFinanceMonthlyClosePreview(period: string): Promise<FinanceMonthlyClosePreview> {
-  return request(`/finance/monthly-close/preview?period=${encodeURIComponent(period)}`);
+export function getFinanceMonthlyClosePreview(period: string, snapshotId?: string): Promise<FinanceMonthlyClosePreview> {
+  return request(`/finance/monthly-close/preview?period=${encodeURIComponent(period)}${snapshotId ? `&snapshotId=${encodeURIComponent(snapshotId)}` : ""}`);
 }
 
-export function registerFinanceMonthlyClose(input: { period: string; note?: string; confirmation: "CERRAR" }): Promise<{ close: IndustryRecord; preview: FinanceMonthlyClosePreview }> {
+export function registerFinanceMonthlyClose(input: { period: string; note?: string; confirmation: "CERRAR"; expectedVersion: number }): Promise<{ close: IndustryRecord; preview: FinanceMonthlyClosePreview }> {
   return request("/finance/monthly-close", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function reopenFinanceMonthlyPeriod(input: { period: string; closeId: string; expectedVersion: number; confirmation: "REABRIR"; reason: string }): Promise<{ periodControl: NonNullable<FinanceMonthlyClosePreview["periodControl"]> }> {
+  return request(`/finance/monthly-close/${encodeURIComponent(input.period)}/reopen`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function getFinancePlanning(period: string): Promise<FinancePlanning> {
@@ -1289,14 +1342,16 @@ export function getFinanceSyncHistory(limit = 12): Promise<{ generatedAt: string
   return request(`/finance/sync-history?limit=${encodeURIComponent(String(limit))}`);
 }
 
-export function syncFinanceNubox(period?: string): Promise<{ ok?: boolean; pending?: boolean; message?: string; created?: number; updated?: number; received?: number }> {
+export type NuboxSyncResult = { ok?: boolean; pending?: boolean; message?: string; warning?: string; period?: string; created?: number; updated?: number; received?: number; total?: number; ignored?: number; analysis?: { analyzed?: boolean; requiresReview?: boolean } };
+
+export function syncFinanceNubox(period?: string): Promise<NuboxSyncResult> {
   return request("/finance/sync/nubox", {
     method: "POST",
     body: JSON.stringify(period ? { period } : {})
   });
 }
 
-export function syncFinanceNuboxHistory(startPeriod: string, endPeriod: string): Promise<{ ok: boolean; periods: number; succeeded: number; failed: number; created: number; updated: number; results: Array<{ period: string; ok?: boolean; error?: string }> }> {
+export function syncFinanceNuboxHistory(startPeriod: string, endPeriod: string): Promise<{ ok: boolean; periods: number; succeeded: number; failed: number; created: number; updated: number; results: Array<NuboxSyncResult & { period: string; error?: string }> }> {
   return request("/finance/sync/nubox/history", {
     method: "POST",
     body: JSON.stringify({ startPeriod, endPeriod })
@@ -1340,7 +1395,7 @@ export function updateFinanceAgentPolicy(patch: Partial<FinanceAgentPolicy>): Pr
   return request("/finance/agents/policy", { method: "PATCH", body: JSON.stringify(patch) });
 }
 
-export function analyzeFinanceAgents(): Promise<{ workspace: FinanceAgentWorkspace; exceptionsPrepared: number; exceptionsSkipped: string | null }> {
+export function analyzeFinanceAgents(): Promise<{ workspace: FinanceAgentWorkspace | null; warning?: string; exceptionsPrepared: number; exceptionsSkipped: string | null; deferred: Array<{ id: string; reason: string; period?: string }>; analyzedMovements: number }> {
   return request("/finance/agents/analyze", { method: "POST" });
 }
 
@@ -2932,8 +2987,8 @@ export async function testConnectionProvider(key: string): Promise<{ ok: boolean
   });
 }
 
-export async function syncNuboxSales(period?: string): Promise<{ ok: boolean; period: string; received: number; total: number; created: number; updated: number; ignored: number }> {
-  return request<{ ok: boolean; period: string; received: number; total: number; created: number; updated: number; ignored: number }>("/connections/finance_nubox/sync", {
+export async function syncNuboxSales(period?: string): Promise<NuboxSyncResult> {
+  return request<NuboxSyncResult>("/connections/finance_nubox/sync", {
     method: "POST",
     body: JSON.stringify(period ? { period } : {})
   });

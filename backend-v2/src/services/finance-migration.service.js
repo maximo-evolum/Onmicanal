@@ -53,10 +53,12 @@ function parseDate(value) {
   const chile = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (chile) {
     const year = chile[3].length === 2 ? `20${chile[3]}` : chile[3];
-    const date = new Date(`${year}-${chile[2].padStart(2, "0")}-${chile[1].padStart(2, "0")}T12:00:00.000Z`);
-    return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+    const source = `${year}-${chile[2].padStart(2, "0")}-${chile[1].padStart(2, "0")}`;
+    const date = new Date(`${source}T12:00:00.000Z`);
+    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== source ? null : source;
   }
   const date = new Date(raw);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw) && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) !== raw) return null;
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
 }
 
@@ -420,7 +422,9 @@ export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION
 
 export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit = MAX_MIGRATION_ROWS } = {}) {
   if (!Array.isArray(rows)) return [];
-  const normalized = rows.slice(0, Math.max(1, Math.min(Number(limit) || MAX_MIGRATION_ROWS, MAX_MIGRATION_ROWS))).map((rawRow, index) => {
+  const maximum = Math.max(1, Math.min(Number(limit) || MAX_MIGRATION_ROWS, MAX_MIGRATION_ROWS));
+  if (rows.length > maximum) throw Object.assign(new Error(`El archivo supera ${maximum} filas. Divide el archivo; no se importó un historial parcial.`), { status: 413 });
+  const normalized = rows.map((rawRow, index) => {
     const row = rawRow && typeof rawRow === "object" && !Array.isArray(rawRow) ? rawRow : {};
     const supplierName = readValue(row, ["proveedor", "supplier", "beneficiario", "vendor", "razon_social_proveedor", "nombre_proveedor"]);
     const customerName = readValue(row, ["cliente", "customer", "deudor", "razon_social", "razon_social_cliente", "nombre_cliente"]);
@@ -497,7 +501,10 @@ export function normalizeHistoricalFinanceRows(rows, { now = new Date(), limit =
       rut: readValue(row, ["rut", "rut_cliente", "rut_proveedor", "tax_id"]),
       category: readValue(row, ["categoria", "category", "centro_costo", "concepto", "glosa"]),
       ...documentData,
+      issueDate,
+      paymentDate,
       amount: documentData.amount,
+      invalidPaymentDate: Boolean(readValue(row, ["fecha_pago", "fecha_de_pago", "payment_date", "paid_at"])) && !paymentDate,
       paidAmount: Math.min(documentData.amount, documentData.paidAmount),
       balance: Math.min(Math.max(0, financeValidation.adjustedAmount), documentData.balance),
       status,

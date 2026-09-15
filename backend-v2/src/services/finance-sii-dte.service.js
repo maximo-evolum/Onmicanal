@@ -41,7 +41,7 @@ function safeNumber(value) {
 
 function validDate(value) {
   const source = cleanText(value);
-  return /^\d{4}-\d{2}-\d{2}$/.test(source) ? source : null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(source) && Number.isFinite(Date.parse(source)) && new Date(source).toISOString().slice(0, 10) === source ? source : null;
 }
 
 const DTE_TYPES = Object.freeze({
@@ -126,13 +126,15 @@ function parseDocument(xml, { companyRut, sourceFile = "dte.xml" } = {}) {
 }
 
 export function parseSiiDteFiles(files, { companyRut } = {}) {
-  const input = Array.isArray(files) ? files.slice(0, MAX_SII_DTE_FILES) : [];
+  const input = Array.isArray(files) ? files : [];
+  if (input.length > MAX_SII_DTE_FILES) throw Object.assign(new Error(`Selecciona como máximo ${MAX_SII_DTE_FILES} DTE. No se procesó un lote parcial.`), { status: 413 });
   if (!normalizeRut(companyRut)) throw new Error("Configura el RUT del contribuyente en Centro de Conexiones antes de importar DTE.");
   return input.map((file) => {
     if (!file?.buffer?.length) throw new Error("Uno de los archivos DTE está vacío.");
     if (file.buffer.length > MAX_SII_DTE_FILE_BYTES) throw new Error("Cada DTE XML debe pesar como máximo 5 MB.");
     if (!/\.xml$/i.test(cleanText(file.originalname || file.name))) throw new Error("Solo se pueden importar documentos DTE en formato XML.");
     const xml = file.buffer.toString("utf8").replace(/^\uFEFF/, "");
+    if ((xml.match(/<(?:\w+:)?Documento\b/g) || []).length > 1) throw new Error("Este XML contiene varios DTE. Sepáralos en archivos individuales para no omitir documentos.");
     if (!/<(?:EnvioDTE|SetDTE|DTE|Documento)\b/i.test(xml)) throw new Error("El archivo no tiene una estructura DTE XML reconocible.");
     return parseDocument(xml, { companyRut, sourceFile: file.originalname || file.name });
   });
@@ -141,7 +143,9 @@ export function parseSiiDteFiles(files, { companyRut } = {}) {
 export function sanitizeSiiDteDocuments(documents, { companyRut } = {}) {
   const normalizedCompanyRut = normalizeRut(companyRut);
   if (!normalizedCompanyRut) throw new Error("Configura el RUT del contribuyente en Centro de Conexiones antes de importar DTE.");
-  return (Array.isArray(documents) ? documents : []).slice(0, MAX_SII_DTE_FILES).map((source) => {
+  const input = Array.isArray(documents) ? documents : [];
+  if (input.length > MAX_SII_DTE_FILES) throw Object.assign(new Error(`El lote supera ${MAX_SII_DTE_FILES} DTE. No se importó parcialmente.`), { status: 413 });
+  return input.map((source) => {
     const document = source && typeof source === "object" ? source : {};
     const emitterRut = normalizeRut(document.emitterRut);
     const receiverRut = normalizeRut(document.receiverRut);

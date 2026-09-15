@@ -1,4 +1,6 @@
 import { prisma } from "../lib/db.js";
+import { findAllFinanceRecords } from "./finance-integrity.service.js";
+import { prepareFinanceExceptionCases } from "./finance-agent-actions.service.js";
 import {
   financeRecordData,
   getFinanceOverview,
@@ -52,7 +54,9 @@ function asObject(value) {
 }
 
 function asBoolean(value, fallback) {
-  return value === undefined ? fallback : Boolean(value);
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  return fallback;
 }
 
 function boundedNumber(value, fallback, min, max) {
@@ -78,8 +82,8 @@ export function normalizeFinanceAgentPolicy(value = {}) {
   };
 }
 
-export async function getFinanceAgentPolicy(tenantId) {
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { aiSettings: true } });
+export async function getFinanceAgentPolicy(tenantId, db = prisma) {
+  const tenant = await db.tenant.findUnique({ where: { id: tenantId }, select: { aiSettings: true } });
   return normalizeFinanceAgentPolicy(tenant?.aiSettings?.financeAgents);
 }
 
@@ -99,75 +103,8 @@ export async function updateFinanceAgentPolicy({ tenantId, patch = {} }) {
  * Se ejecuta a solicitud del usuario desde el equipo de agentes y solo si el
  * tenant autorizo que el agente prepare excepciones automaticamente.
  */
-export async function prepareFinanceAgentExceptions({ tenantId }) {
-  const policy = await getFinanceAgentPolicy(tenantId);
-  if (!policy.autoCreateExceptions) return { created: [], skipped: "POLICY_DISABLED" };
-
-  const [suggestions, existing, movements] = await Promise.all([
-    getFinanceReconciliationSuggestions({ tenantId, limit: 100 }),
-    prisma.industryRecord.findMany({
-      where: { tenantId, recordType: "finance_exception", status: { notIn: ["RESOLVED", "CLOSED"] } },
-      take: 500
-    }),
-    prisma.industryRecord.findMany({ where: { tenantId, recordType: "bank_movement", status: { not: "MATCHED" } }, orderBy: { updatedAt: "desc" }, take: 500 })
-  ]);
-  const existingKeys = new Set(existing.map((item) => {
-    const data = financeRecordData(item);
-    return `${data.invoiceId || ""}:${data.movementId || ""}:${data.type || ""}`;
-  }));
-  const candidates = suggestions.filter((suggestion) => suggestion.partial || suggestion.overpayment || suggestion.difference > 1);
-  const created = [];
-
-  for (const suggestion of candidates) {
-    const type = suggestion.partial ? "PARTIAL_PAYMENT" : "AMOUNT_DIFFERENCE";
-    const key = `${suggestion.invoice.id}:${suggestion.movement.id}:${type}`;
-    if (existingKeys.has(key)) continue;
-    const record = await prisma.industryRecord.create({
-      data: {
-        tenantId,
-        recordType: "finance_exception",
-        title: `${suggestion.partial ? "Pago parcial" : "Diferencia de monto"} · ${suggestion.invoice.title}`.slice(0, 220),
-        status: "OPEN",
-        data: {
-          type,
-          invoiceId: suggestion.invoice.id,
-          movementId: suggestion.movement.id,
-          confidence: suggestion.confidence,
-          difference: suggestion.difference,
-          suggestedBy: "finance_exceptions_agent",
-          reasons: suggestion.reasons,
-          createdAt: new Date().toISOString()
-        }
-      }
-    });
-    existingKeys.add(key);
-    created.push(record);
-  }
-
-  // Un abono que no tiene ningún documento candidato no se descarta ni se
-  // imputa a pérdida: queda en una bandeja explícita para identificarlo.
-  const suggestedMovementIds = new Set(suggestions.map((suggestion) => suggestion.movement?.id).filter(Boolean));
-  for (const movement of movements) {
-    const data = financeRecordData(movement);
-    const direction = String(data.direction || "").toUpperCase();
-    const kind = String(data.movementKind || "").toUpperCase();
-    if (suggestedMovementIds.has(movement.id) || direction === "DEBIT" || ["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(kind)) continue;
-    const key = `:${movement.id}:UNIDENTIFIED_INCOME`;
-    if (existingKeys.has(key)) continue;
-    const record = await prisma.industryRecord.create({
-      data: {
-        tenantId, recordType: "finance_exception", title: `Ingreso sin documento identificado · ${movement.title}`.slice(0, 220), status: "OPEN",
-        data: {
-          type: "UNIDENTIFIED_INCOME", movementId: movement.id, priority: "HIGH", amount: data.amount || 0,
-          detail: "El abono no tiene una factura candidata. Revisa referencia, RUT, contraparte o medio de pago antes de conciliar.",
-          suggestedBy: "finance_exceptions_agent", createdAt: new Date().toISOString()
-        }
-      }
-    });
-    existingKeys.add(key);
-    created.push(record);
-  }
-  return { created, skipped: null };
+export async function prepareFinanceAgentExceptions({ tenantId, userId, db = prisma }) {
+  return prepareFinanceExceptionCases(db, { tenantId, userId, readPolicy: (tx) => getFinanceAgentPolicy(tenantId, tx) });
 }
 
 function agentState(code, state) {
@@ -190,7 +127,8 @@ function agentState(code, state) {
   }
   if (code === "EXCEPTIONS") {
     const partials = suggestions.filter((item) => item.partial).length;
-    const unmatched = Math.max(0, overview.reconciliation.pendingMovements - suggestions.length);
+    const matchedIds = new Set(suggestions.map((s) => s.movement.id));
+    const unmatched = movements.filter((m) => !matchedIds.has(m.id) && !["MATCHED", "CLOSED", "REVIEW", "REJECTED"].includes(m.status) && ["CREDIT", "ABONO"].includes(String(m.data?.direction || m.data?.movementType).toUpperCase()) && !["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(m.data?.movementKind)).length;
     return {
       status: partials || unmatched || overview.exceptions.open ? "NEEDS_REVIEW" : "CLEAR",
       metrics: [{ label: "Pagos parciales", value: partials }, { label: "Sin coincidencia", value: unmatched }, { label: "Casos abiertos", value: overview.exceptions.open }],
@@ -219,8 +157,8 @@ function agentState(code, state) {
 export async function getFinanceAgentWorkspace({ tenantId }) {
   const [overview, suggestions, movements, policy] = await Promise.all([
     getFinanceOverview({ tenantId }),
-    getFinanceReconciliationSuggestions({ tenantId, limit: 100 }),
-    prisma.industryRecord.findMany({ where: { tenantId, recordType: "bank_movement" }, orderBy: { updatedAt: "desc" }, take: 500 }),
+    getFinanceReconciliationSuggestions({ tenantId, limit: null }),
+    findAllFinanceRecords(prisma, { where: { tenantId, recordType: "bank_movement" }, orderBy: { updatedAt: "desc" } }),
     getFinanceAgentPolicy(tenantId)
   ]);
   const state = { overview, suggestions, movements, policy };
