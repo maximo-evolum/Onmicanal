@@ -44,7 +44,7 @@ export async function closeFinancePeriod(db, { tenantId, userId, period, confirm
     checkVersion(control, expectedVersion);
     if (control.status === "CLOSED") fail(409, "El período ya está cerrado. Consulta su fotografía guardada.");
     const preview = await previewBuilder({ tenantId, period, db: tx });
-    if (preview.period !== period || preview.status !== "READY_TO_CLOSE" || preview.blockers?.length) throw new FinanceOperationError(409, "Resuelve los pendientes antes de cerrar el período.", { preview });
+    if (preview.period !== period || preview.status !== "READY_TO_CLOSE" || preview.blockers?.length || preview.coverage?.complete !== true) throw new FinanceOperationError(409, "Resuelve los pendientes y verifica la cobertura antes de cerrar el período.", { preview });
     const closedAt = new Date().toISOString();
     const close = await tx.industryRecord.create({ data: { tenantId, recordType: "finance_monthly_close", title: `Cierre financiero ${period} · versión ${control.version + 1}`, status: "CLOSED", data: {
       ...preview, period, currency: "CLP", closedAt, closedById: userId || null, note: String(note).trim(), lifecycleVersion: control.version + 1, previousCloseId: control.latestCloseId || null

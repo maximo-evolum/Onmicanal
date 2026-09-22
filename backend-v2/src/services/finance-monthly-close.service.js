@@ -6,6 +6,8 @@ import { ACTIVE_IMPORT_STATUSES } from "./finance-import-jobs.service.js";
 import { classifyFinanceMovement } from "./finance-movement-classification.service.js";
 import { auditCloseReconciliations } from "./finance-close-reconciliation.service.js";
 import { financeDocumentDate, financeParty, summarizeFinanceDocuments } from "./finance-document-values.service.js";
+import { buildPeriodCoverage, applyPeriodCoverage } from "./finance-period-coverage.service.js";
+import { customerCreditsForClose } from "./finance-customer-credit-ledger.service.js";
 
 function cleanText(value, fallback = "") {
   const text = String(value ?? "").trim();
@@ -22,6 +24,7 @@ export function validFinancePeriod(period) {
 }
 
 function recordDate(record, recordsById = new Map(), visited = new Set()) {
+  if (record.recordType === "finance_credit_application") return dateText(financeRecordData(record).applicationDate);
   if (["finance_invoice", "finance_payable"].includes(record.recordType)) return financeDocumentDate(record);
   const data = financeRecordData(record);
   if (visited.has(record.id)) return "";
@@ -82,7 +85,9 @@ export function buildFinanceMonthlyClosePreview(records, period, now = new Date(
   const outgoing = classifiedMovements.reduce((total, item) => item.direction === "DEBIT" && item.amount !== null ? total + item.amount : total, 0);
   const unclassified = classifiedMovements.filter((item) => item.amount === null || item.direction === "UNKNOWN");
   const unreconciled = audit.unreconciled;
+  const customerCredits = customerCreditsForClose(evidenceRecords, period);
   const blockers = [
+    ...customerCredits.blockers,
     ...documents.issues.map((item) => ({ type: "DOCUMENTO_SALDO_INCONSISTENTE", id: `document-${item.id}`, title: item.title })),
     ...audit.blockers,
     ...unclassified.map(({ record, amount }) => ({ type: "MOVIMIENTO_CLASIFICACION_PENDIENTE", title: `${amount === null ? "Monto inválido o ausente" : "Tipo abono/cargo sin identificar"}: ${record.title || record.id}. Revisa el movimiento antes de cerrar.`, id: `classification-${record.id}` })),
@@ -107,6 +112,7 @@ export function buildFinanceMonthlyClosePreview(records, period, now = new Date(
     documentSummary: { customers: documents.customers, suppliers: documents.suppliers, excluded: documents.excluded },
     metrics: {
       issued,
+      customerCreditAvailable: customerCredits.availableAmount,
       collected,
       registeredPayables,
       paidPayables,
@@ -139,13 +145,17 @@ export function addPendingImportsToClose(preview, jobs) {
 
 export async function getFinanceMonthlyClosePreview({ tenantId, period, db = prisma }) {
   const records = await findAllFinanceRecords(db, {
-    where: { tenantId, recordType: { in: ["finance_invoice", "finance_payable", "bank_movement", "finance_reconciliation", "finance_invoice_receipt", "finance_exception"] } },
+    where: { tenantId, recordType: { in: ["finance_invoice", "finance_payable", "bank_statement", "bank_movement", "finance_reconciliation", "finance_invoice_receipt", "finance_exception", "finance_period_coverage", "finance_period_reopening", "finance_open_banking_consent", "finance_customer_credit", "finance_credit_application"] } },
   });
   // The current close is company-wide in CLP. Never sum foreign currencies as
   // pesos; account-specific and multicurrency closes need their own workflow.
   const jobs = await db.financeBankImportJob.findMany({ where: { tenantId, status: { in: ACTIVE_IMPORT_STATUSES } },
     select: { id: true, status: true, sourceFile: true, periodRange: true } });
+  const channels = await db.tenantChannelConfig.findMany({ where: { tenantId, channel: { in: ["finance_bank_statements", "finance_open_banking"] } }, select: { metadata: true } });
+  const accounts = channels.flatMap((c) => Array.isArray(c.metadata?.bankAccounts) ? c.metadata.bankAccounts : []).map((a) => ({ bankKey: a.bankKey, bank: a.bank, accountAlias: a.accountAlias || a.alias, accountLast4: a.accountLast4, accountType: a.accountType }));
   // Keep foreign-currency evidence available for detecting invalid links, but
   // never include its amounts or unrelated approvals in this CLP close.
-  return addPendingImportsToClose(buildFinanceMonthlyClosePreview(filterFinanceContext(records, { period: "", accountKey: "", currency: "CLP" }), period, new Date(), records), jobs);
+  const now = new Date();
+  const preview = addPendingImportsToClose(buildFinanceMonthlyClosePreview(filterFinanceContext(records.filter((r) => !["bank_statement", "finance_period_coverage", "finance_period_reopening", "finance_open_banking_consent"].includes(r.recordType)), { period: "", accountKey: "", currency: "CLP" }), period, now, records), jobs);
+  return applyPeriodCoverage(preview, buildPeriodCoverage({ tenantId, period, records, jobs, accounts, now }));
 }

@@ -8,7 +8,7 @@ export function financeDocumentSide(record) {
   const d = dataOf(record), supplier = Boolean(text(d.supplierName || d.supplier || d.providerName)), customer = Boolean(text(d.customerName || d.customer || d.clientName));
   if ([d.documentSide, d.side, d.direction, d.kind, d.documentFlow, d.counterpartyType].some((v) => ["SUPPLIER", "PROVIDER", "PAYABLE", "PURCHASE", "COMPRA", "PROVEEDOR", "EGRESO", "RECEIVED", "RECIBIDO"].includes(upper(v)))) return "SUPPLIER";
   if (supplier !== customer) return supplier ? "SUPPLIER" : "CUSTOMER";
-  return ["SUPPLIER", "PROVIDER", "PAYABLE", "PURCHASE", "COMPRA", "PROVEEDOR", "EGRESO", "RECEIVED", "RECIBIDO"].includes(upper(d.documentSide || d.side || d.direction || d.kind || d.documentFlow || d.counterpartyType)) ? "SUPPLIER" : "CUSTOMER";
+  return "CUSTOMER";
 }
 export function financeParty(record) {
   const d = dataOf(record), side = financeDocumentSide(record), supplier = side === "SUPPLIER";
@@ -32,22 +32,26 @@ export function financeDocumentState(record, now = new Date()) {
   if (!supplied(rawAmount)) issues.push("Falta el monto original del documento.");
   const creditNotes = read(d.creditNotesTotal ?? d.creditNoteAmount, "Notas de crédito"), debitNotes = read(d.debitNotesTotal ?? d.debitNoteAmount, "Notas de débito");
   const adjusted = originalAmount - creditNotes + debitNotes, amount = Math.max(0, adjusted);
+  const justifiedDifference = read(d.justifiedDifferenceTotal, "Diferencias justificadas");
   if (adjusted < 0) issues.push("Las notas de crédito superan el monto ajustable.");
   const storedPaid = supplied(d.paidAmount) ? read(d.paidAmount, "Pagos registrados") : null;
+  if (!supplied(d.balance) && storedPaid === null && amount > 0) issues.push("No se conoce el saldo ni el pago acumulado; requiere respaldo histórico.");
   // Stored balance is already net of applied adjustments. Never deduct NC twice.
-  const balance = supplied(d.balance) ? read(d.balance, "Saldo") : Math.max(0, amount - (storedPaid ?? 0));
+  const balance = supplied(d.balance) ? read(d.balance, "Saldo") : Math.max(0, amount - (storedPaid ?? 0) - justifiedDifference);
   if (balance > amount || (storedPaid !== null && storedPaid > amount)) issues.push("El saldo o los pagos superan el monto ajustado.");
-  const paidAmount = Math.max(0, amount - balance);
+  if (balance + justifiedDifference > amount) issues.push("El saldo y las diferencias justificadas superan el monto del documento.");
+  const paidAmount = Math.max(0, amount - balance - justifiedDifference);
   if (storedPaid !== null && Math.abs(storedPaid - paidAmount) > 0.000001) issues.push("Los pagos registrados y el saldo no cuadran con el monto ajustado.");
   const rawStatus = upper(record.status || d.status || "OPEN");
   const inactive = inactiveStatuses.has(rawStatus) || inactiveStatuses.has(upper(d.status));
   const type = upper(d.documentType || d.documentTypeName).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const adjustment = ["56", "61"].includes(text(d.documentTypeCode)) || /NOTA (DE )?(CREDITO|DEBITO)/.test(type);
   if (!inactive && !adjustment && rawStatus === "PAID" && balance > 0) issues.push("El documento figura pagado pero conserva saldo sin respaldar.");
-  const due = d.dueDate ? new Date(String(d.dueDate)) : null;
+  const dueDay = financeDocumentDate({ data: { issueDate: d.dueDate } });
+  const due = dueDay ? new Date(dueDay) : null;
   const dueDate = due && !Number.isNaN(due.getTime()) ? due : null;
   const status = inactive ? (rawStatus === "DELETED" || rawStatus === "EXCLUDED" ? rawStatus : "ANNULLED") : adjustment ? "ADJUSTMENT" : issues.length ? "REQUIRES_REVIEW" : balance === 0 ? "PAID" : dueDate && dueDate < now ? "OVERDUE" : paidAmount > 0 ? "PARTIAL" : "OPEN";
-  return { amount, originalAmount, creditNotes, debitNotes, balance: inactive || adjustment ? 0 : balance, paidAmount: inactive || adjustment ? 0 : paidAmount, dueDate, status,
+  return { amount, originalAmount, creditNotes, debitNotes, justifiedDifference, balance: inactive || adjustment ? 0 : balance, paidAmount: inactive || adjustment ? 0 : paidAmount, dueDate, status,
     included: !inactive && !adjustment && !issues.length, inactive, adjustment, qualityIssues: issues };
 }
 export function summarizeFinanceDocuments(records, now = new Date()) {
@@ -73,5 +77,6 @@ export function summarizeFinanceDocuments(records, now = new Date()) {
 export function financeDocumentAmounts(record, now = new Date()) {
   const s = financeDocumentState(record, now);
   return { status: s.status, totalAmount: s.originalAmount, amount: s.amount, balance: s.balance, paidAmount: s.paidAmount,
+    justifiedDifferenceTotal: s.justifiedDifference,
     creditNotesTotal: s.creditNotes, debitNotesTotal: s.debitNotes, includedInTotals: s.included, qualityIssues: s.qualityIssues };
 }

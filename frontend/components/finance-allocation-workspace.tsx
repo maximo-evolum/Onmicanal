@@ -7,9 +7,9 @@ type Row = FinanceAllocationPage["records"][number];
 const dataOf = (row: IndustryRecord) => (row.data || {}) as Record<string, unknown>;
 const money = (value: unknown) => new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(Number(value || 0));
 
-function RecordBrowser({ context, kind, revision, disabled, selected, onSelect, onReverse }: {
+export function RecordBrowser({ context, kind, revision, disabled, selected, onSelect, onReverse, customerRut = "" }: {
   context: FinanceWorkspaceContext; kind: string; revision: number; disabled: boolean; selected: string[];
-  onSelect: (row: Row) => void; onReverse?: (row: Row) => void;
+  onSelect: (row: Row) => void; onReverse?: (row: Row) => void; customerRut?: string;
 }) {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -18,13 +18,13 @@ function RecordBrowser({ context, kind, revision, disabled, selected, onSelect, 
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true; setLoading(true); setError(""); setResult(null);
-    const timer = setTimeout(() => { getFinanceAllocationWorkspace(context, kind, page, search).then((response) => {
+    const timer = setTimeout(() => { getFinanceAllocationWorkspace(context, kind, page, search, customerRut).then((response) => {
       if (!active) return;
       if (page > response.pages) { setPage(response.pages); return; }
       setResult(response);
     }).catch((e) => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); }); }, 200);
     return () => { active = false; clearTimeout(timer); };
-  }, [context.period, context.accountKey, context.currency, kind, page, search, revision]);
+  }, [context.period, context.accountKey, context.currency, kind, page, search, revision, customerRut]);
   return <div className="finance-bank-review">
     <label>Buscar por nombre, RUT, folio o referencia<input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Escribe para buscar" /></label>
     {error ? <p role="alert">{error}</p> : null}

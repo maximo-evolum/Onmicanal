@@ -33,7 +33,7 @@ test("resumen mantiene empresa cuenta período moneda y lotes antiguos", async (
   const account = { bankKey: "santander", accountLast4: "1234" };
   const records = [invoice("c"), invoice("supplier", { supplierName: "Proveedor" }), invoice("usd", { currency: "USD" }), invoice("old", { issueDate: "2025-12-01" }), { id: "b", recordType: "bank_statement", data: { account } }, movement("m", "r", "MATCHED", { sourceBatchId: "b" }), rec("r", "m"), movement("outside", null, "PENDING", { bankKey: "otro" })];
   const overview = await getFinanceOverview({ tenantId: "tenant", now, db: dbFor(records), context: { currency: "CLP", period: "2026-01", accountKey: financeAccountKey(account) } });
-  assert.equal(overview.invoices.total, 1); assert.equal(overview.reconciliation.totalMovements, 1); assert.equal(overview.reconciliation.rate, 100);
+  assert.equal(overview.invoices.total, 1); assert.equal(overview.reconciliation.totalMovements, 1); assert.equal(overview.reconciliation.rate, 0); // Minimal legacy link lacks payment evidence.
   assert.equal(overview.schedule.next30Days, 100); assert.equal(overview.collection.dsoSampleSize, 0);
   assert.match(overviewMetricsCsv(overview, "tenant"), /Confirmados \/ activos/);
 });

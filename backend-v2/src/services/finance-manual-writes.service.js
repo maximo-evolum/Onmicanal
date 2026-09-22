@@ -92,6 +92,7 @@ export async function writeManualFinanceRecord(db, { tenantId, userId, recordTyp
       if (String(current.updatedAt) !== String(existing.updatedAt) || current.status !== existing.status || !isDeepStrictEqual(current.data, existing.data)) fail(409, "El registro cambió mientras lo editabas. Actualiza la vista; no se sobrescribieron datos.");
     }
     const before = dataOf(current); const after = nextData ?? before;
+    if ((after.justifiedDifferenceTotal ?? 0) !== (before.justifiedDifferenceTotal ?? 0)) fail(409, "Las diferencias justificadas sólo se aplican o revierten desde su flujo de aprobación.");
     if (current && (before.manualCreationKey !== after.manualCreationKey || before.manualCreationHash !== after.manualCreationHash)) fail(409, "No se pueden modificar los identificadores de creación de este documento.");
     const dates = [...new Set([...(current ? [recordDate(recordType, before)] : []), ...(operation !== "DELETE" ? [recordDate(recordType, after)] : [])].map((date) => date.slice(0, 7)))].sort();
     for (const period of dates) await assertFinancePeriodOpen(tx, tenantId, period);

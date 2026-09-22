@@ -30,8 +30,12 @@ const FINANCE_RECORD_ACTIONS = Object.freeze({
   finance_migration_batch: FINANCE_ACTIONS.IMPORT_HISTORY,
   finance_sii_import_batch: FINANCE_ACTIONS.IMPORT_HISTORY,
   finance_reconciliation: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
+  finance_customer_credit: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
+  finance_credit_application: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
   finance_monthly_close: FINANCE_ACTIONS.CLOSE_PERIOD,
   finance_period_reopening: FINANCE_ACTIONS.REOPEN_PERIOD,
+  finance_period_coverage: FINANCE_ACTIONS.CLOSE_PERIOD,
+  finance_historical_correction: FINANCE_ACTIONS.IMPORT_HISTORY,
   finance_budget: FINANCE_ACTIONS.CONFIGURE,
   finance_open_banking_consent: FINANCE_ACTIONS.CONFIGURE,
   // Estas dos entidades representan trabajo preparatorio. Nunca ejecutan un

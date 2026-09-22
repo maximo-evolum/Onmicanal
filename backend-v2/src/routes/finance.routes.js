@@ -1,6 +1,10 @@
 import { bankPeriodImpact, bankPeriodRestrictions, assertBankPeriodsOpen, deleteBankStatementInOpenPeriods } from "../services/finance-bank-periods.service.js";
 import { closeFinancePeriod, reopenFinancePeriod, getFinancePeriodWorkspace } from "../services/finance-period-control.service.js";
+import { reviewFinancePeriodCoverage } from "../services/finance-period-coverage.service.js";
+import { listHistoricalReview, correctHistoricalRecord } from "../services/finance-historical-review.service.js";
 import { applyFinanceAllocation, reverseFinanceAllocation, sendFinanceMovementToReview } from "../services/finance-allocation.service.js";
+import { registerCustomerCredit, applyCustomerCredit, reverseCustomerCreditApplication, reverseCustomerCredit, listCustomerCredits } from "../services/finance-customer-credit.service.js";
+import { creditRut, invoiceCreditRut } from "../services/finance-customer-credit-ledger.service.js";
 import { BANK_REVIEW_FIELDS, bankReviewColumns, normalizeBankReviewRows, bankReviewPage, validateBankReviewConfig, exportBankReviewCsv } from "../services/finance-bank-review.service.js";
 import { ACTIVE_IMPORT_STATUSES, importJobView, createBankImportJob, analyzeBankImportJob, readBankImportPreview, getBankImportJob, cancelBankImportJob, bankImportConfirmation } from "../services/finance-import-jobs.service.js";
 import { Router } from "express";
@@ -211,7 +215,8 @@ function financeDocumentCoverage(documents) {
   }
   const summarize = (items) => {
     const dates = items
-      .map((item) => new Date(item.issueDate || item.createdAt))
+      .filter((item) => item.issueDate)
+      .map((item) => new Date(item.issueDate))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => a.getTime() - b.getTime());
     const bySource = {};
@@ -370,6 +375,7 @@ financeRouter.get("/finance/customers", async (req, res) => {
       const name = cleanText(data.customerName || data.customer || data.clientName, "Cliente sin nombre");
       const key = `${cleanText(data.rut || data.clientRut).replace(/[^0-9kK]/g, "") || name.toLocaleLowerCase("es")}`;
       const state = getInvoiceFinancialState(invoice);
+      if (!state.included) continue;
       const item = customers.get(key) || { key, name, rut: cleanText(data.rut || data.clientRut) || null, invoices: 0, openInvoices: 0, totalAmount: 0, outstandingAmount: 0, overdueAmount: 0, lastActivityAt: invoice.updatedAt };
       item.invoices += 1;
       item.totalAmount += state.amount;
@@ -422,7 +428,6 @@ financeRouter.get("/finance/documents", async (req, res) => {
     const allDocuments = filterFinanceContext(records, context).filter((r) => includePayables || financeDocumentSide(r) !== "SUPPLIER").map((record) => {
       const data = financeRecordData(record);
       const party = financeParty(record);
-      const state = party.side === "SUPPLIER" ? payableState(record, now) : invoiceState(record, now);
       return {
         id: record.id,
         recordType: record.recordType,
@@ -430,29 +435,20 @@ financeRouter.get("/finance/documents", async (req, res) => {
         documentNumber: cleanText(data.documentNumber || data.invoiceNumber || data.number, "Sin folio"),
         partyName: party.name,
         partyRut: party.rut,
-        status: state.status,
         issueDate: financeDocumentDate(record) || null,
         dueDate: data.dueDate || null,
         documentType: cleanText(data.documentType || data.documentTypeName, party.side === "SUPPLIER" ? "Documento de proveedor" : "Factura de cliente"),
         documentTypeCode: cleanText(data.documentTypeCode) || null,
         netAmount: safeAmount(data.netAmount),
         vatAmount: safeAmount(data.vatAmount),
-        totalAmount: state.originalAmount,
         currency: cleanText(data.currency, "CLP"),
         paymentMethod: cleanText(data.paymentMethod) || null,
         paymentIntermediary: cleanText(data.paymentIntermediary) || null,
         commissionAmount: safeAmount(data.commissionAmount),
         settlementReference: cleanText(data.settlementReference) || null,
-        creditNotesTotal: state.creditNotes,
-        debitNotesTotal: state.debitNotes,
         referenceDocumentType: cleanText(data.referenceDocumentType) || null,
         referenceDocumentNumber: cleanText(data.referenceDocumentNumber) || null,
         referenceDocumentDate: data.referenceDocumentDate || null,
-        amount: state.amount,
-        balance: state.balance,
-        paidAmount: state.paidAmount,
-        includedInTotals: state.included,
-        qualityIssues: state.qualityIssues,
         ...financeDocumentAmounts(record, now),
         nuboxDocument: cleanText(data.source).toLowerCase() === "nubox" && Boolean(cleanText(data.nuboxDocumentId)),
         source: cleanText(data.source, "registro manual"),
@@ -1315,6 +1311,30 @@ financeRouter.get("/finance/plan", async (req, res) => {
 // El cierre mensual es una fotografía controlada para administración y
 // contabilidad. No genera asientos, no presenta declaraciones y no modifica
 // facturas: exige que los movimientos y excepciones del período estén revisados.
+async function historicalModuleAccess(req) {
+  const keys = { customers: MODULES.FINANCE_INVOICES, suppliers: MODULES.FINANCE_PAYABLES, bank: MODULES.FINANCE_BANK_SYNC, exceptions: MODULES.FINANCE_EXCEPTIONS };
+  return Object.fromEntries(await Promise.all(Object.entries(keys).map(async ([key, module]) => [key, req.user?.role === "SUPER_ADMIN" || await ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant })])));
+}
+financeRouter.get("/finance/historical-review", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    res.json(await listHistoricalReview(prisma, { tenantId: req.tenantId, access: await historicalModuleAccess(req), page: req.query.page || 1, query: cleanText(req.query.q) }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Historical review error", error); res.status(500).json({ error: "No se pudo consultar la revisión histórica." });
+  }
+});
+financeRouter.post("/finance/historical-review/:id/correct", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const { version, patch, reason, evidence, confirmation } = req.body || {};
+    res.json(await correctHistoricalRecord(prisma, { tenantId: req.tenantId, userId: req.user?.id, id: req.params.id, version, patch, reason, evidence, confirmation, access: await historicalModuleAccess(req) }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Historical correction error", error); res.status(500).json({ error: "No se pudo corregir el registro histórico. No se aplicaron cambios parciales." });
+  }
+});
+
 financeRouter.get("/finance/monthly-close/preview", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
@@ -1324,6 +1344,18 @@ financeRouter.get("/finance/monthly-close/preview", async (req, res) => {
     if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Finance monthly close preview error:", error);
     res.status(500).json({ error: "No se pudo consultar el cierre mensual." });
+  }
+});
+
+financeRouter.post("/finance/monthly-close/:period/coverage", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.CLOSE_PERIOD), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const { expectedVersion, fingerprint, confirmation, declarations, inventoryConfirmed } = req.body || {};
+    res.status(201).json(await reviewFinancePeriodCoverage(prisma, { tenantId: req.tenantId, userId: req.user?.id, period: req.params.period, expectedVersion, fingerprint, confirmation, declarations, inventoryConfirmed }));
+  } catch (error) {
+    if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+    console.error("Finance period coverage error", error);
+    res.status(500).json({ error: "No se pudo guardar la revisión del período." });
   }
 });
 
@@ -1529,6 +1561,24 @@ financeRouter.post("/finance/agents/analyze", requireRole(ROLE_GROUPS.STAFF), re
   }
 });
 
+financeRouter.get("/finance/customer-credits", async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.json(await listCustomerCredits(prisma, { tenantId: req.tenantId, page: req.query.page || 1, query: req.query.q || "" }));
+  } catch (error) { res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudieron consultar los saldos a favor." }); }
+});
+for (const [path, operation, args] of [
+  ["/finance/customer-credits", registerCustomerCredit, (req) => ({ movementId: req.body?.movementId, customerRut: req.body?.customerRut, customerName: req.body?.customerName, kind: req.body?.kind })],
+  ["/finance/customer-credits/:id/apply", applyCustomerCredit, (req) => ({ creditId: req.params.id, expectedVersion: req.body?.expectedVersion, allocations: req.body?.allocations, applicationDate: req.body?.applicationDate })],
+  ["/finance/customer-credits/:id/reverse", reverseCustomerCredit, (req) => ({ creditId: req.params.id })],
+  ["/finance/credit-applications/:id/reverse", reverseCustomerCreditApplication, (req) => ({ applicationId: req.params.id })]
+]) financeRouter.post(path, requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.json(await operation(prisma, { ...args(req), tenantId: req.tenantId, userId: req.user?.id, reason: req.body?.reason }));
+  } catch (error) { res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo guardar la operación. No se aplicaron cambios parciales." }); }
+});
+
 financeRouter.get("/finance/reconciliation-workspace", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
@@ -1542,6 +1592,7 @@ financeRouter.get("/finance/reconciliation-workspace", async (req, res) => {
       : row.recordType === "bank_movement" && !["MATCHED", "DELETED", "REVIEW", "REJECTED"].includes(row.status));
     const normalize = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const search = normalize(String(req.query.search || "").slice(0, 200));
+    if (kind === "invoices") records = records.filter((row) => getInvoiceFinancialState(row).included && financeDocumentSide(row) === "CUSTOMER" && (!req.query.customerRut || invoiceCreditRut(row) === creditRut(req.query.customerRut)));
     if (search) records = records.filter((row) => { const d = financeRecordData(row); return normalize([row.title, d.description, d.reference, d.clientRut, d.customerRut, d.rut, d.clientName, d.customerName, d.invoiceNumber].join(" ")).includes(search); });
     records.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)) || a.id.localeCompare(b.id));
     const page = Math.max(1, Math.min(100000, Math.trunc(Number(req.query.page) || 1)));

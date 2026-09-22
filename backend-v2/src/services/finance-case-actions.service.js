@@ -42,6 +42,7 @@ export function isCollectionCustomerInvoice(r) {
     && !d.demoOnly && !d.isDemo && !d.isSimulated && !d.trainingRun && !["demo", "seed", "simulation"].includes(text(d.source).toLowerCase());
 }
 function validAmounts(record, state) {
+  if (!state.included) return false;
   const d = dataOf(record);
   const amounts = [d.amount ?? d.total ?? d.value, d.balance ?? state.amount, d.creditNotesTotal ?? d.creditNoteAmount ?? 0, d.debitNotesTotal ?? d.debitNoteAmount ?? 0];
   return amounts.every((value) => value !== "" && Number.isSafeInteger(Number(value)) && Number(value) >= 0) && state.originalAmount > 0 && state.balance <= state.amount;
@@ -86,6 +87,8 @@ export async function updateFinanceExceptionCase(db, { tenantId, userId, id, inp
   return withFinanceWrite(db, async (tx) => {
     const record = await getRecord(tx, tenantId, id, "finance_exception"); const d = dataOf(record); version(record, input.expectedVersion);
     const status = upper(input.status || record.status); const oldStatus = upper(record.status); const resolution = reason(input.resolution);
+    if (["MIGRATION_REVIEW", "BANK_STATEMENT_IMPORT_REVIEW"].includes(d.type) && ["RESOLVED", "CLOSED"].includes(status) && !d.correctedRecordId) fail(409, "Completa la fila desde Revisión histórica antes de resolverla. No basta cambiar el estado de la excepción.");
+    if (d.correctedRecordId && !["RESOLVED", "CLOSED"].includes(status)) fail(409, "La fila ya generó un registro operativo. Corrige ese registro; no se reabre la fila para importarla otra vez.");
     const reopening = ["RESOLVED", "CLOSED"].includes(oldStatus) && status !== oldStatus && status !== "CLOSED";
     if (!["OPEN", "IN_REVIEW", "RESOLVED", "CLOSED"].includes(status)) fail(422, "Estado de excepción no válido.");
     if (reopening && status !== "CLOSED" && (!canReopen || status !== "OPEN")) fail(403, "Solo un administrador puede reabrir la excepción.");

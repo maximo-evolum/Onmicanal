@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import { closeFinancePeriod, reopenFinancePeriod, getFinancePeriodWorkspace, assertFinancePeriodOpen } from "../src/services/finance-period-control.service.js";
 import { buildFinanceMonthlyClosePreview } from "../src/services/finance-monthly-close.service.js";
 
-const preview = { period: "2026-01", generatedAt: "2026-02-01T12:00:00Z", status: "READY_TO_CLOSE", blockers: [], metrics: { issued: 100, collected: 100, paidPayables: 0, netBankFlow: 100 }, rows: [{ fecha: "2026-01-20", documento: "F-1", monto: 100, saldo: 0 }] };
+const preview = { period: "2026-01", generatedAt: "2026-02-01T12:00:00Z", status: "READY_TO_CLOSE", coverage: { complete: true }, blockers: [], metrics: { issued: 100, collected: 100, paidPayables: 0, netBankFlow: 100 }, rows: [{ fecha: "2026-01-20", documento: "F-1", monto: 100, saldo: 0 }] };
 function database() {
   let records = [], controls = [], audits = []; let sequence = 0; let tail = Promise.resolve();
   const match = (row, where = {}) => Object.entries(where).every(([key, value]) => value?.in ? value.in.includes(row[key]) : value?.path ? value.path.reduce((obj, part) => obj?.[part], row[key]) === value.equals : row[key] === value);
   const apply = (row, data) => { for (const [key, value] of Object.entries(data)) row[key] = value?.increment !== undefined ? Number(row[key] || 0) + value.increment : structuredClone(value); return structuredClone(row); };
   const db = {
+    tenantChannelConfig: { findMany: async () => [] },
     get records() { return records; }, get controls() { return controls; }, get audits() { return audits; },
     // Deterministic serialization for lifecycle tests, not a PostgreSQL stress test.
     $transaction: (fn, options) => {

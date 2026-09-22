@@ -5,7 +5,7 @@ import { financeDocumentDate, financeDocumentSide } from "./finance-document-val
 const dataOf = (record) => record?.data && typeof record.data === "object" ? record.data : {};
 const text = (value) => String(value ?? "").trim();
 const normalized = (value) => text(value).normalize("NFKC").toLowerCase();
-export const FINANCE_CONTEXT_TYPES = ["bank_statement", "bank_movement", "finance_invoice", "finance_payable", "finance_exception", "finance_reconciliation", "finance_collection_case"];
+export const FINANCE_CONTEXT_TYPES = ["bank_statement", "bank_movement", "finance_invoice", "finance_payable", "finance_exception", "finance_reconciliation", "finance_collection_case", "finance_customer_credit", "finance_credit_application"];
 
 export function parseFinanceContext(input = {}) {
   // The tenant is always supplied by authentication, never by a query parameter.
@@ -43,6 +43,7 @@ export function financeOperationalDate(record, index = new Map(), visited = new 
   visited.add(record.id);
   const data = dataOf(record);
   const related = index.get(data.movementId);
+  if (record.recordType === "finance_credit_application") return text(data.applicationDate).slice(0, 10);
   if (related) return financeOperationalDate(related, index, visited);
   const administrativeDate = record.recordType === "finance_exception" && !data.importBatchId && !data.movementId && !data.movement ? record.createdAt : null;
   const value = data.transactionDate || data.operatingDate || data.movement?.transactionDate || data.movement?.date || data.issueDate || data.date || data.paymentDate || administrativeDate;

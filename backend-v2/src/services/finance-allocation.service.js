@@ -108,6 +108,7 @@ export async function reverseFinanceAllocation(db, { tenantId, userId, reconcili
     if (reconciliation.status === "REVERSED") return { reconciliation, alreadyReversed: true };
     if (reconciliation.status !== "APPROVED") fail(409, "Sólo se puede revertir una conciliación aprobada.");
     const rec = dataOf(reconciliation);
+    if (rec.reconciliationType === "CUSTOMER_CREDIT") fail(409, "Revierte el origen desde Anticipos y saldos a favor, después de revertir sus aplicaciones.");
     const movement = await tx.industryRecord.findFirst({ where: { id: rec.movementId, tenantId, recordType: "bank_movement" } });
     if (!movement || movement.status !== "MATCHED" || dataOf(movement).reconciliationId !== reconciliation.id) fail(409, "El vínculo con el movimiento cambió. Requiere revisión antes de revertir.");
     await assertReconciliationPeriodOpen(tx, tenantId, movement);

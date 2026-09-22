@@ -194,7 +194,7 @@ function agingBucket(dueDate, now = new Date()) {
 
 export async function getFinanceOverview({ tenantId, now = new Date(), context = null, db = prisma }) {
   context = parseFinanceContext(context || {});
-  const types = ["finance_invoice", "finance_payable", "finance_invoice_receipt", "bank_statement", "bank_movement", "finance_reconciliation", "finance_exception", "finance_collection_case"];
+  const types = ["finance_invoice", "finance_payable", "finance_invoice_receipt", "bank_statement", "bank_movement", "finance_reconciliation", "finance_exception", "finance_collection_case", "finance_customer_credit", "finance_credit_application"];
   const sourceRecords = await findAllFinanceRecords(db, {
     where: { tenantId, recordType: { in: types } },
     orderBy: { updatedAt: "desc" },
@@ -210,22 +210,15 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
   const exceptions = grouped.finance_exception;
   const collectionCases = grouped.finance_collection_case;
 
-  let issued = 0;
-  let paid = 0;
-  let pending = 0;
-  let overdue = 0;
+  const { issued, paid, pendingAmount: pending, overdueAmount: overdue } = documents.customers;
   const aging = { "No vencida": 0, "1-7 dias": 0, "8-30 dias": 0, "31-60 dias": 0, "61-90 dias": 0, "+90 dias": 0 };
   const dsoValues = [];
 
   for (const invoice of invoices) {
     const state = getInvoiceFinancialState(invoice, now);
-    issued += state.amount;
-    paid += Math.max(0, state.amount - state.balance);
-    pending += state.balance;
     if (state.status !== "PAID") {
       const bucket = agingBucket(state.dueDate, now);
       aging[bucket] += state.balance;
-      if (state.status === "OVERDUE") overdue += state.balance;
     }
     const data = dataOf(invoice);
     const issuedAt = dateOf(data.issueDate);
@@ -256,8 +249,8 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
       total: invoices.length,
       issued,
       paid,
-      pending: invoices.filter((invoice) => getInvoiceFinancialState(invoice, now).status !== "PAID").length,
-      overdue: invoices.filter((invoice) => getInvoiceFinancialState(invoice, now).status === "OVERDUE").length,
+      pending: documents.customers.pending,
+      overdue: documents.customers.overdue,
       pendingAmount: pending,
       overdueAmount: overdue
     },
@@ -270,7 +263,7 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
     reconciliation: reconciliationMetrics,
     exceptions: { open: openExceptions, critical: criticalExceptions },
     collections: { open: openCollections, promises: promiseCollections },
-    recent: { invoices: invoices.slice(0, 8), exceptions: exceptions.slice(0, 8), collectionCases: collectionCases.slice(0, 8) },
+    recent: { invoices: invoices.slice(0, 8).map((r) => ({ ...r, data: { ...dataOf(r), balance: getInvoiceFinancialState(r, now).balance } })), exceptions: exceptions.slice(0, 8), collectionCases: collectionCases.slice(0, 8) },
     integrationReadiness: [
       { key: "erp", label: "ERP / contabilidad", status: "requires_configuration", note: "Nubox, Defontana, Softland u otro ERP requieren su integracion autorizada." },
       { key: "bank", label: "Cartolas bancarias", status: "manual", note: "Carga manual de CSV disponible; PDF y Excel quedan listos para el parser contratado." },

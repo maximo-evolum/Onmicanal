@@ -921,8 +921,8 @@ export function approveFinanceReconciliation(movementId: string, invoiceId: stri
 }
 
 export type FinanceAllocationPage = { page: number; pages: number; total: number; records: Array<IndustryRecord & { financial?: { balance: number } }> };
-export function getFinanceAllocationWorkspace(context: FinanceWorkspaceContext, kind: string, page: number, search: string): Promise<FinanceAllocationPage> {
-  const query = new URLSearchParams({ ...context, kind, page: String(page), search });
+export function getFinanceAllocationWorkspace(context: FinanceWorkspaceContext, kind: string, page: number, search: string, customerRut = ""): Promise<FinanceAllocationPage> {
+  const query = new URLSearchParams({ ...context, kind, page: String(page), search, customerRut });
   return request(`/finance/reconciliation-workspace?${query}`);
 }
 export function applyManualFinanceAllocation(movementId: string, allocations: Array<{ invoiceId: string; amount: number }>, reason: string): Promise<{ reconciliation: IndustryRecord }> {
@@ -931,6 +931,13 @@ export function applyManualFinanceAllocation(movementId: string, allocations: Ar
 export function reverseFinanceReconciliation(id: string, reason: string): Promise<{ reconciliation: IndustryRecord; alreadyReversed: boolean }> {
   return request(`/finance/reconciliations/${encodeURIComponent(id)}/reverse`, { method: "POST", body: JSON.stringify({ reason }) });
 }
+
+export type FinanceCustomerCredit = IndustryRecord & { data: { customerName: string; customerRut: string; kind: string; amount: number; availableAmount: number; version: number; transactionDate: string; movementId: string; reason: string }; ledger: { valid: boolean; errors: string[]; available: number; applied: number; applications: IndustryRecord[] } };
+export type FinanceCustomerCreditPage = { page: number; pages: number; total: number; availableAmount: number; reviewCount: number; records: FinanceCustomerCredit[] };
+export function getFinanceCustomerCredits(page = 1, query = ""): Promise<FinanceCustomerCreditPage> { return request(`/finance/customer-credits?page=${page}&q=${encodeURIComponent(query)}`); }
+export function registerFinanceCustomerCredit(input: { movementId: string; customerName: string; customerRut: string; kind: string; reason: string }): Promise<{ credit: IndustryRecord }> { return request("/finance/customer-credits", { method: "POST", body: JSON.stringify(input) }); }
+export function applyFinanceCustomerCredit(id: string, input: { expectedVersion: number; allocations: Array<{ invoiceId: string; amount: number }>; applicationDate: string; reason: string }): Promise<{ availableAmount: number }> { return request(`/finance/customer-credits/${encodeURIComponent(id)}/apply`, { method: "POST", body: JSON.stringify(input) }); }
+export function reverseFinanceCustomerCredit(id: string, reason: string, application = false): Promise<{ alreadyReversed: boolean }> { return request(`/finance/${application ? "credit-applications" : "customer-credits"}/${encodeURIComponent(id)}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }); }
 
 export function generateFinanceCollectionCases(): Promise<{ created: IndustryRecord[]; count: number; deferred: Array<{ id: string; reason: string }>; analyzedInvoices: number }> {
   return request("/finance/collection-cases/generate", { method: "POST" });
@@ -947,7 +954,7 @@ export type FinanceDocument = {
   partyName: string;
   partyRut: string | null;
   status: string;
-  issueDate: string;
+  issueDate: string | null;
   dueDate: string | null;
   documentType: string;
   documentTypeCode: string | null;
@@ -1107,6 +1114,7 @@ export type FinanceOpenBankingStatus = {
   message: string;
 };
 export type FinanceMonthlyClosePreview = {
+  coverage?: FinancePeriodCoverage;
   documentSummary?: { customers: { pendingAmount: number }; suppliers: { pendingAmount: number }; excluded: { inactive: number; adjustments: number; invalid: number } };
   period: string;
   generatedAt: string;
@@ -1115,10 +1123,19 @@ export type FinanceMonthlyClosePreview = {
   history?: Array<{ id: string; kind: "CLOSE" | "REOPEN"; at: string; userId: string | null; note: string; version: number | null; closeId: string; active: boolean }>;
   protection?: { scope: string; message: string };
   status: "READY_TO_CLOSE" | "REQUIRES_REVIEW" | string;
-  metrics: { issued: number; collected: number; registeredPayables: number; paidPayables: number; incoming: number; outgoing: number; netBankFlow: number; unclassifiedMovements?: number; inconsistentReconciliations?: number; excludedMovements?: number; reconciliations: number; unreconciledMovements: number; openExceptions: number };
+  metrics: { issued: number; collected: number; registeredPayables: number; paidPayables: number; incoming: number; outgoing: number; netBankFlow: number; customerCreditAvailable?: number; unclassifiedMovements?: number; inconsistentReconciliations?: number; excludedMovements?: number; reconciliations: number; unreconciledMovements: number; openExceptions: number };
   blockers: Array<{ type: string; title: string; id: string }>;
   rows: Array<{ fecha: string; tipo: string; documento: string; contraparte: string; categoria: string; monto: number | null; saldo: number; estado: string }>;
 };
+
+export type FinanceHistoricalReviewRow = { id: string; title: string; recordType: string; target: string; version: string; issues: Array<{ code: string; label: string; blocking: boolean }>; values: Record<string, string | number | null>; source: { file: string; row: number | null; batchId: string | null }; lastReview: { at: string; reason: string; evidence: string } | null };
+export type FinanceHistoricalReview = { total: number; page: number; pages: number; records: FinanceHistoricalReviewRow[]; banks: Array<{ key: string; name: string }>; scope: string };
+export function getFinanceHistoricalReview(page = 1, query = ""): Promise<FinanceHistoricalReview> {
+  return request(`/finance/historical-review?page=${page}&q=${encodeURIComponent(query)}`);
+}
+export function correctFinanceHistoricalRecord(id: string, input: { version: string; patch: Record<string, string | number | null>; reason: string; evidence: string; confirmation: "CORREGIR" }): Promise<{ recordId: string; correctionId: string }> {
+  return request(`/finance/historical-review/${encodeURIComponent(id)}/correct`, { method: "POST", body: JSON.stringify(input) });
+}
 export type FinancePlanning = {
   period: string;
   categories: Array<{ id: string | null; category: string; plannedIncome: number; plannedExpense: number; actualIncome: number; actualExpense: number; incomeVariance: number; expenseVariance: number }>;
@@ -1302,6 +1319,17 @@ export function prepareFinanceOpenBankingConsent(input: { bankKey: string; accou
 
 export function getFinanceMonthlyClosePreview(period: string, snapshotId?: string): Promise<FinanceMonthlyClosePreview> {
   return request(`/finance/monthly-close/preview?period=${encodeURIComponent(period)}${snapshotId ? `&snapshotId=${encodeURIComponent(snapshotId)}` : ""}`);
+}
+
+export type FinanceCoverageDeclaration = { sourceId: string; status: "COMPLETE" | "NO_ACTIVITY" | "NOT_APPLICABLE"; from: string; to: string; evidence: string; expectedCount: number };
+export type FinancePeriodCoverage = {
+  period: string; from: string; to: string; fingerprint: string; complete: boolean; status: "PENDING" | "STALE" | "REVIEWED"; basis: string;
+  sources: Array<{ id: string; label: string; kind: "BANK" | "DOCUMENTS"; count: number; statements: number; firstMovementOrDocumentDate: string | null; lastMovementOrDocumentDate: string | null }>;
+  blockers: Array<{ type: string; id: string; title: string }>;
+  review: { id: string; reviewedAt: string; reviewedById: string; declarations: FinanceCoverageDeclaration[]; inventoryConfirmed: boolean } | null;
+};
+export function reviewFinanceCoverage(input: { period: string; expectedVersion: number; fingerprint: string; declarations: FinanceCoverageDeclaration[]; inventoryConfirmed: boolean; confirmation: "VERIFICAR" }): Promise<{ reviewId: string }> {
+  return request(`/finance/monthly-close/${encodeURIComponent(input.period)}/coverage`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function registerFinanceMonthlyClose(input: { period: string; note?: string; confirmation: "CERRAR"; expectedVersion: number }): Promise<{ close: IndustryRecord; preview: FinanceMonthlyClosePreview }> {

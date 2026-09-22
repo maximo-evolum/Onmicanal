@@ -117,9 +117,10 @@ test("consulta carga comprobantes y documentos históricos paginados de la empre
     assert.equal(q.where.tenantId, "a"); assert.ok(q.where.recordType.in.includes("finance_invoice_receipt"));
     const start = q.cursor ? rows.findIndex((r) => r.id === q.cursor.id) + q.skip : 0;
     pages++; return rows.slice(start, start + q.take);
-  } }, financeBankImportJob: { findMany: async (q) => { assert.equal(q.where.tenantId, "a"); return []; } } };
+  } }, tenantChannelConfig: { findMany: async () => [] }, financeBankImportJob: { findMany: async (q) => { assert.equal(q.where.tenantId, "a"); return []; } } };
   const result = await getFinanceMonthlyClosePreview({ tenantId: "a", period: "2026-01", db });
-  assert.equal(pages, 3); assert.equal(result.status, "READY_TO_CLOSE"); assert.equal(result.metrics.reconciliations, 1);
+  assert.equal(pages, 3); assert.equal(result.status, "REQUIRES_REVIEW"); assert.equal(result.metrics.reconciliations, 1);
+  assert.ok(result.blockers.some((b) => b.type === "COBERTURA_PENDIENTE"));
 });
 
 test("no oculta evidencia de moneda incorrecta ni mezcla aprobaciones USD ajenas al cierre CLP", () => {

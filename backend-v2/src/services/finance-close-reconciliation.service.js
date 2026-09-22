@@ -1,4 +1,5 @@
 import { classifyFinanceMovement } from "./finance-movement-classification.service.js";
+import { auditCustomerCredit } from "./finance-customer-credit-ledger.service.js";
 
 const data = (r) => r?.data && typeof r.data === "object" ? r.data : {};
 const upper = (v) => String(v ?? "").trim().toUpperCase();
@@ -45,6 +46,15 @@ export function auditCloseReconciliations(records, periodMovements, period, oper
     if (linked && upper(rec.status) === "APPROVED") {
       const bank = classifyFinanceMovement(md);
       if (bank.direction !== "CREDIT" || !positivePesos(bank.amount) || currency(m) !== "CLP" || currency(rec) !== currency(m) || Number(rd.amount) !== bank.amount) reasons.push("El abono, la moneda y el monto aprobado no coinciden o no corresponden al flujo de cobro bancario admitido.");
+      if (rd.reconciliationType === "CUSTOMER_CREDIT") {
+        const credit = index.get(rd.customerCreditId);
+        const ledger = auditCustomerCredit(credit, records);
+        reasons.push(...ledger.errors);
+        if (activeReceipts.length || (Array.isArray(rd.allocations) && rd.allocations.length)) reasons.push("El abono reservado tiene cobros bancarios adicionales: posible doble aplicación.");
+        if (reasons.length) { inconsistentIds.add(m.id); blockers.push({ type: "CONCILIACION_INCONSISTENTE", id: `reconciliation-${m.id}`, title: `${m.title || m.id}: ${[...new Set(reasons)].join(" ")}` }); }
+        else { validIds.add(m.id); validatedRecIds.add(rec.id); }
+        continue;
+      }
       const allocations = Array.isArray(rd.allocations) ? rd.allocations : [];
       const ids = allocations.map((a) => a?.invoiceId);
       const allocationShape = allocations.length > 0 && new Set(ids).size === ids.length && allocations.every((a) => typeof a?.invoiceId === "string" && a.invoiceId && positivePesos(a.amount));

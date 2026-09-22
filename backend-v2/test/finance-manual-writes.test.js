@@ -97,6 +97,27 @@ test("pago a proveedor usa el mismo control y devuelve contrato de API", async (
   const db = seeded("finance_payable"); const result = await pay(db, { kind: "PAYMENT" });
   assert.equal(result.payment.recordType, "finance_payable_payment"); assert.equal(result.payable.data.balance, 40); assert.equal(db.audits[0].action, "FINANCE_PAYABLE_PAYMENT_REGISTERED");
 });
+
+test("un pago posterior conserva los pagos históricos inferidos del saldo y los ajustes", async () => {
+  for (const type of ["finance_invoice", "finance_payable"]) {
+    const db = seeded(type);
+    db.rows[0].data = { ...db.rows[0].data, amount: 200, creditNotesTotal: 20, debitNotesTotal: 10, balance: 90 };
+    delete db.rows[0].data.paidAmount;
+    const result = await pay(db, { kind: type === "finance_payable" ? "PAYMENT" : "RECEIPT", amount: 60 });
+    const document = result.invoice || result.payable;
+    assert.equal(document.data.paidAmount, 160);
+    assert.equal(document.data.balance, 30);
+    assert.equal(document.data.creditNotesTotal, 20);
+    assert.equal(document.data.debitNotesTotal, 10);
+  }
+});
+
+test("un saldo inconsistente no permite registrar pagos ni altera el documento", async () => {
+  const db = seeded(); db.rows[0].data.balance = 40;
+  const before = structuredClone(db.rows[0]);
+  await assert.rejects(pay(db, { amount: 10 }), /revisión/);
+  assert.deepEqual(db.rows[0], before); assert.equal(db.rows.length, 1); assert.equal(db.audits.length, 0);
+});
 test("no permite cruzar empresas ni documento de tipo incorrecto", async () => {
   const db = seeded(); await assert.rejects(pay(db, { tenantId: "b" }), /no encontrado/); await assert.rejects(pay(db, { kind: "PAYMENT" }), /no encontrado/);
 });

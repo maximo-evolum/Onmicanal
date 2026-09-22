@@ -100,6 +100,10 @@ const RECORD_MODULES = Object.freeze({
   finance_reconciliation: MODULES.FINANCE_RECONCILIATION,
   finance_monthly_close: MODULES.FINANCE_ANALYTICS,
   finance_period_reopening: MODULES.FINANCE_ANALYTICS,
+  finance_period_coverage: MODULES.FINANCE_ANALYTICS,
+  finance_historical_correction: MODULES.FINANCE_ANALYTICS,
+  finance_customer_credit: MODULES.FINANCE_RECONCILIATION,
+  finance_credit_application: MODULES.FINANCE_RECONCILIATION,
   finance_exception: MODULES.FINANCE_EXCEPTIONS,
   finance_collection_case: MODULES.FINANCE_COLLECTIONS,
   finance_reminder_batch: MODULES.FINANCE_COLLECTIONS,
@@ -141,6 +145,18 @@ async function assertRecordModule(req, recordType) {
 }
 
 function assertFinanceRecordMutation(req, res, recordType, existing) {
+  if (["finance_customer_credit", "finance_credit_application"].includes(recordType)) {
+    res.status(409).json({ error: "Utiliza Anticipos y saldos a favor: su saldo, aplicaciones y reversas son auditados y no se editan ni eliminan directamente." });
+    return false;
+  }
+  if (recordType === "finance_historical_correction") {
+    res.status(409).json({ error: "El historial de correcciones es inmutable. Utiliza Revisión histórica para registrar una nueva corrección respaldada." });
+    return false;
+  }
+  if (recordType === "finance_period_coverage") {
+    res.status(409).json({ error: "La revisión de cobertura se registra desde Cierre mensual y no se edita ni elimina por la ficha genérica." });
+    return false;
+  }
   if (recordType === "bank_movement" && req.body?.assignedToId !== undefined && (req.body.assignedToId || null) !== (existing?.assignedToId || null)) {
     res.status(409).json({ error: "Asigna el responsable desde el detalle del movimiento, con motivo e historial." });
     return false;
@@ -190,6 +206,11 @@ function metadataValidationResponse(evaluation) {
 }
 
 async function redactRecordForViewer(req, record) {
+  // Las copias originales pueden contener datos de módulos no habilitados al
+  // lector del listado genérico. Sólo auditoría superadmin accede al contenido.
+  if (record.recordType === "finance_historical_correction" && req.user?.role !== "SUPER_ADMIN") {
+    return { ...record, title: "Corrección histórica auditada", data: { at: record.data?.at, restricted: true } };
+  }
   const schema = await getPublishedMetadataSchema(req.tenantId, record.recordType);
   if (!schema || req.user?.role === "SUPER_ADMIN") return record;
   const redacted = redactMetadataForRole(record.data, schema, req.user?.role);
