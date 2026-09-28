@@ -4,6 +4,10 @@ import { reviewFinancePeriodCoverage } from "../services/finance-period-coverage
 import { listHistoricalReview, correctHistoricalRecord } from "../services/finance-historical-review.service.js";
 import { applyFinanceAllocation, reverseFinanceAllocation, sendFinanceMovementToReview } from "../services/finance-allocation.service.js";
 import { registerCustomerCredit, applyCustomerCredit, reverseCustomerCreditApplication, reverseCustomerCredit, listCustomerCredits } from "../services/finance-customer-credit.service.js";
+import { proposeFinanceDifference, approveFinanceDifference, rejectFinanceDifference, reverseFinanceDifference, listFinanceDifferences } from "../services/finance-differences.service.js";
+import { previewFinanceGroup, approveFinanceGroup, reverseFinanceGroup, listFinanceGroups } from "../services/finance-group-allocation.service.js";
+import { listManualSettlements, previewManualSettlementReversal, reverseManualSettlement } from "../services/finance-manual-reversals.service.js";
+import { listFinanceBankAccounts, saveFinanceBankAccount, resolveFinanceBankAccount } from "../services/finance-bank-accounts.service.js";
 import { creditRut, invoiceCreditRut } from "../services/finance-customer-credit-ledger.service.js";
 import { BANK_REVIEW_FIELDS, bankReviewColumns, normalizeBankReviewRows, bankReviewPage, validateBankReviewConfig, exportBankReviewCsv } from "../services/finance-bank-review.service.js";
 import { ACTIVE_IMPORT_STATUSES, importJobView, createBankImportJob, analyzeBankImportJob, readBankImportPreview, getBankImportJob, cancelBankImportJob, bankImportConfirmation } from "../services/finance-import-jobs.service.js";
@@ -11,6 +15,9 @@ import { Router } from "express";
 import { readMovementLedger, movementLedgerCsv } from "../services/finance-movement-ledger.service.js";
 import { reviewMovementBatch } from "../services/finance-movement-bulk.service.js";
 import { movementLedgerExcel } from "../services/finance-movement-excel.service.js";
+import { FINANCE_CONNECTION_SOURCES, readFinanceConnectionHealth } from "../services/finance-connection-health.service.js";
+import { processReportQuery, readFinanceProcessReport } from "../services/finance-process-reports.service.js";
+import { financeProcessReportExcel, financeProcessReportPdf } from "../lib/finance-process-report-files.js";
 import { readMovementTrace } from "../services/finance-movement-trace.service.js";
 import { assignMovementOwner, listMovementOwners } from "../services/finance-movement-owner.service.js";
 import { overviewMetricsCsv } from "../services/finance-overview-metrics.service.js";
@@ -31,6 +38,7 @@ import {
 } from "../services/finance.service.js";
 import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions, updateFinanceAgentPolicy } from "../services/finance-agents.service.js";
 import { generateFinanceCollectionCases } from "../services/finance-agent-actions.service.js";
+import { previewCollectionDelivery, sendCollectionDelivery, listCollectionDeliveries } from "../services/finance-collection-delivery.service.js";
 import { updateCollectionCase, updateFinanceExceptionCase, prepareCollectionReminders, createAdministrativeException, collectionPartyKey, isCollectionCustomerInvoice } from "../services/finance-case-actions.service.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { createTenantNotification } from "../lib/notifications.js";
@@ -50,9 +58,11 @@ import {
   MAX_BANK_STATEMENT_ROWS,
   bankMovementFingerprint,
   detectBankStatementInstitution,
+  detectBankStatementCurrency,
   detectBankStatementFileFormat,
   normalizeBankStatementRows,
   readBankStatementFile,
+  inspectBankStatementLayout,
   summarizeBankStatementRows,
   withBankStatementNet
 } from "../services/finance-bank-statements.service.js";
@@ -295,6 +305,19 @@ financeRouter.get("/finance/workspace-records", requireRole(ROLE_GROUPS.STAFF), 
   }
 });
 
+financeRouter.get("/finance/connection-health", requireRole(ROLE_GROUPS.VIEWERS), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
+    const requested = [...new Set([...FINANCE_CONNECTION_SOURCES.map((s) => s.module), MODULES.INTEGRATIONS])];
+    const allowedModules = (await Promise.all(requested.map(async (module) => req.user?.role === "SUPER_ADMIN" || await ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant }) ? module : null))).filter(Boolean);
+    const result = await readFinanceConnectionHealth(prisma, { tenantId: req.tenantId, allowedModules });
+    res.json({ ...result, canManage: ["SUPER_ADMIN", ...ROLE_GROUPS.MANAGERS].includes(req.user?.role) && allowedModules.includes(MODULES.INTEGRATIONS) });
+  } catch (error) {
+    res.status(error instanceof FinanceOperationError ? error.status : 503).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo consultar el estado de las conexiones. Esto no significa que estén desconectadas." });
+  }
+});
+
 financeRouter.get("/finance/overview", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
@@ -305,6 +328,24 @@ financeRouter.get("/finance/overview", async (req, res) => {
     if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
     console.error("Finance overview error:", error);
     res.status(500).json({ error: "No se pudo cargar el dashboard financiero" });
+  }
+});
+
+financeRouter.get("/finance/process-reports", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    const input = processReportQuery(req.query);
+    const format = req.query.format || "json";
+    if (!["json", "pdf", "xlsx"].includes(format)) throw new FinanceOperationError(400, "Formato de reporte no válido.");
+    const modules = input.kind === "reconciliation" ? [MODULES.FINANCE_RECONCILIATION, MODULES.FINANCE_BANK_SYNC, MODULES.FINANCE_INVOICES] : [MODULES.FINANCE_EXCEPTIONS, MODULES.FINANCE_BANK_SYNC];
+    for (const module of modules) if (!(await requireFinanceModule(req, res, module))) return;
+    const report = await readFinanceProcessReport(prisma, { tenantId: req.tenantId, companyName: req.tenant?.name, input });
+    if (req.query.fingerprint && req.query.fingerprint !== report.fingerprint) throw new FinanceOperationError(409, "Los datos cambiaron desde la vista previa. Actualiza el reporte antes de descargarlo.");
+    if (format === "json") return res.json({ ...report, rows: report.rows.slice(0, 20), issues: report.issues.slice(0, 20), totalIssues: report.issues.length, previewLimit: 20 });
+    const body = format === "pdf" ? financeProcessReportPdf(report) : await financeProcessReportExcel(report);
+    return res.set({ "Content-Type": format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "Content-Disposition": `attachment; filename="${input.kind === "reconciliation" ? "conciliacion" : "excepciones"}-${input.period}.${format}"`, "X-Report-Fingerprint": report.fingerprint }).send(body);
+  } catch (error) {
+    return res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo generar el reporte completo. Inténtalo nuevamente." });
   }
 });
 
@@ -602,9 +643,9 @@ financeRouter.get("/finance/collections/portfolio", async (req, res) => {
       const row = rows.get(key);
       if (!row) continue;
       const history = financeHistory(data);
-      const reminders = history.filter((entry) => ["REMINDER_PREPARED", "REMINDER_DRAFT_PREPARED"].includes(String(entry?.type || "").toUpperCase()));
+      const reminders = history.filter((entry) => String(entry?.type || "").toUpperCase() === "DELIVERY_ACCEPTED");
       row.reminders += reminders.length;
-      const latestReminder = reminders.at(-1)?.at || data.lastReminderAt || null;
+      const latestReminder = reminders.at(-1)?.at || null;
       if (latestReminder && (!row.lastReminderAt || new Date(latestReminder) > new Date(row.lastReminderAt))) row.lastReminderAt = latestReminder;
       if (!row.latestCaseId || new Date(collectionCase.updatedAt) > new Date(rows.get(key).caseUpdatedAt || 0)) {
         row.latestCaseId = collectionCase.id;
@@ -623,6 +664,23 @@ financeRouter.get("/finance/collections/portfolio", async (req, res) => {
     res.status(500).json({ error: "No se pudo cargar la cartera de cobranza." });
   }
 });
+
+for (const [segment, kind, module] of [["receipts", "RECEIPT", MODULES.FINANCE_INVOICES], ["payments", "PAYMENT", MODULES.FINANCE_PAYABLES]]) {
+  financeRouter.get(`/finance/manual-settlements/${segment}`, requireFinancePermission(FINANCE_ACTIONS.VIEW), async (req, res) => {
+    try {
+      if (!(await requireFinanceModule(req, res, module))) return;
+      res.json(await listManualSettlements(prisma, { tenantId: req.tenantId, kind, period: req.query.period || "", query: req.query.q || "", page: req.query.page || 1, status: req.query.status || "ALL" }));
+    } catch (error) { res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo consultar el historial de cobros y pagos." }); }
+  });
+  for (const [suffix, operation] of [["preview-reversal", previewManualSettlementReversal], ["reverse", reverseManualSettlement]]) {
+    financeRouter.post(`/finance/manual-settlements/${segment}/:id/${suffix}`, requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.REGISTER), async (req, res) => {
+      try {
+        if (!(await requireFinanceModule(req, res, module))) return;
+        res.json(await operation(prisma, { tenantId: req.tenantId, userId: req.user?.id, kind, id: req.params.id, reason: req.body?.reason, expectedVersion: req.body?.expectedVersion, confirmation: req.body?.confirmation }));
+      } catch (error) { res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo confirmar la reversa. Consulta el historial antes de reintentar." }); }
+    });
+  }
+}
 
 // Registrar un cobro es una acción humana y trazable. No dispara mensajes ni
 // cambios hacia Nubox/ERP: solo actualiza el registro interno de EVOLUM.
@@ -761,13 +819,18 @@ financeRouter.get("/finance/banks/catalog", async (req, res) => {
   }
 });
 
-async function analyzeStoredBankStatement({ file, account, reviewConfig = {}, tenantId }) {
+export async function analyzeStoredBankStatement({ file, account, reviewConfig = {}, tenantId }) {
+    account = await resolveFinanceBankAccount(prisma, tenantId, account);
     const format = detectBankStatementFileFormat(file);
-    const sourceRows = await readBankStatementFile(file);
-    const bankDetection = await detectBankStatementInstitution(file, sourceRows);
+    const sourceRows = await readBankStatementFile(file, { selection: reviewConfig.selection });
+    const detectedCurrency = await detectBankStatementCurrency(file, reviewConfig.selection);
+    if (detectedCurrency && account.currency && detectedCurrency !== account.currency) throw new FinanceOperationError(409, `La moneda de la carátula (${detectedCurrency}) no coincide con la cuenta (${account.currency}). Revisa la cuenta; no se convirtió ningún monto.`);
+    if (detectedCurrency) account = { ...account, currency: detectedCurrency };
+    const bankDetection = await detectBankStatementInstitution(file, sourceRows, reviewConfig.selection);
+    if (account.bankAccountId && bankDetection.institution && bankDetection.institution.key !== account.bankKey) throw new FinanceOperationError(409, "El banco detectado en el archivo no corresponde a la cuenta seleccionada. Revisa la cuenta antes de incorporar.");
     const allRows = normalizeBankReviewRows(sourceRows, {
       ...(account || {}),
-      bankKey: bankDetection.institution?.key || cleanText(account?.bankKey)
+      bankKey: account.bankAccountId ? account.bankKey : bankDetection.institution?.key || cleanText(account?.bankKey)
     }, reviewConfig);
     const rows = allRows.filter((row) => !row.excluded);
     if (!rows.length) throw new FinanceOperationError(400, "No hay movimientos incluidos. Cancela la carga si deseas excluir toda la cartola.");
@@ -807,7 +870,7 @@ async function analyzeStoredBankStatement({ file, account, reviewConfig = {}, te
       },
       fileFingerprint,
       maxRows: MAX_BANK_STATEMENT_ROWS,
-      account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },
+      account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4, bankAccountId: rows[0].bankAccountId || null, currency: rows[0].currency },
       summary,
       reviewConfig: validateBankReviewConfig(reviewConfig, bankReviewColumns(sourceRows), sourceRows.length),
       columns: bankReviewColumns(sourceRows),
@@ -828,6 +891,25 @@ function bankImportError(res, error) {
   return res.status(status).json({ error: status === 500 ? "No se pudo acceder a la importación guardada. Comprueba la migración y vuelve a intentarlo." : error.message, ...(error.details || {}) });
 }
 
+financeRouter.get("/finance/bank-accounts", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    res.json({ accounts: await listFinanceBankAccounts(prisma, req.tenantId) });
+  } catch (error) { bankImportError(res, error); }
+});
+financeRouter.post("/finance/bank-accounts", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    res.status(201).json({ account: await saveFinanceBankAccount(prisma, { tenantId: req.tenantId, userId: req.user?.id, input: req.body }) });
+  } catch (error) { bankImportError(res, error); }
+});
+financeRouter.patch("/finance/bank-accounts/:id", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    res.json({ account: await saveFinanceBankAccount(prisma, { tenantId: req.tenantId, userId: req.user?.id, id: req.params.id, input: req.body }) });
+  } catch (error) { bankImportError(res, error); }
+});
+
 async function bankPreviewForClient(preview, tenantId) {
   if (!preview) return null;
   const { normalizedRows: _normalized, sourceRows: _source, ...summary } = preview;
@@ -835,6 +917,24 @@ async function bankPreviewForClient(preview, tenantId) {
   const rows = (preview.normalizedRows || normalizeBankReviewRows(preview.sourceRows, preview.account, preview.reviewConfig || {})).filter((row) => !row.excluded);
   return { ...summary, sourceRows: [], periodProtection: await bankPeriodRestrictions(prisma, tenantId, rows) };
 }
+
+financeRouter.post("/finance/bank-import-jobs/upload", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), bankStatementUpload.single("file"), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const job = await createBankImportJob(prisma, { tenantId: req.tenantId, userId: req.user?.id, file: req.file, account: req.body });
+    res.status(202).set("Cache-Control", "no-store").json({ job: importJobView(job) });
+  } catch (error) { bankImportError(res, error); }
+});
+financeRouter.post("/finance/bank-import-jobs/:id/enqueue", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    if (!Number.isInteger(req.body?.revision)) throw new FinanceOperationError(428, "Recupera la revisión actual antes de reanudar.");
+    const job = await getBankImportJob(prisma, req.tenantId, req.params.id);
+    if (job.revision !== req.body.revision) throw new FinanceOperationError(409, "La carga cambió. Actualiza su estado.");
+    const queued = await analyzeBankImportJob(prisma, { tenantId: req.tenantId, id: job.id, queueOnly: true, expectedRevision: req.body.revision, account: req.body.account, reviewConfig: req.body.reviewConfig ?? job.reviewConfig ?? {} });
+    res.status(202).set("Cache-Control", "no-store").json({ job: queued });
+  } catch (error) { bankImportError(res, error); }
+});
 
 financeRouter.post("/finance/bank-statements/preview-file", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.IMPORT_HISTORY), bankStatementUpload.single("file"), async (req, res) => {
   try {
@@ -873,6 +973,17 @@ financeRouter.get("/finance/bank-import-jobs/:id/rows", requireRole(ROLE_GROUPS.
     const { preview, job } = await readBankImportPreview(prisma, req.tenantId, req.params.id);
     if (!preview || !["READY", "IMPORTED"].includes(job.status)) throw new FinanceOperationError(409, "La importación no tiene una revisión disponible.");
     res.json(bankReviewPage(preview, req.query));
+  } catch (error) { bankImportError(res, error); }
+});
+
+financeRouter.get("/finance/bank-import-jobs/:id/layout", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_BANK_SYNC))) return;
+    const job = await getBankImportJob(prisma, req.tenantId, req.params.id, { original: true });
+    const buffer = Buffer.from(job.original.content);
+    if (createHash("sha256").update(buffer).digest("hex") !== job.original.sha256) throw new FinanceOperationError(409, "El archivo original no supera la verificación de integridad.");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json({ ...(await inspectBankStatementLayout({ buffer, originalname: job.sourceFile }, req.query)), revision: job.revision });
   } catch (error) { bankImportError(res, error); }
 });
 
@@ -965,6 +1076,7 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
       return { result: { batch, imported: Number(data.importedRows || 0), requiresReview: Number(data.reviewRows || 0) }, duplicateRows: Number(data.duplicateRows || 0), summary: data.summary };
     }
     const preview = confirmation.preview;
+    await resolveFinanceBankAccount(tx, req.tenantId, preview.account);
     if (!cleanText(preview.account?.bankKey)) throw new FinanceOperationError(400, "Selecciona el banco en la revisión antes de incorporar la cartola.");
     const rows = normalizeBankReviewRows(preview.sourceRows, preview.account, preview.reviewConfig || {}).filter((row) => !row.excluded);
     if (!rows.length) throw new FinanceOperationError(400, "No se detectaron movimientos para importar.");
@@ -1026,11 +1138,13 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
             importRevision: job.revision,
             excludedSourceRows: preview.reviewConfig?.excludedRows || [],
             columnMapping: preview.reviewConfig?.mapping || {},
+            fileSelection: preview.reviewConfig?.selection || {},
+            currency: rows[0].currency,
             originalId: job.originalId,
             fileFingerprint: fileFingerprint || null,
             importedAt,
             importedById: req.user?.id || null,
-            account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4 },
+            account: { bank: rows[0].bank, bankKey: rows[0].bankKey, cmfCode: rows[0].cmfCode, accountAlias: rows[0].accountAlias, accountType: rows[0].accountType, accountLast4: rows[0].accountLast4, bankAccountId: rows[0].bankAccountId || null, currency: rows[0].currency },
             summary,
             importedRows: validRows.length,
             duplicateRows,
@@ -1561,6 +1675,41 @@ financeRouter.post("/finance/agents/analyze", requireRole(ROLE_GROUPS.STAFF), re
   }
 });
 
+financeRouter.get("/finance/reconciliation-groups", requireFinancePermission(FINANCE_ACTIONS.VIEW), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.json(await listFinanceGroups(prisma, { tenantId: req.tenantId, page: req.query.page || 1, query: req.query.q || "", period: req.query.period || "" }));
+  } catch (error) { res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudieron consultar los grupos." }); }
+});
+for (const [path, operation, prepare, args] of [
+  ["/finance/reconciliation-groups/preview", previewFinanceGroup, true, (req) => ({ allocations: req.body?.allocations })],
+  ["/finance/reconciliation-groups/approve", approveFinanceGroup, false, (req) => ({ allocations: req.body?.allocations, expectedVersion: req.body?.expectedVersion, confirmation: req.body?.confirmation })],
+  ["/finance/reconciliation-groups/:id/reverse", reverseFinanceGroup, false, (req) => ({ id: req.params.id })]
+]) financeRouter.post(path, requireRole(prepare ? ROLE_GROUPS.STAFF : ROLE_GROUPS.MANAGERS), requireFinancePermission(prepare ? FINANCE_ACTIONS.PREPARE : FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.json(await operation(prisma, { ...args(req), tenantId: req.tenantId, userId: req.user?.id, reason: req.body?.reason }));
+  } catch (error) { res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo completar el grupo. No se aplicaron cambios parciales." }); }
+});
+
+financeRouter.get("/finance/differences", requireFinancePermission(FINANCE_ACTIONS.VIEW), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.json(await listFinanceDifferences(prisma, { tenantId: req.tenantId, page: req.query.page || 1, query: req.query.q || "", status: req.query.status || "" }));
+  } catch (error) { res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudieron consultar las diferencias." }); }
+});
+for (const [path, operation, prepare, args] of [
+  ["/finance/differences", proposeFinanceDifference, true, (req) => ({ movementId: req.body?.movementId, invoiceId: req.body?.invoiceId, settlementAmount: req.body?.settlementAmount, category: req.body?.category, evidence: req.body?.evidence })],
+  ["/finance/differences/:id/approve", approveFinanceDifference, false, (req) => ({ id: req.params.id, expectedVersion: req.body?.expectedVersion, confirmation: req.body?.confirmation })],
+  ["/finance/differences/:id/reject", rejectFinanceDifference, false, (req) => ({ id: req.params.id })],
+  ["/finance/differences/:id/reverse", reverseFinanceDifference, false, (req) => ({ id: req.params.id })]
+]) financeRouter.post(path, requireRole(prepare ? ROLE_GROUPS.STAFF : ROLE_GROUPS.MANAGERS), requireFinancePermission(prepare ? FINANCE_ACTIONS.PREPARE : FINANCE_ACTIONS.APPROVE_RECONCILIATION), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
+    res.json(await operation(prisma, { ...args(req), tenantId: req.tenantId, userId: req.user?.id, reason: req.body?.reason }));
+  } catch (error) { res.status(error instanceof FinanceOperationError ? error.status : 500).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo guardar la diferencia. No se aplicaron cambios parciales." }); }
+});
+
 financeRouter.get("/finance/customer-credits", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_RECONCILIATION))) return;
@@ -1649,6 +1798,38 @@ financeRouter.post("/finance/reconciliations/:movementId/reject", requireRole(RO
     console.error("Reject finance reconciliation error:", error);
     res.status(500).json({ error: "No se pudo enviar el movimiento a revisión." });
   }
+});
+
+function collectionDeliveryError(res, error) {
+  if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
+  // Do not log provider payloads, contacts or tokens.
+  return res.status(500).json({ error: "No se pudo confirmar el resultado. Consulta el historial antes de intentar otro envío." });
+}
+async function collectionChannelPermission(req, res, channel) {
+  if (!["gmail", "whatsapp"].includes(channel)) { res.status(422).json({ error: "Selecciona Gmail o WhatsApp con plantilla aprobada." }); return false; }
+  return requireFinanceModule(req, res, channel === "gmail" ? MODULES.GMAIL : MODULES.INBOX);
+}
+financeRouter.get("/finance/collection-deliveries", requireRole(ROLE_GROUPS.VIEWERS), requireFinancePermission(FINANCE_ACTIONS.VIEW), async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store");
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS))) return;
+    res.json(await listCollectionDeliveries(prisma, { tenantId: req.tenantId, userId: req.user?.id, role: req.user?.role, caseId: req.query.caseId }));
+  } catch (error) { collectionDeliveryError(res, error); }
+});
+financeRouter.post("/finance/collection-deliveries/preview", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS)) || !(await collectionChannelPermission(req, res, req.body?.channel))) return;
+    res.status(201).json(await previewCollectionDelivery(prisma, { tenantId: req.tenantId, userId: req.user?.id, role: req.user?.role, input: req.body || {} }));
+  } catch (error) { collectionDeliveryError(res, error); }
+});
+financeRouter.post("/finance/collection-deliveries/:id/send", requireRole(ROLE_GROUPS.MANAGERS), requireFinancePermission(FINANCE_ACTIONS.SEND_COLLECTION), async (req, res) => {
+  try {
+    if (!(await requireFinanceModule(req, res, MODULES.FINANCE_COLLECTIONS))) return;
+    const row = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: "finance_collection_delivery" }, select: { data: true } });
+    if (!row) return res.status(404).json({ error: "Envío no encontrado en esta empresa." });
+    if (!(await collectionChannelPermission(req, res, row.data?.channel))) return;
+    res.json(await sendCollectionDelivery(prisma, { tenantId: req.tenantId, userId: req.user?.id, role: req.user?.role, id: req.params.id, input: req.body || {} }));
+  } catch (error) { collectionDeliveryError(res, error); }
 });
 
 financeRouter.post("/finance/collection-cases/generate", requireRole(ROLE_GROUPS.STAFF), requireFinancePermission(FINANCE_ACTIONS.PREPARE), async (req, res) => {

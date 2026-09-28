@@ -15,7 +15,7 @@ async function log(tx, tenantId, userId, action, record, detail) { await tx.tena
 function plan(records, movement, invoice, settlementAmount, category) {
   const m = data(movement), positive = (n) => Number.isSafeInteger(n) && n > 0;
   if (!positive(m.amount) || !positive(settlementAmount) || settlementAmount <= m.amount) fail(422, "La justificación debe cubrir una diferencia positiva entre la deuda saldada y el abono. Los excesos se conservan como saldo a favor.");
-  if (!DIFFERENCE_CATEGORIES[category]) fail(422, "Selecciona una causa admitida para la diferencia.");
+  if (typeof category !== "string" || !Object.hasOwn(DIFFERENCE_CATEGORIES, category)) fail(422, "Selecciona una causa admitida para la diferencia.");
   const amount = settlementAmount - m.amount;
   if (category === "ROUNDING" && amount > 100) fail(422, "Un redondeo no puede superar 100 CLP. No reclasifiques comisiones o descuentos como redondeos.");
   if (m.currency !== "CLP" || data(invoice).currency !== "CLP" || m.excluded || ["EXCLUDED", "RECONCILED", "CLOSED"].includes(movement.status)) fail(422, "El abono y la factura deben estar vigentes e identificados en CLP.");

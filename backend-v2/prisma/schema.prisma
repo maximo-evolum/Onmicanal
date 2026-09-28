@@ -357,6 +357,7 @@ model FinanceBankImportJob {
   createdById String?
   status      String   @default("RECEIVED")
   revision    Int      @default(0)
+  attempts    Int      @default(0)
   runToken    String?
   account     Json?
   periodRange Json?

@@ -64,7 +64,7 @@ export function buildFinancePlanning(records, period) {
     if (!issueDate.startsWith(`${period}-`)) continue;
     if (isInvoice) {
       const state = getInvoiceFinancialState(record);
-      item.actualIncome += Math.max(0, state.amount - state.balance);
+      item.actualIncome += state.included ? state.paidAmount : 0;
     } else {
       item.actualExpense += payableState(record).paid;
     }

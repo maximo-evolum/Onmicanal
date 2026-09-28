@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { createHash } from "node:crypto";
 import { normalizeFinanceDocumentData, validateFinanceDocumentData } from "./finance-document.service.js";
+import { FinanceOperationError } from "./finance-integrity.service.js";
 
 const MAX_MIGRATION_ROWS = 500;
 const MAX_MIGRATION_FILE_BYTES = 8 * 1024 * 1024;
@@ -184,7 +185,7 @@ function valueFromSheetCell(value) {
 }
 
 function detectDelimiter(source) {
-  const candidates = [";", ",", "\t"];
+  const candidates = [";", ",", "\t", "|"];
   const sample = String(source || "").split("\n").slice(0, 40).join("\n");
   return candidates.reduce((selected, candidate) => (sample.split(candidate).length > sample.split(selected).length ? candidate : selected), ";");
 }
@@ -207,8 +208,11 @@ function headerScore(row) {
   }, 0);
 }
 
-function rowsToObjects(rows, origin = null) {
-  if (!Array.isArray(rows) || rows.length < 2) return [];
+function rowsToObjects(rows, origin = null, options = {}) {
+  if (!Array.isArray(rows) || !rows.length) {
+    options.onTable?.({ rows: [], origin, detectedHeaderRow: null, sheets: options.sheets || [] });
+    return [];
+  }
   const searchLimit = Math.min(rows.length - 1, 40);
   let headerIndex = 0;
   let bestScore = headerScore(rows[0]);
@@ -222,17 +226,28 @@ function rowsToObjects(rows, origin = null) {
   // Dos columnas conocidas bastan para formatos simples; para una carátula
   // con texto libre mantenemos la primera fila, que será revisada aguas abajo.
   if (bestScore < 2) headerIndex = 0;
+  const selection = options.selection || {};
+  const physicalRow = (row, index) => row.__sourceRow || index + 1;
+  options.onTable?.({ rows, origin, detectedHeaderRow: physicalRow(rows[headerIndex], headerIndex), sheets: options.sheets || [] });
+  if (options.inspectOnly) return [];
+  if (selection.headerRow) {
+    headerIndex = rows.findIndex((row, index) => physicalRow(row, index) === selection.headerRow);
+    if (headerIndex < 0 || !rows[headerIndex].some((cell) => cleanText(cell))) throw new FinanceOperationError(400, "El encabezado seleccionado está vacío o no existe.");
+  }
+  if (selection.endRow && selection.endRow <= physicalRow(rows[headerIndex], headerIndex)) throw new FinanceOperationError(400, "La última fila debe estar después del encabezado.");
+  if (selection.endRow && selection.endRow > physicalRow(rows.at(-1), rows.length - 1)) throw new FinanceOperationError(400, "La última fila seleccionada supera el contenido del archivo.");
   const used = new Set(["__financeOrigin"]);
   const headers = Array.from(rows[headerIndex], (header, index) => { const name = cleanText(header, `Columna ${index + 1}`); let unique = used.has(name) ? `${name} [${index + 1}]` : name; while (used.has(unique)) unique += "_"; used.add(unique); return unique; });
   return rows.slice(headerIndex + 1)
     .map((row, index) => ({ values: Object.fromEntries(headers.map((header, col) => [header, row[col] ?? ""])), row: row.__sourceRow || headerIndex + index + 2 }))
+    .filter((entry) => !selection.endRow || entry.row <= selection.endRow)
     .filter((entry) => Object.values(entry.values).some((value) => cleanText(value)))
     .map((entry) => origin ? { ...entry.values, __financeOrigin: { ...origin, row: origin.kind === "parsed" ? null : entry.row } } : entry.values);
 }
 
 export function parseDelimitedText(text, options = {}) {
   const source = String(text || "").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
-  const delimiter = detectDelimiter(source);
+  const delimiter = options.selection?.delimiter || detectDelimiter(source);
   const rows = [];
   let currentRow = [];
   let currentValue = "";
@@ -256,7 +271,8 @@ export function parseDelimitedText(text, options = {}) {
   }
   currentRow.push(currentValue.trim());
   if (currentRow.some(Boolean)) rows.push(currentRow);
-  return rowsToObjects(rows, options.includeOrigin ? { kind: "csv-record", sheet: null } : null);
+  if (quoted && options.selection) throw new FinanceOperationError(400, "El archivo tiene comillas sin cerrar. Corrige el texto antes de importar.");
+  return rowsToObjects(rows, options.includeOrigin ? { kind: "csv-record", sheet: null } : null, options);
 }
 
 async function parseSpreadsheet(buffer, options = {}) {
@@ -264,23 +280,27 @@ async function parseSpreadsheet(buffer, options = {}) {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
     const sheets = Array.isArray(workbook.worksheets) ? workbook.worksheets : [];
-    const sheet = sheets.find((candidate) => candidate.actualRowCount > 1) || sheets[0];
+    const sheet = options.selection?.sheet ? sheets.find((candidate) => candidate.name === options.selection.sheet) : sheets.find((candidate) => candidate.actualRowCount > 1) || sheets[0];
+    if (options.selection?.sheet && !sheet) throw new FinanceOperationError(400, "La hoja seleccionada no existe en este archivo.");
     if (!sheet) return parseSpreadsheetFallback(buffer, options);
     const rawRows = [];
-    sheet.eachRow({ includeEmpty: false }, (row) => { const values = row.values.slice(1).map(valueFromSheetCell); values.__sourceRow = row.number; rawRows.push(values); });
-    const rows = rowsToObjects(rawRows, options.includeOrigin ? { kind: "sheet", sheet: sheet.name } : null);
+    sheet.eachRow({ includeEmpty: false }, (row) => { const values = row.values.slice(1).map((value) => options.preserveNumbers && typeof (value?.result ?? value) === "number" ? (value?.result ?? value) : valueFromSheetCell(value)); values.__sourceRow = row.number; rawRows.push(values); });
+    const rows = rowsToObjects(rawRows, options.includeOrigin ? { kind: "sheet", sheet: sheet.name } : null, { ...options, sheets: sheets.map((s) => ({ name: s.name, rows: s.rowCount })) });
+    if (options.inspectOnly || Object.keys(options.selection || {}).length) return rows;
     // Un libro con metadatos incompletos puede abrirse sin error pero no
     // exponer hojas a ExcelJS. La segunda lectura evita devolver una cartola
     // vacía cuando el XML de la hoja sí contiene movimientos.
     return rows.length ? rows : parseSpreadsheetFallback(buffer, options);
   } catch (primaryError) {
+    if (primaryError instanceof FinanceOperationError) throw primaryError;
     // Algunos bancos generan archivos XLSX válidos para Excel pero con el
     // catálogo de hojas incompleto. ExcelJS no siempre los abre; se intenta
     // una lectura segura de la primera hoja antes de pedir al usuario que lo
     // vuelva a exportar.
     try {
       return await parseSpreadsheetFallback(buffer, options);
-    } catch {
+    } catch (fallbackError) {
+      if (fallbackError instanceof FinanceOperationError) throw fallbackError;
       const detail = primaryError instanceof Error ? primaryError.message : "";
       if (/sheets|workbook|zip|central directory/i.test(detail)) {
         throw new Error("No se pudo leer la estructura del Excel. Ábrelo en Excel o Google Sheets, guárdalo como Libro de Excel (.xlsx) o expórtalo a CSV y vuelve a intentarlo.");
@@ -362,6 +382,7 @@ function parseOdsSpreadsheet(source) {
 }
 
 async function parseSpreadsheetFallback(buffer, options = {}) {
+  if (Object.keys(options.selection || {}).length) throw new FinanceOperationError(400, "Este formato usa lectura de compatibilidad y no admite selección de hoja o filas. Guarda una copia como XLSX o CSV para usar la revisión flexible.");
   let zip;
   try {
     zip = await JSZip.loadAsync(buffer);
@@ -411,12 +432,12 @@ async function parseSpreadsheetFallback(buffer, options = {}) {
   return rowsToObjects(rawRows, options.includeOrigin ? { kind: "sheet", sheet: worksheet.name } : null);
 }
 
-export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION_FILE_BYTES, includeOrigin = false } = {}) {
+export async function readHistoricalFinanceFile(file, { maxBytes = MAX_MIGRATION_FILE_BYTES, includeOrigin = false, ...options } = {}) {
   if (!file?.buffer?.length) throw new Error("Selecciona un archivo con datos para revisar.");
   if (file.buffer.length > maxBytes) throw new Error(`El archivo supera el límite de ${Math.round(maxBytes / (1024 * 1024))} MB para una revisión segura.`);
   const name = cleanText(file.originalname || file.name).toLocaleLowerCase("es");
-  if (/\.(xlsx|xlsm)$/i.test(name)) return parseSpreadsheet(file.buffer, { includeOrigin });
-  if (/\.(csv|txt)$/i.test(name)) return parseDelimitedText(decodeSpreadsheetText(file.buffer), { includeOrigin });
+  if (/\.(xlsx|xlsm)$/i.test(name)) return parseSpreadsheet(file.buffer, { ...options, includeOrigin });
+  if (/\.(csv|txt)$/i.test(name)) return parseDelimitedText(decodeSpreadsheetText(file.buffer), { ...options, includeOrigin });
   throw new Error("Usa un archivo CSV o Excel (.xlsx). Los PDF e imágenes se adjuntan en Documentos para revisión humana.");
 }
 

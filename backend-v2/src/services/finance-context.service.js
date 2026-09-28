@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
 import { financeDocumentDate, financeDocumentSide } from "./finance-document-values.service.js";
+import { financeCurrency, financeRecordCurrency } from "./finance-currency.service.js";
 
 const dataOf = (record) => record?.data && typeof record.data === "object" ? record.data : {};
 const text = (value) => String(value ?? "").trim();
 const normalized = (value) => text(value).normalize("NFKC").toLowerCase();
-export const FINANCE_CONTEXT_TYPES = ["bank_statement", "bank_movement", "finance_invoice", "finance_payable", "finance_exception", "finance_reconciliation", "finance_collection_case", "finance_customer_credit", "finance_credit_application"];
+export const FINANCE_CONTEXT_TYPES = ["finance_bank_account", "bank_statement", "bank_movement", "finance_invoice", "finance_payable", "finance_exception", "finance_reconciliation", "finance_collection_case", "finance_customer_credit", "finance_credit_application", "finance_reconciliation_difference", "finance_reconciliation_group"];
 
 export function parseFinanceContext(input = {}) {
   // The tenant is always supplied by authentication, never by a query parameter.
@@ -20,9 +21,11 @@ export function parseFinanceContext(input = {}) {
 
 export function financeAccountKey(account) {
   if (!account?.bankKey) return "";
+  if (account.bankAccountId) return createHash("sha256").update(`registered:${account.bankAccountId}`).digest("hex").slice(0, 24);
   // Legacy records contain a masked account, not its full number. Keep aliases
   // distinct and expose identification as partial instead of asserting a bank ID.
   const identity = [account.bankKey, account.accountLast4, account.accountAlias, account.accountType].map(normalized);
+  if (financeCurrency(account.currency) !== "CLP") identity.push(financeCurrency(account.currency));
   return createHash("sha256").update(identity.join("|" )).digest("hex").slice(0, 24);
 }
 
@@ -54,7 +57,7 @@ export function financeOperationalDate(record, index = new Map(), visited = new 
 
 export function financeRecordMatchesContext(record, context, index = new Map(), { documentMode = "period" } = {}) {
   const data = dataOf(record);
-  if (text(data.currency || "CLP").toUpperCase() !== context.currency) return false;
+  if (financeRecordCurrency(record, index) !== context.currency) return false;
   const document = ["finance_invoice", "finance_payable", "finance_collection_case"].includes(record.recordType);
   if (context.accountKey && !document && financeAccountKey(financeRecordAccount(record, index)) !== context.accountKey) return false;
   if (!context.period) return true;
@@ -84,10 +87,11 @@ export function buildFinanceContextCoverage(records, context) {
   const accounts = new Map();
   for (const record of records) {
     const account = financeRecordAccount(record, index);
+    if (financeRecordCurrency(record, index) !== context.currency) continue;
     const key = financeAccountKey(account);
-    if (key && !accounts.has(key)) accounts.set(key, {
+    if (key && (!accounts.has(key) || record.recordType === "finance_bank_account")) accounts.set(key, {
       key, bank: text(account.bank || account.bankKey), alias: text(account.accountAlias || "Cuenta sin nombre"),
-      last4: text(account.accountLast4), identification: "partial"
+      last4: text(account.accountLast4), identification: account.bankAccountId ? "registered" : "partial", currency: financeRecordCurrency(record, index)
     });
   }
   if (context.accountKey && !accounts.has(context.accountKey)) throw new FinanceOperationError(404, "La cuenta seleccionada no pertenece a la empresa actual o ya no está disponible.");
@@ -112,6 +116,7 @@ export function buildFinanceContextCoverage(records, context) {
   if (!suppliers.count) warnings.push("No hay documentos de proveedores emitidos en este período. Una cartola no sustituye esos documentos.");
   if (undatedMovements) warnings.push(`${undatedMovements} movimiento(s) de la empresa no tienen fecha operativa y requieren revisión.`);
   warnings.push("La presencia de registros y sus fechas no acredita cobertura completa. No se infieren días faltantes a partir de días sin movimientos.");
+  if (context.currency !== "CLP") warnings.push(`Consulta en ${context.currency}, sin conversión a CLP. La conciliación, anticipos, diferencias, cobros manuales y cierre operativo actuales sólo admiten CLP.`);
   return { context, accounts: [...accounts.values()].sort((a, b) => (a.bank + a.alias).localeCompare(b.bank + b.alias)), statements: statements.length,
     sources: { movements, customers, suppliers }, warnings, complete: false,
     documentScope: "Los documentos pertenecen a la empresa; el filtro de cuenta aplica a los movimientos bancarios." };

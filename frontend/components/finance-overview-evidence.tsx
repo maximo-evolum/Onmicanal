@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { exportFinanceOverview, type FinanceOverview } from "@/lib/api";
+import { formatFinanceMoney } from "@/lib/finance-money";
 export function FinanceOverviewEvidence({ overview }: { overview: FinanceOverview }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState(""); const lock = useRef(false);
   async function download() {
@@ -11,6 +12,7 @@ export function FinanceOverviewEvidence({ overview }: { overview: FinanceOvervie
   }
   return <section className="finance-card" aria-label="Alcance y evidencia de indicadores">
     <p>{overview.scopeNote}</p>
+    <p>Diferencias justificadas de estas facturas: <strong>{formatFinanceMoney(overview.invoices.justifiedDifferences || 0, overview.context.currency)}</strong>. Se presentan separadas de lo cobrado y del saldo pendiente.</p>
     {overview.documentQuality ? <p>Documentos de clientes fuera de totales: {overview.documentQuality.inactive} anulados/excluidos, {overview.documentQuality.adjustments} notas independientes y {overview.documentQuality.invalid} con datos inconsistentes. Revisa estos últimos en Facturas; no se consideran saldos verificados.</p> : null}
     <p>Conciliación: {overview.reconciliation.matchedMovements} confirmados de {overview.reconciliation.totalMovements} movimientos activos con fecha. {overview.reconciliation.excludedMovements} excluidos fuera del cálculo. {overview.reconciliation.inconsistentMovements} con vínculos inconsistentes requieren revisión.</p>
     <p>El archivo se calcula al descargarlo con este mismo contexto; puede cambiar si hubo operaciones nuevas. No sustituye un cierre contable.</p>

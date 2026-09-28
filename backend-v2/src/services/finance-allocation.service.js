@@ -54,12 +54,16 @@ export function planFinanceAllocation(movement, invoices, allocations) {
 }
 
 // Both suggestion approval and manual allocation use this same atomic writer.
-export async function applyFinanceAllocation(db, { tenantId, userId, movementId, allocations, invoiceIds, reason, manual = false }) {
+export async function applyFinanceAllocation(db, input) {
+  return withFinanceWrite(db, (tx) => applyFinanceAllocationInTransaction(tx, input));
+}
+
+// Internal helper: caller must hold a Serializable transaction.
+export async function applyFinanceAllocationInTransaction(tx, { tenantId, userId, movementId, allocations, invoiceIds, reason, manual = false }) {
   if (manual) reason = allocationReason(reason);
   const explicit = allocations !== undefined ? validateAllocationInput(allocations) : null;
   const ids = explicit ? explicit.map((item) => item.invoiceId) : invoiceIds;
   if (!Array.isArray(ids) || !ids.length || ids.length > 100 || new Set(ids).size !== ids.length || ids.some((id) => typeof id !== "string" || !id.trim())) fail(400, "Selecciona entre 1 y 100 facturas distintas.");
-  return withFinanceWrite(db, async (tx) => {
     const movement = await tx.industryRecord.findFirst({ where: { id: movementId, tenantId, recordType: "bank_movement" } });
     if (!movement) fail(404, "Movimiento no encontrado.");
     await assertReconciliationPeriodOpen(tx, tenantId, movement);
@@ -93,22 +97,27 @@ export async function applyFinanceAllocation(db, { tenantId, userId, movementId,
       const balance = item.state.balance - item.amount;
       const status = balance === 0 ? "PAID" : "PARTIAL";
       const receipt = await tx.industryRecord.create({ data: { tenantId, recordType: "finance_invoice_receipt", title: `Cobro conciliado ${item.invoice.title}`.slice(0, 220), status: "RECONCILED", data: { invoiceId: item.invoiceId, amount: item.amount, paymentDate: bank.transactionDate || bank.date, reference: bank.reference || null, movementId, reconciliationId: reconciliation.id, source: "bank_reconciliation", registeredById: userId || null } } });
-      updated.push(await tx.industryRecord.update({ where: { id: item.invoiceId }, data: { status, data: { ...data, balance, paidAmount: Number(data.paidAmount ?? Math.max(0, item.state.amount - item.state.balance)) + item.amount, status, paidAt: balance === 0 ? now : null, lastReconciliationId: reconciliation.id, history: [...history(data), { at: now, type: "BANK_RECONCILIATION_APPLIED", amount: item.amount, movementId, reconciliationId: reconciliation.id, receiptId: receipt.id, userId, reason: reason || "Aprobación humana de sugerencia" }] } } }));
+      updated.push(await tx.industryRecord.update({ where: { id: item.invoiceId }, data: { status, data: { ...data, balance, paidAmount: item.state.paidAmount + item.amount, status, paidAt: balance === 0 ? now : null, lastReconciliationId: reconciliation.id, history: [...history(data), { at: now, type: "BANK_RECONCILIATION_APPLIED", amount: item.amount, movementId, reconciliationId: reconciliation.id, receiptId: receipt.id, userId, reason: reason || "Aprobación humana de sugerencia" }] } } }));
     }
     await tx.tenantAuditLog.create({ data: { tenantId, actorUserId: userId || null, action: "FINANCE_RECONCILIATION_APPROVED", entity: "finance_reconciliation", entityId: reconciliation.id, metadata: { movementId, allocations: requested, reason: reason || "Aprobación humana de sugerencia", manual } } });
     return { reconciliation, invoices: updated, confidence, reasons, remainingBalance: plan.reduce((sum, item) => sum + item.state.balance - item.amount, 0) };
-  });
 }
 
-export async function reverseFinanceAllocation(db, { tenantId, userId, reconciliationId, reason }) {
+export async function reverseFinanceAllocation(db, input) {
+  return withFinanceWrite(db, (tx) => reverseFinanceAllocationInTransaction(tx, { ...input, groupId: null }));
+}
+
+// Internal helper: caller must hold a Serializable transaction.
+export async function reverseFinanceAllocationInTransaction(tx, { tenantId, userId, reconciliationId, reason, groupId = null }) {
   reason = allocationReason(reason);
-  return withFinanceWrite(db, async (tx) => {
     const reconciliation = await tx.industryRecord.findFirst({ where: { id: reconciliationId, tenantId, recordType: "finance_reconciliation" } });
     if (!reconciliation) fail(404, "Conciliación no encontrada.");
     if (reconciliation.status === "REVERSED") return { reconciliation, alreadyReversed: true };
     if (reconciliation.status !== "APPROVED") fail(409, "Sólo se puede revertir una conciliación aprobada.");
     const rec = dataOf(reconciliation);
+    if (rec.groupId && rec.groupId !== groupId) fail(409, "Esta conciliación pertenece a un grupo. Revierte el grupo completo desde Conciliaciones agrupadas.");
     if (rec.reconciliationType === "CUSTOMER_CREDIT") fail(409, "Revierte el origen desde Anticipos y saldos a favor, después de revertir sus aplicaciones.");
+    if (rec.reconciliationType === "JUSTIFIED_DIFFERENCE") fail(409, "Revierte desde Diferencias justificadas para restituir el cobro y el ajuste juntos.");
     const movement = await tx.industryRecord.findFirst({ where: { id: rec.movementId, tenantId, recordType: "bank_movement" } });
     if (!movement || movement.status !== "MATCHED" || dataOf(movement).reconciliationId !== reconciliation.id) fail(409, "El vínculo con el movimiento cambió. Requiere revisión antes de revertir.");
     await assertReconciliationPeriodOpen(tx, tenantId, movement);
@@ -122,8 +131,8 @@ export async function reverseFinanceAllocation(db, { tenantId, userId, reconcili
       const detail = dataOf(receipt); const invoice = invoices.find((item) => item.id === detail.invoiceId);
       if (!invoice) fail(409, "Falta un documento vinculado; no se puede revertir parcialmente.");
       const data = dataOf(invoice); const state = getInvoiceFinancialState(invoice);
-      const paid = Number(data.paidAmount ?? Math.max(0, state.amount - state.balance));
-      if (!Number.isSafeInteger(paid) || !Number.isSafeInteger(state.balance) || ["ANNULLED", "CANCELLED", "REJECTED", "ANULADA"].includes(invoice.status) || paid < detail.amount || state.balance + detail.amount > state.amount) fail(409, "El documento tiene ajustes posteriores incompatibles. Revisa sus pagos o notas antes de revertir.");
+      const paid = state.paidAmount;
+      if (!Number.isSafeInteger(paid) || !Number.isSafeInteger(state.balance) || ["ANNULLED", "CANCELLED", "REJECTED", "ANULADA"].includes(invoice.status) || paid < detail.amount || !state.included || state.balance + detail.amount + state.justifiedDifference > state.amount) fail(409, "El documento tiene ajustes posteriores incompatibles. Revisa sus pagos o notas antes de revertir.");
       return { receipt, invoice, data, amount: detail.amount, balance: state.balance + detail.amount, paid: paid - detail.amount };
     });
     const now = new Date().toISOString();
@@ -137,7 +146,6 @@ export async function reverseFinanceAllocation(db, { tenantId, userId, reconcili
     const updated = await tx.industryRecord.update({ where: { id: reconciliationId }, data: { status: "REVERSED", data: { ...rec, reversedAt: now, reversedById: userId || null, reversalReason: reason } } });
     await tx.tenantAuditLog.create({ data: { tenantId, actorUserId: userId || null, action: "FINANCE_RECONCILIATION_REVERSED", entity: "finance_reconciliation", entityId: reconciliationId, metadata: { movementId: movement.id, reason, restored: plan.map((item) => ({ invoiceId: item.invoice.id, amount: item.amount })) } } });
     return { reconciliation: updated, alreadyReversed: false };
-  });
 }
 
 export async function sendFinanceMovementToReview(db, { tenantId, userId, movementId, detail, expectedVersion, operationKey }) {

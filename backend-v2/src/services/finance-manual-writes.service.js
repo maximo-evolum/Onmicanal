@@ -39,6 +39,7 @@ export async function registerManualSettlement(db, { tenantId, userId, documentI
     if (previous) {
       const old = dataOf(previous);
       if (old[relation] !== documentId || old.amount !== paid || old.paymentDate !== date || old.reference !== ref) fail(409, "El identificador ya se utilizó con otros datos. Revisa el registro antes de iniciar otra operación.");
+      if (previous.status === "REVERSED" || old.reversedAt) fail(409, "Esta operación fue revertida. No se registró otro cobro o pago; consulta el historial e inicia una operación nueva si corresponde.");
       return { [incoming ? "receipt" : "payment"]: previous, [incoming ? "invoice" : "payable"]: document, remainingBalance: getInvoiceFinancialState(document).balance, replayed: true };
     }
     // The payment affects its effective month, not the invoice's issue month.

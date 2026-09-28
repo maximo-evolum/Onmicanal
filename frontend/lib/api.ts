@@ -762,6 +762,23 @@ export type IndustryRecord = {
   assignedTo?: IndustryUser | null;
 };
 
+export type FinanceCollectionDelivery = {
+  id: string; status: "DRAFT" | "SENDING" | "ACCEPTED" | "REJECTED" | "UNKNOWN";
+  caseId: string; invoiceId: string; channel: string; recipient: string; sender: string;
+  subject: string; body: string; balance: number; currency: string; createdAt: string;
+  expiresAt: string; approvedAt: string | null; finishedAt: string | null;
+  providerMessageId: string | null; detail: string; previewHash: string;
+};
+export function getFinanceCollectionDeliveries(caseId: string) {
+  return request<{ deliveries: FinanceCollectionDelivery[] }>(`/finance/collection-deliveries?caseId=${encodeURIComponent(caseId)}`);
+}
+export function previewFinanceCollectionDelivery(input: { caseId: string; channel: string; recipient: string; consentConfirmed: boolean; consentNote: string; templateName: string; language: string }) {
+  return request<FinanceCollectionDelivery>("/finance/collection-deliveries/preview", { method: "POST", body: JSON.stringify(input), signal: AbortSignal.timeout(45000) });
+}
+export function sendFinanceCollectionDelivery(delivery: FinanceCollectionDelivery) {
+  return request<FinanceCollectionDelivery>(`/finance/collection-deliveries/${encodeURIComponent(delivery.id)}/send`, { method: "POST", body: JSON.stringify({ approved: true, previewHash: delivery.previewHash }), signal: AbortSignal.timeout(45000) });
+}
+
 export type RealtyIntelligence = {
   generatedAt: string;
   inventory: {
@@ -825,7 +842,7 @@ export type FinanceOverview = {
   context: FinanceWorkspaceContext; scopeNote: string;
   schedule: { asOf: string; next30Days: number; undatedDocuments: number; basis: string; weeks: Array<{ label: string; from: string; to: string; amount: number; documents: number }> };
   generatedAt: string;
-  invoices: { total: number; issued: number; paid: number; pending: number; overdue: number; pendingAmount: number; overdueAmount: number };
+  invoices: { total: number; issued: number; paid: number; justifiedDifferences?: number; pending: number; overdue: number; pendingAmount: number; overdueAmount: number };
   collection: { rate: number; dsoDays: number; dsoSampleSize: number; expectedNext30Days: number };
   reconciliation: { totalMovements: number; matchedMovements: number; pendingMovements: number; rate: number; excludedMovements: number; inconsistentMovements: number; invalidDateMovements: number };
   exceptions: { open: number; critical: number };
@@ -854,6 +871,17 @@ export type FinanceReconciliationSuggestion = {
 };
 
 export type FinanceWorkspaceContext = { period: string; accountKey: string; currency: string };
+export type FinanceConnectionHealth = {
+  checkedAt: string; maxVerificationAgeHours: number; scope: string; canManage: boolean;
+  items: Array<{ key: string; label: string; status: string; statusLabel: string; note: string;
+    lastCheckedAt: string | null; lastSuccessAt: string | null; expiresAt: string | null; targetUrl: string;
+    sync: { status: string; startedAt: string | null; completedAt: string | null; lastSuccessAt: string | null; period: string | null };
+    banking?: { total: number; pending: number; received: number; failed: number; lastReceivedAt: string | null };
+  }>;
+};
+export function getFinanceConnectionHealth(): Promise<FinanceConnectionHealth> {
+  return request("/finance/connection-health");
+}
 export type FinanceLedgerRow = { assignedToId: string; importRevision: string; confidenceScore: number | null; confidenceBand: string; confidenceLabel: string; id: string; version: string; date: string; description: string; amount: number | null; direction: string; status: string; reference: string; rut: string; payer: string; bank: string; account: string; last4: string; sourceFile: string; batchId: string; sourceRow: string; sourceSheet: string; reconciliationId: string; reasons: string[]; currency: string };
 export type FinanceLedger = { reconciliationAccess: boolean; records: FinanceLedgerRow[]; page: number; pages: number; pageSize: number; total: number; dateScope: "PERIOD" | "UNDATED"; undatedAvailable: number; scopeNotice: string; summary: { credits: number; debits: number; unclassified: number } };
 export function getFinanceMovementLedger(query: Record<string, string>): Promise<FinanceLedger> {
@@ -872,6 +900,20 @@ export function getFinanceMovementTrace(id: string, cursor?: string): Promise<Fi
 }
 export function reviewFinanceMovementBatch(input: { items: Array<{ id: string; version: string }>; reason: string; operationKey: string }): Promise<{ results: Array<{ id: string; status: string; message: string }> }> {
   return request("/finance/movement-ledger/review", { method: "POST", body: JSON.stringify(input) });
+}
+export type FinanceProcessReport = {
+  title: string; fingerprint: string; generatedAt: string; company: { id: string; name: string };
+  summary: { total: number; counts: Record<string, { label: string; count: number }>; credits: number | null; debits: number | null; undated: number; withoutAmount: number };
+  rows: Array<{ id: string; date: string; description: string; statusLabel: string; amount: number | null; currency: string; sourceFile: string }>;
+  notices: string[]; issues: Array<{ id: string; title: string }>; totalIssues: number; previewLimit: number;
+};
+export function getFinanceProcessReport(query: Record<string, string>): Promise<FinanceProcessReport> {
+  return request(`/finance/process-reports?${new URLSearchParams(query)}`);
+}
+export async function exportFinanceProcessReport(query: Record<string, string>, format: "pdf" | "xlsx"): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/finance/process-reports?${new URLSearchParams({ ...query, format })}`, { headers: buildHeaders(), credentials: "include", cache: "no-store" });
+  if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.error || "No se pudo descargar el reporte."); }
+  return response.blob();
 }
 export async function exportFinanceMovementLedger(query: Record<string, string>, format: "csv" | "xlsx" = "csv"): Promise<Blob> {
   const response = await fetch(`${API_BASE_URL}/finance/movement-ledger?${new URLSearchParams({ ...query, export: format })}`, { headers: buildHeaders(), credentials: "include", cache: "no-store" });
@@ -932,6 +974,19 @@ export function reverseFinanceReconciliation(id: string, reason: string): Promis
   return request(`/finance/reconciliations/${encodeURIComponent(id)}/reverse`, { method: "POST", body: JSON.stringify({ reason }) });
 }
 
+export type FinanceGroupCell = { movementId: string; invoiceId: string; amount: number };
+export type FinanceGroupPreview = { version: string; customerRut: string; currency: string; total: number; periods: string[]; allocations: FinanceGroupCell[]; documents: Array<{ id: string; title: string; balance: number; applied: number; remaining: number }>; movements: Array<{ id: string; title: string; amount: number; date: string }> };
+export type FinanceGroup = IndustryRecord & { data: FinanceGroupPreview & { amount: number; reason: string; approvedAt: string; approvedById: string; reversedAt?: string; reversalReason?: string }; validation: { valid: boolean; errors: string[] } | null };
+export type FinanceGroupPage = { page: number; pages: number; total: number; records: FinanceGroup[] };
+export function previewFinanceGroup(allocations: FinanceGroupCell[]): Promise<FinanceGroupPreview> { return request("/finance/reconciliation-groups/preview", { method: "POST", body: JSON.stringify({ allocations }) }); }
+export function approveFinanceGroup(input: { allocations: FinanceGroupCell[]; expectedVersion: string; confirmation: string; reason: string }): Promise<unknown> { return request("/finance/reconciliation-groups/approve", { method: "POST", body: JSON.stringify(input) }); }
+export function reverseFinanceGroup(id: string, reason: string): Promise<unknown> { return request(`/finance/reconciliation-groups/${encodeURIComponent(id)}/reverse`, { method: "POST", body: JSON.stringify({ reason }) }); }
+export function getFinanceGroups(page = 1, query = "", period = ""): Promise<FinanceGroupPage> { return request(`/finance/reconciliation-groups?page=${page}&q=${encodeURIComponent(query)}&period=${encodeURIComponent(period)}`); }
+export type FinanceDifference = IndustryRecord & { version: string; validation: { valid: boolean; errors: string[] } | null; data: { invoiceTitle: string; movementTitle: string; amount: number; bankAmount: number; settlementAmount: number; category: string; reason: string; evidence: string; transactionDate: string; proposedAt: string; proposedById: string; approvedAt?: string; approvedById?: string; rejectedAt?: string; rejectionReason?: string; reversedAt?: string; reversalReason?: string } };
+export type FinanceDifferencePage = { page: number; pages: number; total: number; categories: Record<string, string>; records: FinanceDifference[] };
+export function getFinanceDifferences(page = 1, query = "", status = ""): Promise<FinanceDifferencePage> { return request(`/finance/differences?page=${page}&q=${encodeURIComponent(query)}&status=${encodeURIComponent(status)}`); }
+export function proposeFinanceDifference(input: { movementId: string; invoiceId: string; settlementAmount: number; category: string; reason: string; evidence: string }): Promise<unknown> { return request("/finance/differences", { method: "POST", body: JSON.stringify(input) }); }
+export function resolveFinanceDifference(id: string, action: "approve" | "reject" | "reverse", input: { expectedVersion?: string; confirmation?: string; reason?: string }): Promise<unknown> { return request(`/finance/differences/${encodeURIComponent(id)}/${action}`, { method: "POST", body: JSON.stringify(input) }); }
 export type FinanceCustomerCredit = IndustryRecord & { data: { customerName: string; customerRut: string; kind: string; amount: number; availableAmount: number; version: number; transactionDate: string; movementId: string; reason: string }; ledger: { valid: boolean; errors: string[]; available: number; applied: number; applications: IndustryRecord[] } };
 export type FinanceCustomerCreditPage = { page: number; pages: number; total: number; availableAmount: number; reviewCount: number; records: FinanceCustomerCredit[] };
 export function getFinanceCustomerCredits(page = 1, query = ""): Promise<FinanceCustomerCreditPage> { return request(`/finance/customer-credits?page=${page}&q=${encodeURIComponent(query)}`); }
@@ -967,6 +1022,7 @@ export type FinanceDocument = {
   commissionAmount: number;
   settlementReference: string | null;
   creditNotesTotal: number;
+  justifiedDifferenceTotal?: number;
   debitNotesTotal: number;
   referenceDocumentType: string | null;
   referenceDocumentNumber: string | null;
@@ -1031,7 +1087,12 @@ export type FinanceMigrationPreview = {
   sourceRows?: Array<Record<string, unknown>>;
 };
 export type ChileanBank = { key: string; name: string; cmfCode: string };
-export type FinanceBankStatementAccount = { bank: string; bankKey: string; cmfCode: string; accountAlias: string; accountType: string; accountLast4: string | null };
+export type FinanceBankStatementAccount = { bank: string; bankKey: string; cmfCode: string; accountAlias: string; accountType: string; accountLast4: string | null; bankAccountId?: string | null; currency?: string };
+export type FinanceBankAccount = FinanceBankStatementAccount & { id: string; status: "ACTIVE" | "INACTIVE"; currency: string; version: number };
+export function getFinanceBankAccounts(): Promise<{ accounts: FinanceBankAccount[] }> { return request("/finance/bank-accounts"); }
+export function saveFinanceBankAccount(input: { accountAlias: string; bankKey?: string; accountLast4?: string; accountType?: string; currency?: string; status?: string; version?: number }, id?: string): Promise<{ account: FinanceBankAccount }> {
+  return request(`/finance/bank-accounts${id ? "/" + encodeURIComponent(id) : ""}`, { method: id ? "PATCH" : "POST", body: JSON.stringify(input) });
+}
 export type FinanceBankStatementPreview = {
   periodProtection?: { periods: string[]; closedPeriods: string[]; undatedRows: Array<string | number>; blocked: boolean; message: string };
   reviewConfig?: BankReviewConfig;
@@ -1123,7 +1184,7 @@ export type FinanceMonthlyClosePreview = {
   history?: Array<{ id: string; kind: "CLOSE" | "REOPEN"; at: string; userId: string | null; note: string; version: number | null; closeId: string; active: boolean }>;
   protection?: { scope: string; message: string };
   status: "READY_TO_CLOSE" | "REQUIRES_REVIEW" | string;
-  metrics: { issued: number; collected: number; registeredPayables: number; paidPayables: number; incoming: number; outgoing: number; netBankFlow: number; customerCreditAvailable?: number; unclassifiedMovements?: number; inconsistentReconciliations?: number; excludedMovements?: number; reconciliations: number; unreconciledMovements: number; openExceptions: number };
+  metrics: { issued: number; collected: number; registeredPayables: number; paidPayables: number; incoming: number; outgoing: number; netBankFlow: number; justifiedDifferences?: number; justifiedDifferencesByCategory?: Record<string, number>; customerCreditAvailable?: number; unclassifiedMovements?: number; inconsistentReconciliations?: number; excludedMovements?: number; reconciliations: number; unreconciledMovements: number; openExceptions: number };
   blockers: Array<{ type: string; title: string; id: string }>;
   rows: Array<{ fecha: string; tipo: string; documento: string; contraparte: string; categoria: string; monto: number | null; saldo: number; estado: string }>;
 };
@@ -1195,6 +1256,21 @@ export function registerFinanceInvoiceReceipt(id: string, input: { amount: numbe
   return request(`/finance/invoices/${encodeURIComponent(id)}/receipts`, { method: "POST", body: JSON.stringify(input) });
 }
 
+export type FinanceManualKind = "RECEIPT" | "PAYMENT";
+export type FinanceManualReversalPreview = { version: string; amount: number; paymentDate: string; period: string; documentId: string; title: string; before: { balance: number; paidAmount: number }; after: { balance: number; paidAmount: number; status: string } };
+export type FinanceManualHistoryRow = { entry: { id: string; title: string; status: string; data: { amount: number; paymentDate: string; reference?: string; source?: string; registeredById?: string; registeredAt?: string; reversedAt?: string; reversedById?: string; reversalReason?: string } }; documentTitle: string; partyName: string; partyRut: string; canReverse: boolean; blockedReason: string };
+export type FinanceManualHistoryPage = { records: FinanceManualHistoryRow[]; page: number; pages: number; total: number };
+const manualSettlementPath = (kind: FinanceManualKind) => `/finance/manual-settlements/${kind === "RECEIPT" ? "receipts" : "payments"}`;
+export function getFinanceManualHistory(kind: FinanceManualKind, filters: { period: string; query: string; page: number; status: string }): Promise<FinanceManualHistoryPage> {
+  return request(`${manualSettlementPath(kind)}?${new URLSearchParams({ period: filters.period, q: filters.query, page: String(filters.page), status: filters.status })}`);
+}
+export function previewFinanceManualReversal(kind: FinanceManualKind, id: string): Promise<FinanceManualReversalPreview> {
+  return request(`${manualSettlementPath(kind)}/${encodeURIComponent(id)}/preview-reversal`, { method: "POST", body: "{}" });
+}
+export function reverseFinanceManualSettlement(kind: FinanceManualKind, id: string, input: { expectedVersion: string; reason: string; confirmation: string }): Promise<{ alreadyReversed: boolean }> {
+  return request(`${manualSettlementPath(kind)}/${encodeURIComponent(id)}/reverse`, { method: "POST", body: JSON.stringify(input) });
+}
+
 export function prepareFinanceCollectionReminders(partyKey: string): Promise<{ prepared: IndustryRecord[]; count: number; replayed: boolean; originalCount?: number; deferred: Array<{ id: string; reason: string }> }> {
   return request(`/finance/collections/portfolio/${encodeURIComponent(partyKey)}/reminders`, { method: "POST" });
 }
@@ -1241,14 +1317,19 @@ export function getFinanceBankCatalog(): Promise<{ banks: ChileanBank[]; support
   return request("/finance/banks/catalog");
 }
 
-export function previewFinanceBankStatementFile(file: File, account: { bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }): Promise<FinanceBankStatementPreview> {
+export function previewFinanceBankStatementFile(file: File, account: { bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string; bankAccountId?: string; currency?: string }): Promise<FinanceBankStatementPreview> {
+  return enqueueFinanceBankStatementFile(file, account).then(({ job }) => waitForFinanceBankImport(job.id));
+}
+export function enqueueFinanceBankStatementFile(file: File, account: { bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string; bankAccountId?: string; currency?: string }): Promise<{ job: FinanceBankImportJob }> {
   const data = new FormData();
   data.append("file", file);
   data.append("bankKey", account.bankKey);
   data.append("accountAlias", account.accountAlias || "");
   data.append("accountType", account.accountType || "Cuenta corriente");
   data.append("accountLast4", account.accountLast4 || "");
-  return request<FinanceBankStatementPreview>("/finance/bank-statements/preview-file", { method: "POST", body: data });
+  data.append("bankAccountId", account.bankAccountId || "");
+  data.append("currency", account.currency || "");
+  return request<{ job: FinanceBankImportJob }>("/finance/bank-import-jobs/upload", { method: "POST", body: data, signal: AbortSignal.timeout(120000) });
 }
 
 export function importFinanceBankStatement(input: { jobId: string; revision: number }): Promise<{ imported: number; duplicateRows: number; requiresReview: number; summary: FinanceBankStatementPreview["summary"] }> {
@@ -1258,6 +1339,7 @@ export function importFinanceBankStatement(input: { jobId: string; revision: num
 export type FinanceBankImportJob = {
   id: string; sourceFile: string; status: "RECEIVED" | "PROCESSING" | "READY" | "FAILED" | "IMPORTED" | "CANCELLED";
   revision: number; updatedAt: string; createdAt: string; error: string | null; recoverable: boolean;
+  attempts?: number;
 };
 export function getFinanceBankImportJobs(cursor?: string): Promise<{ jobs: FinanceBankImportJob[]; nextCursor: string | null }> {
   return request(`/finance/bank-import-jobs${cursor ? "?cursor=" + encodeURIComponent(cursor) : ""}`);
@@ -1265,10 +1347,28 @@ export function getFinanceBankImportJobs(cursor?: string): Promise<{ jobs: Finan
 export function getFinanceBankImportJob(id: string): Promise<{ job: FinanceBankImportJob; preview: FinanceBankStatementPreview | null }> {
   return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}`);
 }
-export function reanalyzeFinanceBankImport(id: string, account?: { bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string }, review?: { revision: number; reviewConfig: BankReviewConfig }): Promise<FinanceBankStatementPreview> {
-  return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}/reanalyze`, { method: "POST", body: JSON.stringify({ account, ...review }) });
+export function reanalyzeFinanceBankImport(id: string, account?: { bankKey: string; accountAlias?: string; accountType?: string; accountLast4?: string; bankAccountId?: string; currency?: string }, review?: { revision: number; reviewConfig: BankReviewConfig }): Promise<FinanceBankStatementPreview> {
+  return (review ? Promise.resolve(review.revision) : getFinanceBankImportJob(id).then(({ job }) => job.revision))
+    .then((revision) => request<{ job: FinanceBankImportJob }>(`/finance/bank-import-jobs/${encodeURIComponent(id)}/enqueue`, { method: "POST", body: JSON.stringify({ account, ...review, revision }) }))
+    .then(() => waitForFinanceBankImport(id));
 }
-export type BankReviewConfig = { mapping: Record<string, string>; excludedRows: Array<{ dataRow: number; reason: string }> };
+export async function waitForFinanceBankImport(id: string): Promise<FinanceBankStatementPreview> {
+  const deadline = Date.now() + 180000;
+  while (Date.now() < deadline) {
+    const result = await getFinanceBankImportJob(id);
+    if (result.job.status === "READY" && result.preview) return result.preview;
+    if (["FAILED", "CANCELLED", "IMPORTED"].includes(result.job.status)) throw new Error(result.job.error || "Esta carga ya fue incorporada o cancelada. Consulta las importaciones guardadas.");
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  throw new Error("El archivo está guardado y continúa en segundo plano. Puedes salir y recuperar la revisión desde Importaciones guardadas; no necesitas subirlo nuevamente.");
+}
+export type BankFileSelection = { sheet?: string; headerRow?: number; endRow?: number; delimiter?: string };
+export type BankReviewConfig = { mapping: Record<string, string>; excludedRows: Array<{ dataRow: number; reason: string }>; selection?: BankFileSelection };
+export type BankFileLayout = { supported: boolean; message?: string; revision: number; kind?: string; sheet?: string; sheets: Array<{ name: string; rows: number }>; detectedHeaderRow?: number; lastRow?: number; page?: number; pages?: number; total?: number; rows: Array<{ number: number; cells: string[]; truncatedColumns: boolean }> };
+export function getBankFileLayout(id: string, input: { sheet?: string; delimiter?: string; page: number }): Promise<BankFileLayout> {
+  const query = new URLSearchParams(Object.entries(input).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+  return request(`/finance/bank-import-jobs/${encodeURIComponent(id)}/layout?${query}`);
+}
 export type BankReviewRow = { dataRow: number; transactionDate: string | null; description: string; reference: string; rut: string; amount: number; movementType: string; needsReview: boolean; reviewReasons: string[]; excluded: boolean; exclusionReason: string | null; duplicate?: boolean; origin?: { kind: string; row: number | null; sheet: string | null }; source: Record<string, unknown> };
 export type BankReviewPage = { revision: number; page: number; pageSize: number; total: number; totalSourceRows: number; pages: number; rows: BankReviewRow[] };
 export type BankMappingTemplate = { id: string; name: string; bankKey: string; columns: string[]; mapping: Record<string, string> };

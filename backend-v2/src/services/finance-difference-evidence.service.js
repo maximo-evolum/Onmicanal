@@ -8,6 +8,12 @@ export function auditDifference(difference, records) {
   const movement = index.get(d.movementId), invoice = index.get(d.invoiceId), rec = index.get(d.reconciliationId), receipt = index.get(d.receiptId);
   const m = differenceData(movement), r = differenceData(rec), p = differenceData(receipt);
   const positive = (n) => Number.isSafeInteger(n) && n > 0;
+  const day = String(d.transactionDate || "");
+  if (typeof d.category !== "string" || !Object.hasOwn(DIFFERENCE_CATEGORIES, d.category) || (d.category === "ROUNDING" && d.amount > 100)) errors.push("Causa o límite operativo de la diferencia inválido.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day) errors.push("Falta una fecha operativa válida para la diferencia.");
+  if (r.reversedAt || m.currency !== "CLP" || p.currency !== "CLP" || r.currency !== "CLP" || p.paymentDate !== d.transactionDate) errors.push("Moneda, fecha de cobro o vigencia incompatibles con el respaldo.");
+  if (records.filter((item) => item.recordType === "finance_reconciliation" && item.status === "APPROVED" && differenceData(item).movementId === d.movementId).length !== 1) errors.push("El abono debe tener una sola aprobación vigente.");
+  if (records.filter((item) => item.recordType === "finance_invoice_receipt" && item.status !== "REVERSED" && differenceData(item).movementId === d.movementId).length !== 1) errors.push("El abono debe respaldar un único comprobante vigente.");
   if (difference?.recordType !== "finance_reconciliation_difference" || difference.status !== "APPROVED" || d.reversedAt || !DIFFERENCE_CATEGORIES[d.category] || !positive(d.amount) || !positive(d.bankAmount) || !positive(d.settlementAmount) || d.bankAmount + d.amount !== d.settlementAmount || d.currency !== "CLP" || !d.approvedById || !d.approvedAt || String(d.reason || "").trim().length < 10 || String(d.evidence || "").trim().length < 10) errors.push("Falta una diferencia aprobada, clasificada y respaldada con montos consistentes.");
   const sameTenant = (record) => record?.tenantId === difference?.tenantId;
   if (movement?.recordType !== "bank_movement" || !sameTenant(movement) || movement.status !== "MATCHED" || m.reconciliationId !== rec?.id || m.amount !== d.bankAmount || String(m.transactionDate || m.date).slice(0, 10) !== d.transactionDate) errors.push("La diferencia no coincide con el abono original.");
@@ -25,9 +31,10 @@ export function auditDifference(difference, records) {
 export function differencesForClose(records, period) {
   const blockers = [], byCategory = Object.fromEntries(Object.keys(DIFFERENCE_CATEGORIES).map((key) => [key, 0]));
   for (const difference of records.filter((r) => r.recordType === "finance_reconciliation_difference")) {
-    const d = differenceData(difference), inPeriod = String(d.transactionDate || "").startsWith(period + "-");
-    if (difference.status === "PROPOSED" && (inPeriod || !d.transactionDate)) blockers.push({ type: "DIFERENCIA_PENDIENTE", id: difference.id, title: `${difference.title}: aprobar o rechazar la justificación antes del cierre.` });
-    if (difference.status === "APPROVED" && (inPeriod || !d.transactionDate)) {
+    const d = differenceData(difference), day = String(d.transactionDate || ""), inPeriod = day.startsWith(period + "-");
+    const validDate = /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(Date.parse(day)) && new Date(day).toISOString().slice(0, 10) === day;
+    if (difference.status === "PROPOSED" && (inPeriod || !validDate)) blockers.push({ type: "DIFERENCIA_PENDIENTE", id: difference.id, title: `${difference.title}: aprobar o rechazar la justificación antes del cierre.` });
+    if (difference.status === "APPROVED" && (inPeriod || !validDate)) {
       const evidence = auditDifference(difference, records);
       if (!evidence.valid) blockers.push({ type: "DIFERENCIA_INCONSISTENTE", id: difference.id, title: evidence.errors.join(" ") });
       else byCategory[d.category] += d.amount;

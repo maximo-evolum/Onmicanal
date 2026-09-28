@@ -1,0 +1,14 @@
+.report { min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
+.controls label { display: grid; gap: 6px; flex: 1 1 220px; }
+.controls input, .controls select { width: 100%; min-height: 42px; box-sizing: border-box; }
+.actions, .metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0; }
+.actions button, .controls button { min-height: 42px; padding: 10px 16px; border-radius: 12px; cursor: pointer; }
+.report button:disabled { opacity: .55; cursor: wait; }
+.error { border-left: 4px solid #d26060; padding: 12px; }
+.table { width: 100%; overflow-x: auto; }
+.table table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align: left; padding: 12px; vertical-align: top; border-bottom: 1px solid var(--border, #74848b); }
+.table small { display: block; overflow-wrap: anywhere; }
+.report summary { cursor: pointer; padding: 10px 0; }
+.report progress { margin-right: 12px; max-width: 100%; accent-color: #008e99; }

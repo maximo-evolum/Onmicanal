@@ -194,7 +194,7 @@ function agingBucket(dueDate, now = new Date()) {
 
 export async function getFinanceOverview({ tenantId, now = new Date(), context = null, db = prisma }) {
   context = parseFinanceContext(context || {});
-  const types = ["finance_invoice", "finance_payable", "finance_invoice_receipt", "bank_statement", "bank_movement", "finance_reconciliation", "finance_exception", "finance_collection_case", "finance_customer_credit", "finance_credit_application"];
+  const types = ["finance_invoice", "finance_payable", "finance_invoice_receipt", "bank_statement", "bank_movement", "finance_reconciliation", "finance_exception", "finance_collection_case", "finance_customer_credit", "finance_credit_application", "finance_reconciliation_difference", "finance_reconciliation_group"];
   const sourceRecords = await findAllFinanceRecords(db, {
     where: { tenantId, recordType: { in: types } },
     orderBy: { updatedAt: "desc" },
@@ -242,11 +242,12 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
     generatedAt: now.toISOString(),
     context, schedule,
     documentQuality: summarizeFinanceDocuments(records.filter((r) => r.recordType === "finance_invoice" && financeDocumentSide(r) === "CUSTOMER"), now).excluded,
-    scopeNote: "Facturas de clientes emitidas en el período seleccionado, con saldos actuales. Monto ajustado = total original − notas de crédito + notas de débito vinculadas. Cobrado = monto ajustado − saldo; no equivale a cobros bancarios del mes. Se excluyen anuladas, notas independientes, proveedores y datos inconsistentes. La cuenta bancaria no filtra las facturas. No acredita cobertura ni reconstruye saldos históricos.",
+    scopeNote: "Facturas de clientes emitidas en el período seleccionado, con saldos actuales. Monto ajustado = total original − notas de crédito + notas de débito vinculadas. Cobrado = monto ajustado − saldo − diferencias justificadas; estas últimas no son dinero recibido. No equivale a cobros bancarios del mes. Se excluyen anuladas, notas independientes, proveedores y datos inconsistentes. La cuenta bancaria no filtra las facturas. No acredita cobertura ni reconstruye saldos históricos.",
     // Contract used by the Finance OS workspace. Keep the legacy kpis below
     // for backwards-compatible API consumers while exposing named domains.
     invoices: {
       total: invoices.length,
+      justifiedDifferences: invoices.reduce((sum, invoice) => sum + getInvoiceFinancialState(invoice, now).justifiedDifference, 0),
       issued,
       paid,
       pending: documents.customers.pending,
@@ -264,11 +265,9 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
     exceptions: { open: openExceptions, critical: criticalExceptions },
     collections: { open: openCollections, promises: promiseCollections },
     recent: { invoices: invoices.slice(0, 8).map((r) => ({ ...r, data: { ...dataOf(r), balance: getInvoiceFinancialState(r, now).balance } })), exceptions: exceptions.slice(0, 8), collectionCases: collectionCases.slice(0, 8) },
-    integrationReadiness: [
-      { key: "erp", label: "ERP / contabilidad", status: "requires_configuration", note: "Nubox, Defontana, Softland u otro ERP requieren su integracion autorizada." },
-      { key: "bank", label: "Cartolas bancarias", status: "manual", note: "Carga manual de CSV disponible; PDF y Excel quedan listos para el parser contratado." },
-      { key: "channels", label: "Canales de cobranza", status: "requires_configuration", note: "WhatsApp, correo y SMS se activan solo con la cuenta y consentimiento configurados." }
-    ],
+    // Connection health is permission-filtered by /finance/connection-health.
+    // Never fabricate provider status from the presence of financial records.
+    integrationReadiness: [],
     kpis: {
       invoices: invoices.length,
       issued,
@@ -289,11 +288,7 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
     recentInvoices: invoices.slice(0, 8).map((invoice) => ({ ...invoice, financial: getInvoiceFinancialState(invoice, now) })),
     recentMovements: movements.slice(0, 8),
     recentExceptions: exceptions.slice(0, 8),
-    integrationStatus: {
-      erp: "manual_or_api_pending",
-      bankStatements: "manual_pdf_excel_csv_ready",
-      collections: "crm_channels_ready_when_connected"
-    }
+    integrationStatus: { source: "/finance/connection-health", status: "SEPARATE_QUERY_REQUIRED" }
   };
 }
 

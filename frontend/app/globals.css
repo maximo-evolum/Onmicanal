@@ -17811,6 +17811,12 @@ html.dark .finance-bank-statement-state.is-protected,
 .finance-review-table-wrap td { min-width: 80px; }
 .finance-review-table-wrap td:nth-child(3) { min-width: 220px; overflow-wrap: anywhere; }
 .finance-review-table-wrap small { display: block; color: var(--text-muted); margin-top: 4px; }
+.finance-bank-accounts summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.finance-bank-accounts label { display: grid; gap: 6px; font-size: 13px; }
+.finance-bank-accounts input, .finance-bank-accounts select { width: 100%; min-width: 0; min-height: 40px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 9px; padding: 8px; }
+.finance-bank-accounts .finance-review-table-wrap td:nth-child(3) { min-width: 70px; }
+.finance-bank-accounts .finance-review-table-wrap td:last-child { min-width: 180px; }
+.finance-bank-accounts button { margin: 3px; }
 .finance-review-row-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 150px; }
 .finance-review-source { padding: 12px; background: var(--card-soft); border-radius: 10px; }
 .finance-review-source dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
@@ -17825,3 +17831,26 @@ html.dark .finance-bank-statement-state.is-protected,
 .finance-coverage-evidence textarea { min-height: 75px; resize: vertical; }
 .finance-coverage-panel .finance-coverage-confirm { display: flex; align-items: flex-start; gap: 10px; }
 .finance-coverage-panel .finance-coverage-confirm input { width: 18px; min-height: 18px; flex-shrink: 0; }
+.finance-differences { min-width: 0; grid-column: 1 / -1; }
+.finance-differences > details { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 16px 0; }
+.finance-differences summary { cursor: pointer; font-weight: 650; padding: 8px 0; }
+.finance-differences p { line-height: 1.55; overflow-wrap: anywhere; }
+.finance-differences .finance-review-toolbar label { display: grid; gap: 6px; }
+.finance-differences .finance-review-toolbar input, .finance-differences .finance-review-toolbar select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); }
+.finance-differences .finance-review-table-wrap td:nth-child(3) { min-width: 110px; }
+.finance-differences .finance-review-table-wrap td:first-child { min-width: 230px; max-width: 460px; overflow-wrap: anywhere; }
+.finance-differences .finance-review-table-wrap td:last-child { min-width: 160px; }
+.finance-differences td button { display: block; margin-top: 8px; min-height: 38px; }
+.finance-differences button:disabled { opacity: .5; cursor: not-allowed; }
+.finance-grouped-allocation { min-width: 0; grid-column: 1 / -1; }
+.finance-grouped-allocation > details, .finance-group-history article { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 16px 0; }
+.finance-grouped-allocation summary { cursor: pointer; font-weight: 650; padding: 8px 0; }
+.finance-grouped-allocation p { line-height: 1.55; overflow-wrap: anywhere; }
+.finance-grouped-allocation input:not([type="checkbox"]), .finance-grouped-allocation textarea { min-height: 40px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); max-width: 100%; }
+.finance-grouped-allocation textarea { display: block; width: 100%; min-height: 80px; resize: vertical; }
+.finance-group-periods { display: flex; align-items: center; gap: 10px; }
+.finance-group-periods input { width: 18px; height: 18px; }
+.finance-group-matrix th, .finance-group-matrix td { min-width: 150px !important; max-width: 250px; overflow-wrap: anywhere; }
+.finance-group-matrix input { width: 140px; }
+.finance-group-matrix { max-height: 580px; overflow: auto; margin-bottom: 16px; }
+.finance-grouped-allocation button:disabled { opacity: .5; cursor: not-allowed; }

@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createBankImportJob, analyzeBankImportJob, readBankImportPreview, cancelBankImportJob, bankImportConfirmation, getBankImportJob, importJobView, IMPORT_LEASE_MS } from "../src/services/finance-import-jobs.service.js";
+import express from "express";
+import { createServer } from "node:http";
+import { prisma } from "../src/lib/db.js";
+import { financeRouter } from "../src/routes/finance.routes.js";
+import { createBankImportJob, analyzeBankImportJob, readBankImportPreview, cancelBankImportJob, bankImportConfirmation, getBankImportJob, importJobView, IMPORT_LEASE_MS, runBankImportWorker, startBankImportWorker } from "../src/services/finance-import-jobs.service.js";
 import { addPendingImportsToClose } from "../src/services/finance-monthly-close.service.js";
+import { FinanceOperationError } from "../src/services/finance-integrity.service.js";
 
 // In-memory adapter tests lifecycle and tenant filtering; it does not replace
 // an integration test of the PostgreSQL migration and Serializable isolation.
@@ -22,6 +27,7 @@ function database() {
       create: async ({ data }) => { const row = { id: `original-${++sequence}`, ...data }; state.originals.push(row); return row; }
     },
     financeBankImportJob: {
+      findMany: async ({ where, take }) => state.jobs.filter((item) => where.OR.some((condition) => item.status === condition.status && new Date(item.updatedAt) <= condition.updatedAt.lte)).slice(0, take).map((row) => ({ ...row })),
       findFirst: async ({ where, include }) => {
         const row = state.jobs.find((item) => matches(item, where));
         return row ? { ...row, ...(include?.original ? { original: state.originals.find((item) => item.id === row.originalId) } : {}) } : null;
@@ -111,9 +117,30 @@ test("rechazar mapeo inválido o exclusión total no destruye la revisión lista
     assert.equal(db.state.jobs[0].status, "READY"); assert.equal(db.state.jobs[0].revision, 1);
   }
 });
+
+test("cambiar tabla exige limpiar exclusiones y mapeos; conserva original y revisiones", async () => {
+  const db = database(); const job = await create(db); await analyze(db, job.id);
+  for (const reviewConfig of [
+    { selection: { headerRow: 2 }, mapping: { date: "fecha" } },
+    { selection: { headerRow: 2 }, excludedRows: [{ dataRow: 1, reason: "Exclusión anterior" }] }
+  ]) await assert.rejects(analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, reviewConfig, expectedRevision: 1, analyze: async () => preview }), /limpia/);
+  const reviewConfig = { selection: { headerRow: 2 }, mapping: {}, excludedRows: [] };
+  await analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, reviewConfig, expectedRevision: 1, analyze: async (input) => ({ ...preview, reviewConfig: input.reviewConfig }) });
+  assert.equal(db.state.revisions.length, 2); assert.deepEqual(db.state.originals[0].content, file.buffer);
+  assert.deepEqual((await bankImportConfirmation(db, "empresa-a", job.id, 2)).preview.reviewConfig, reviewConfig);
+  await assert.rejects(bankImportConfirmation(db, "empresa-a", job.id, 1), /cambió/);
+});
+
+test("un fallo al releer no elimina la revisión anterior y una selección posterior puede recuperarse", async () => {
+  const db = database(); const job = await create(db); await analyze(db, job.id);
+  await assert.rejects(analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, expectedRevision: 1, reviewConfig: { selection: { sheet: "Otra" } }, analyze: async () => { throw new FinanceOperationError(400, "Hoja no encontrada"); } }), /Hoja/);
+  assert.equal(db.state.jobs[0].status, "FAILED"); assert.deepEqual(db.state.revisions[0].preview.sourceRows, preview.sourceRows);
+  await analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, expectedRevision: 2, reviewConfig: { selection: { sheet: "Correcta" } }, analyze: async () => preview });
+  assert.equal(db.state.jobs[0].status, "READY"); assert.equal(db.state.jobs[0].revision, 3);
+});
 test("el parser fallido conserva original y error para reintentar", async () => {
   const db = database(); const job = await create(db);
-  await assert.rejects(() => analyze(db, job.id, async () => { throw new Error("No hay fechas válidas"); }), /No hay fechas válidas/);
+  await assert.rejects(() => analyze(db, job.id, async () => { throw new FinanceOperationError(400, "No hay fechas válidas"); }), /No hay fechas válidas/);
   assert.equal(db.state.jobs[0].status, "FAILED"); assert.equal(db.state.revisions[0].status, "FAILED");
   assert.deepEqual(db.state.originals[0].content, file.buffer);
   await analyze(db, job.id); assert.equal(db.state.jobs[0].status, "READY");
@@ -170,4 +197,104 @@ test("el cierre avisa de cargas del período y de cargas cuyo período se descon
   ];
   const result = addPendingImportsToClose(base, jobs);
   assert.equal(result.status, "REQUIRES_REVIEW"); assert.deepEqual(result.blockers.map((item) => item.id), ["enero", "fallida"]);
+});
+
+test("cola durable procesa originales recibidos sin navegador ni movimientos nuevos", async () => {
+  const db = database(), job = await create(db);
+  db.state.jobs[0].updatedAt = new Date(Date.now() - 31000);
+  assert.deepEqual(await runBankImportWorker(db, { analyze: async () => preview }), [{ id: job.id, status: "READY" }]);
+  assert.equal(db.state.jobs[0].attempts, 1); assert.equal(db.state.records.length, 0);
+  assert.equal((await runBankImportWorker(db, { analyze: async () => { throw Error("no debe ejecutarse"); } })).length, 0);
+});
+test("reinicio recupera trabajo vencido y conserva bytes originales", async () => {
+  const db = database(), job = await create(db);
+  Object.assign(db.state.jobs[0], { status: "PROCESSING", runToken: "proceso-anterior", revision: 1, attempts: 1, updatedAt: new Date(Date.now() - IMPORT_LEASE_MS - 1) });
+  await runBankImportWorker(db, { analyze: async ({ file: source }) => { assert.deepEqual(source.buffer, file.buffer); return preview; } });
+  assert.equal(db.state.jobs[0].status, "READY"); assert.equal(db.state.jobs[0].attempts, 2);
+});
+test("tres interrupciones quedan fallidas y no forman un ciclo infinito", async () => {
+  const db = database(); await create(db);
+  Object.assign(db.state.jobs[0], { status: "PROCESSING", runToken: "anterior", attempts: 3, updatedAt: new Date(Date.now() - IMPORT_LEASE_MS - 1) });
+  let calls = 0; await runBankImportWorker(db, { analyze: async () => { calls++; return preview; } });
+  assert.equal(calls, 0); assert.equal(db.state.jobs[0].status, "FAILED"); assert.match(db.state.jobs[0].error, /tres veces/);
+});
+test("error transitorio reintenta con espera y máximo tres intentos", async () => {
+  const db = database(); await create(db);
+  for (let i = 1; i <= 3; i++) {
+    db.state.jobs[0].updatedAt = new Date(Date.now() - 31000);
+    await runBankImportWorker(db, { analyze: async () => { throw Object.assign(Error("secret DB URL"), { code: "P1001" }); } });
+    assert.equal(db.state.jobs[0].attempts, i);
+    assert.equal(db.state.jobs[0].status, i === 3 ? "FAILED" : "RECEIVED");
+    assert.equal((await runBankImportWorker(db, { analyze: async () => preview })).length, 0);
+    assert.doesNotMatch(db.state.jobs[0].error, /secret/);
+  }
+});
+test("archivo inválido no impide procesar los otros y no reintenta automáticamente", async () => {
+  const db = database(); await create(db); await create(db, "empresa-b");
+  db.state.jobs.forEach((job) => { job.updatedAt = new Date(Date.now() - 31000); });
+  const result = await runBankImportWorker(db, { analyze: async ({ tenantId }) => { if (tenantId === "empresa-a") throw new FinanceOperationError(400, "Archivo inválido"); return preview; } });
+  assert.equal(result.length, 2); assert.equal(db.state.jobs[0].status, "FAILED"); assert.equal(db.state.jobs[1].status, "READY");
+});
+test("reanudar manualmente conserva selección y reinicia límite de intentos", async () => {
+  const db = database(), job = await create(db); await analyze(db, job.id);
+  Object.assign(db.state.jobs[0], { status: "FAILED", attempts: 3 });
+  const queued = await analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, queueOnly: true, reviewConfig: {}, expectedRevision: 1 });
+  assert.equal(queued.status, "RECEIVED"); assert.equal(queued.attempts, 0); assert.equal(queued.revision, 2);
+  await assert.rejects(bankImportConfirmation(db, "empresa-a", job.id, 1), /cambió/);
+  await assert.rejects(analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, queueOnly: true, reviewConfig: {}, expectedRevision: 1 }), /cambió/);
+});
+test("timeout deja error y un resultado tardío no puede publicar la revisión", async () => {
+  const db = database(), job = await create(db); let finish;
+  await assert.rejects(analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, timeoutMs: 5, analyze: () => new Promise((r) => { finish = r; }) }), (e) => e.status === 408);
+  finish(preview); await new Promise((r) => setTimeout(r, 10));
+  assert.equal(db.state.jobs[0].status, "FAILED"); assert.equal(db.state.revisions.filter((r) => r.status === "READY").length, 0);
+});
+test("otro worker no vuelve a analizar un trabajo ya terminado", async () => {
+  const db = database(), job = await create(db); await analyze(db, job.id);
+  await assert.rejects(analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, background: true, analyze: async () => { throw Error("no debe ejecutarse"); } }), (e) => e.status === 409);
+});
+test("fallo de infraestructura al guardar conserva el trabajo recuperable", async () => {
+  const db = database(), job = await create(db); const transaction = db.$transaction; let count = 0;
+  db.$transaction = async (...args) => { if (++count > 1) throw Object.assign(Error("offline"), { code: "P1001" }); return transaction(...args); };
+  await assert.rejects(analyze(db, job.id));
+  assert.equal(db.state.jobs[0].status, "PROCESSING"); assert.deepEqual(db.state.originals[0].content, file.buffer);
+});
+test("el temporizador no solapa ciclos y puede detenerse", async () => {
+  let calls = 0, release;
+  const db = { financeBankImportJob: { findMany: async () => { calls++; await new Promise((r) => { release = r; }); return []; } } };
+  const stop = startBankImportWorker(db, async () => preview, { intervalMs: 2 });
+  await new Promise((r) => setTimeout(r, 12)); assert.equal(calls, 1);
+  stop(); release(); await new Promise((r) => setTimeout(r, 10)); assert.equal(calls, 1);
+});
+
+test("HTTP: recepción asíncrona, permisos, revisión obligatoria y aislamiento de empresa", async (t) => {
+  const db = database(), originalTransaction = prisma.$transaction, originalModules = prisma.tenantModule.findMany;
+  const originalFind = prisma.financeBankImportJob.findFirst;
+  let allowed = true;
+  prisma.$transaction = (...args) => db.$transaction(...args);
+  prisma.financeBankImportJob.findFirst = (...args) => db.financeBankImportJob.findFirst(...args);
+  prisma.tenantModule.findMany = async ({ where }) => where.module.in.map((module) => ({ module, enabled: allowed, source: "MANUAL" }));
+  t.after(() => { prisma.$transaction = originalTransaction; prisma.tenantModule.findMany = originalModules; prisma.financeBankImportJob.findFirst = originalFind; });
+  const app = express(); app.use(express.json());
+  app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "empresa-a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { id: "user", role: req.headers["x-role"] || "ADMIN" }; next(); });
+  app.use(financeRouter);
+  const server = createServer(app); await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = `http://127.0.0.1:${server.address().port}/finance/bank-import-jobs`;
+  const upload = (headers = {}) => {
+    const form = new FormData(); form.append("file", new Blob([file.buffer], { type: "text/csv" }), file.originalname);
+    form.append("tenantId", "empresa-atacante");
+    return fetch(`${base}/upload`, { method: "POST", body: form, headers, signal: AbortSignal.timeout(5000) });
+  };
+  const received = await upload(); assert.equal(received.status, 202); assert.equal(received.headers.get("cache-control"), "no-store");
+  const { job } = await received.json(); assert.equal(job.status, "RECEIVED"); assert.equal(job.tenantId, "empresa-a"); assert.equal(db.state.revisions.length, 0); assert.equal(db.state.records.length, 0);
+  assert.equal((await (await upload()).json()).job.id, job.id); assert.equal(db.state.originals.length, 1);
+  assert.equal((await upload({ "x-role": "VIEWER" })).status, 403);
+  allowed = false; assert.equal((await upload()).status, 403); allowed = true;
+  const enqueue = (data, headers = {}) => fetch(`${base}/${job.id}/enqueue`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(data), signal: AbortSignal.timeout(5000) });
+  assert.equal((await enqueue({})).status, 428);
+  assert.equal((await enqueue({ revision: 99 })).status, 409);
+  assert.equal((await enqueue({ revision: 0 }, { "x-tenant": "empresa-b" })).status, 404);
+  assert.equal((await enqueue({ revision: 0 })).status, 202);
+  assert.equal(db.state.jobs[0].revision, 1); assert.equal(db.state.jobs[0].status, "RECEIVED");
 });

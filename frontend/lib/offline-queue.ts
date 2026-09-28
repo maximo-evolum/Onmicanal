@@ -47,6 +47,13 @@ export function canQueueOfflineMutation(path: string, init?: RequestInit) {
   const body = init?.body;
   return ["POST", "PUT", "PATCH", "DELETE"].includes(method)
     && !path.startsWith("/auth/")
+    // Financial proposals and approvals need current evidence and session.
+    // Never replay them later from the generic offline queue.
+    && !/^\/finance\/differences(?:\/|\?|$)/.test(path)
+    && !/^\/finance\/reconciliation-groups(?:\/|\?|$)/.test(path)
+    && !/^\/finance\/manual-settlements(?:\/|\?|$)/.test(path)
+    && !/^\/finance\/collection-deliveries(?:\/|\?|$)/.test(path)
+    && !/^\/finance\/(?:bank-accounts|bank-import-jobs|bank-statements|bank-mapping-templates)(?:\/|\?|$)/.test(path)
     && (body === undefined || typeof body === "string");
 }
 

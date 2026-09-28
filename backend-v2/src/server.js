@@ -24,7 +24,8 @@ import { bookingsRouter } from "./routes/bookings.routes.js";
 import { paymentsRouter } from "./routes/payments.routes.js";
 import { dashboardRouter } from "./routes/dashboard.routes.js";
 import { reportsRouter } from "./routes/reports.routes.js";
-import { financePublicRouter, financeRouter } from "./routes/finance.routes.js";
+import { financePublicRouter, financeRouter, analyzeStoredBankStatement } from "./routes/finance.routes.js";
+import { startBankImportWorker } from "./services/finance-import-jobs.service.js";
 import { onboardingRouter } from "./routes/onboarding.routes.js";
 import { modulesRouter } from "./routes/modules.routes.js";
 import { industriesRouter } from "./routes/industries.routes.js";
@@ -383,8 +384,11 @@ io.on("connection", (socket) => {
   });
 });
 
+let stopBankImportWorker = () => {};
 async function bootstrap() {
   await prisma.$connect();
+  // Authorized uploads are processed even when autonomous sales automation is off.
+  stopBankImportWorker = startBankImportWorker(prisma, analyzeStoredBankStatement, { onError: (message) => console.warn("[BANK_IMPORT_WORKER]", message) });
 
   server.listen(env.port, "0.0.0.0", () => {
     console.log(`Servidor corriendo en http://0.0.0.0:${env.port}`);
@@ -409,11 +413,13 @@ process.on("uncaughtException", (error) => {
 });
 
 process.on("SIGINT", async () => {
+  stopBankImportWorker();
   await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on("SIGTERM", async () => {
+  stopBankImportWorker();
   await prisma.$disconnect();
   process.exit(0);
 });

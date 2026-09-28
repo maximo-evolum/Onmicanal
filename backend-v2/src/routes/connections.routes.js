@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { normalizeMetadata } from "../lib/metadata.js";
+import { editableConnectionMetadata } from "../services/finance-connection-health.service.js";
 import { MODULES } from "../lib/modules.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
@@ -1405,6 +1406,7 @@ function oauthCallbackHandler(expectedProvider) {
           discoveryError: discoveryError instanceof Error ? discoveryError.message : "No se pudo descubrir la cuenta autorizada"
         };
       }
+      const oauthVerifiedAt = new Date().toISOString();
       const metadata = normalizeMetadata({
         ...configMetadata(existing),
         providerType: provider.type,
@@ -1416,7 +1418,9 @@ function oauthCallbackHandler(expectedProvider) {
         hasRefreshToken: Boolean(token.refresh_token || existing?.verifyToken || configMetadata(existing).hasRefreshToken),
         refreshToken: undefined,
         oauthExpiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000).toISOString() : null,
-        oauthConnectedAt: new Date().toISOString(),
+        oauthConnectedAt: oauthVerifiedAt,
+        connectionConfigChangedAt: oauthVerifiedAt,
+        lastTestedAt: oauthVerifiedAt,
         oauthInitiatedByUserId: state.initiatedByUserId || null,
         lastTestStatus: discovery.discoveryError ? "ERROR" : "OK",
         lastTestMessage: discovery.discoveryError ? "OAuth conectado; falta revisar la cuenta autorizada" : "OAuth conectado y cuenta detectada",
@@ -1535,7 +1539,7 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
     if (provider.availability === "COMING_SOON") return res.status(409).json({ error: "Esta conexión aún no está disponible para configuración." });
 
     const existing = await findTenantProviderConfig(req.tenantId, provider);
-    const incomingMetadata = normalizeMetadata(req.body?.metadata, {});
+    const incomingMetadata = normalizeMetadata(editableConnectionMetadata(req.body?.metadata), {});
     if (["finance_bank_statements", "finance_open_banking"].includes(provider.key)
       && Object.prototype.hasOwnProperty.call(incomingMetadata, "bankAccounts")) {
       incomingMetadata.bankAccounts = normalizeBankAccounts(incomingMetadata.bankAccounts);
@@ -1550,7 +1554,7 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
     // anterior. Queda pendiente hasta que la prueba manual o el verificador
     // programado confirme que el proveedor realmente la acepta.
     const supportsRemoteVerification = Boolean(provider.oauthProvider || provider.key === "finance_nubox" || requiresExternalAuthorization(provider));
-    const verificationInputChanged = ["accessToken", "verifyToken", ...(provider.requiredFields || [])]
+    const verificationInputChanged = ["accessToken", "verifyToken", "isActive", ...(provider.requiredFields || [])]
       .some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field)
         || Object.prototype.hasOwnProperty.call(incomingMetadata, field));
     const metadata = normalizeMetadata({
@@ -1561,6 +1565,8 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
       updatedFrom: "connection_center",
       ...(supportsRemoteVerification && verificationInputChanged
         ? {
+          connectionConfigChangedAt: new Date().toISOString(),
+          oauthExpiresAt: null,
           lastTestStatus: "PENDING",
           lastTestMessage: requiresExternalAuthorization(provider)
             ? pendingExternalAuthorizationMessage(provider)

@@ -3,6 +3,9 @@ import pdfParse from "pdf-parse";
 import ExcelJS from "exceljs";
 import { CHILEAN_FINANCIAL_INSTITUTIONS, getChileanFinancialInstitution } from "../lib/finance-integrations.js";
 import { readHistoricalFinanceFile } from "./finance-migration.service.js";
+import { validateFileSelection } from "./finance-file-selection.service.js";
+import { FinanceOperationError } from "./finance-integrity.service.js";
+import { financeCurrency, requireFinanceCurrency, validFinanceAmount, FINANCE_CURRENCIES } from "./finance-currency.service.js";
 
 export const MAX_BANK_STATEMENT_ROWS = 5000;
 export const MAX_BANK_STATEMENT_FILE_BYTES = 12 * 1024 * 1024;
@@ -15,7 +18,7 @@ function looksLikeDelimitedText(source) {
   const sample = String(source || "").replace(/^\uFEFF/, "").trim();
   if (!sample || /[\u0000-\u0008\u000E-\u001F]/.test(sample)) return false;
   const lines = sample.split(/\r?\n/).filter(Boolean).slice(0, 5);
-  return lines.some((line) => [";", ",", "\t"].some((separator) => line.split(separator).length >= 2));
+  return lines.some((line) => [";", ",", "\t", "|"].some((separator) => line.split(separator).length >= 2));
 }
 
 // La extensión no es suficiente: algunos bancos descargan HTML/XML con nombre
@@ -157,7 +160,7 @@ function valuesFromRows(rows, limit = 40) {
   return (Array.isArray(rows) ? rows : []).slice(0, limit).flatMap((row) => Object.entries(row || {}).map(([key, value]) => ({ key: normalizeKey(key), value: cleanText(value) })));
 }
 
-async function bankStatementFileText(file) {
+async function bankStatementFileText(file, { sheet: selectedSheet } = {}) {
   const buffer = Buffer.isBuffer(file?.buffer) ? file.buffer : Buffer.from(file?.buffer || "");
   if (!buffer.length) return "";
   const format = detectBankStatementFileFormat(file);
@@ -165,7 +168,8 @@ async function bankStatementFileText(file) {
     try {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(buffer);
-      return (workbook.worksheets || []).slice(0, 2).flatMap((sheet) => {
+      const sheets = selectedSheet ? (workbook.worksheets || []).filter((s) => s.name === selectedSheet) : (workbook.worksheets || []).slice(0, 2);
+      return sheets.flatMap((sheet) => {
         const lines = [];
         sheet.eachRow({ includeEmpty: false }, (row, index) => {
           if (index <= 45) lines.push(row.values.slice(1).map((value) => String(value?.text ?? value ?? "")).join(" "));
@@ -182,19 +186,29 @@ async function bankStatementFileText(file) {
 // Primero busca el banco en campos estructurados y carátulas del archivo.
 // Sólo deja la selección manual como salida excepcional cuando la cartola no
 // entrega ninguna marca bancaria verificable.
-export async function detectBankStatementInstitution(file, rows = []) {
+export async function detectBankStatementInstitution(file, rows = [], selection = {}) {
   const rowValues = valuesFromRows(rows);
   const structured = rowValues.find((item) => /^(?:banco|bank|institucion|entidad|entidad_financiera|cmf)$/.test(item.key));
   const structuredInstitution = structured ? institutionInText(structured.value) : null;
   if (structuredInstitution) return { institution: structuredInstitution, method: "METADATOS" };
 
-  const fileInstitution = institutionInText(fileName(file));
+  const fileInstitution = selection.sheet ? null : institutionInText(fileName(file));
   if (fileInstitution) return { institution: fileInstitution, method: "NOMBRE_DE_ARCHIVO" };
 
-  const fileText = await bankStatementFileText(file);
+  const fileText = await bankStatementFileText(file, selection);
   const contentInstitution = institutionInText(fileText, { requireStrongName: true });
   if (contentInstitution) return { institution: contentInstitution, method: "CARTOLA" };
   return { institution: null, method: "NO_IDENTIFICADO" };
+}
+
+// Only labelled metadata is evidence of currency. A mention of dollars in a
+// transaction description or filename must never change the statement currency.
+export async function detectBankStatementCurrency(file, selection = {}) {
+  const source = await bankStatementFileText(file, selection);
+  const matches = [...source.matchAll(/(?:^|[\s;|])(?:moneda|divisa|currency)\s*[:=]?\s*(PESOS DE CHILE|PESOS CHILENOS|PESO CHILENO|UNIDAD DE FOMENTO|D[ÓO]LARES|CLP|USD|EUR|UF|US\$)(?=$|[\s;|])/gim)];
+  const currencies = [...new Set(matches.map((m) => requireFinanceCurrency(m[1])))];
+  if (currencies.length > 1) throw new FinanceOperationError(400, "El archivo identifica varias monedas. Selecciona una hoja o tabla por moneda antes de cargar.");
+  return currencies[0] || "";
 }
 
 function getValue(row, aliases) {
@@ -249,7 +263,7 @@ function parseNumber(value) {
     ? raw.replace(/\./g, "").replace(",", ".")
     : raw.includes(",")
       ? raw.replace(",", ".")
-      : dots > 1 || (dots === 1 && /\.\d{3}$/.test(raw))
+      : dots > 1 || (dots === 1 && /\.\d{3}$/.test(raw) && !/^0\./.test(raw))
         ? raw.replace(/\./g, "")
         : raw;
   const parsed = Number(normalized.replace(/[^0-9.-]/g, ""));
@@ -276,8 +290,10 @@ function safeSourceRow(row) {
 function normalizedAccount(input = {}) {
   const institution = getChileanFinancialInstitution(input.bankKey || input.bank || input.cmfCode);
   const last4 = String(input.accountLast4 || "").replace(/\D/g, "").slice(-4);
+  const monetary = { currency: requireFinanceCurrency(input.currency), ...(input.bankAccountId ? { bankAccountId: input.bankAccountId } : {}) };
   if (!institution) {
     return {
+      ...monetary,
       bank: "Banco por identificar",
       bankKey: "",
       cmfCode: "",
@@ -287,6 +303,7 @@ function normalizedAccount(input = {}) {
     };
   }
   return {
+    ...monetary,
     bank: institution.name,
     bankKey: institution.key,
     cmfCode: institution.cmfCode,
@@ -297,11 +314,11 @@ function normalizedAccount(input = {}) {
 }
 
 function sourceAmount(row) {
-  const debit = getValue(row, ["cargo", "debe", "debito", "débito", "egreso", "retiro", "withdrawal", "debit"]);
-  const credit = getValue(row, ["abono", "haber", "credito", "crédito", "ingreso", "deposito", "depósito", "deposit", "credit"]);
+  const debit = amountValue(row, ["cargo", "debe", "debito", "débito", "egreso", "retiro", "withdrawal", "debit"]);
+  const credit = amountValue(row, ["abono", "haber", "credito", "crédito", "ingreso", "deposito", "depósito", "deposit", "credit"]);
   if (parseNumber(debit) !== 0) return { signedAmount: -Math.abs(parseNumber(debit)), direction: "DEBIT", directionSource: "Columna Cargo" };
   if (parseNumber(credit) !== 0) return { signedAmount: Math.abs(parseNumber(credit)), direction: "CREDIT", directionSource: "Columna Abono" };
-  const rawAmount = getValue(row, ["monto", "importe", "amount", "valor", "monto_movimiento", "importe_movimiento"]);
+  const rawAmount = amountValue(row, ["monto", "importe", "amount", "valor", "monto_movimiento", "importe_movimiento"]);
   const parsedAmount = parseNumber(rawAmount);
   // Santander usa una sola columna MONTO y una marca CARGO/ABONO: A es un
   // abono y C un cargo. El importe puede venir con o sin signo, por lo que la
@@ -314,6 +331,14 @@ function sourceAmount(row) {
     return { signedAmount: -Math.abs(parsedAmount), direction: "DEBIT", directionSource: "Marca Cargo/Abono" };
   }
   return { signedAmount: parsedAmount, direction: parsedAmount < 0 ? "DEBIT" : "CREDIT", directionSource: "Signo del monto" };
+}
+
+function amountValue(row, aliases) {
+  for (const alias of aliases) {
+    const entry = Object.entries(row || {}).find(([key, value]) => normalizeKey(key) === normalizeKey(alias) && cleanText(value));
+    if (entry) return entry[1];
+  }
+  return "";
 }
 
 export function classifyBankMovement({ description = "", reference = "", direction = "" } = {}) {
@@ -334,11 +359,19 @@ export function bankMovementFingerprint(input = {}) {
     normalizeKey(input.reference),
     normalizeKey(input.description)
   ].join("|");
-  return createHash("sha256").update(source).digest("hex");
+  // Retain legacy CLP fingerprints; registered accounts and foreign currencies
+  // use exact amounts and a stable account identity, independent of alias edits.
+  const currency = financeCurrency(input.currency);
+  const identity = input.bankAccountId || currency !== "CLP"
+    ? JSON.stringify(["v2", input.bankAccountId || [input.bankKey, input.accountLast4, input.accountAlias], currency, input.transactionDate || input.date, Number(input.amount), input.direction || "", normalizeKey(input.reference), normalizeKey(input.description)]) : source;
+  return createHash("sha256").update(identity).digest("hex");
 }
 
 export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MAX_BANK_STATEMENT_ROWS } = {}) {
-  const account = normalizedAccount(accountInput);
+  const declared = [...new Set((Array.isArray(rows) ? rows : []).map((r) => getValue(r, ["moneda", "currency", "divisa"])).filter(Boolean).map((v) => requireFinanceCurrency(v)))];
+  if (declared.length > 1) throw new FinanceOperationError(400, "La cartola contiene varias monedas. Separa sus tablas por moneda; no se sumarán como si fueran pesos.");
+  const account = normalizedAccount({ ...accountInput, currency: accountInput.currency || declared[0] || "CLP" });
+  if (declared.length && declared[0] !== account.currency) throw new FinanceOperationError(409, `La moneda del archivo (${declared[0]}) no coincide con la cuenta (${account.currency}). Selecciona la cuenta correcta; no se convirtió ningún monto.`);
   const maxRows = Math.max(1, Math.min(Number(limit) || MAX_BANK_STATEMENT_ROWS, MAX_BANK_STATEMENT_ROWS));
   if (Array.isArray(rows) && rows.length > maxRows) {
     const error = new Error(`La cartola contiene ${rows.length} movimientos y el límite por archivo es ${maxRows}. No se importó ni recortó ningún movimiento. Divide el archivo antes de continuar.`);
@@ -353,15 +386,17 @@ export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MA
     const reference = getValue(row, ["referencia", "reference", "comprobante", "folio", "nro_operacion", "numero_operacion", "número operación", "id_movimiento", "numero_documento", "n_documento", "n documento", "n° documento"]);
     const payerName = getValue(row, ["contraparte", "nombre_contraparte", "ordenante", "beneficiario", "pagador", "titular", "payer", "counterparty"]);
     const rut = getValue(row, ["rut", "rut_contraparte", "rut_cliente", "rut_proveedor", "tax_id"]);
-    const balance = parseNumber(getValue(row, ["saldo", "saldo_contable", "saldo_disponible", "balance"]));
+    const balance = parseNumber(amountValue(row, ["saldo", "saldo_contable", "saldo_disponible", "balance"]));
     const { signedAmount, direction, directionSource } = sourceAmount(row);
     const amount = Math.abs(signedAmount);
     const reviewReasons = [];
     if (!account.bankKey) reviewReasons.push("banco de origen");
     if (!transactionDate) reviewReasons.push("fecha del movimiento");
     if (!amount) reviewReasons.push("monto");
+    if (!validFinanceAmount(amount, account.currency)) reviewReasons.push(`precisión o rango de monto en ${account.currency}`);
+    if (account.currency === "UF" && Object.entries(row).some(([name, value]) => /^(monto|importe|amount|valor|cargo|abono|debe|haber|credit|debit)$/.test(normalizeKey(name)) && typeof value === "string" && /^[1-9]\d{0,2}\.\d{3}$/.test(value.trim()))) reviewReasons.push("separador ambiguo en UF: usa coma decimal o una celda numérica de Excel");
     if (!description) reviewReasons.push("descripción o glosa");
-    const fingerprint = bankMovementFingerprint({ ...account, transactionDate, amount, reference, description });
+    const fingerprint = bankMovementFingerprint({ ...account, transactionDate, amount, direction, reference, description });
     return {
       rowNumber: index + 2,
       ...account,
@@ -379,7 +414,7 @@ export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MA
       movementKind: classifyBankMovement({ description, reference, direction }),
       balance: balance || null,
       branch: getValue(row, ["sucursal", "oficina", "branch"]) || null,
-      currency: "CLP",
+      currency: account.currency,
       fingerprint,
       needsReview: reviewReasons.length > 0,
       reviewReasons,
@@ -390,19 +425,27 @@ export function normalizeBankStatementRows(rows, accountInput = {}, { limit = MA
 
 export function summarizeBankStatementRows(rows) {
   const normalized = Array.isArray(rows) ? rows : [];
+  const currencies = [...new Set(normalized.map((r) => financeCurrency(r.currency)))];
+  if (currencies.length > 1) throw new FinanceOperationError(400, "No se pueden sumar movimientos de monedas distintas.");
+  const scale = 10 ** (FINANCE_CURRENCIES[currencies[0] || "CLP"] || 0);
   return normalized.reduce((summary, row) => {
     summary.totalRows += 1;
     if (row.needsReview) summary.reviewRows += 1;
-    if (row.direction === "CREDIT") summary.credits += row.amount || 0;
-    else summary.debits += row.amount || 0;
+    if (row.direction === "CREDIT") summary.credits = Math.round((summary.credits + (row.amount || 0)) * scale) / scale;
+    else summary.debits = Math.round((summary.debits + (row.amount || 0)) * scale) / scale;
     return summary;
   }, { totalRows: 0, reviewRows: 0, credits: 0, debits: 0, net: 0 });
 }
 
-export async function readBankStatementFile(file) {
+export async function readBankStatementFile(file, options = {}) {
   if (!file?.buffer?.length) throw new Error("Selecciona una cartola CSV, Excel, TXT o PDF con texto para revisar.");
   if (file.buffer.length > MAX_BANK_STATEMENT_FILE_BYTES) throw new Error("La cartola supera el límite de 12 MB para una importación segura.");
   const format = detectBankStatementFileFormat(file);
+  const selection = validateFileSelection(options.selection);
+  if (["PDF", "LEGACY_SPREADSHEET"].includes(format.key) && Object.keys(selection).length) throw new FinanceOperationError(400, "Este formato no admite selección de tabla. Usa XLSX o CSV para elegir hoja, encabezado y última fila.");
+  if (format.key === "DELIMITED_TEXT" && selection.sheet) throw new FinanceOperationError(400, "Un archivo de texto no tiene hojas de Excel.");
+  if (format.key === "SPREADSHEET" && selection.delimiter) throw new FinanceOperationError(400, "El separador sólo se utiliza en archivos de texto.");
+  const readOptions = { ...options, selection, preserveNumbers: true, maxBytes: MAX_BANK_STATEMENT_FILE_BYTES, includeOrigin: true };
   if (format.key === "PDF") {
     const parsed = await pdfParse(file.buffer);
     const rows = parsePdfBankStatementText(parsed.text);
@@ -418,14 +461,28 @@ export async function readBankStatementFile(file) {
   // puede ocurrir lo inverso: un CSV con nombre .xlsx. Forzamos el lector
   // correcto según el contenido, no según el nombre entregado por el banco.
   if (format.key === "LEGACY_SPREADSHEET" || format.key === "SPREADSHEET") {
-    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.xlsx` }, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES, includeOrigin: true });
+    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.xlsx` }, readOptions);
   }
   if (format.key === "DELIMITED_TEXT") {
-    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.csv` }, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES, includeOrigin: true });
+    return readHistoricalFinanceFile({ ...file, originalname: `${fileName(file)}.csv` }, readOptions);
   }
-  return readHistoricalFinanceFile(file, { maxBytes: MAX_BANK_STATEMENT_FILE_BYTES, includeOrigin: true });
+  return readHistoricalFinanceFile(file, readOptions);
+}
+
+// Read-only, paged view of the original table, including cover/header/footer rows.
+export async function inspectBankStatementLayout(file, { sheet = "", delimiter = "", page = 1 } = {}) {
+  page = Number(page);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 4000) throw new FinanceOperationError(400, "Página de origen inválida.");
+  let table;
+  await readBankStatementFile(file, { selection: validateFileSelection({ sheet, delimiter }), inspectOnly: true, onTable: (value) => { table = value; } });
+  if (!table) return { supported: false, sheets: [], rows: [], message: "Lectura de compatibilidad o PDF: puedes corregir columnas y excluir registros, pero para elegir hoja y encabezado guarda una copia XLSX o CSV." };
+  const pages = Math.max(1, Math.ceil(table.rows.length / 25));
+  const current = Math.min(page, pages), start = (current - 1) * 25;
+  return { supported: true, kind: table.origin?.kind, sheet: table.origin?.sheet, sheets: table.sheets, detectedHeaderRow: table.detectedHeaderRow,
+    page: current, pages, total: table.rows.length, lastRow: table.rows.at(-1)?.__sourceRow || table.rows.length,
+    rows: table.rows.slice(start, start + 25).map((row, index) => ({ number: row.__sourceRow || start + index + 1, cells: Array.from(row, (v) => String(v ?? "").slice(0, 500)).slice(0, 80), truncatedColumns: row.length > 80 })) };
 }
 
 export function withBankStatementNet(summary) {
-  return { ...summary, net: summary.credits - summary.debits };
+  return { ...summary, net: Number((summary.credits - summary.debits).toFixed(4)) };
 }

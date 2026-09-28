@@ -1,6 +1,8 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import { FinanceBankLayout } from "./finance-bank-layout";
+import { formatFinanceMoney } from "@/lib/finance-money";
 import { getBankReviewPage, getBankMappingTemplates, saveBankMappingTemplate, deleteBankMappingTemplate, reanalyzeFinanceBankImport, downloadBankReview,
   type BankReviewConfig, type BankReviewPage, type BankMappingTemplate, type BankReviewRow, type FinanceBankStatementPreview } from "@/lib/api";
 
@@ -18,9 +20,14 @@ export function FinanceBankReview({ preview, disabled, onBusy, onDirty, onUpdate
   const [templates, setTemplates] = useState<BankMappingTemplate[]>([]);
   const [templateId, setTemplateId] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [layoutDirty, setLayoutDirty] = useState(false);
+  const [selected, setSelected] = useState<number[]>([]), [bulkReason, setBulkReason] = useState("");
+  const applying = useRef(false);
   const identity = `${preview.jobId}:${preview.revision}`;
   const identityRef = useRef(identity); identityRef.current = identity;
   const dirty = JSON.stringify(config) !== JSON.stringify(preview.reviewConfig || emptyConfig);
+  useEffect(() => { onDirty(dirty || layoutDirty); }, [dirty, layoutDirty]);
+  useEffect(() => { setSelected([]); setBulkReason(""); }, [identity, filter, search]);
   useEffect(() => { setConfig(preview.reviewConfig || emptyConfig); setExpanded(null); onDirty(false); }, [identity]);
   useEffect(() => { let alive = true; getBankMappingTemplates().then((result) => { if (alive) setTemplates(result.templates); }).catch((e) => { if (alive) setError(e.message); }); return () => { alive = false; }; }, [preview.jobId]);
   useEffect(() => {
@@ -40,13 +47,22 @@ export function FinanceBankReview({ preview, disabled, onBusy, onDirty, onUpdate
     const next = { ...config, mapping }; setConfig(next); onDirty(JSON.stringify(next) !== JSON.stringify(preview.reviewConfig || emptyConfig));
   }
   async function apply(next = config) {
+    if (applying.current || disabled || layoutDirty) return;
+    applying.current = true;
     const originalIdentity = identity; onBusy(true); setError("");
     try {
       const updated = await reanalyzeFinanceBankImport(preview.jobId, undefined, { revision: preview.revision, reviewConfig: next });
       if (identityRef.current !== originalIdentity) return;
       onUpdated(updated); onDirty(false);
     } catch (e) { setError(e instanceof Error ? e.message : "No se pudo guardar la revisión."); }
-    finally { onBusy(false); }
+    finally { applying.current = false; onBusy(false); }
+  }
+  function applySelected(exclude: boolean) {
+    if (!selected.length || dirty || layoutDirty || disabled) return;
+    if (exclude && (bulkReason.trim().length < 5 || bulkReason.trim().length > 300)) return setError("Escribe un motivo de entre 5 y 300 caracteres para las filas seleccionadas.");
+    const excludedRows = config.excludedRows.filter((r) => !selected.includes(r.dataRow));
+    if (exclude) excludedRows.push(...selected.map((dataRow) => ({ dataRow, reason: bulkReason.trim() })));
+    void apply({ ...config, excludedRows });
   }
   function toggleExclusion(row: BankReviewRow) {
     if (row.excluded) return void apply({ ...config, excludedRows: config.excludedRows.filter((entry) => entry.dataRow !== row.dataRow) });
@@ -80,6 +96,8 @@ export function FinanceBankReview({ preview, disabled, onBusy, onDirty, onUpdate
     catch (e) { setError(e instanceof Error ? e.message : "No se pudo exportar."); } finally { onBusy(false); }
   }
   return <section className="finance-bank-review" aria-label="Revisión completa de la cartola">
+    <FinanceBankLayout jobId={preview.jobId} revision={preview.revision} selection={preview.reviewConfig?.selection} disabled={disabled || dirty} onBusy={onBusy} onDirty={setLayoutDirty} onUpdated={onUpdated} />
+    <fieldset disabled={disabled || layoutDirty} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
     <details className="finance-bank-mapping"><summary>Corregir columnas y usar plantillas</summary><p>Indica dónde aparece cada dato. «Automático» mantiene la detección actual; «No usar» descarta esa columna como fuente del dato. Los originales nunca se modifican.</p>
       <div className="finance-bank-mapping-fields">{preview.fields?.map((field) => <label key={field.key}>{field.label}<select disabled={disabled} value={config.mapping[field.key] || ""} onChange={(e) => editMapping(field.key, e.target.value)}><option value="">Automático</option><option value="__IGNORE__">No usar este dato</option>{preview.columns?.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>)}</div>
       <div className="finance-review-toolbar"><button className="primary-btn" type="button" disabled={disabled || !dirty} onClick={() => void apply()}>Aplicar y volver a revisar</button><button type="button" className="finance-link-button" disabled={disabled || dirty || !Object.keys(config.mapping).length} onClick={() => void saveTemplate()}>Guardar como plantilla</button></div>
@@ -89,8 +107,10 @@ export function FinanceBankReview({ preview, disabled, onBusy, onDirty, onUpdate
     {error ? <p className="finance-note" role="alert">{error}</p> : null}
     <div className="finance-review-toolbar"><label>Buscar movimientos<input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Descripción, referencia, RUT o fecha" /></label><label>Mostrar<select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}><option value="all">Todos</option><option value="review">Por revisar</option><option value="excluded">Excluidos</option><option value="duplicate">Duplicados</option><option value="credit">Abonos</option><option value="debit">Cargos</option></select></label><button className="finance-link-button" type="button" disabled={disabled || loading || dirty} onClick={() => void exportReview()}>Exportar todos los resultados (CSV)</button></div>
     <p>Revisión {preview.revision} · {preview.totalSourceRows ?? preview.summary.totalRows} registros leídos · {preview.excludedRows || 0} excluidos con motivo. Abonos y cargos del resumen corresponden sólo a los registros incluidos.</p>
-    <div className="finance-review-table-wrap"><table><thead><tr><th>N°</th><th>Fecha</th><th>Descripción / referencia</th><th>Monto</th><th>Tipo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{data?.rows.map((row) => <Fragment key={row.dataRow}><tr><td>{row.dataRow}</td><td>{row.transactionDate || "Sin fecha"}</td><td>{row.description}<small>{row.reference} {row.rut}</small></td><td>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(row.amount)}</td><td>{row.movementType}</td><td>{row.excluded ? "Excluido" : row.needsReview ? "Revisar" : row.duplicate ? "Duplicado" : "Válido"}</td><td><div className="finance-review-row-actions"><button type="button" className="finance-link-button" onClick={() => setExpanded(expanded === row.dataRow ? null : row.dataRow)} aria-expanded={expanded === row.dataRow}>Ver origen</button><button type="button" className="finance-link-button" disabled={disabled || dirty} onClick={() => toggleExclusion(row)}>{row.excluded ? "Volver a incluir" : "Excluir con motivo"}</button></div></td></tr>{expanded === row.dataRow ? <tr><td colSpan={7}><div className="finance-review-source"><strong>{row.origin?.kind === "sheet" ? `Hoja: ${row.origin.sheet} · Fila ${row.origin.row}` : row.origin?.kind === "csv-record" ? `Registro ${row.origin.row} del CSV (no necesariamente línea de texto)` : "Origen extraído: consulta el archivo original para localizar la fila"}</strong>{row.exclusionReason ? <p>Exclusión: {row.exclusionReason}</p> : null}{row.reviewReasons.length ? <p>Revisar: {row.reviewReasons.join(", ")}</p> : null}<dl>{Object.entries(row.source || {}).filter(([key]) => key !== "__financeOrigin").map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{String(value ?? "")}</dd></div>)}</dl></div></td></tr> : null}</Fragment>)}</tbody></table></div>
+    <div className="finance-review-toolbar"><label><input type="checkbox" checked={Boolean(data?.rows.length) && data!.rows.every((r) => selected.includes(r.dataRow))} disabled={dirty || loading} onChange={(e) => setSelected((current) => e.target.checked ? [...new Set([...current, ...(data?.rows.map((r) => r.dataRow) || [])])] : current.filter((id) => !data?.rows.some((r) => r.dataRow === id)))} />Seleccionar esta página</label><span>{selected.length} filas seleccionadas (incluye otras páginas)</span><label>Motivo para excluir<input maxLength={300} value={bulkReason} onChange={(e) => setBulkReason(e.target.value)} placeholder="Ej.: total de control del banco" /></label><button type="button" disabled={dirty || !selected.length} onClick={() => applySelected(true)}>Excluir seleccionadas</button><button type="button" disabled={dirty || !selected.length} onClick={() => applySelected(false)}>Reincorporar seleccionadas</button><button type="button" disabled={!selected.length} onClick={() => setSelected([])}>Limpiar selección</button></div>
+    <div className="finance-review-table-wrap"><table><thead><tr><th>N°</th><th>Fecha</th><th>Descripción / referencia</th><th>Monto</th><th>Tipo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>{data?.rows.map((row) => <Fragment key={row.dataRow}><tr><td><label><input type="checkbox" aria-label={`Seleccionar registro ${row.dataRow}`} checked={selected.includes(row.dataRow)} disabled={dirty} onChange={(e) => setSelected((current) => e.target.checked ? [...new Set([...current, row.dataRow])] : current.filter((id) => id !== row.dataRow))} />{row.dataRow}</label></td><td>{row.transactionDate || "Sin fecha"}</td><td>{row.description}<small>{row.reference} {row.rut}</small></td><td>{formatFinanceMoney(row.amount, preview.account.currency)}</td><td>{row.movementType}</td><td>{row.excluded ? "Excluido" : row.needsReview ? "Revisar" : row.duplicate ? "Duplicado" : "Válido"}</td><td><div className="finance-review-row-actions"><button type="button" className="finance-link-button" onClick={() => setExpanded(expanded === row.dataRow ? null : row.dataRow)} aria-expanded={expanded === row.dataRow}>Ver origen</button><button type="button" className="finance-link-button" disabled={disabled || dirty} onClick={() => toggleExclusion(row)}>{row.excluded ? "Volver a incluir" : "Excluir con motivo"}</button></div></td></tr>{expanded === row.dataRow ? <tr><td colSpan={7}><div className="finance-review-source"><strong>{row.origin?.kind === "sheet" ? `Hoja: ${row.origin.sheet} · Fila ${row.origin.row}` : row.origin?.kind === "csv-record" ? `Registro ${row.origin.row} del CSV (no necesariamente línea de texto)` : "Origen extraído: consulta el archivo original para localizar la fila"}</strong>{row.exclusionReason ? <p>Exclusión: {row.exclusionReason}</p> : null}{row.reviewReasons.length ? <p>Revisar: {row.reviewReasons.join(", ")}</p> : null}<dl>{Object.entries(row.source || {}).filter(([key]) => key !== "__financeOrigin").map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{String(value ?? "")}</dd></div>)}</dl></div></td></tr> : null}</Fragment>)}</tbody></table></div>
     {loading ? <p role="status">Cargando registros…</p> : !data?.rows.length ? <p>No hay registros que coincidan con el filtro.</p> : null}
     <div className="finance-review-toolbar"><button type="button" disabled={loading || page <= 1} onClick={() => setPage((current) => current - 1)}>Anterior</button><span>Página {data?.page || page} de {data?.pages || 1} · {data?.total ?? 0} resultados</span><button type="button" disabled={loading || !data || page >= data.pages} onClick={() => setPage((current) => current + 1)}>Siguiente</button></div>
+    </fieldset>
   </section>;
 }

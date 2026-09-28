@@ -5,6 +5,7 @@ import { financeDocumentSide } from "./finance-document-values.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";
 import { getFinanceMonthlyClosePreview } from "./finance-monthly-close.service.js";
 import { historicalCoverageBlockers } from "./finance-historical-quality.service.js";
+import { financeCurrency, financeRecordCurrency } from "./finance-currency.service.js";
 
 const dataOf = (r) => r?.data || {};
 const text = (v) => String(v ?? "").trim();
@@ -27,8 +28,8 @@ export function buildPeriodCoverage({ tenantId, period, records, jobs = [], acco
   const index = new Map(records.map((r) => [r.id, r]));
   const known = new Map();
   const addAccount = (a) => { const key = financeAccountKey(a); if (key) known.set(key, { id: `bank:${key}`, label: `${text(a.bank || a.bankKey)} · ${text(a.accountAlias) || "Cuenta sin nombre"}${a.accountLast4 ? ` · ****${text(a.accountLast4)}` : ""}`, kind: "BANK", count: 0, statements: 0, dates: [], identified: Boolean(text(a.accountLast4) || (text(a.accountAlias) && text(a.accountAlias).toLowerCase() !== "cuenta sin nombre")) }); return key; };
-  for (const a of accounts) addAccount(a);
-  for (const r of records) if (!inactive(r) && ["bank_statement", "bank_movement", "finance_open_banking_consent"].includes(r.recordType)) addAccount(financeRecordAccount(r, index));
+  for (const a of accounts) if (financeCurrency(a.currency) === "CLP") addAccount(a);
+  for (const r of records) if (!inactive(r) && r.status !== "INACTIVE" && financeRecordCurrency(r, index) === "CLP" && ["finance_bank_account", "bank_statement", "bank_movement", "finance_open_banking_consent"].includes(r.recordType)) addAccount(financeRecordAccount(r, index));
   const sources = [
     { id: "customers", label: "Documentos emitidos a clientes", kind: "DOCUMENTS", count: 0, statements: 0, dates: [] },
     { id: "suppliers", label: "Documentos recibidos de proveedores", kind: "DOCUMENTS", count: 0, statements: 0, dates: [] }
@@ -41,7 +42,7 @@ export function buildPeriodCoverage({ tenantId, period, records, jobs = [], acco
     const document = ["finance_invoice", "finance_payable"].includes(r.recordType);
     const movement = r.recordType === "bank_movement";
     if (!document && !movement && r.recordType !== "bank_statement") continue;
-    if (text(dataOf(r).currency || "CLP").toUpperCase() !== "CLP") continue;
+    if (financeRecordCurrency(r, index) !== "CLP") continue;
     const date = day(financeOperationalDate(r, index));
     if ((document || movement) && !date) {
       blockers.push({ type: "COBERTURA_FECHA_DESCONOCIDA", id: `coverage-date-${r.id}`, title: `${r.title || r.id}: falta una fecha válida para determinar a qué período pertenece.` });

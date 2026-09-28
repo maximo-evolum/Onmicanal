@@ -160,7 +160,7 @@ test("todas las acciones exigen contexto de empresa",async()=>{
 });
 test("lotes no se pueden mutar por API genérica y requieren módulo cobranza",()=>{
  const source=readFileSync(new URL("../src/routes/industry-records.routes.js",import.meta.url),"utf8");
- assert.match(source,/finance_reminder_batch: MODULES.FINANCE_COLLECTIONS/);assert.match(source,/\["finance_exception", "finance_collection_case", "finance_reminder_batch"\]\.includes\(recordType\)/);
+ assert.match(source,/finance_reminder_batch: MODULES.FINANCE_COLLECTIONS/);assert.match(source,/\["finance_exception", "finance_collection_case", "finance_reminder_batch", "finance_collection_delivery"\]\.includes\(recordType\)/);
  assert.equal(financeActionForRecordMutation("finance_reminder_batch"),FINANCE_ACTIONS.PREPARE);
 });
 test("saldo corrupto no se normaliza a cero para declarar pagado",async()=>{

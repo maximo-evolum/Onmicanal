@@ -1,8 +1,10 @@
 import { normalizeBankStatementRows, MAX_BANK_STATEMENT_ROWS } from "./finance-bank-statements.service.js";
 import { FinanceOperationError } from "./finance-integrity.service.js";
+import { validateFileSelection } from "./finance-file-selection.service.js";
 
 const key = (value) => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 export const BANK_REVIEW_FIELDS = [
+  { key: "currency", label: "Moneda (CLP, USD, EUR o UF)", canonical: "moneda", aliases: ["moneda", "currency", "divisa"] },
   { key: "date", label: "Fecha del movimiento", canonical: "fecha", aliases: ["fecha", "fecha_movimiento", "fecha_transaccion", "fecha_operacion", "fecha_valor", "date", "transaction_date"] },
   { key: "description", label: "Descripción / glosa", canonical: "descripcion", pattern: /descr|glosa|detalle|concepto/, aliases: [] },
   { key: "amount", label: "Monto con signo", canonical: "monto", aliases: ["monto", "importe", "amount", "valor", "monto_movimiento", "importe_movimiento"] },
@@ -39,7 +41,7 @@ export function validateBankReviewConfig(input = {}, columns, rowCount = MAX_BAN
     if (reason.length < 5 || reason.length > 300) throw new FinanceOperationError(400, "Indica un motivo de exclusión de entre 5 y 300 caracteres.");
     seen.add(entry.dataRow); excludedRows.push({ dataRow: entry.dataRow, reason });
   }
-  return { mapping, excludedRows };
+  return { mapping, excludedRows, ...(input.selection !== undefined ? { selection: validateFileSelection(input.selection) } : {}) };
 }
 export function normalizeBankReviewRows(sourceRows, account, input = {}) {
   const config = validateBankReviewConfig(input, bankReviewColumns(sourceRows), sourceRows.length);
@@ -79,8 +81,8 @@ export function bankReviewPage(preview, query = {}, { all = false } = {}) {
 export function exportBankReviewCsv(preview, query) {
   const cell = (value) => { const text = String(value ?? ""); return `"${(/^[\s]*[=+@-]/.test(text) ? "'" : "") + text.replace(/"/g, '""')}"`; };
   const rows = bankReviewPage(preview, query, { all: true }).rows;
-  return "\uFEFF" + [["N° registro", "Origen", "Fila de origen", "Fecha", "Descripción", "Referencia", "RUT", "Monto", "Tipo", "Estado", "Motivo"],
-    ...rows.map((row) => [row.dataRow, row.origin?.sheet || row.origin?.kind || "", row.origin?.row || "", row.transactionDate, row.description, row.reference, row.rut, row.amount, row.movementType,
+  return "\uFEFF" + [["N° registro", "Origen", "Fila de origen", "Fecha", "Descripción", "Referencia", "RUT", "Monto", "Moneda", "Tipo", "Estado", "Motivo"],
+    ...rows.map((row) => [row.dataRow, row.origin?.sheet || row.origin?.kind || "", row.origin?.row || "", row.transactionDate, row.description, row.reference, row.rut, row.amount, row.currency, row.movementType,
       row.excluded ? "Excluida" : row.needsReview ? "Revisar" : row.duplicate ? "Duplicada" : "Válida", row.exclusionReason || row.reviewReasons?.join("; ") || ""])]
     .map((row) => row.map(cell).join(";")).join("\r\n");
 }

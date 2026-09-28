@@ -3,6 +3,7 @@
 export const FINANCE_ACTIONS = Object.freeze({
   VIEW: "VIEW",
   PREPARE: "PREPARE",
+  SEND_COLLECTION: "SEND_COLLECTION",
   REGISTER: "REGISTER",
   APPROVE_RECONCILIATION: "APPROVE_RECONCILIATION",
   CLOSE_PERIOD: "CLOSE_PERIOD",
@@ -32,6 +33,8 @@ const FINANCE_RECORD_ACTIONS = Object.freeze({
   finance_reconciliation: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
   finance_customer_credit: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
   finance_credit_application: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
+  finance_reconciliation_difference: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
+  finance_reconciliation_group: FINANCE_ACTIONS.APPROVE_RECONCILIATION,
   finance_monthly_close: FINANCE_ACTIONS.CLOSE_PERIOD,
   finance_period_reopening: FINANCE_ACTIONS.REOPEN_PERIOD,
   finance_period_coverage: FINANCE_ACTIONS.CLOSE_PERIOD,
@@ -72,7 +75,7 @@ export function canPerformFinanceAction(role, action) {
   const normalizedAction = String(action || "").toUpperCase();
   if (normalizedAction === FINANCE_ACTIONS.VIEW) return new Set([...STAFF, "VIEWER"]).has(normalizedRole);
   if (normalizedAction === FINANCE_ACTIONS.PREPARE) return STAFF.has(normalizedRole);
-  if ([FINANCE_ACTIONS.REGISTER, FINANCE_ACTIONS.APPROVE_RECONCILIATION, FINANCE_ACTIONS.CLOSE_PERIOD, FINANCE_ACTIONS.REOPEN_PERIOD, FINANCE_ACTIONS.IMPORT_HISTORY, FINANCE_ACTIONS.CONFIGURE].includes(normalizedAction)) return MANAGERS.has(normalizedRole);
+  if ([FINANCE_ACTIONS.SEND_COLLECTION, FINANCE_ACTIONS.REGISTER, FINANCE_ACTIONS.APPROVE_RECONCILIATION, FINANCE_ACTIONS.CLOSE_PERIOD, FINANCE_ACTIONS.REOPEN_PERIOD, FINANCE_ACTIONS.IMPORT_HISTORY, FINANCE_ACTIONS.CONFIGURE].includes(normalizedAction)) return MANAGERS.has(normalizedRole);
   return false;
 }
 

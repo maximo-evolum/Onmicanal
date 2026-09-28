@@ -1,5 +1,7 @@
 import { classifyFinanceMovement } from "./finance-movement-classification.service.js";
 import { auditCustomerCredit } from "./finance-customer-credit-ledger.service.js";
+import { auditDifference } from "./finance-difference-evidence.service.js";
+import { auditFinanceGroup } from "./finance-group-evidence.service.js";
 
 const data = (r) => r?.data && typeof r.data === "object" ? r.data : {};
 const upper = (v) => String(v ?? "").trim().toUpperCase();
@@ -55,6 +57,8 @@ export function auditCloseReconciliations(records, periodMovements, period, oper
         else { validIds.add(m.id); validatedRecIds.add(rec.id); }
         continue;
       }
+      if (rd.reconciliationType === "JUSTIFIED_DIFFERENCE") reasons.push(...auditDifference(index.get(rd.differenceId), records).errors);
+      if (rd.groupId || rd.reconciliationType === "GROUPED_BATCH") reasons.push(...auditFinanceGroup(index.get(rd.groupId), records).errors);
       const allocations = Array.isArray(rd.allocations) ? rd.allocations : [];
       const ids = allocations.map((a) => a?.invoiceId);
       const allocationShape = allocations.length > 0 && new Set(ids).size === ids.length && allocations.every((a) => typeof a?.invoiceId === "string" && a.invoiceId && positivePesos(a.amount));

@@ -1,0 +1,24 @@
+.panel { min-width: 0; margin-block: 18px; }
+.panel p { line-height: 1.5; }
+.filters { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin-block: 16px; }
+.filters label, .dialog label { display: grid; gap: 6px; }
+.filters label:first-child { flex: 1 1 260px; }
+.filters .check { display: flex; align-items: center; gap: 8px; }
+.panel input:not([type=checkbox]), .panel select, .dialog input, .dialog textarea { min-height: 42px; padding: 9px 12px; border: 1px solid #71809670; border-radius: 9px; background: transparent; color: inherit; font: inherit; box-sizing: border-box; }
+.panel button { min-height: 40px; padding: 8px 14px; border: 1px solid #71809670; border-radius: 10px; color: inherit; background: transparent; cursor: pointer; }
+.panel button:disabled { opacity: .5; cursor: not-allowed; }
+.table { overflow-x: auto; margin-block: 16px; }
+.table table { width: 100%; border-collapse: collapse; min-width: 690px; }
+.table th, .table td { padding: 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #71809640; }
+.table small { display: block; margin-top: 6px; line-height: 1.4; max-width: 360px; }
+.table summary { cursor: pointer; padding-block: 7px; }
+.pagination, .dialog footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); margin: auto; padding: 24px; overflow: auto; border: 1px solid #71809670; border-radius: 18px; background: var(--card, #f7faf9); color: var(--foreground, #18262c); }
+.dialog::backdrop { background: #071b2dcc; }
+.dialog label { margin-block: 16px; }
+.dialog textarea { min-height: 90px; resize: vertical; }
+.dialog dl { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.dialog dd { margin: 0; font-weight: 700; }
+.error { border: 1px solid #c45a5a; border-radius: 10px; padding: 12px; }
+:global([data-theme="dark"]) .dialog { background: #171127; color: #f3edff; }
+@media (max-width: 480px) { .dialog { padding: 16px; } .filters { align-items: stretch; } }

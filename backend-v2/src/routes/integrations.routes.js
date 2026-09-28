@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { normalizeMetadata } from "../lib/metadata.js";
+import { editableConnectionMetadata } from "../services/finance-connection-health.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { encryptSecret, hasSecret } from "../lib/credential-crypto.js";
 
@@ -83,7 +84,8 @@ integrationsRouter.put("/integrations/:channel", requireRole(ROLE_GROUPS.MANAGER
       externalAccountId: req.body?.externalAccountId === undefined ? previous?.externalAccountId || null : String(req.body.externalAccountId || "").trim() || null,
       accessToken: req.body?.accessToken === undefined ? previous?.accessToken || null : encryptSecret(req.body.accessToken),
       verifyToken: req.body?.verifyToken === undefined ? previous?.verifyToken || null : encryptSecret(req.body.verifyToken),
-      metadata: normalizeMetadata({ ...(previous?.metadata || {}), ...(req.body?.metadata || {}) }, {}),
+      metadata: normalizeMetadata({ ...(previous?.metadata || {}), ...editableConnectionMetadata(req.body?.metadata),
+        connectionConfigChangedAt: new Date().toISOString(), oauthExpiresAt: null, lastTestStatus: "PENDING", lastTestedAt: null }, {}),
       isActive: req.body?.isActive === undefined ? previous?.isActive ?? true : Boolean(req.body.isActive)
     };
 

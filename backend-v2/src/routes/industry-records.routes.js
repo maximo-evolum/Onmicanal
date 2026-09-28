@@ -96,6 +96,7 @@ const RECORD_MODULES = Object.freeze({
   workflow_run: MODULES.WORKFLOWS,
   finance_invoice: MODULES.FINANCE_INVOICES,
   bank_statement: MODULES.FINANCE_BANK_SYNC,
+  finance_bank_account: MODULES.FINANCE_BANK_SYNC,
   bank_movement: MODULES.FINANCE_BANK_SYNC,
   finance_reconciliation: MODULES.FINANCE_RECONCILIATION,
   finance_monthly_close: MODULES.FINANCE_ANALYTICS,
@@ -104,9 +105,12 @@ const RECORD_MODULES = Object.freeze({
   finance_historical_correction: MODULES.FINANCE_ANALYTICS,
   finance_customer_credit: MODULES.FINANCE_RECONCILIATION,
   finance_credit_application: MODULES.FINANCE_RECONCILIATION,
+  finance_reconciliation_difference: MODULES.FINANCE_RECONCILIATION,
+  finance_reconciliation_group: MODULES.FINANCE_RECONCILIATION,
   finance_exception: MODULES.FINANCE_EXCEPTIONS,
   finance_collection_case: MODULES.FINANCE_COLLECTIONS,
-  finance_reminder_batch: MODULES.FINANCE_COLLECTIONS,
+    finance_reminder_batch: MODULES.FINANCE_COLLECTIONS,
+    finance_collection_delivery: MODULES.FINANCE_COLLECTIONS,
   finance_invoice_receipt: MODULES.FINANCE_INVOICES,
   finance_payable: MODULES.FINANCE_PAYABLES,
   finance_payable_payment: MODULES.FINANCE_PAYABLES,
@@ -145,6 +149,18 @@ async function assertRecordModule(req, recordType) {
 }
 
 function assertFinanceRecordMutation(req, res, recordType, existing) {
+  if (recordType === "finance_bank_account") {
+    res.status(409).json({ error: "Utiliza la gestión de cuentas bancarias. Su identidad, moneda e historial no se editan por la ficha genérica." });
+    return false;
+  }
+  if (recordType === "finance_reconciliation_group") {
+    res.status(409).json({ error: "Utiliza Conciliaciones agrupadas para aprobar o revertir el grupo completo. No se edita ni elimina directamente." });
+    return false;
+  }
+  if (recordType === "finance_reconciliation_difference") {
+    res.status(409).json({ error: "Utiliza Diferencias justificadas: requiere propuesta, aprobación y reversa auditada. No admite edición ni eliminación directa." });
+    return false;
+  }
   if (["finance_customer_credit", "finance_credit_application"].includes(recordType)) {
     res.status(409).json({ error: "Utiliza Anticipos y saldos a favor: su saldo, aplicaciones y reversas son auditados y no se editan ni eliminan directamente." });
     return false;
@@ -161,7 +177,7 @@ function assertFinanceRecordMutation(req, res, recordType, existing) {
     res.status(409).json({ error: "Asigna el responsable desde el detalle del movimiento, con motivo e historial." });
     return false;
   }
-  if (["finance_exception", "finance_collection_case", "finance_reminder_batch"].includes(recordType)) {
+  if (["finance_exception", "finance_collection_case", "finance_reminder_batch", "finance_collection_delivery"].includes(recordType)) {
     res.status(409).json({ error: "Utiliza las acciones de Excepciones o Cobranza para conservar estados, períodos y trazabilidad. No se editan ni eliminan mediante la ficha genérica." });
     return false;
   }

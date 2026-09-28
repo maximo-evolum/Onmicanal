@@ -1,0 +1,16 @@
+.panel { min-width: 0; display: grid; gap: 16px; }
+.panel h2, .panel h3, .panel p { margin: 0; }
+.panel label { display: grid; gap: 8px; min-width: 0; }
+.panel select, .panel input:not([type="checkbox"]), .panel textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; border: 0; padding: 0; margin: 0; }
+.wide { grid-column: 1 / -1; }
+.panel .check { display: flex; align-items: flex-start; gap: 10px; }
+.check input { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; }
+.preview { display: grid; gap: 14px; padding: 20px; border: 1px solid currentColor; border-radius: 14px; }
+.preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.6; }
+.notice { padding: 14px; border-left: 4px solid #119b95; background: rgba(17,155,149,.09); }
+.heading { display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; align-items: center; }
+.history { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.history li { border: 1px solid rgba(128,128,128,.35); border-radius: 12px; padding: 16px; display: grid; gap: 8px; overflow-wrap: anywhere; }
+.history button { justify-self: start; }
+@media (max-width: 640px) { .form { grid-template-columns: minmax(0,1fr); } .preview { padding: 12px; } }
