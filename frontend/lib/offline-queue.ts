@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./constants";
+import { isNuboxSyncRequest } from './nubox-sync-client.mjs';
 
 const STORAGE_KEY = "evolum_web_offline_queue_v1";
 
@@ -47,6 +48,7 @@ export function canQueueOfflineMutation(path: string, init?: RequestInit) {
   const body = init?.body;
   return ["POST", "PUT", "PATCH", "DELETE"].includes(method)
     && !path.startsWith("/auth/")
+    && !isNuboxSyncRequest(path)
     // Financial proposals and approvals need current evidence and session.
     // Never replay them later from the generic offline queue.
     && !/^\/finance\/differences(?:\/|\?|$)/.test(path)
@@ -81,6 +83,9 @@ export async function syncOfflineQueue() {
   const pending: QueuedMutation[] = [];
   let synced = 0;
   for (const item of queue) {
+    // Preserve older queued requests for manual review, but never replay a
+    // provider synchronization whose previous outcome may be unknown.
+    if (isNuboxSyncRequest(item.path)) { pending.push(item); continue; }
     try {
       const response = await fetch(`${API_BASE_URL}${item.path}`, {
         method: item.method,

@@ -1,6 +1,7 @@
 import { AgentSession, Booking, BookingSlot, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
 import { API_BASE_URL, SESSION_STORAGE_KEY } from "./constants";
 import { canQueueOfflineMutation, OfflineQueuedError, queueOfflineMutation } from "./offline-queue";
+import { isNuboxSyncRequest, requestTimeoutMs, runNuboxHistory } from './nubox-sync-client.mjs';
 
 export function getStoredApiSession() {
   if (typeof window === "undefined") return null;
@@ -27,7 +28,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   // Evita que una solicitud deje una pantalla esperando indefinidamente
   // cuando hay una red inestable o un deploy activo.
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs(path));
   let response: Response;
   try {
     if (typeof window !== "undefined" && !navigator.onLine && queueOfflineMutation(path, init)) {
@@ -46,8 +47,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw new OfflineQueuedError();
     }
     if (error instanceof DOMException && error.name === "AbortError") {
+      if (isNuboxSyncRequest(path)) throw new Error('La sincronización de Nubox superó los 2 minutos de espera. El servidor podría seguir procesando; revisa el historial de sincronización antes de repetirla. No se confirmó el resultado.');
       throw new Error("La conexión tardó demasiado. Revisa tu red e inténtalo nuevamente.");
     }
+    if (isNuboxSyncRequest(path)) throw new Error('Se interrumpió la comunicación con Nubox. El servidor podría seguir procesando; revisa el historial antes de repetir la sincronización.');
     throw error;
   } finally {
     clearTimeout(timeout);
@@ -1481,11 +1484,8 @@ export function syncFinanceNubox(period?: string): Promise<NuboxSyncResult> {
   });
 }
 
-export function syncFinanceNuboxHistory(startPeriod: string, endPeriod: string): Promise<{ ok: boolean; periods: number; succeeded: number; failed: number; created: number; updated: number; results: Array<NuboxSyncResult & { period: string; error?: string }> }> {
-  return request("/finance/sync/nubox/history", {
-    method: "POST",
-    body: JSON.stringify({ startPeriod, endPeriod })
-  });
+export function syncFinanceNuboxHistory(startPeriod: string, endPeriod: string, onProgress?: (progress: { completed: number; total: number; period: string }) => void): Promise<{ ok: boolean; periods: number; succeeded: number; failed: number; unprocessed: number; created: number; updated: number; results: Array<NuboxSyncResult & { period: string; error?: string }> }> {
+  return runNuboxHistory({ startPeriod, endPeriod, syncPeriod: syncFinanceNubox, onProgress });
 }
 
 export function rejectFinanceReconciliation(movementId: string, detail?: string): Promise<{ updatedMovement: IndustryRecord; exception: IndustryRecord }> {

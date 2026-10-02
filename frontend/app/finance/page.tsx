@@ -371,6 +371,8 @@ function FinanceWorkspace() {
   const [manualSettlementRevision, setManualSettlementRevision] = useState(0);
   useEffect(() => { setManualPayment(null); }, [contextTenant]);
   const [syncingNubox, setSyncingNubox] = useState(false);
+  const nuboxSyncLock = useRef(false);
+  const [nuboxSyncProgress, setNuboxSyncProgress] = useState<{ completed: number; total: number; period: string } | null>(null);
   const [nuboxSyncPeriod, setNuboxSyncPeriod] = useState(() => new Date().toISOString().slice(0, 7));
   const [nuboxHistoryStartPeriod, setNuboxHistoryStartPeriod] = useState(() => {
     const date = new Date();
@@ -410,7 +412,7 @@ function FinanceWorkspace() {
     window.history.pushState({}, "", tab === "resumen" ? "/finance" : `/finance?tab=${tab}`);
   }
 
-  async function load() {
+  async function load(preserveMessage = false) {
     if (!contextTenant || contextReady !== contextTenant) return;
     const generation = ++loadGeneration.current;
     const current = () => generation === loadGeneration.current;
@@ -420,7 +422,7 @@ function FinanceWorkspace() {
     }
     setLoading(true);
     if (activeTab === "resumen" || activeTab === "indicadores") setOverview(null);
-    setMessage(null);
+    if (!preserveMessage) setMessage(null);
     try {
       if (contextualTab) {
         const context = activeTab === "cierre" ? { ...financeContext, accountKey: "", currency: "CLP" } : financeContext;
@@ -453,7 +455,10 @@ function FinanceWorkspace() {
       if (activeTab === "plan") await commit(getFinancePlan(), setFinancePlan);
       if (activeTab === "agentes") await commit(getFinanceAgentWorkspace(), (workspace) => { setAgentWorkspace(workspace); setAgentPolicy(workspace.policy); });
     } catch (error) {
-      if (current()) setMessage(error instanceof Error ? error.message : "No se pudieron cargar los datos financieros.");
+      if (current()) {
+        const detail = error instanceof Error ? error.message : "No se pudieron cargar los datos financieros.";
+        setMessage(previous => preserveMessage && previous ? `${previous} No se pudo refrescar la vista: ${detail}` : detail);
+      }
     } finally {
       if (current()) setLoading(false);
     }
@@ -1024,29 +1029,38 @@ function FinanceWorkspace() {
   }
 
   async function synchronizeNubox() {
+    if (nuboxSyncLock.current) return;
+    nuboxSyncLock.current = true;
     setSyncingNubox(true);
+    setNuboxSyncProgress({ completed: 0, total: 1, period: nuboxSyncPeriod });
     try {
       const result = await syncFinanceNubox(nuboxSyncPeriod);
       setMessage(result.pending ? (result.message || "Ya existe una sincronización en curso.") : `Nubox sincronizado para ${nuboxSyncPeriod}: ${result.created || 0} nuevos y ${result.updated || 0} actualizados.${result.warning ? ` Atención: ${result.warning}` : ""}`);
-      await load();
+      await load(true);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo sincronizar Nubox.");
     } finally {
+      nuboxSyncLock.current = false;
+      setNuboxSyncProgress(null);
       setSyncingNubox(false);
     }
   }
 
   async function synchronizeNuboxHistory() {
+    if (nuboxSyncLock.current) return;
     if (!nuboxHistoryStartPeriod || !nuboxHistoryEndPeriod) return setMessage("Selecciona el período inicial y final del historial.");
+    nuboxSyncLock.current = true;
     setSyncingNubox(true);
     try {
-      const result = await syncFinanceNuboxHistory(nuboxHistoryStartPeriod, nuboxHistoryEndPeriod);
-      const issues = result.results.filter((r) => r.error || r.warning).map((r) => `${r.period}: ${r.error || r.warning}`);
-      setMessage(`Historial Nubox procesado: ${result.succeeded}/${result.periods} mes(es), ${result.created} nuevos y ${result.updated} actualizados.${issues.length ? ` Requieren revisión: ${issues.join(" · ")}` : ""}`);
-      await load();
+      const result = await syncFinanceNuboxHistory(nuboxHistoryStartPeriod, nuboxHistoryEndPeriod, setNuboxSyncProgress);
+      const issues = result.results.filter((r) => r.error || r.warning || r.pending).map((r) => `${r.period}: ${r.error || r.warning || r.message || 'Sincronización en curso'}`);
+      setMessage(`Historial Nubox: ${result.succeeded}/${result.periods} mes(es) confirmados, ${result.created} nuevos y ${result.updated} actualizados.${result.unprocessed ? ` ${result.unprocessed} mes(es) no iniciados; se detuvo el historial para evitar operaciones superpuestas.` : ""}${issues.length ? ` Requieren revisión: ${issues.join(" · ")}` : ""}`);
+      await load(true);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo sincronizar el historial de Nubox.");
     } finally {
+      nuboxSyncLock.current = false;
+      setNuboxSyncProgress(null);
       setSyncingNubox(false);
     }
   }
@@ -1285,6 +1299,11 @@ function FinanceWorkspace() {
             <article className="finance-card finance-sync-card">
               <span className="finance-eyebrow">Automatización segura</span>
               <h2>Sincronización Nubox</h2>
+              {syncingNubox && nuboxSyncProgress ? <div className="finance-note" role="status" aria-live="polite" style={{ display: 'grid', gap: 8 }}>
+                <strong>Consultando Nubox · {nuboxSyncProgress.period}</strong>
+                <progress aria-label="Progreso de sincronización Nubox" max={nuboxSyncProgress.total} value={nuboxSyncProgress.total > 1 ? nuboxSyncProgress.completed : undefined} style={{ width: '100%', accentColor: '#0d9488' }} />
+                <span>{nuboxSyncProgress.total > 1 ? `${nuboxSyncProgress.completed} de ${nuboxSyncProgress.total} meses confirmados. ` : ''}La consulta puede tardar hasta 2 minutos por mes. Mantén esta vista abierta; no necesitas presionar nuevamente.</span>
+              </div> : null}
               <p>Cuando Nubox esté conectado, EVOLUM actualiza las facturas en segundo plano y prepara el análisis para revisión humana. No confirma pagos, no modifica el ERP ni envía cobranzas.</p>
               {canManageFinance ? <div className="finance-sync-controls"><label>Período a consultar en Nubox<input type="month" value={nuboxSyncPeriod} max={new Date().toISOString().slice(0, 7)} onChange={(event) => setNuboxSyncPeriod(event.target.value)} disabled={syncingNubox} /></label><button className="primary-btn" type="button" disabled={syncingNubox || !nuboxSyncPeriod} onClick={synchronizeNubox}>{syncingNubox ? "Sincronizando..." : "Sincronizar período"}</button><div className="finance-history-sync"><strong>Traer historial de ventas</strong><div><label>Desde<input type="month" value={nuboxHistoryStartPeriod} max={nuboxHistoryEndPeriod || new Date().toISOString().slice(0, 7)} onChange={(event) => setNuboxHistoryStartPeriod(event.target.value)} disabled={syncingNubox} /></label><label>Hasta<input type="month" value={nuboxHistoryEndPeriod} min={nuboxHistoryStartPeriod} max={new Date().toISOString().slice(0, 7)} onChange={(event) => setNuboxHistoryEndPeriod(event.target.value)} disabled={syncingNubox} /></label></div><button className="secondary-btn" type="button" disabled={syncingNubox || !nuboxHistoryStartPeriod || !nuboxHistoryEndPeriod} onClick={synchronizeNuboxHistory}>{syncingNubox ? "Procesando..." : "Sincronizar historial"}</button></div><small>Nubox v1 entrega ventas por período. Las facturas de proveedores se incorporan con DTE XML o migración histórica; una cartola no puede crear documentos tributarios.</small></div> : <div className="finance-note">Solo una cuenta administradora puede iniciar una sincronización manual.</div>}
               <div className="finance-sync-history"><h3>Historial reciente</h3>{financeSyncHistory.slice(0, 5).map((entry) => <div key={entry.id}><b className={entry.action === "NUBOX_SALES_SYNC_FAILED" ? "is-error" : "is-success"}>{entry.action === "NUBOX_SALES_SYNCED" ? "Sincronización completada" : entry.action === "NUBOX_SALES_SYNC_FAILED" ? "Sincronización con incidencia" : "Análisis preparado"}</b><span>{shortDate(entry.createdAt)}</span></div>)}{!financeSyncHistory.length && !loading ? <p className="finance-empty">Aún no hay sincronizaciones registradas.</p> : null}</div>
