@@ -276,7 +276,7 @@ test("HTTP: recepción asíncrona, permisos, revisión obligatoria y aislamiento
   prisma.tenantModule.findMany = async ({ where }) => where.module.in.map((module) => ({ module, enabled: allowed, source: "MANUAL" }));
   t.after(() => { prisma.$transaction = originalTransaction; prisma.tenantModule.findMany = originalModules; prisma.financeBankImportJob.findFirst = originalFind; });
   const app = express(); app.use(express.json());
-  app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "empresa-a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { id: "user", role: req.headers["x-role"] || "ADMIN" }; next(); });
+app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "empresa-a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { tenantId: req.tenantId, id: "user", role: req.headers["x-role"] || "ADMIN" }; next(); });
   app.use(financeRouter);
   const server = createServer(app); await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(() => { server.closeAllConnections(); server.close(); });

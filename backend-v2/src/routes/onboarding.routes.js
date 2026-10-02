@@ -23,6 +23,7 @@ function getUploadLimitByPlan(plan) {
 
 import { Router } from "express";
 import multer from "multer";
+import { uploadLimits } from "../lib/upload-limits.js";
 import { prisma } from "../lib/db.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { extractOnboardingKnowledge } from "../services/onboarding-intelligence.service.js";
@@ -31,7 +32,7 @@ export const onboardingRouter = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 850 * 1024 * 1024, files: 8 },
+  limits: uploadLimits({ fileSize: 850 * 1024 * 1024, files: 8 }),
   fileFilter(_req, file, cb) {
     const allowed = [
       "text/csv",

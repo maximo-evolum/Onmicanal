@@ -97,7 +97,7 @@ test("HTTP reportes: permisos por módulo, tenant autenticado, descarga y vista 
   let enabled = true; prisma.$transaction = db.$transaction;
   prisma.tenantModule.findMany = async ({ where }) => where.module.in.map((module) => ({ module, enabled, source: "MANUAL" }));
   t.after(() => { prisma.$transaction = oldTx; prisma.tenantModule.findMany = oldModules; });
-  const app = express(); app.use((req, _res, next) => { req.tenantId = req.headers["x-test-tenant"] || "a"; req.tenant = { id: req.tenantId, name: "Prueba", industry: "FINANCE" }; req.user = { id: "user", role: req.headers["x-test-role"] || "SUPER_ADMIN" }; next(); }); app.use(financeRouter);
+const app = express(); app.use((req, _res, next) => { req.tenantId = req.headers["x-test-tenant"] || "a"; req.tenant = { id: req.tenantId, name: "Prueba", industry: "FINANCE" }; req.user = { tenantId: req.tenantId, id: "user", role: req.headers["x-test-role"] || "SUPER_ADMIN" }; next(); }); app.use(financeRouter);
   const server = createServer(app); await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve)); t.after(() => { server.closeAllConnections(); server.close(); });
   const call = (query = "", headers = {}) => fetch(`http://127.0.0.1:${server.address().port}/finance/process-reports?period=2026-01${query}`, { headers, signal: AbortSignal.timeout(5000) });
   enabled = false; assert.equal((await call("", { "x-test-role": "ADMIN" })).status, 403); enabled = true;

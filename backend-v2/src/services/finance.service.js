@@ -1,4 +1,5 @@
 import { findAllFinanceRecords } from "./finance-integrity.service.js";
+import { financeRecordRequiredModules } from './finance-record-access.service.js';
 import { filterFinanceContext, parseFinanceContext } from "./finance-context.service.js";
 import { overviewReconciliationMetrics, overviewCollectionSchedule } from "./finance-overview-metrics.service.js";
 import { prisma } from "../lib/db.js";
@@ -192,7 +193,7 @@ function agingBucket(dueDate, now = new Date()) {
   return ({ POR_VENCER: "No vencida", "1_7": "1-7 dias", "8_30": "8-30 dias", "31_60": "31-60 dias", "61_90": "61-90 dias", MAS_90: "+90 dias" })[code] || "No vencida";
 }
 
-export async function getFinanceOverview({ tenantId, now = new Date(), context = null, db = prisma }) {
+export async function getFinanceOverview({ tenantId, now = new Date(), context = null, db = prisma, allowedModules = null }) {
   context = parseFinanceContext(context || {});
   const types = ["finance_invoice", "finance_payable", "finance_invoice_receipt", "bank_statement", "bank_movement", "finance_reconciliation", "finance_exception", "finance_collection_case", "finance_customer_credit", "finance_credit_application", "finance_reconciliation_difference", "finance_reconciliation_group"];
   const sourceRecords = await findAllFinanceRecords(db, {
@@ -200,7 +201,12 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
     orderBy: { updatedAt: "desc" },
     take: 1000
   });
-  const normalized = sourceRecords.map((r) => r.data?.sourceBatchId && !r.data.importBatchId ? { ...r, data: { ...r.data, importBatchId: r.data.sourceBatchId } } : r);
+  const visible = allowedModules === null ? sourceRecords : sourceRecords.filter(r => {
+    const required = financeRecordRequiredModules(r.recordType, r.data);
+    return required.length > 0 && required.every(module => allowedModules.includes(module));
+  });
+  const restricted = allowedModules !== null && types.some(type => financeRecordRequiredModules(type).some(module => !allowedModules.includes(module)));
+  const normalized = visible.map((r) => r.data?.sourceBatchId && !r.data.importBatchId ? { ...r, data: { ...r.data, importBatchId: r.data.sourceBatchId } } : r);
   const records = filterFinanceContext(normalized, context);
   const grouped = Object.fromEntries(types.map((type) => [type, records.filter((record) => record.recordType === type)]));
   const documents = summarizeFinanceDocuments(records, now);
@@ -240,6 +246,8 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
 
   return {
     generatedAt: now.toISOString(),
+    restricted,
+    accessNote: restricted ? "Vista parcial según tus módulos habilitados. Los indicadores no representan la totalidad de la empresa." : null,
     context, schedule,
     documentQuality: summarizeFinanceDocuments(records.filter((r) => r.recordType === "finance_invoice" && financeDocumentSide(r) === "CUSTOMER"), now).excluded,
     scopeNote: "Facturas de clientes emitidas en el período seleccionado, con saldos actuales. Monto ajustado = total original − notas de crédito + notas de débito vinculadas. Cobrado = monto ajustado − saldo − diferencias justificadas; estas últimas no son dinero recibido. No equivale a cobros bancarios del mes. Se excluyen anuladas, notas independientes, proveedores y datos inconsistentes. La cuenta bancaria no filtra las facturas. No acredita cobertura ni reconstruye saldos históricos.",

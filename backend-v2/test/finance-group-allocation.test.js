@@ -195,6 +195,9 @@ test("workflow y permiso genérico no autorizan escrituras de grupos", () => {
 });
 test("HTTP: vista previa, aprobación y reversa reales con DB simulada; permisos y bypass protegidos", async (t) => {
   const db = database(initial()), oldTx = prisma.$transaction, oldRead = prisma.industryRecord.findMany;
+  const oldModules = prisma.tenantModule.findMany;
+  prisma.tenantModule.findMany = async ({ where }) => where.module.in.map((module) => ({ module, enabled: true, source: "MANUAL" }));
+  t.after(() => { prisma.tenantModule.findMany = oldModules; });
   const tx = (fn, opts) => db.$transaction(fn, opts), read = (args) => db.industryRecord.findMany(args);
   prisma.$transaction = tx; prisma.industryRecord.findMany = read;
   t.after(() => { prisma.$transaction = oldTx; prisma.industryRecord.findMany = oldRead; });

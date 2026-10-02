@@ -114,7 +114,7 @@ test("HTTP de origen respeta empresa, permisos, módulo e integridad y no cambia
   prisma.financeBankImportJob.findFirst = async ({ where }) => where.tenantId === "a" && where.id === "job" ? job : null;
   prisma.tenantModule.findMany = async ({ where }) => where.module.in.map((module) => ({ module, enabled, source: "MANUAL" }));
   t.after(() => { prisma.financeBankImportJob.findFirst = read; prisma.tenantModule.findMany = modules; });
-  const app = express(); app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { id: "admin", role: req.headers["x-role"] || "SUPER_ADMIN" }; next(); }); app.use(financeRouter);
+const app = express(); app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { tenantId: req.tenantId, id: "admin", role: req.headers["x-role"] || "SUPER_ADMIN" }; next(); }); app.use(financeRouter);
   const server = createServer(app); await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve)); t.after(() => { server.closeAllConnections(); server.close(); });
   const get = (headers = {}) => fetch(`http://127.0.0.1:${server.address().port}/finance/bank-import-jobs/job/layout?sheet=Movimientos%20enero`, { headers, signal: AbortSignal.timeout(5000) });
   let res = await get(); assert.equal(res.status, 200); assert.equal((await res.json()).revision, 3); assert.equal(job.status, "FAILED");

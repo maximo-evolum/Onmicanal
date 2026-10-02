@@ -1,0 +1,37 @@
+name: evolum-finance-qa
+
+services:
+  postgres:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: evolum_test
+      POSTGRES_PASSWORD: evolum_local_test_only
+      POSTGRES_DB: evolum_finance_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - finance_qa_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolum_test -d evolum_finance_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "evolum_local_test_only"]
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - finance_qa_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "evolum_local_test_only", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+
+volumes:
+  finance_qa_postgres:
+  finance_qa_redis:

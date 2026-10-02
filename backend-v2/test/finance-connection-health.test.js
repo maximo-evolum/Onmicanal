@@ -90,7 +90,7 @@ test("HTTP: snapshot aislado, módulo deshabilitado y error de consulta sin secr
   prisma.tenantChannelConfig.findMany = async ({ where }) => { if (failed) throw Error("SECRET"); return where.tenantId === "a" ? [config({ lastTestStatus: "OK", lastTestedAt: new Date().toISOString() })] : []; };
   prisma.industryRecord.findMany = async () => [];
   t.after(() => { prisma.tenantChannelConfig.findMany = old.configs; prisma.tenantModule.findMany = old.modules; prisma.industryRecord.findMany = old.records; });
-  const app = express(); app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { id: "user", role: req.headers["x-role"] || "ADMIN" }; next(); }); app.use(financeRouter);
+const app = express(); app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { tenantId: req.tenantId, id: "user", role: req.headers["x-role"] || "ADMIN" }; next(); }); app.use(financeRouter);
   const server = createServer(app); await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve)); t.after(() => { server.closeAllConnections(); server.close(); });
   const call = (headers = {}) => fetch(`http://127.0.0.1:${server.address().port}/finance/connection-health?tenantId=b&period=2020-01`, { headers, signal: AbortSignal.timeout(5000) });
   const response = await call(); assert.equal(response.status, 200); assert.equal(response.headers.get("cache-control"), "no-store"); const body = await response.json(); assert.equal(body.items.find((s) => s.key === "finance_nubox").status, "VERIFIED"); assert.ok(body.items.every((s) => s.key.startsWith("finance_"))); assert.equal(body.canManage, false);

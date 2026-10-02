@@ -269,20 +269,24 @@ export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), l
         const completedAt = new Date().toISOString();
         await updateStatus(config, {
           lastSyncedAt: completedAt, lastSyncCompletedAt: completedAt, lastSyncStatus: "OK", lastSyncAttempts: attempt,
-          lastSyncMessage: `${summary.created} creados, ${summary.updated} actualizados`, lastSyncError: null, lastSyncPeriod: period,
+          lastSyncMessage: `${summary.created} facturas creadas, ${summary.updated} actualizadas${summary.adjustmentsPending ? `; ${summary.adjustmentsPending} notas de crédito/débito pendientes en Excepciones` : ''}`, lastSyncError: null, lastSyncPeriod: period,
           lastAutomationSummary: analysis
         });
         await audit(tenantId, "NUBOX_SALES_SYNCED", config.id, { source, period, attempt, coordinated, ...summary, analysis });
-        if (summary.created || summary.updated) {
+        if (summary.created || summary.updated || summary.adjustmentsCreated || summary.adjustmentsUpdated) {
           await createTenantNotification({
             tenantId,
             title: "Nubox sincronizó documentos financieros",
-            body: `${summary.created} nuevos y ${summary.updated} actualizados. ${analysis.analyzed ? "El análisis quedó preparado para revisión humana." : "El análisis automático quedó pendiente; los documentos sí se guardaron."}`,
+            body: `${summary.created} facturas nuevas y ${summary.updated} actualizadas. ${summary.adjustmentsPending ? `${summary.adjustmentsPending} notas de crédito/débito requieren revisión en Excepciones; no se aplicaron a saldos. ` : ''}${analysis.analyzed ? "El análisis quedó preparado para revisión humana." : "El análisis automático quedó pendiente; los documentos sí se guardaron."}`,
             severity: "info", targetUrl: "/finance?tab=facturas",
             metadata: { notificationType: "finance", screen: "finance", provider: "nubox", source }
           }).catch(() => null);
         }
-        return { ok: true, period, attempts: attempt, coordinated, ...summary, analysis, ...(!analysis.analyzed ? { warning: "Los documentos se guardaron, pero el análisis automático quedó pendiente." } : analysis.requiresReview ? { warning: "Los documentos se guardaron. El análisis tiene pendientes por cierre de período, calidad de fechas o actualización del resumen; revisa su detalle." } : {}) };
+        const warnings = [
+          ...(summary.adjustmentsPending ? [`${summary.adjustmentsPending} notas de crédito/débito quedaron en Excepciones para verificar sus referencias. Las facturas sí se sincronizaron; las notas no modificaron saldos.`] : []),
+          ...(!analysis.analyzed ? ['Los documentos se guardaron, pero el análisis automático quedó pendiente.'] : analysis.requiresReview ? ['El análisis tiene pendientes por cierre de período, calidad de fechas o actualización del resumen; revisa su detalle.'] : [])
+        ];
+        return { ok: true, period, attempts: attempt, coordinated, ...summary, analysis, ...(warnings.length ? { warning: warnings.join(' ') } : {}) };
       } catch (error) {
         if (committed) return { ok: true, period, attempts: attempt, coordinated, ...committed, warning: "Los documentos se guardaron; no se pudo completar la actualización del estado de la conexión.", analysis: { analyzed: false, requiresReview: true } };
         lastError = error instanceof Error ? error : new Error("No se pudo sincronizar Nubox.");

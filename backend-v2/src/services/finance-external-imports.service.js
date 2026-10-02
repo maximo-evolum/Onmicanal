@@ -60,33 +60,65 @@ export async function collectNuboxSales(request, { period, limit = 100, maxRows 
 export async function importNuboxDocuments(db, { tenantId, configId, period, invoices }) {
   if (!tenantId) fail(400, "Empresa requerida.");
   return withFinanceWrite(db, async (tx) => {
-    const existing = await findAllFinanceRecords(tx, { where: { tenantId, recordType: "finance_invoice" } });
+    const existing = await findAllFinanceRecords(tx, { where: { tenantId, recordType: { in: ["finance_invoice", "finance_document_adjustment"] } } });
     const evidence = await findAllFinanceRecords(tx, { where: { tenantId, recordType: { in: ["finance_invoice_receipt", "finance_reconciliation", "finance_document_adjustment", "finance_opening_balance"] } } });
     const byId = new Map(existing.filter((r) => dataOf(r).nuboxDocumentId).map((r) => [String(r.data.nuboxDocumentId), r]));
-    const seen = new Set(); const changes = []; let ignored = 0;
+    const seen = new Set(); const changes = []; let ignored = 0; let adjustmentsPending = 0;
     for (const invoice of invoices) {
       const id = invoice.externalDocumentId; const d = invoice.data;
       if (!id || seen.has(id)) fail(422, "El lote Nubox contiene identificadores ausentes o repetidos.");
       seen.add(id);
-      if (["56", "61"].includes(String(d.documentTypeCode))) fail(422, "El lote Nubox contiene notas de crédito/débito. Requieren el flujo de ajustes referenciados; no se trataron como facturas.");
-      if (![d.amount, d.balance].every((value) => Number.isFinite(value) && value >= 0) || d.balance > d.amount) fail(422, "Nubox entregó montos o saldos inconsistentes.");
+      const adjustment = ["56", "61"].includes(String(d.documentTypeCode));
+      if (!Number.isFinite(d.amount) || d.amount < 0 || (!adjustment && (!Number.isFinite(d.balance) || d.balance < 0 || d.balance > d.amount))) fail(422, "Nubox entregó montos o saldos inconsistentes.");
       const current = byId.get(id); const hash = fingerprint(snapshot(invoice)); const old = dataOf(current);
-      if (old.nuboxSnapshotHash === hash) { ignored++; continue; }
+      if (old.nuboxSnapshotHash === hash && (!adjustment || current?.recordType === 'finance_document_adjustment')) {
+        ignored++;
+        if (adjustment && current.status === 'PENDING_REVIEW') adjustmentsPending++;
+        continue;
+      }
       if (current) {
         const linked = evidence.some((r) => [r.data?.invoiceId, r.data?.documentId, ...(Array.isArray(r.data?.allocations) ? r.data.allocations : []).map((a) => a.invoiceId || a.documentId)].includes(current.id));
         const local = linked || old.lastManualPaymentId || old.lastAdjustmentId || old.reconciliationId || Number(old.paidAmount || 0) > 0 || Number(old.creditNotesTotal || 0) > 0 || Number(old.debitNotesTotal || 0) > 0;
-        if (local) fail(409, `El documento ${d.invoiceNumber} tiene pagos, ajustes o conciliaciones locales. Requiere revisión antes de reemplazar sus datos con Nubox.`);
+        if (local || current.status === 'APPLIED') fail(409, `El documento ${d.invoiceNumber} tiene pagos, ajustes o conciliaciones locales. Requiere revisión antes de reemplazar sus datos con Nubox.`);
+        if (!adjustment && current.recordType === 'finance_document_adjustment') fail(409, 'Nubox cambió el tipo de una nota a factura. Requiere revisión antes de reemplazarla.');
       }
-      changes.push({ invoice, current, hash });
+      if (adjustment) adjustmentsPending++;
+      changes.push({ invoice, current, hash, adjustment });
     }
     await lockDocumentImportPeriods(tx, tenantId, changes.map((c) => c.invoice), changes.filter((c) => c.current).map((c) => c.current), "NUBOX");
-    let created = 0; let updated = 0;
-    for (const { invoice, current, hash } of changes) {
+    let created = 0; let updated = 0; let adjustmentsCreated = 0; let adjustmentsUpdated = 0;
+    for (const { invoice, current, hash, adjustment } of changes) {
+      if (adjustment) {
+        // Nubox's balance may already include this note. Never apply it again
+        // without verified references and evidence of the provider's balance.
+        const reason = 'Nota de Nubox pendiente de verificar contra su documento de origen y el saldo del proveedor. No se aplicó automáticamente para evitar duplicar el ajuste.';
+        const next = { recordType: 'finance_document_adjustment', title: invoice.title, status: 'PENDING_REVIEW', data: {
+          ...dataOf(current), ...invoice.data, status: 'PENDING_REVIEW', sourceStatus: invoice.status,
+          documentNumber: invoice.data.invoiceNumber,
+          adjustmentType: String(invoice.data.documentTypeCode) === '61' ? 'CREDIT_NOTE' : 'DEBIT_NOTE',
+          nuboxSnapshotHash: hash, linkReviewReason: reason, requiresReview: true
+        } };
+        const note = current
+          ? await tx.industryRecord.update({ where: { id: current.id }, data: next })
+          : await tx.industryRecord.create({ data: { tenantId, ...next } });
+        if (current) adjustmentsUpdated++; else adjustmentsCreated++;
+        const previousReview = await tx.industryRecord.findFirst({ where: { tenantId, recordType: 'finance_exception', data: { path: ['adjustmentId'], equals: note.id } } });
+        const review = { title: `Revisar ${invoice.title}`.slice(0, 220), status: 'OPEN', data: {
+          type: 'NUBOX_ADJUSTMENT_LINK_REVIEW', source: 'nubox', priority: 'HIGH', issueDate: invoice.data.issueDate,
+          adjustmentId: note.id, nuboxDocumentId: invoice.externalDocumentId,
+          documentNumber: invoice.data.invoiceNumber, documentTypeCode: invoice.data.documentTypeCode,
+          amount: invoice.data.amount, customerName: invoice.data.customerName || '', customerRut: invoice.data.customerRut || '',
+          detail: reason, period
+        } };
+        if (previousReview) await tx.industryRecord.update({ where: { id: previousReview.id }, data: review });
+        else await tx.industryRecord.create({ data: { tenantId, recordType: 'finance_exception', ...review } });
+        continue;
+      }
       const next = { title: invoice.title, status: invoice.status, data: { ...dataOf(current), ...invoice.data, status: invoice.status, nuboxSnapshotHash: hash } };
       if (current) { await tx.industryRecord.update({ where: { id: current.id }, data: next }); updated++; }
       else { await tx.industryRecord.create({ data: { tenantId, recordType: "finance_invoice", ...next } }); created++; }
     }
-    const summary = { received: invoices.length, total: invoices.length, created, updated, ignored };
+    const summary = { received: invoices.length, total: invoices.length, created, updated, ignored, adjustmentsCreated, adjustmentsUpdated, adjustmentsPending };
     if (changes.length) await tx.tenantAuditLog.create({ data: { tenantId, action: "FINANCE_NUBOX_DOCUMENTS_IMPORTED", entity: "tenant_channel_config", entityId: configId, metadata: { period, ...summary } } });
     return summary;
   });

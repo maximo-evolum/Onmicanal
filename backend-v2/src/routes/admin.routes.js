@@ -24,6 +24,7 @@ function getUploadLimitByPlan(plan) {
 import bcrypt from "bcryptjs";
 import { Router } from "express";
 import multer from "multer";
+import { uploadLimits } from "../lib/upload-limits.js";
 import { prisma } from "../lib/db.js";
 import { resolveIndustryRole } from "../lib/industry-roles.js";
 import { requireRole } from "../middleware/tenant-access.js";
@@ -75,7 +76,7 @@ async function hashPassword(password) {
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 850 * 1024 * 1024, files: 8 },
+  limits: uploadLimits({ fileSize: 850 * 1024 * 1024, files: 8 }),
   fileFilter(_req, file, cb) {
     const allowed = [
       "text/csv",

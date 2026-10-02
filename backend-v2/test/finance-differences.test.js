@@ -189,6 +189,9 @@ test("si falla auditoría de reversa conserva todos los saldos aprobados", async
 test("HTTP real de rutas: propuesta, consulta, aprobación y reversa; rechaza bypass genérico y rol agente", async (t) => {
   const db = database();
   const originalTransaction = prisma.$transaction, originalFindMany = prisma.industryRecord.findMany;
+  const originalModules = prisma.tenantModule.findMany;
+  prisma.tenantModule.findMany = async ({ where }) => where.module.in.map((module) => ({ module, enabled: true, source: "MANUAL" }));
+  t.after(() => { prisma.tenantModule.findMany = originalModules; });
   const transactionStub = (fn, options) => db.$transaction(fn, options), readStub = (args) => db.industryRecord.findMany(args);
   prisma.$transaction = transactionStub; prisma.industryRecord.findMany = readStub;
   t.after(() => { prisma.$transaction = originalTransaction; prisma.industryRecord.findMany = originalFindMany; });

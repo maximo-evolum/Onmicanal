@@ -407,7 +407,7 @@ model FinancePeriodControl {
   version       Int      @default(0)
   lockVersion   Int      @default(0)
   latestCloseId String?
-  updatedAt     DateTime @updatedAt
+  updatedAt     DateTime @default(now()) @updatedAt
   tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@id([tenantId, period])
@@ -429,6 +429,7 @@ model IndustryRecord {
   assignedTo WorkspaceUser? @relation("AssignedIndustryRecords", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, recordType, status])
+  @@index([tenantId, recordType, schemaVersion])
   @@index([tenantId, assignedToId])
   @@index([tenantId, updatedAt])
 }
@@ -1362,6 +1363,7 @@ model Lead {
 
   @@index([tenantId, status])
   @@index([tenantId, nextFollowUpAt])
+  @@index([tenantId, schemaVersion])
 }
 
 model Campaign {
@@ -1444,6 +1446,7 @@ model Booking {
 
   @@index([tenantId, status])
   @@index([tenantId, date])
+  @@index([tenantId, schemaVersion])
 }
 
 model ConversationMemory {
@@ -1543,7 +1546,7 @@ model Payment {
   schemaVersion Int?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now()) @updatedAt
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
@@ -1556,4 +1559,5 @@ model Payment {
   @@index([leadId])
   @@index([bookingId])
   @@index([provider, externalId])
+  @@index([tenantId, schemaVersion])
 }

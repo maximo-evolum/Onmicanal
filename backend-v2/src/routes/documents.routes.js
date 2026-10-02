@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Router } from "express";
 import multer from "multer";
+import { uploadLimits } from "../lib/upload-limits.js";
 import { prisma } from "../lib/db.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { normalizeMetadata } from "../lib/metadata.js";
@@ -57,10 +58,10 @@ const upload = multer({
       cb(null, `${Date.now()}-${base}${ext.toLowerCase()}`);
     }
   }),
-  limits: {
+  limits: uploadLimits({
     fileSize: Number(process.env.DOCUMENT_UPLOAD_MAX_BYTES || 25 * 1024 * 1024),
     files: 10
-  },
+  }),
   fileFilter(_req, file, cb) {
     const extension = path.extname(file.originalname || "").toLowerCase();
     const allowedMimes = ALLOWED_DOCUMENT_TYPES.get(extension);

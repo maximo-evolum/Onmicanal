@@ -161,11 +161,11 @@ test("reintento Serializable de la finalización no reenvía el mensaje", async 
 test("HTTP real: módulo, rol y tenant protegen historial, previsualización y envío", async (t) => {
   const old = { modules: prisma.tenantModule.findMany, records: prisma.industryRecord.findMany, record: prisma.industryRecord.findFirst };
   let allowed = true, gmailAllowed = false, calls = 0;
-  prisma.tenantModule.findMany = async ({ where }) => where.module.in.map((module) => ({ module, enabled: allowed && (module === MODULES.FINANCE_COLLECTIONS || (module === MODULES.GMAIL && gmailAllowed)), source: "MANUAL" }));
+  prisma.tenantModule.findMany = async ({ where }) => where.module.in.map((module) => ({ module, enabled: allowed && (module === MODULES.FINANCE_COLLECTIONS || module === MODULES.FINANCE_INVOICES || (module === MODULES.GMAIL && gmailAllowed)), source: "MANUAL" }));
   prisma.industryRecord.findMany = async ({ where }) => { calls++; assert.equal(where.tenantId, "a"); return []; };
   prisma.industryRecord.findFirst = async ({ where }) => where.tenantId === "a" && where.id === "delivery" ? { data: { channel: "gmail" } } : null;
   t.after(() => { prisma.tenantModule.findMany = old.modules; prisma.industryRecord.findMany = old.records; prisma.industryRecord.findFirst = old.record; });
-  const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { id: "user", role: req.headers["x-role"] || "ADMIN" }; next(); }); app.use(financeRouter);
+const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.tenantId = req.headers["x-tenant"] || "a"; req.tenant = { id: req.tenantId, industry: "FINANCE" }; req.user = { tenantId: req.tenantId, id: "user", role: req.headers["x-role"] || "ADMIN" }; next(); }); app.use(financeRouter);
   const server = createServer(app); await new Promise((r) => server.listen(0, "127.0.0.1", r)); t.after(() => { server.closeAllConnections(); server.close(); });
   const call = (path, body, headers = {}) => fetch(`http://127.0.0.1:${server.address().port}/finance/collection-deliveries${path}`, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", ...headers }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(5000) });
   const list = await call("?tenantId=other"); assert.equal(list.status, 200); assert.equal(list.headers.get("cache-control"), "no-store"); assert.deepEqual(await list.json(), { deliveries: [] }); assert.equal(calls, 1);

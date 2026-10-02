@@ -3,10 +3,20 @@
   "version": "1.0.0",
   "type": "module",
   "main": "src/server.js",
+  "engines": {
+    "node": ">=22.23.3 <23"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "node --test test",
+    "test": "node scripts/run-tests.mjs",
+    "qa:migrate": "node scripts/finance-qa.mjs migrate",
+    "qa:status": "node scripts/finance-qa.mjs status",
+    "qa:schema": "node scripts/finance-qa.mjs schema",
+    "qa:recovery": "node scripts/finance-qa-recovery.mjs",
+    "test:database": "node scripts/finance-qa.mjs database",
+    "test:permissions": "node scripts/finance-qa.mjs permissions",
+    "test:integration": "node scripts/finance-qa.mjs all",
     "repair:admin": "node scripts/repair-admin-access.mjs",
     "audit:tenant-modules": "node scripts/normalize-tenant-modules.mjs",
     "normalize:tenant-modules": "node scripts/normalize-tenant-modules.mjs --apply",
@@ -21,34 +31,32 @@
     "migrate:broker-relational": "node scripts/migrate-broker-relational-core.mjs",
     "prisma:deploy": "prisma migrate deploy",
     "audit:production": "npm audit --omit=dev --json",
+    "audit:security": "npm audit --audit-level=low",
     "load:test": "node scripts/load-test.mjs"
   },
   "dependencies": {
-    "@prisma/client": "^6.6.0",
+    "@prisma/client": "6.19.3",
     "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
-    "express": "^4.21.2",
+    "express": "^4.22.3",
     "jszip": "^3.10.1",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^2.1.1",
+    "multer": "^2.4.0",
     "openai": "^4.104.0",
     "pdf-parse": "^1.1.1",
     "redis": "^6.1.0",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
-    "prisma": "^6.6.0"
+    "prisma": "6.19.3"
   },
   "overrides": {
     "uuid": "^11.1.1",
-    "body-parser": "1.20.6",
-    "socket.io-parser": "4.2.7",
-    "minimatch": {
-      "brace-expansion": "1.1.18"
+    "body-parser": "1.20.8",
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2"
     },
-    "readdir-glob": {
-      "brace-expansion": "2.1.4"
-    }
+    "socket.io-parser": "4.2.7"
   }
 }

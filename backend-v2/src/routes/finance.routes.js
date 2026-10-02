@@ -23,6 +23,7 @@ import { assignMovementOwner, listMovementOwners } from "../services/finance-mov
 import { overviewMetricsCsv } from "../services/finance-overview-metrics.service.js";
 import { financeDocumentSide, financeParty, financeDocumentDate, financeDocumentAmounts } from "../services/finance-document-values.service.js";
 import multer from "multer";
+import { uploadLimits } from "../lib/upload-limits.js";
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
@@ -79,6 +80,7 @@ import { createFloidConsentCase } from "../services/finance-floid.service.js";
 import { importFloidBankMovements } from "../services/finance-external-imports.service.js";
 import { getFinancePlanning, validPlanningPeriod } from "../services/finance-planning.service.js";
 import { canPerformFinanceAction, FINANCE_ACTIONS, financeRoleCapabilities } from "../services/finance-security.service.js";
+import { FINANCE_RECORD_MODULES, FINANCE_CLOSE_SOURCE_MODULES } from '../services/finance-record-access.service.js';
 
 import { FinanceOperationError, withFinanceWrite, findAllFinanceRecords } from "../services/finance-integrity.service.js";
 
@@ -86,13 +88,38 @@ import { parseFinanceContext, buildFinanceContextCoverage, loadFinanceContextRec
 
 export const financeRouter = Router();
 export const financePublicRouter = Router();
+// Defence in depth: never allow Prisma's undefined tenant filter to become
+// an unscoped read if this router is accidentally mounted without auth.
+financeRouter.use('/finance', (req, res, next) => {
+  if (!req.user?.id || !req.tenantId || req.user.tenantId !== req.tenantId) {
+    return res.status(401).json({ error: "Se requiere una sesión y empresa válidas." });
+  }
+  if (!canPerformFinanceAction(req.user.role, FINANCE_ACTIONS.VIEW)) {
+    return res.status(403).json({ error: "Tu rol no tiene acceso a Finanzas." });
+  }
+  res.set("Cache-Control", "no-store");
+  next();
+});
+// Derived workspaces must not reveal documents/movements whose source modules
+// are disabled. Applies to reads as well as approval/reversal endpoints.
+financeRouter.use('/finance', async (req, res, next) => {
+  const dependencies = /^\/(reconciliation|differences|customer-credits|agents(?:\/analyze)?$)/.test(req.path)
+    ? [MODULES.FINANCE_BANK_SYNC, MODULES.FINANCE_INVOICES]
+    : /^\/collection/.test(req.path) ? [MODULES.FINANCE_INVOICES]
+    : /^\/monthly-close(?:\/|$)/.test(req.path) ? FINANCE_CLOSE_SOURCE_MODULES
+    : /^\/(planning|budgets)(?:\/|$)/.test(req.path) ? [MODULES.FINANCE_INVOICES, MODULES.FINANCE_PAYABLES] : [];
+  try {
+    for (const module of dependencies) if (!(await requireFinanceModule(req, res, module))) return;
+    next();
+  } catch (error) { next(error); }
+});
 const historicalMigrationUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_MIGRATION_FILE_BYTES, files: 1 }
+  limits: uploadLimits({ fileSize: MAX_MIGRATION_FILE_BYTES, files: 1 })
 });
 const bankStatementUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_BANK_STATEMENT_FILE_BYTES, files: 1 }
+  limits: uploadLimits({ fileSize: MAX_BANK_STATEMENT_FILE_BYTES, files: 1 })
 });
 
 function bankStatementFileFingerprint(buffer) {
@@ -128,7 +155,7 @@ function bankStatementDuplicatePayload({ sourceFile, totalRows, validRows, dupli
 }
 const siiDteUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_SII_DTE_FILE_BYTES, files: MAX_SII_DTE_FILES }
+  limits: uploadLimits({ fileSize: MAX_SII_DTE_FILE_BYTES, files: MAX_SII_DTE_FILES })
 });
 
 async function requireFinanceModule(req, res, module) {
@@ -257,12 +284,18 @@ function isoDate(value) {
   return date && !Number.isNaN(date.getTime()) ? date : null;
 }
 
-async function nuboxDocumentForTenant(tenantId, recordId) {
+async function nuboxDocumentForTenant(tenantId, recordId, req) {
   const record = await prisma.industryRecord.findFirst({
     where: { id: recordId, tenantId, recordType: "finance_invoice" },
     select: { id: true, data: true, title: true }
   });
   const data = financeRecordData(record || {});
+  if (record && financeDocumentSide(record) === 'SUPPLIER' && req.user?.role !== 'SUPER_ADMIN'
+    && !(await ensureTenantModuleEligibility({ tenantId, module: MODULES.FINANCE_PAYABLES, tenant: req.tenant }))) {
+    const error = new Error('Cuentas por pagar no está habilitado para esta cuenta.');
+    error.statusCode = 403;
+    throw error;
+  }
   const nuboxDocumentId = cleanText(data.nuboxDocumentId);
   if (!record || cleanText(data.source).toLowerCase() !== "nubox" || !nuboxDocumentId) {
     const error = new Error("Este documento no proviene de Nubox o no tiene un identificador remoto disponible.");
@@ -297,6 +330,7 @@ financeRouter.get("/finance/workspace-records", requireRole(ROLE_GROUPS.STAFF), 
     if (!["bank_movement", "finance_exception", "finance_collection_case"].includes(type)) return res.status(400).json({ error: "Tipo de consulta no permitido." });
     const module = type === "bank_movement" ? MODULES.FINANCE_BANK_SYNC : type === "finance_collection_case" ? MODULES.FINANCE_COLLECTIONS : MODULES.FINANCE_EXCEPTIONS;
     if (!(await requireFinanceModule(req, res, module))) return;
+    if (type === 'finance_collection_case' && !(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
     const context = parseFinanceContext(req.query);
     const records = await loadFinanceContextRecords(prisma, req.tenantId);
     res.json({ records: filterFinanceContext(records, context).filter((record) => record.recordType === type) });
@@ -321,7 +355,10 @@ financeRouter.get("/finance/connection-health", requireRole(ROLE_GROUPS.VIEWERS)
 financeRouter.get("/finance/overview", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
-    const overview = await getFinanceOverview({ tenantId: req.tenantId, context: parseFinanceContext(req.query) });
+    const allowedModules = req.user.role === 'SUPER_ADMIN' ? null : (await Promise.all([...new Set(Object.values(FINANCE_RECORD_MODULES))].map(async module =>
+      await ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant }) ? module : null))).filter(Boolean);
+    const overview = await getFinanceOverview({ tenantId: req.tenantId, context: parseFinanceContext(req.query), allowedModules });
+    if (req.query.export === 'csv' && overview.restricted) return res.status(403).json({ error: 'La vista es parcial por permisos. Solicita acceso a los módulos de origen antes de exportar el informe consolidado.' });
     if (req.query.export === "csv") return res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="indicadores-financieros.csv"', "Cache-Control": "no-store" }).send(overviewMetricsCsv(overview, req.tenantId));
     res.set("Cache-Control", "no-store").json(overview);
   } catch (error) {
@@ -514,7 +551,7 @@ financeRouter.get("/finance/documents", async (req, res) => {
 financeRouter.get("/finance/documents/:id/nubox", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
-    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id);
+    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id, req);
     res.json({ sale: await getNuboxSale({ tenantId: req.tenantId, documentId: nuboxDocumentId }) });
   } catch (error) {
     console.error("Finance Nubox document error:", error);
@@ -525,7 +562,7 @@ financeRouter.get("/finance/documents/:id/nubox", async (req, res) => {
 financeRouter.get("/finance/documents/:id/nubox/details", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
-    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id);
+    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id, req);
     res.json({ details: await getNuboxSaleDetails({ tenantId: req.tenantId, documentId: nuboxDocumentId }) });
   } catch (error) {
     console.error("Finance Nubox details error:", error);
@@ -536,7 +573,7 @@ financeRouter.get("/finance/documents/:id/nubox/details", async (req, res) => {
 financeRouter.get("/finance/documents/:id/nubox/references", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
-    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id);
+    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id, req);
     res.json({ references: await getNuboxSaleReferences({ tenantId: req.tenantId, documentId: nuboxDocumentId }) });
   } catch (error) {
     console.error("Finance Nubox references error:", error);
@@ -547,7 +584,7 @@ financeRouter.get("/finance/documents/:id/nubox/references", async (req, res) =>
 financeRouter.get("/finance/documents/:id/nubox/:format", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_INVOICES))) return;
-    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id);
+    const { nuboxDocumentId } = await nuboxDocumentForTenant(req.tenantId, req.params.id, req);
     const format = String(req.params.format).toLowerCase();
     const file = await downloadNuboxSaleFile({ tenantId: req.tenantId, documentId: nuboxDocumentId, format });
     res.setHeader("Content-Type", file.contentType || (format === "pdf" ? "application/pdf" : "application/xml"));

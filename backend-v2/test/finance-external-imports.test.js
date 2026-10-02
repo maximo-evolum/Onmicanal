@@ -60,8 +60,70 @@ test("Nubox permite repetir lote idéntico sin reescribir un mes cerrado", async
 test("Nubox no sobrescribe saldos con pago local o evidencia enlazada", async () => {
   for (const mode of ["balance", "receipt"]) { const db = database(); await nubox(db); const row = db.rows[0]; if (mode === "balance") { row.data.paidAmount = 40; row.data.balance = 60; } else db.rows.push({ id: "receipt", tenantId: "a", recordType: "finance_invoice_receipt", data: { invoiceId: row.id } }); const before = structuredClone(db.rows); await assert.rejects(nubox(db, [invoice({ balance: 80 })]), /locales/); assert.deepEqual(db.rows, before); }
 });
-test("Nubox rechaza nota sin flujo de ajustes, montos inválidos y fechas desconocidas", async () => {
-  for (const extra of [{ documentTypeCode: "61" }, { amount: NaN }, { balance: 101 }, { issueDate: "" }]) { const db = database(); await assert.rejects(nubox(db, [invoice(extra)])); assert.equal(db.rows.length, 0); }
+test("Nubox rechaza montos inválidos y fechas desconocidas", async () => {
+  for (const extra of [{ amount: NaN }, { balance: 101 }, { issueDate: "" }]) { const db = database(); await assert.rejects(nubox(db, [invoice(extra)])); assert.equal(db.rows.length, 0); }
+});
+
+const note = (code = '61', extra = {}) => ({ ...invoice(), externalDocumentId: `note-${code}`, title: `Nota ${code} · Cliente de prueba`, data: { ...invoice().data, nuboxDocumentId: `note-${code}`, invoiceNumber: `N-${code}`, documentTypeCode: code, amount: 20, balance: 0, ...extra } });
+
+test('Nubox importa facturas con NC y ND sin bloquear ni aplicar dos veces los ajustes', async () => {
+  const db = database(); const result = await nubox(db, [note(), invoice({ balance: 80 }), note('56')]);
+  assert.equal(result.created, 1); assert.equal(result.adjustmentsCreated, 2); assert.equal(result.adjustmentsPending, 2);
+  assert.equal(byType(db, 'finance_invoice').length, 1);
+  assert.equal(byType(db, 'finance_invoice')[0].data.balance, 80);
+  assert.equal(byType(db, 'finance_invoice')[0].data.creditNotesTotal, undefined);
+  assert.deepEqual(byType(db, 'finance_document_adjustment').map(r => r.data.adjustmentType), ['CREDIT_NOTE', 'DEBIT_NOTE']);
+  assert.ok(byType(db, 'finance_document_adjustment').every(r => r.status === 'PENDING_REVIEW'));
+  assert.equal(byType(db, 'finance_exception').length, 2);
+  assert.ok(byType(db, 'finance_exception').every(r => r.data.issueDate === '2026-01-10' && r.data.adjustmentId));
+});
+
+test('reintentar notas idénticas no duplica notas ni excepciones, incluso en período cerrado', async () => {
+  const db = database(); await nubox(db, [note()]); close(db, '2026-01');
+  const result = await nubox(db, [note()]);
+  assert.equal(result.ignored, 1); assert.equal(result.adjustmentsPending, 1);
+  assert.equal(db.rows.length, 2); assert.equal(db.audits.length, 1);
+});
+
+test('nota modificada actualiza una sola revisión y nunca altera el saldo de factura', async () => {
+  const db = database(); await nubox(db, [invoice(), note()]);
+  const result = await nubox(db, [note('61', { amount: 30 })]);
+  assert.equal(result.adjustmentsUpdated, 1); assert.equal(byType(db, 'finance_exception').length, 1);
+  assert.equal(byType(db, 'finance_exception')[0].data.amount, 30);
+  assert.equal(byType(db, 'finance_invoice')[0].data.balance, 100);
+});
+
+test('nota ya aplicada no se sobrescribe si Nubox cambia su contenido', async () => {
+  const db = database(); await nubox(db, [note()]);
+  byType(db, 'finance_document_adjustment')[0].status = 'APPLIED'; const before = structuredClone(db.rows);
+  await assert.rejects(nubox(db, [note('61', { amount: 30 })]), /locales/);
+  assert.deepEqual(db.rows, before);
+});
+
+test('notas conservan atomicidad, protección de períodos y validación de montos y fechas', async () => {
+  for (const extra of [{ amount: NaN }, { amount: -20 }, { issueDate: '' }]) {
+    const db = database(); await assert.rejects(nubox(db, [invoice(), note('61', extra)])); assert.equal(db.rows.length, 0);
+  }
+  const db = database(); close(db, '2026-02');
+  await assert.rejects(nubox(db, [invoice(), note('61', { issueDate: '2026-02-10' })]), /cerrado/);
+  assert.equal(db.rows.length, 0);
+});
+
+test('fallo al auditar lote mixto revierte facturas, notas y excepciones juntas', async () => {
+  const db = database(); db.tenantAuditLog.create = async () => { throw new Error('audit'); };
+  await assert.rejects(nubox(db, [invoice(), note()]), /audit/); assert.equal(db.rows.length, 0);
+});
+
+test('notas del mismo Nubox ID en empresas diferentes permanecen aisladas', async () => {
+  const db = database(); await nubox(db, [note()], 'a'); await nubox(db, [note()], 'b');
+  assert.equal(byType(db, 'finance_document_adjustment').length, 2);
+  assert.deepEqual(byType(db, 'finance_exception').map(r => r.tenantId), ['a', 'b']);
+});
+
+test('dos importaciones simultáneas del mismo lote mixto no duplican notas', async () => {
+  const db = database(); await Promise.all([nubox(db, [invoice(), note()]), nubox(db, [invoice(), note()])]);
+  assert.equal(byType(db, 'finance_invoice').length, 1); assert.equal(byType(db, 'finance_document_adjustment').length, 1);
+  assert.equal(byType(db, 'finance_exception').length, 1); assert.equal(db.audits.length, 1);
 });
 test("Nubox encuentra documento más allá de mil registros", async () => {
   const db = database(); for (let i = 0; i < 1001; i++) db.rows.push({ id: `old-${i}`, tenantId: "a", recordType: "finance_invoice", data: {} }); await nubox(db); assert.equal((await nubox(db)).ignored, 1); assert.equal(db.rows.length, 1002);

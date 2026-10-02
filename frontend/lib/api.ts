@@ -838,6 +838,8 @@ export async function getIndustryRecords(type?: string): Promise<IndustryRecord[
 }
 
 export type FinanceOverview = {
+  restricted?: boolean;
+  accessNote?: string | null;
   documentQuality?: { inactive: number; adjustments: number; invalid: number };
   context: FinanceWorkspaceContext; scopeNote: string;
   schedule: { asOf: string; next30Days: number; undatedDocuments: number; basis: string; weeks: Array<{ label: string; from: string; to: string; amount: number; documents: number }> };
