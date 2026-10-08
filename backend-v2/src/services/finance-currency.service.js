@@ -15,6 +15,7 @@ export function requireFinanceCurrency(value) {
 export function validFinanceAmount(value, currency) {
   const digits = FINANCE_CURRENCIES[currency];
   if (digits === undefined || typeof value !== "number" || !Number.isFinite(value)) return false;
+  if (digits === 0) return Number.isSafeInteger(value);
   const units = value * 10 ** digits;
   return Number.isSafeInteger(Math.round(units)) && Math.abs(units - Math.round(units)) < 0.000001;
 }

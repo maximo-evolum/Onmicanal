@@ -4,6 +4,12 @@ import crypto from "crypto";
 let client = null;
 let connecting = null;
 
+export async function closeRedisClient() {
+  if (connecting) await connecting;
+  if (client?.isOpen) await client.quit();
+  client = null;
+}
+
 const connectTimeoutMs = Math.max(500, Number(process.env.REDIS_CONNECT_TIMEOUT_MS || 1500));
 
 export async function getRedisClient() {

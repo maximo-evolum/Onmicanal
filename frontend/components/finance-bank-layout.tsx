@@ -1,4 +1,5 @@
 "use client";
+import { FinanceFeedback } from "./finance-feedback";
 import { useEffect, useRef, useState } from "react";
 import { getBankFileLayout, reanalyzeFinanceBankImport, type BankFileLayout, type BankFileSelection, type FinanceBankStatementPreview } from "@/lib/api";
 
@@ -41,7 +42,7 @@ export function FinanceBankLayout({ jobId, revision, selection = {}, disabled, o
         <label>Fila de encabezado<input type="number" min="1" max="100000" value={header} placeholder={String(layout?.detectedHeaderRow || "Automático")} disabled={disabled || busy} onChange={(e) => setHeader(e.target.value)} /></label>
         <label>Última fila de datos (opcional)<input type="number" min="1" max="100000" value={end} placeholder="Hasta el final" disabled={disabled || busy} onChange={(e) => setEnd(e.target.value)} /></label>
       </div>
-      {error && <p role="alert" className="finance-note">{error}</p>}
+      {error && <FinanceFeedback kind="error" message={error} />}
       {!layout && !error && <p role="status">Leyendo estructura del original…</p>}
       {layout && !layout.supported && <p>{layout.message}</p>}
       {layout?.supported && <><p>Hoja: {layout.sheet || "texto"} · Encabezado detectado: {layout.detectedHeaderRow || "ninguno"} · Última fila: {layout.lastRow}. Esta vista incluye carátula y totales para que puedas dejarlos fuera de la tabla.</p>

@@ -9,6 +9,7 @@ import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { decryptSecret, encryptSecret, hasSecret } from "../lib/credential-crypto.js";
 import { syncNuboxForTenant } from "../services/finance-sync.service.js";
+import { requestNubox } from "../services/nubox-http.service.js";
 import { createTenantNotification } from "../lib/notifications.js";
 import { CHILEAN_FINANCIAL_INSTITUTIONS, normalizeChileanBankAccounts } from "../lib/finance-integrations.js";
 
@@ -432,92 +433,9 @@ function providerStatus(provider, config) {
   return "CONNECTED";
 }
 
-function nuboxBaseUrl() {
-  const configured = String(env.nuboxApiBaseUrl || "").trim();
-  if (!configured) {
-    throw new Error("Falta configurar la URL base de Nubox en el servidor. Agrega NUBOX_API_BASE_URL con la URL entregada por Nubox para este ambiente.");
-  }
-
-  let parsed;
-  try {
-    parsed = new URL(configured);
-  } catch {
-    throw new Error("NUBOX_API_BASE_URL no tiene un formato de URL valido.");
-  }
-
-  // Nubox entrega un host distinto para certificación y producción. No se
-  // restringe a un dominio fijo porque el host oficial puede variar por
-  // ambiente; esta variable sólo existe en la configuración segura del
-  // servidor, nunca en un formulario de tenant.
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-    throw new Error("NUBOX_API_BASE_URL debe ser una URL HTTPS válida, sin credenciales incluidas, entregada por Nubox.");
-  }
-  return configured.replace(/\/$/, "");
-}
-
-function nuboxAuthorization(value) {
-  const token = String(value || "").trim();
-  if (!token) return null;
-  return /^bearer\s+/i.test(token) ? token : `Bearer ${token}`;
-}
-
-function nuboxErrorMessage(status, payload) {
-  const message = typeof payload?.message === "string" ? payload.message.trim() : "";
-  if (status === 401 || status === 403) return "Nubox rechazo las credenciales. Revisa x-api-key y Authorization.";
-  if (status === 404) return "Nubox no encontro el recurso solicitado. Revisa NUBOX_API_BASE_URL y el ambiente configurado.";
-  if (status >= 500) return "Nubox no esta disponible temporalmente. Intenta nuevamente mas tarde.";
-  return message ? `Nubox no pudo validar la conexion: ${message.slice(0, 180)}` : `Nubox no pudo validar la conexion (HTTP ${status}).`;
-}
-
-function nuboxNetworkErrorMessage(error, action = "validar la conexión") {
-  const code = String(error?.cause?.code || error?.code || "").toUpperCase();
-  if (["ENOTFOUND", "EAI_AGAIN"].includes(code)) {
-    return "EVOLUM no pudo encontrar el servidor de Nubox. Revisa la URL base configurada y vuelve a intentar.";
-  }
-  if (["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET"].includes(code)) {
-    return "No fue posible establecer una conexión segura con Nubox desde el servidor. El servicio puede estar temporalmente no disponible; inténtalo nuevamente.";
-  }
-  return `No fue posible ${action} con Nubox desde el servidor. Revisa el diagnóstico de Railway o intenta nuevamente en unos minutos.`;
-}
-
-async function nuboxRequest(config, path) {
-  const apiKey = decryptSecret(config?.accessToken);
-  const authorization = nuboxAuthorization(decryptSecret(config?.verifyToken));
-  if (!apiKey || !authorization) throw new Error("Faltan las credenciales de Nubox.");
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  const baseUrl = nuboxBaseUrl();
-  try {
-    const response = await fetch(`${baseUrl}${path}`, {
-      method: "GET",
-      headers: {
-        Authorization: authorization,
-        "X-Api-Key": apiKey,
-        "Content-Type": "application/json",
-        Accept: "application/json"
-      },
-      signal: controller.signal
-    });
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(nuboxErrorMessage(response.status, payload));
-    return { payload, total: Number(response.headers.get("x-total-count") || 0) || 0 };
-  } catch (error) {
-    if (error?.name === "AbortError") throw new Error("La validacion con Nubox excedio el tiempo de espera. Intenta nuevamente.");
-    if (error instanceof TypeError && /fetch failed/i.test(String(error.message || ""))) {
-      // Nunca se registran encabezados ni secretos: sólo el host y el código de
-      // red permiten diagnosticar problemas de salida desde Railway.
-      console.warn("[NUBOX_REQUEST_FAILED]", {
-        host: new URL(baseUrl).host,
-        endpoint: String(path || "").split("?")[0],
-        code: error?.cause?.code || error?.code || "unknown"
-      });
-      throw new Error(nuboxNetworkErrorMessage(error));
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+async function nuboxRequest(config, path, options = {}) {
+  return requestNubox({ baseUrl: env.nuboxApiBaseUrl, apiKey: decryptSecret(config?.accessToken),
+    token: decryptSecret(config?.verifyToken), path, ...options });
 }
 
 function nuboxSalesFromPayload(payload) {

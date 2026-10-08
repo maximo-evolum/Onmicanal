@@ -6,6 +6,7 @@
     "node": ">=22.23.3 <23"
   },
   "scripts": {
+    "test:usability": "node --test test/finance-usability.test.cjs",
     "dev": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
     "start": "next start",

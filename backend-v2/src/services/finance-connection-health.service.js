@@ -1,4 +1,5 @@
 import { MODULES } from "../lib/modules.js";
+import { nuboxEnvironment } from "./nubox-http.service.js";
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
 
 export const CONNECTION_HEALTH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -27,7 +28,7 @@ export function editableConnectionMetadata(value = {}) {
   return Object.fromEntries(Object.entries(value).filter(([key]) => !/^(lastTest|lastSync|lastConnection|lastAutomation|connectionConfigChangedAt|connectionReady|connectedAt|disconnectedAt|oauthExpiresAt|oauthConnectedAt|oauthDiscovery|hasRefreshToken)/i.test(key)));
 }
 
-export function buildFinanceConnectionHealth({ tenantId, configs = [], consents = [], allowedModules = [], now = new Date() }) {
+export function buildFinanceConnectionHealth({ tenantId, configs = [], consents = [], allowedModules = [], now = new Date(), nuboxBaseUrl = "" }) {
   if (!tenantId) throw new FinanceOperationError(401, "Se requiere una empresa autenticada.");
   const nowMs = now.getTime();
   const allowed = new Set(allowedModules);
@@ -70,6 +71,13 @@ export function buildFinanceConnectionHealth({ tenantId, configs = [], consents 
       lastCheckedAt, lastSuccessAt, expiresAt, sync: { status: syncStatus, startedAt: syncStartedAt, completedAt: syncFinishedAt, lastSuccessAt: lastSuccessfulSyncAt,
         period: source.sync && (syncStartedAt || syncFinishedAt) && /^\d{4}-(0[1-9]|1[0-2])$/.test(String(m.lastSyncPeriod || "")) ? m.lastSyncPeriod : null },
       targetUrl: source.manual ? "/finance?tab=cartolas" : "/connections" };
+    const capabilities = {
+      finance_nubox: { mode: "API de ventas", available: "Consulta de ventas por período e historial, detalle y descarga de PDF/XML; sincronización con revisión de ajustes.", limitation: "Esta conexión no importa automáticamente facturas de proveedores. Una respuesta exitosa no acredita todos los permisos ni todos los períodos.", nextStep: "Habilita la empresa en Nubox, prueba la conexión y sincroniza un período conocido para comparar documentos y totales.", environment: nuboxEnvironment(nuboxBaseUrl) },
+      finance_sii: { mode: "Preparación e importación", available: "Configuración tributaria e incorporación de DTE XML para revisión.", limitation: "No hay una conexión directa al SII verificada por este panel ni descarga tributaria automática acreditada.", nextStep: "Completa las habilitaciones y pruebas del servicio específico del SII antes de usarlo como fuente automática." },
+      finance_open_banking: { mode: "Recepción de datos con consentimiento", available: "Registro de solicitudes de consentimiento y recepción de lotes bancarios para normalización.", limitation: "Registrar una solicitud no abre por sí solo la autorización bancaria ni inicia consultas periódicas al banco.", nextStep: "Acordar con el proveedor bancario el flujo de autorización, contrato de API y pruebas de recepción para cada cuenta." },
+      finance_bank_statements: { mode: "Archivos", available: "Carga de cartolas, revisión de columnas, clasificación de abonos/cargos y control de duplicados.", limitation: "No descarga movimientos del banco; requiere un archivo aportado por el usuario.", nextStep: "Sube el archivo, revisa banco, cuenta, moneda y período antes de incorporarlo." }
+    };
+    if (capabilities[source.key]) result.capability = capabilities[source.key];
     if (source.key === "finance_open_banking") {
       const own = consents.filter((c) => c.tenantId === tenantId && c.recordType === "finance_open_banking_consent");
       const completed = own.filter((c) => c.status === "SYNCED" && timestamp(c.data?.lastSyncAt) && millis(c.data.lastSyncAt) <= nowMs);

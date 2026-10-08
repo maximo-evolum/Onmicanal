@@ -75,6 +75,7 @@ export async function analyzeBankImportJob(db, { tenantId, id, account, reviewCo
   const claimed = await withFinanceWrite(db, async (tx) => {
     const job = await getBankImportJob(tx, tenantId, id);
     if (background && !["RECEIVED", "PROCESSING"].includes(job.status)) throw new FinanceOperationError(409, "La carga ya no está pendiente de análisis.");
+    if (background && Number(job.attempts || 0) >= IMPORT_MAX_AUTOMATIC_ATTEMPTS) throw new FinanceOperationError(409, "La carga agotó sus intentos automáticos. Revisa el original antes de reintentar manualmente.");
     if (reviewConfig !== undefined && (!Number.isInteger(expectedRevision) || expectedRevision !== job.revision)) throw new FinanceOperationError(409, "La revisión cambió. Recupérala antes de guardar cambios.");
     const previous = job.status === "READY" ? await tx.financeBankImportRevision.findUnique({ where: { jobId_revision: { jobId: id, revision: job.revision } } }) : null;
     const previousRows = previous?.preview?.sourceRows;
@@ -111,6 +112,12 @@ export async function analyzeBankImportJob(db, { tenantId, id, account, reviewCo
     return { ...preview, jobId: id, revision: claimed.revision };
   } catch (error) {
     const transient = ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(error?.code);
+    // The COMMIT may have succeeded even if its response was lost. Reuse only
+    // this exact persisted revision; never run the parser again to guess success.
+    if (transient) {
+      const recovered = await readBankImportPreview(db, tenantId, id).catch(() => null);
+      if (recovered?.job.status === "READY" && recovered.job.revision === claimed.revision && recovered.preview) return recovered.preview;
+    }
     const retry = background && transient && claimed.attempts < IMPORT_MAX_AUTOMATIC_ATTEMPTS;
     const message = transient ? "La base de datos no estuvo disponible durante el análisis. El archivo original se conserva."
       : error instanceof FinanceOperationError ? String(error.message).slice(0, 1000)
@@ -132,12 +139,12 @@ export async function runBankImportWorker(db, { analyze, now = new Date(), limit
   ] }, orderBy: [{ updatedAt: "asc" }, { id: "asc" }], take: Math.max(1, Math.min(10, limit)) });
   const results = [];
   for (const job of jobs) {
-    // Repeated process crashes eventually require human review instead of an infinite loop.
-    if (job.status === "PROCESSING" && Number(job.attempts || 0) >= IMPORT_MAX_AUTOMATIC_ATTEMPTS) {
-      const result = await db.financeBankImportJob.updateMany({ where: { id: job.id, tenantId: job.tenantId, status: "PROCESSING", runToken: job.runToken, updatedAt: job.updatedAt }, data: { status: "FAILED", runToken: null, error: "El análisis se interrumpió tres veces. Original conservado; revisa la carga y reintenta manualmente." } });
-      results.push({ id: job.id, status: result.count ? "FAILED" : "CHANGED" }); continue;
-    }
     try {
+      // Repeated process crashes eventually require human review instead of an infinite loop.
+      if (Number(job.attempts || 0) >= IMPORT_MAX_AUTOMATIC_ATTEMPTS) {
+        const result = await db.financeBankImportJob.updateMany({ where: { id: job.id, tenantId: job.tenantId, status: job.status, revision: job.revision, runToken: job.runToken, updatedAt: job.updatedAt }, data: { status: "FAILED", runToken: null, error: "El análisis se interrumpió tres veces. Original conservado; revisa la carga y reintenta manualmente." } });
+        results.push({ id: job.id, status: result.count ? "FAILED" : "CHANGED" }); continue;
+      }
       await analyzeBankImportJob(db, { tenantId: job.tenantId, id: job.id, analyze, background: true });
       results.push({ id: job.id, status: "READY" });
     } catch (error) {
@@ -150,14 +157,15 @@ export async function runBankImportWorker(db, { analyze, now = new Date(), limit
 
 export function startBankImportWorker(db, analyze, { intervalMs = 5000, onError = () => {} } = {}) {
   let running = false, stopped = false;
+  let current = Promise.resolve();
   const tick = async () => {
     if (running || stopped) return;
     running = true;
-    try { await runBankImportWorker(db, { analyze }); } catch { onError("No se pudo consultar la cola de cartolas; se reintentará."); }
+    try { current = runBankImportWorker(db, { analyze }); await current; } catch { onError("No se pudo consultar la cola de cartolas; se reintentará."); }
     finally { running = false; }
   };
   const timer = setInterval(tick, intervalMs); timer.unref?.(); void tick();
-  return () => { stopped = true; clearInterval(timer); };
+  return () => { stopped = true; clearInterval(timer); return current.catch(() => {}); };
 }
 export async function cancelBankImportJob(db, tenantId, id) {
   return withFinanceWrite(db, async (tx) => {

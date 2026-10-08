@@ -215,6 +215,28 @@ export async function ensureTenantModuleEligibility({ tenantId, module, tenant: 
   return true;
 }
 
+// One request-scoped read for aggregate screens. Do not cache permissions
+// between requests: a manual revocation must affect the next request.
+export async function getEligibleTenantModules({ tenantId, modules = [], tenant = null } = {}) {
+  if (!tenantId) return [];
+  const requested = [...new Set(modules.filter(Boolean))];
+  if (!requested.length) return [];
+  const candidates = new Map(requested.map(module => [module, getModuleCandidates(module)]));
+  const configured = await prisma.tenantModule.findMany({
+    where: { tenantId, module: { in: [...new Set([...candidates.values()].flat())] } },
+    select: { module: true, enabled: true, source: true }
+  });
+  const allowed = [];
+  for (const module of requested) {
+    const rows = configured.filter(row => candidates.get(module).includes(row.module));
+    // Keep the same alias/configuration precedence as the single-module path.
+    if (rows.some(row => row.enabled)) allowed.push(module);
+    else if (!rows.some(row => row.source === "MANUAL" && !row.enabled)
+      && await ensureTenantModuleEligibility({ tenantId, module, tenant })) allowed.push(module);
+  }
+  return allowed;
+}
+
 export async function setTenantModules({ tenantId, modules = [], source = "MANUAL" }) {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },

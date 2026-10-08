@@ -879,6 +879,7 @@ export type FinanceWorkspaceContext = { period: string; accountKey: string; curr
 export type FinanceConnectionHealth = {
   checkedAt: string; maxVerificationAgeHours: number; scope: string; canManage: boolean;
   items: Array<{ key: string; label: string; status: string; statusLabel: string; note: string;
+    capability?: { mode: string; available: string; limitation: string; nextStep: string; environment?: "CERTIFICATION" | "PRODUCTION" | "UNCONFIRMED" };
     lastCheckedAt: string | null; lastSuccessAt: string | null; expiresAt: string | null; targetUrl: string;
     sync: { status: string; startedAt: string | null; completedAt: string | null; lastSuccessAt: string | null; period: string | null };
     banking?: { total: number; pending: number; received: number; failed: number; lastReceivedAt: string | null };

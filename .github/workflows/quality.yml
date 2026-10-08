@@ -28,7 +28,7 @@ jobs:
       - run: npm test
 
   finance-database:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16-bookworm
@@ -45,6 +45,16 @@ jobs:
         ports: ["56379:6379"]
         options: >-
           --health-cmd "redis-cli ping"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+      postgres-recovery:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: evolum_test
+          POSTGRES_PASSWORD: evolum_local_test_only
+          POSTGRES_DB: evolum_finance_test
+        ports: ["55433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U evolum_test -d evolum_finance_test"
           --health-interval 3s --health-timeout 3s --health-retries 20
     env:
       NODE_ENV: test
@@ -68,6 +78,17 @@ jobs:
       - run: npm run qa:status
       - run: npm run qa:schema
       - run: npm run test:integration
+      - run: npm run test:startup
+      - name: Install matching PostgreSQL backup tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+      - name: Restore synthetic backup into empty isolated database
+        run: npm run qa:recovery
+        env:
+          QA_RECOVERY_DATABASE_URL: postgresql://evolum_test:evolum_local_test_only@127.0.0.1:55433/evolum_finance_test
+          QA_PG_BIN: /usr/lib/postgresql/16/bin
+          QA_BACKUP_DIR: ${{ runner.temp }}/finance-recovery
 
   frontend:
     runs-on: ubuntu-latest
@@ -83,6 +104,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run audit:security
+      - run: npm run test:usability
       - run: npm run build
 
   mobile:

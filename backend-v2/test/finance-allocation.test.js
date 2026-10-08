@@ -158,6 +158,42 @@ test("si falla la auditoría no se confirma una actualización parcial", async (
   assert.equal(db.rows.length, 2); assert.equal(db.rows.find((row) => row.id === "i").data.balance, 100);
 });
 
+test("no vuelve a aplicar un movimiento pendiente que conserva evidencia financiera activa", async () => {
+  for (const recordType of ["finance_reconciliation", "finance_invoice_receipt"]) {
+    const db = database([movement(), invoice(), { id: "orphan", tenantId: "a", recordType,
+      status: recordType === "finance_reconciliation" ? "APPROVED" : "RECONCILED", data: { movementId: "m" } }]);
+    const before = structuredClone(db.rows);
+    await assert.rejects(apply(db), /evidencia financiera/);
+    assert.deepEqual(db.rows, before);
+  }
+});
+
+test("la reversa rechaza evidencia alterada aunque el total de los comprobantes cuadre", async () => {
+  for (const mutate of [
+    (r, receipts) => { receipts[0].data.amount = 60; receipts[1].data.amount = 40; },
+    (r) => { r.data.amount = 99; },
+    (r) => { r.data.allocations = []; },
+    (r) => { r.data.invoiceIds = ["i", "i"]; },
+    (r, receipts) => { receipts[0].data.reversedAt = "2026-01-21"; },
+    (r, receipts) => { receipts[0].data.currency = "USD"; }
+  ]) {
+    const db = database([movement(), movement("n"), invoice("i", 200), invoice("j", 200)]);
+    const result = await apply(db, [{ invoiceId: "i", amount: 50 }, { invoiceId: "j", amount: 50 }]);
+    await apply(db, [{ invoiceId: "i", amount: 50 }, { invoiceId: "j", amount: 50 }], { movementId: "n" });
+    mutate(db.rows.find(r => r.id === result.reconciliation.id), db.rows.filter(r => r.recordType === "finance_invoice_receipt" && r.data.reconciliationId === result.reconciliation.id));
+    const before = structuredClone(db.rows);
+    await assert.rejects(reverse(db, result.reconciliation.id), /evidencia|asignaciones/);
+    assert.deepEqual(db.rows, before);
+  }
+});
+
+test("movimientos excluidos o con estado conciliado alternativo no son reutilizables", () => {
+  for (const mutate of [(m) => { m.status = "EXCLUDED"; }, (m) => { m.status = "RECONCILED"; }, (m) => { m.data.excluded = true; }]) {
+    const m = movement(); mutate(m);
+    assert.throws(() => planFinanceAllocation(m, [invoice()], [{ invoiceId: "i", amount: 100 }]), /conciliado|excluido/);
+  }
+});
+
 test("enviar a revisión no puede deshacer una aprobación ni duplicar excepciones", async () => {
   const db = database([movement(), invoice()]);
   const review = () => sendFinanceMovementToReview(db, { tenantId: "a", userId: "admin", movementId: "m", detail: "Validar origen del pago" });

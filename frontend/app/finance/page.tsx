@@ -3,6 +3,10 @@
 import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { FinanceBankReview } from "@/components/finance-bank-review";
+import { FinanceFeedback, FinanceLoading, type FinanceFeedbackKind } from "@/components/finance-feedback";
+import { FinanceImportStatus } from "@/components/finance-import-status";
+import { canIncorporateSelectedImports, filterLoadedImports, mergeImportJobs, invalidateImportReviews } from "@/lib/finance-import-presentation";
+import { FinanceImportMonitor, type ImportMonitorState } from "@/components/finance-import-monitor";
 import { FinanceBankAccounts } from "@/components/finance-bank-accounts";
 import { FinanceProcessReports } from "@/components/finance-process-reports";
 import { FinanceConnectionHealth } from "@/components/finance-connection-health";
@@ -103,7 +107,7 @@ type FinanceDocumentStatusFilter = "all" | "paid" | "cancelled" | "pending" | "o
 type NuboxResourceKind = "documento" | "productos" | "referencias";
 type NuboxResourcePanel = { documentId: string; title: string; value: unknown };
 type BankStatementAccountInput = { bankKey: string; accountAlias: string; accountType: string; accountLast4: string; bankAccountId?: string; currency?: string };
-type BankStatementQueueItem = { reviewDirty?: boolean; id: string; file: File | null; selected: boolean; preview: FinanceBankStatementPreview; rows: Array<Record<string, unknown>>; account: BankStatementAccountInput };
+type BankStatementQueueItem = { reviewDirty?: boolean; staleReview?: boolean; id: string; file: File | null; selected: boolean; preview: FinanceBankStatementPreview; rows: Array<Record<string, unknown>>; account: BankStatementAccountInput };
 type BankStatementUploadProgress = { phase: "UPLOAD" | "REVIEW" | "IMPORT"; total: number; processed: number; ready: number; failed: number; currentFile: string; finished: boolean };
 
 const tabs: Array<{ key: FinanceTab; label: string; module: ModuleAccessKey; detail: string }> = [
@@ -343,6 +347,9 @@ function FinanceWorkspace() {
   const [bankStatementQueue, setBankStatementQueue] = useState<BankStatementQueueItem[]>([]);
   const [bankAccounts, setBankAccounts] = useState<FinanceBankAccount[]>([]);
   const [savedBankJobs, setSavedBankJobs] = useState<FinanceBankImportJob[]>([]);
+  const [importMonitor, setImportMonitor] = useState<ImportMonitorState>({ offline: false, checking: false, error: "", checkedAt: null });
+  const bankImportLock = useRef(false);
+  useEffect(() => { setBankStatementQueue(current => invalidateImportReviews(current, savedBankJobs)); }, [savedBankJobs]);
   const [bankJobsCursor, setBankJobsCursor] = useState<string | null>(null);
   const canManageImports = ["OWNER", "ADMIN", "SUPER_ADMIN"].includes(String(agent?.role || "").toUpperCase());
   const [bankStatementBatches, setBankStatementBatches] = useState<FinanceBankStatementBatch[]>([]);
@@ -380,7 +387,16 @@ function FinanceWorkspace() {
     return date.toISOString().slice(0, 7);
   });
   const [nuboxHistoryEndPeriod, setNuboxHistoryEndPeriod] = useState(() => new Date().toISOString().slice(0, 7));
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, updateMessage] = useState<string | null>(null);
+  const [messageKind, setMessageKind] = useState<FinanceFeedbackKind>("info");
+  function setMessage(value: string | null | ((previous: string | null) => string | null), kind: FinanceFeedbackKind = "info") {
+    setMessageKind(kind); updateMessage(value);
+  }
+  function setErrorMessage(value: string | null | ((previous: string | null) => string | null)) { setMessage(value, "error"); }
+  const [importQuery, setImportQuery] = useState("");
+  const [importStatusFilter, setImportStatusFilter] = useState("ALL");
+  const visibleBankJobs = filterLoadedImports(savedBankJobs, importQuery, importStatusFilter);
+  const canImportSelected = canIncorporateSelectedImports(bankStatementQueue);
   const [search, setSearch] = useState("");
   const [invoiceForm, setInvoiceForm] = useState({ number: "", client: "", rut: "", documentType: "Factura de cliente", issueDate: new Date().toISOString().slice(0, 10), dueDate: "", netAmount: "", vatAmount: "", amount: "", currency: "CLP", paymentMethod: "", paymentIntermediary: "", commissionAmount: "", settlementReference: "", referenceDocumentType: "", referenceDocumentNumber: "" });
   const [payableForm, setPayableForm] = useState({ number: "", supplier: "", rut: "", category: "", documentType: "Documento de proveedor", issueDate: new Date().toISOString().slice(0, 10), dueDate: "", netAmount: "", vatAmount: "", amount: "", currency: "CLP", paymentMethod: "", paymentIntermediary: "", commissionAmount: "", settlementReference: "", referenceDocumentType: "", referenceDocumentNumber: "" });
@@ -457,7 +473,7 @@ function FinanceWorkspace() {
     } catch (error) {
       if (current()) {
         const detail = error instanceof Error ? error.message : "No se pudieron cargar los datos financieros.";
-        setMessage(previous => preserveMessage && previous ? `${previous} No se pudo refrescar la vista: ${detail}` : detail);
+        setErrorMessage(previous => preserveMessage && previous ? `${previous} No se pudo refrescar la vista: ${detail}` : detail);
       }
     } finally {
       if (current()) setLoading(false);
@@ -478,7 +494,7 @@ function FinanceWorkspace() {
 
   async function createInvoice(event: FormEvent) {
     event.preventDefault();
-    if (!invoiceForm.number || !invoiceForm.client || !invoiceForm.amount || !invoiceForm.dueDate) return setMessage("Completa numero, cliente, monto y vencimiento de la factura.");
+    if (!invoiceForm.number || !invoiceForm.client || !invoiceForm.amount || !invoiceForm.dueDate) return setErrorMessage("Completa numero, cliente, monto y vencimiento de la factura.");
     setSaving(true);
     try {
       const total = amount(invoiceForm.amount);
@@ -491,7 +507,7 @@ function FinanceWorkspace() {
       setInvoiceForm({ number: "", client: "", rut: "", documentType: "Factura de cliente", issueDate: new Date().toISOString().slice(0, 10), dueDate: "", netAmount: "", vatAmount: "", amount: "", currency: "CLP", paymentMethod: "", paymentIntermediary: "", commissionAmount: "", settlementReference: "", referenceDocumentType: "", referenceDocumentNumber: "" });
       setMessage("Factura registrada. Ya puede entrar al flujo de conciliacion y cobranza.");
       await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar la factura."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo guardar la factura."); }
     finally { setSaving(false); }
   }
 
@@ -533,7 +549,7 @@ function FinanceWorkspace() {
   async function createPayable(event: FormEvent) {
     event.preventDefault();
     if (!payableForm.number || !payableForm.supplier || !payableForm.amount || !payableForm.dueDate) {
-      return setMessage("Completa documento, proveedor, monto y vencimiento de la cuenta por pagar.");
+      return setErrorMessage("Completa documento, proveedor, monto y vencimiento de la cuenta por pagar.");
     }
     setSaving(true);
     try {
@@ -568,7 +584,7 @@ function FinanceWorkspace() {
       setPayableForm({ number: "", supplier: "", rut: "", category: "", documentType: "Documento de proveedor", issueDate: new Date().toISOString().slice(0, 10), dueDate: "", netAmount: "", vatAmount: "", amount: "", currency: "CLP", paymentMethod: "", paymentIntermediary: "", commissionAmount: "", settlementReference: "", referenceDocumentType: "", referenceDocumentNumber: "" });
       setMessage("Cuenta por pagar registrada. El pago se confirma solo cuando una persona autorizada lo registra.");
       await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar la cuenta por pagar."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo guardar la cuenta por pagar."); }
     finally { setSaving(false); }
   }
 
@@ -591,7 +607,7 @@ function FinanceWorkspace() {
       setOpenActionId(null);
       await load();
       setMessage(`${result.replayed ? "Estos recordatorios ya se prepararon hoy con los mismos saldos; no se duplicaron." : `${result.count} borrador(es) de recordatorio preparados para revisión.`}${result.deferred.length ? ` ${result.deferred.length} documento(s) requieren corregir datos o reabrir su caso.` : ""} No se envió ningún mensaje.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo preparar el recordatorio."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo preparar el recordatorio."); }
     finally { setSaving(false); }
   }
 
@@ -625,7 +641,7 @@ function FinanceWorkspace() {
       setMessage(`${resource === "documento" ? "Documento" : resource === "productos" ? "Detalle de productos" : "Referencias"} actualizado desde Nubox.`);
       setOpenActionId(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo consultar Nubox.");
+      setErrorMessage(error instanceof Error ? error.message : "No se pudo consultar Nubox.");
     } finally {
       setSaving(false);
     }
@@ -646,7 +662,7 @@ function FinanceWorkspace() {
       setMessage(`${format.toUpperCase()} descargado desde Nubox.`);
       setOpenActionId(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `No se pudo descargar el ${format.toUpperCase()}.`);
+      setErrorMessage(error instanceof Error ? error.message : `No se pudo descargar el ${format.toUpperCase()}.`);
     } finally {
       setSaving(false);
     }
@@ -657,7 +673,7 @@ function FinanceWorkspace() {
     event.target.value = "";
     if (!file) return;
     if (!/\.(csv|xlsx|xlsm)$/i.test(file.name)) {
-      return setMessage("Selecciona un CSV o Excel (.xlsx). Los PDF e imágenes se adjuntan en Documentos y requieren revisión humana.");
+      return setErrorMessage("Selecciona un CSV o Excel (.xlsx). Los PDF e imágenes se adjuntan en Documentos y requieren revisión humana.");
     }
     setSaving(true);
     try {
@@ -670,13 +686,13 @@ function FinanceWorkspace() {
       setMigrationPreview(preview);
       setMigrationSourceFile(preview.sourceFile || file.name);
       setMessage("Vista previa lista. Revisa los totales y las filas marcadas antes de importar.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo preparar la migración histórica."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo preparar la migración histórica."); }
     finally { setSaving(false); }
   }
 
   async function importHistoricalMigration() {
     if (saving || !migrationPreview || !migrationRows.length) return;
-    if (migrationPreview.periodProtection?.blocked) return setMessage(migrationPreview.periodProtection.message);
+    if (migrationPreview.periodProtection?.blocked) return setErrorMessage(migrationPreview.periodProtection.message);
     setSaving(true);
     try {
       const result = await importFinanceMigration({ sourceFile: migrationSourceFile || "migracion-historica.csv", rows: migrationRows });
@@ -684,13 +700,13 @@ function FinanceWorkspace() {
       setMigrationRows([]);
       setMigrationSourceFile("");
       setMessage(`${result.imported} registros históricos incorporados. ${result.duplicateRows || 0} duplicados se omitieron y ${result.requiresReview} quedaron en Excepciones para revisión humana.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo importar el historial."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo importar el historial."); }
     finally { setSaving(false); }
   }
 
   async function createMovement(event: FormEvent) {
     event.preventDefault();
-    if (!movementForm.date || !movementForm.amount) return setMessage("Completa fecha y monto del movimiento.");
+    if (!movementForm.date || !movementForm.amount) return setErrorMessage("Completa fecha y monto del movimiento.");
     setSaving(true);
     try {
       await createIndustryRecord({
@@ -702,7 +718,7 @@ function FinanceWorkspace() {
       setMovementForm({ date: "", amount: "", description: "", reference: "" });
       setMessage("Movimiento listo para conciliacion.");
       await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar el movimiento."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo guardar el movimiento."); }
     finally { setSaving(false); }
   }
 
@@ -710,25 +726,37 @@ function FinanceWorkspace() {
     const tenant = contextTenant;
     const response = await getFinanceBankImportJobs(append ? bankJobsCursor || undefined : undefined);
     if (importTenantRef.current !== tenant) return;
-    setSavedBankJobs((current) => append ? [...current, ...response.jobs.filter((job) => !current.some((item) => item.id === job.id))] : response.jobs);
+    setSavedBankJobs((current) => append ? mergeImportJobs(response.jobs, current) : mergeImportJobs(current, response.jobs));
     setBankJobsCursor(response.nextCursor);
+    setImportMonitor({ offline: false, checking: false, error: "", checkedAt: new Date().toISOString() });
   }
 
   useEffect(() => {
     if (activeTab !== "cartolas" || !contextTenant) return;
     let alive = true, polling = false;
-    const timer = setInterval(async () => {
-      if (document.hidden || !navigator.onLine || polling) return;
+    setImportMonitor({ offline: !navigator.onLine, checking: false, error: "", checkedAt: null });
+    async function poll() {
+      if (!alive || document.hidden || polling) return;
+      if (!navigator.onLine) { setImportMonitor(state => ({ ...state, offline: true, checking: false })); return; }
       polling = true;
+      setImportMonitor(state => ({ ...state, offline: false, checking: true }));
       try {
         const response = await getFinanceBankImportJobs();
         if (!alive || importTenantRef.current !== contextTenant) return;
         // Refresh recent jobs without removing older pages opened with "Ver más".
-        setSavedBankJobs((current) => [...response.jobs, ...current.filter((job) => !response.jobs.some((fresh) => fresh.id === job.id))]);
-      } catch { /* The saved originals remain on the server; the next poll retries. */ }
-      finally { polling = false; }
-    }, 5000);
-    return () => { alive = false; clearInterval(timer); };
+        setSavedBankJobs((current) => mergeImportJobs(current, response.jobs));
+        setImportMonitor({ offline: !navigator.onLine, checking: false, error: "", checkedAt: new Date().toISOString() });
+      } catch {
+        if (alive) setImportMonitor(state => ({ ...state, checking: false, offline: !navigator.onLine, error: "Consulta pendiente" }));
+      } finally { polling = false; }
+    }
+    function offline() { setImportMonitor(state => ({ ...state, offline: true, checking: false })); }
+    void poll();
+    const timer = setInterval(() => void poll(), 5000);
+    window.addEventListener("online", poll);
+    window.addEventListener("offline", offline);
+    document.addEventListener("visibilitychange", poll);
+    return () => { alive = false; clearInterval(timer); window.removeEventListener("online", poll); window.removeEventListener("offline", offline); document.removeEventListener("visibilitychange", poll); };
   }, [activeTab, contextTenant]);
 
   async function recoverBankImport(job: FinanceBankImportJob, reanalyze = false) {
@@ -743,7 +771,7 @@ function FinanceWorkspace() {
       setBankStatementQueue((current) => [...current.filter((item) => item.id !== job.id), { id: job.id, file: null, preview, rows: preview.sourceRows, account, selected: !preview.duplicate?.blocked && !preview.periodProtection?.blocked }]);
       await refreshBankJobs();
       setMessage("Revisión recuperada. Comprueba los datos y pulsa Incorporar cuando estén correctos.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo recuperar la importación."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo recuperar la importación."); }
     finally { setSaving(false); }
   }
 
@@ -755,7 +783,7 @@ function FinanceWorkspace() {
       setBankStatementQueue((current) => current.filter((item) => item.id !== job.id));
       await refreshBankJobs();
       setMessage("Importación cancelada. Original conservado para consulta.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo cancelar."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo cancelar."); }
     finally { setSaving(false); }
   }
 
@@ -768,7 +796,7 @@ function FinanceWorkspace() {
       const link = document.createElement("a");
       link.href = url; link.download = sourceFile; link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo descargar el original."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo descargar el original."); }
     finally { setSaving(false); }
   }
 
@@ -778,8 +806,8 @@ function FinanceWorkspace() {
     const files = Array.from(event.target.files || []);
     event.target.value = "";
     if (!files.length) return;
-    if (files.length > 10) return setMessage("Selecciona hasta 10 archivos por carga. No se subió ningún archivo.");
-    if (files.some((file) => !/\.(csv|txt|xlsx|xlsm|pdf)$/i.test(file.name))) return setMessage("Selecciona cartolas CSV, TXT, Excel (.xlsx/.xlsm) o PDF con texto.");
+    if (files.length > 10) return setErrorMessage("Selecciona hasta 10 archivos por carga. No se subió ningún archivo.");
+    if (files.some((file) => !/\.(csv|txt|xlsx|xlsm|pdf)$/i.test(file.name))) return setErrorMessage("Selecciona cartolas CSV, TXT, Excel (.xlsx/.xlsm) o PDF con texto.");
     setSaving(true);
     setBankStatementUploadIssues([]);
     const errors: Array<{ fileName: string; detail: string }> = [];
@@ -802,7 +830,7 @@ function FinanceWorkspace() {
       setMessage(`${stored} archivo(s) guardado(s). El análisis continúa en segundo plano; puedes salir de esta pantalla. Recupera cada revisión desde Importaciones guardadas antes de incorporar movimientos.${errors.length ? " Revisa los archivos con observaciones." : ""}`);
       await refreshBankJobs();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo actualizar el estado; consulta las importaciones guardadas.");
+      setErrorMessage(error instanceof Error ? error.message : "No se pudo actualizar el estado; consulta las importaciones guardadas.");
     } finally { if (importTenantRef.current === tenant) setSaving(false); }
   }
 
@@ -820,36 +848,49 @@ function FinanceWorkspace() {
       preview.bankDetection = { detected: preview.bankDetection?.detected ?? false, method: "USER_CONFIRMED", message: "Banco confirmado por el usuario. Movimientos y duplicados validados nuevamente." };
       setBankStatementQueue((current) => current.map((queued) => queued.id === id ? { ...queued, account, preview, rows: preview.sourceRows, selected: !preview.duplicate?.blocked && !preview.periodProtection?.blocked } : queued));
       setMessage(`Cartola revisada: ${preview.summary.totalRows - preview.summary.reviewRows} fila(s) válidas y ${preview.summary.reviewRows} por revisar.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo validar el banco. Intenta nuevamente."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo validar el banco. Intenta nuevamente."); }
     finally { setSaving(false); }
   }
 
   async function importBankStatements(onlyId?: string) {
-    if (saving || !bankStatementQueue.length) return;
+    if (saving || bankImportLock.current || !bankStatementQueue.length) return;
+    if (!navigator.onLine) return setErrorMessage("Sin conexión. Reconecta y actualiza las cargas antes de incorporar; no vuelvas a subir los originales.");
+    const tenant = contextTenant;
     const selected = bankStatementQueue.filter((item) => onlyId ? item.id === onlyId : item.selected);
-    if (selected.some((item) => item.reviewDirty)) return setMessage("Hay cambios de columnas sin aplicar. Guarda la revisión antes de incorporar.");
+    if (selected.some(item => item.staleReview)) return setErrorMessage("Una revisión cambió en el servidor. Recupérala desde Importaciones guardadas antes de incorporar.");
+    if (selected.some((item) => item.reviewDirty)) return setErrorMessage("Hay cambios de columnas sin aplicar. Guarda la revisión antes de incorporar.");
     const blockedPeriods = selected.filter((item) => item.preview.periodProtection?.blocked);
-    if (blockedPeriods.length) return setMessage(`No se inició la incorporación. ${blockedPeriods.map((item) => `${item.preview.sourceFile}: ${item.preview.periodProtection?.message}`).join(" ")}`);
+    if (blockedPeriods.length) return setErrorMessage(`No se inició la incorporación. ${blockedPeriods.map((item) => `${item.preview.sourceFile}: ${item.preview.periodProtection?.message}`).join(" ")}`);
     const withoutBank = selected.filter((item) => !item.account.bankKey);
-    if (withoutBank.length) return setMessage(`No se pudo identificar el banco de ${withoutBank.map((item) => item.preview.sourceFile).join(", ")}. Selecciónalo en la tarjeta de esa cartola antes de incorporarla.`);
+    if (withoutBank.length) return setErrorMessage(`No se pudo identificar el banco de ${withoutBank.map((item) => item.preview.sourceFile).join(", ")}. Selecciónalo en la tarjeta de esa cartola antes de incorporarla.`);
     const importable = selected.filter((item) => !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked);
-    if (!importable.length) return setMessage("Selecciona al menos una cartola nueva, revisada y sin bloqueos de período para incorporarla.");
+    if (!importable.length) return setErrorMessage("Selecciona al menos una cartola nueva, revisada y sin bloqueos de período para incorporarla.");
+    bankImportLock.current = true;
     setSaving(true);
     setBankStatementUploadProgress({ phase: "IMPORT", total: importable.length, processed: 0, ready: 0, failed: 0, currentFile: importable[0]?.preview.sourceFile || "", finished: false });
     try {
+      const latest = await Promise.all(importable.map(async item => (await getFinanceBankImportJob(item.id)).job));
+      if (importTenantRef.current !== tenant) return;
+      setSavedBankJobs(current => mergeImportJobs(current, latest));
+      if (latest.some(job => job.status !== "READY" || job.revision !== importable.find(item => item.id === job.id)?.preview.revision)) {
+        throw new Error("La carga cambió desde que abriste la revisión. No se inició la incorporación; recupera la revisión actual y comprueba sus datos.");
+      }
       let imported = 0;
       let duplicateRows = 0;
       let requiresReview = 0;
       const pending: BankStatementQueueItem[] = [];
       const errors: string[] = [];
       for (const [index, item] of importable.entries()) {
+        if (importTenantRef.current !== tenant) return;
         setBankStatementUploadProgress({ phase: "IMPORT", total: importable.length, processed: index, ready: index - errors.length, failed: errors.length, currentFile: item.preview.sourceFile, finished: false });
         try {
           const result = await importFinanceBankStatement({ jobId: item.preview.jobId, revision: item.preview.revision });
+          if (importTenantRef.current !== tenant) return;
           imported += result.imported;
           duplicateRows += result.duplicateRows;
           requiresReview += result.requiresReview;
         } catch (error) {
+          if (importTenantRef.current !== tenant) return;
           pending.push(item);
           errors.push(`${item.preview.sourceFile}: ${error instanceof Error ? error.message : "no se pudo importar"}`);
         }
@@ -860,13 +901,13 @@ function FinanceWorkspace() {
       await load();
       setMessage(errors.length
         ? `${imported} movimientos incorporados. Quedaron ${pending.length} cartola(s) pendientes: ${errors.join(" · ")}`
-        : `${imported} movimientos incorporados desde las cartolas seleccionadas. ${duplicateRows} duplicados se omitieron y ${requiresReview} fila(s) quedaron para revisión.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo importar la cartola."); }
-    finally { setSaving(false); }
+        : `${imported} movimientos incorporados desde las cartolas seleccionadas. ${duplicateRows} duplicados se omitieron y ${requiresReview} fila(s) quedaron para revisión.`, errors.length || requiresReview ? "warning" : "success");
+    } catch (error) { if (importTenantRef.current === tenant) { setBankStatementUploadProgress(null); setErrorMessage(error instanceof Error ? error.message : "No se pudo importar la cartola."); } }
+    finally { bankImportLock.current = false; if (importTenantRef.current === tenant) setSaving(false); }
   }
 
   async function removeBankStatement(batch: FinanceBankStatementBatch) {
-    if (!batch.canDelete) return setMessage(batch.deleteBlockReason || "Esta cartola no puede eliminarse.");
+    if (!batch.canDelete) return setErrorMessage(batch.deleteBlockReason || "Esta cartola no puede eliminarse.");
     const confirmed = window.confirm(`Eliminar la cartola “${batch.sourceFile}”?\n\nSe eliminarán ${batch.movements} movimiento(s) aún no conciliados y ${batch.exceptions} excepción(es) asociada(s). Esta acción no se puede deshacer.`);
     if (!confirmed) return;
     setSaving(true);
@@ -876,21 +917,21 @@ function FinanceWorkspace() {
       setMessage(`Cartola eliminada correctamente. Se quitaron ${result.deleted.movements} movimiento(s) y ${result.deleted.exceptions} excepción(es) asociada(s).`);
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo eliminar la cartola.");
+      setErrorMessage(error instanceof Error ? error.message : "No se pudo eliminar la cartola.");
     } finally {
       setSaving(false);
     }
   }
 
   async function prepareOpenBankingConsent() {
-    if (!openBankingForm.bankKey) return setMessage("Selecciona el banco que el titular autorizará.");
+    if (!openBankingForm.bankKey) return setErrorMessage("Selecciona el banco que el titular autorizará.");
     setSaving(true);
     try {
       const result = await prepareFinanceOpenBankingConsent(openBankingForm);
       setOpenBankingCaseId(result.consent.caseId);
       setMessage(result.message);
       await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo preparar el consentimiento bancario."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo preparar el consentimiento bancario."); }
     finally { setSaving(false); }
   }
 
@@ -900,20 +941,20 @@ function FinanceWorkspace() {
     try {
       setFinancePlanning(await getFinancePlanning(period));
       setMessage("Planificación financiera actualizada con los datos registrados.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo actualizar la planificación."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo actualizar la planificación."); }
     finally { setSaving(false); }
   }
 
   async function submitBudget(event: FormEvent) {
     event.preventDefault();
-    if (!budgetForm.category.trim()) return setMessage("Indica la categoría del presupuesto.");
+    if (!budgetForm.category.trim()) return setErrorMessage("Indica la categoría del presupuesto.");
     setSaving(true);
     try {
       const result = await saveFinanceBudget({ period: planningPeriod, category: budgetForm.category, plannedIncome: amount(budgetForm.plannedIncome), plannedExpense: amount(budgetForm.plannedExpense), note: budgetForm.note });
       setFinancePlanning(result.planning);
       setBudgetForm({ category: "", plannedIncome: "", plannedExpense: "", note: "" });
       setMessage("Presupuesto guardado. Puedes volver a editar la misma categoría sin crear duplicados.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar el presupuesto."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo guardar el presupuesto."); }
     finally { setSaving(false); }
   }
 
@@ -924,7 +965,7 @@ function FinanceWorkspace() {
       await deleteFinanceBudget(id);
       await refreshFinancePlanning();
       setMessage("Presupuesto eliminado.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo eliminar el presupuesto."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo eliminar el presupuesto."); }
     finally { setSaving(false); }
   }
 
@@ -932,20 +973,20 @@ function FinanceWorkspace() {
     const files = Array.from(event.target.files || []);
     event.target.value = "";
     if (!files.length) return;
-    if (files.some((file) => !/\.xml$/i.test(file.name))) return setMessage("Selecciona únicamente documentos DTE XML exportados desde el SII o tu sistema autorizado.");
+    if (files.some((file) => !/\.xml$/i.test(file.name))) return setErrorMessage("Selecciona únicamente documentos DTE XML exportados desde el SII o tu sistema autorizado.");
     setSaving(true);
     try {
       const preview = await previewFinanceSiiDtes(files);
       setSiiPreview(preview);
       setSiiDocuments(preview.documents);
       setMessage("DTE revisados. Confirma la vista previa antes de incorporarlos a las cuentas por cobrar o pagar.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudieron revisar los DTE XML."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudieron revisar los DTE XML."); }
     finally { setSaving(false); }
   }
 
   async function importSiiDtes() {
     if (saving || !siiPreview || !siiDocuments.length) return;
-    if (siiPreview.periodProtection?.blocked) return setMessage(siiPreview.periodProtection.message);
+    if (siiPreview.periodProtection?.blocked) return setErrorMessage(siiPreview.periodProtection.message);
     setSaving(true);
     try {
       const result = await importFinanceSiiDtes(siiDocuments);
@@ -953,7 +994,7 @@ function FinanceWorkspace() {
       setSiiDocuments([]);
       setMessage(`${result.imported} DTE incorporados. ${result.duplicates} duplicados se omitieron y ${result.requiresReview} quedaron en Excepciones.`);
       await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudieron importar los DTE."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudieron importar los DTE."); }
     finally { setSaving(false); }
   }
 
@@ -963,7 +1004,7 @@ function FinanceWorkspace() {
       await approveFinanceReconciliation(suggestion.movement.id, suggestion.invoice.id, suggestion.invoiceIds || suggestion.invoices?.map((invoice) => invoice.id));
       setMessage(suggestion.grouped ? "Conciliación agrupada confirmada y documentos actualizados." : "Conciliación confirmada y factura actualizada.");
       await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo confirmar la conciliacion."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo confirmar la conciliacion."); }
     finally { setSaving(false); }
   }
 
@@ -973,13 +1014,13 @@ function FinanceWorkspace() {
       await rejectFinanceReconciliation(suggestion.movement.id, `Revisión manual solicitada desde la explicación de conciliación: ${suggestion.recommendedAction || "sin recomendación automática"}.`);
       setMessage("La sugerencia fue enviada a Excepciones para revisión humana; no se modificaron documentos ni saldos.");
       await load();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo enviar la sugerencia a revisión."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo enviar la sugerencia a revisión."); }
     finally { setSaving(false); }
   }
 
   async function createException(event: FormEvent) {
     event.preventDefault();
-    if (!exceptionForm.title) return setMessage("Describe la excepcion para crear el caso.");
+    if (!exceptionForm.title) return setErrorMessage("Describe la excepcion para crear el caso.");
     setSaving(true);
     try {
       const payload = JSON.stringify(exceptionForm);
@@ -989,7 +1030,7 @@ function FinanceWorkspace() {
       setExceptionForm({ title: "", type: "Diferencia de monto", detail: "" });
       await load();
       setMessage("Excepcion creada para revision humana.");
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo crear la excepcion."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo crear la excepcion."); }
     finally { setSaving(false); }
   }
 
@@ -999,7 +1040,7 @@ function FinanceWorkspace() {
       const result = await generateFinanceCollectionCases();
       await load();
       setMessage(`${result.count ? `${result.count} casos de cobranza listos para revisar.` : "No hay nuevas facturas vencidas válidas sin caso de cobranza."}${result.deferred.length ? ` ${result.deferred.length} documento(s) requieren corregir fechas, moneda o saldo antes de generar casos.` : ""} No se enviaron mensajes.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudieron generar los casos."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudieron generar los casos."); }
     finally { setSaving(false); }
   }
 
@@ -1012,7 +1053,7 @@ function FinanceWorkspace() {
       setMessage("Politica del equipo IA actualizada. Los cambios financieros siguen requiriendo aprobacion humana.");
       const workspace = await getFinanceAgentWorkspace();
       setAgentWorkspace(workspace);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo guardar la politica de agentes."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo guardar la politica de agentes."); }
     finally { setSaving(false); }
   }
 
@@ -1024,7 +1065,7 @@ function FinanceWorkspace() {
       const closed = result.deferred.filter((item) => item.reason === "CLOSED_PERIOD").length;
       const invalid = result.deferred.length - closed;
       setMessage(`${result.exceptionsPrepared ? `${result.exceptionsPrepared} excepciones preparadas para revisión.` : result.exceptionsSkipped ? "La preparación automática de excepciones está desactivada." : "Análisis sin nuevas excepciones."}${closed ? ` ${closed} movimiento(s) omitidos por período cerrado.` : ""}${invalid ? ` ${invalid} movimiento(s) requieren corregir su fecha de origen.` : ""}${result.warning ? ` ${result.warning}` : ""}`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se pudo ejecutar el analisis de agentes."); }
+    } catch (error) { setErrorMessage(error instanceof Error ? error.message : "No se pudo ejecutar el analisis de agentes."); }
     finally { setSaving(false); }
   }
 
@@ -1038,7 +1079,7 @@ function FinanceWorkspace() {
       setMessage(result.pending ? (result.message || "Ya existe una sincronización en curso.") : `Nubox sincronizado para ${nuboxSyncPeriod}: ${result.created || 0} nuevos y ${result.updated || 0} actualizados.${result.warning ? ` Atención: ${result.warning}` : ""}`);
       await load(true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo sincronizar Nubox.");
+      setErrorMessage(error instanceof Error ? error.message : "No se pudo sincronizar Nubox.");
     } finally {
       nuboxSyncLock.current = false;
       setNuboxSyncProgress(null);
@@ -1048,7 +1089,7 @@ function FinanceWorkspace() {
 
   async function synchronizeNuboxHistory() {
     if (nuboxSyncLock.current) return;
-    if (!nuboxHistoryStartPeriod || !nuboxHistoryEndPeriod) return setMessage("Selecciona el período inicial y final del historial.");
+    if (!nuboxHistoryStartPeriod || !nuboxHistoryEndPeriod) return setErrorMessage("Selecciona el período inicial y final del historial.");
     nuboxSyncLock.current = true;
     setSyncingNubox(true);
     try {
@@ -1057,7 +1098,7 @@ function FinanceWorkspace() {
       setMessage(`Historial Nubox: ${result.succeeded}/${result.periods} mes(es) confirmados, ${result.created} nuevos y ${result.updated} actualizados.${result.unprocessed ? ` ${result.unprocessed} mes(es) no iniciados; se detuvo el historial para evitar operaciones superpuestas.` : ""}${issues.length ? ` Requieren revisión: ${issues.join(" · ")}` : ""}`);
       await load(true);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "No se pudo sincronizar el historial de Nubox.");
+      setErrorMessage(error instanceof Error ? error.message : "No se pudo sincronizar el historial de Nubox.");
     } finally {
       nuboxSyncLock.current = false;
       setNuboxSyncProgress(null);
@@ -1105,8 +1146,8 @@ function FinanceWorkspace() {
             </details> : <p role="status">{loading ? "Comprobando fuentes del período…" : "No se pudo comprobar la cobertura. Revisa el mensaje y la selección."}</p>}
           </section> : null}
 
-          {message ? <div className="finance-message">{message}</div> : null}
-          {loading ? <div className="finance-loading">Actualizando informacion financiera...</div> : null}
+          {message ? <FinanceFeedback message={message} kind={messageKind} onDismiss={() => setMessage(null)} /> : null}
+          {loading ? <FinanceLoading /> : null}
 
           {activeTab === "resumen" && overview ? <>
           <section className="finance-kpis finance-kpis-v3">{headline?.map((item) => <article key={item.label}><small>{item.label}</small><strong>{item.value}</strong><span>{item.help}</span></article>)}</section>
@@ -1176,16 +1217,31 @@ function FinanceWorkspace() {
                 {!bankStatementForm.bankAccountId && <label>Moneda si el archivo no la indica<select disabled={saving} value={bankStatementForm.currency || ""} onChange={(e) => setBankStatementForm({ ...bankStatementForm, currency: e.target.value })}><option value="">Detectar columna moneda; en su ausencia CLP</option>{["CLP", "USD", "EUR", "UF"].map((code) => <option key={code}>{code}</option>)}</select></label>}
                 <label className="finance-upload">Seleccionar una o más cartolas<input type="file" accept=".csv,.txt,.xlsx,.xlsm,.pdf,text/csv,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple onChange={previewBankStatement} disabled={saving || bankStatementBusy} /></label>
                 <p className="finance-muted">CSV, TXT, Excel, XML/HTML bancario y PDF con texto. Máximo 10 archivos por selección.</p>
-                {bankStatementUploadProgress ? <section className="finance-upload-progress" aria-live="polite"><div className="finance-upload-progress-heading"><div><strong>{bankStatementUploadProgress.phase === "IMPORT" ? (bankStatementUploadProgress.finished ? "Importación finalizada" : "Incorporando cartolas") : (bankStatementUploadProgress.finished ? "Archivos recibidos" : "Subiendo originales")}</strong><small>{bankStatementUploadProgress.phase === "IMPORT" ? "Los movimientos se están guardando de forma segura." : "Progreso por archivos recibidos, no por bytes. El análisis continúa en segundo plano."}</small></div><b>{bankStatementProgressPercent}%</b></div><div className="finance-upload-progress-track" role="progressbar" aria-valuenow={bankStatementProgressPercent} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${bankStatementProgressPercent}%` }} /></div><span>{bankStatementUploadProgress.processed} de {bankStatementUploadProgress.total} archivo(s) · {bankStatementUploadProgress.ready} {bankStatementUploadProgress.phase === "UPLOAD" ? "guardados" : "incorporados"} · {bankStatementUploadProgress.failed} con observaciones</span>{!bankStatementUploadProgress.finished && bankStatementUploadProgress.currentFile ? <small className="finance-upload-current">Procesando: {bankStatementUploadProgress.currentFile}</small> : null}{bankStatementUploadIssues.length ? <ul>{bankStatementUploadIssues.map((issue) => <li key={`${issue.fileName}-${issue.detail}`}><b>{issue.fileName}</b><span>{issue.detail}</span></li>)}</ul> : null}</section> : null}
-                {bankStatementQueue.length ? <div className="finance-bank-import-ready"><div><strong>{bankStatementQueue.length} cartola(s) preparada(s)</strong><span>Las repetidas se bloquean antes de importar; duplicados parciales y filas incompletas quedan en revisión.</span></div><button type="button" className="primary-btn" disabled={saving || bankStatementBusy || !bankStatementQueue.some((item) => item.account.bankKey && !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked)} onClick={() => void importBankStatements()}>{bankStatementBusy && bankStatementUploadProgress?.phase === "IMPORT" ? "Incorporando..." : `Incorporar ${bankStatementQueue.filter((item) => item.account.bankKey && !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked && item.selected).length} cartola(s) seleccionada(s)`}</button></div> : null}
+                {bankStatementUploadProgress ? <section className="finance-upload-progress" aria-live="polite"><div className="finance-upload-progress-heading"><div><strong>{bankStatementUploadProgress.phase === "IMPORT" ? (bankStatementUploadProgress.finished ? "Importación finalizada" : "Incorporando cartolas") : (bankStatementUploadProgress.finished ? "Archivos recibidos" : "Subiendo originales")}</strong><small>{bankStatementUploadProgress.phase === "IMPORT" ? "Los movimientos se están guardando de forma segura." : "Progreso por archivos recibidos, no por bytes. El análisis continúa en segundo plano."}</small></div><b>{bankStatementProgressPercent}%</b></div><div className="finance-upload-progress-track" role="progressbar" aria-label="Avance de carga de cartolas" aria-valuenow={bankStatementProgressPercent} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${bankStatementProgressPercent}%` }} /></div><span>{bankStatementUploadProgress.processed} de {bankStatementUploadProgress.total} archivo(s) · {bankStatementUploadProgress.ready} {bankStatementUploadProgress.phase === "UPLOAD" ? "guardados" : "incorporados"} · {bankStatementUploadProgress.failed} con observaciones</span>{!bankStatementUploadProgress.finished && bankStatementUploadProgress.currentFile ? <small className="finance-upload-current">Procesando: {bankStatementUploadProgress.currentFile}</small> : null}{bankStatementUploadIssues.length ? <ul>{bankStatementUploadIssues.map((issue) => <li key={`${issue.fileName}-${issue.detail}`}><b>{issue.fileName}</b><span>{issue.detail}</span></li>)}</ul> : null}</section> : null}
+                {bankStatementQueue.length ? <div className="finance-bank-import-ready"><div><strong>{bankStatementQueue.length} cartola(s) preparada(s)</strong><span>Las repetidas se bloquean antes de importar; duplicados parciales y filas incompletas quedan en revisión.</span></div><button type="button" className="primary-btn" disabled={saving || bankStatementBusy || !canImportSelected} onClick={() => void importBankStatements()}>{bankStatementBusy && bankStatementUploadProgress?.phase === "IMPORT" ? "Incorporando..." : `Incorporar ${bankStatementQueue.filter((item) => item.account.bankKey && !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked && item.selected).length} cartola(s) seleccionada(s)`}</button></div> : null}
                 <button type="button" className="finance-link-button" onClick={() => window.location.assign("/connections")}>Administrar cuentas conectadas</button>
               </section>
-              <section className="finance-bank-manual"><div><h3>Registrar movimiento manual</h3><p>Úsalo sólo si el movimiento no viene en una cartola.</p></div><form onSubmit={createMovement}><input type="date" value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /><input type="number" placeholder="Monto abonado CLP" value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /><input placeholder="Descripción" value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /><input placeholder="Referencia / comprobante" value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /><button className="primary-btn" disabled={saving || bankStatementBusy}>Agregar movimiento</button></form></section>
+              <section className="finance-bank-manual">
+                <div><h3>Registrar movimiento manual</h3><p>Úsalo sólo si el movimiento no viene en una cartola.</p></div>
+                <form onSubmit={createMovement}>
+                  <label>Fecha del movimiento<input type="date" required value={movementForm.date} onChange={(event) => setMovementForm({ ...movementForm, date: event.target.value })} /></label>
+                  <label>Monto en CLP<input type="number" required value={movementForm.amount} onChange={(event) => setMovementForm({ ...movementForm, amount: event.target.value })} /></label>
+                  <label>Descripción<input value={movementForm.description} onChange={(event) => setMovementForm({ ...movementForm, description: event.target.value })} /></label>
+                  <label>Referencia / comprobante<input value={movementForm.reference} onChange={(event) => setMovementForm({ ...movementForm, reference: event.target.value })} /></label>
+                  <button className="primary-btn" disabled={saving || bankStatementBusy}>Agregar movimiento</button>
+                </form>
+              </section>
             </article>
             <article className="finance-card finance-saved-imports">
-              <div className="finance-card-heading"><div><span className="finance-eyebrow">Continuidad de carga</span><h2>Importaciones guardadas</h2><p>Los originales recibidos y sus revisiones permanecen guardados aunque cierres esta página. Este historial incluye todos los períodos y cuentas de tu empresa.</p></div><button type="button" className="finance-link-button" disabled={saving} onClick={() => void refreshBankJobs().catch((error) => setMessage(error.message))}>Actualizar estado</button></div>
-              <div className="finance-saved-import-list">{savedBankJobs.map((job) => <article key={job.id} className="finance-saved-import">
-                <div><strong>{job.sourceFile}</strong><span>{{ RECEIVED: "Recibida", PROCESSING: "Analizando", READY: "Lista para revisar", FAILED: "Requiere atención", IMPORTED: "Incorporada", CANCELLED: "Cancelada" }[job.status]} · Intentos {job.attempts || 0} · Revisión {job.revision} · {new Date(job.updatedAt).toLocaleString("es-CL")}</span>{job.error ? <p role="status">{job.error}</p> : null}{job.status === "PROCESSING" ? <small>El servidor analiza el original en segundo plano. Tras una interrupción, intentará recuperarlo a los cinco minutos; máximo tres intentos automáticos. No necesitas volver a subirlo.</small> : null}</div>
+              <div className="finance-card-heading"><div><span className="finance-eyebrow">Continuidad de carga</span><h2>Importaciones guardadas</h2><p>Los originales recibidos y sus revisiones permanecen guardados aunque cierres esta página. Este historial incluye todos los períodos y cuentas de tu empresa.</p></div><button type="button" className="finance-link-button" disabled={saving} onClick={() => void refreshBankJobs().catch((error) => setErrorMessage(error.message))}>Actualizar estado</button></div>
+              <div className="finance-import-filters" role="search" aria-label="Buscar importaciones guardadas">
+                <label>Nombre del archivo<input type="search" value={importQuery} onChange={event => setImportQuery(event.target.value)} placeholder="Por ejemplo: cartola enero" /></label>
+                <label>Estado de la carga<select value={importStatusFilter} onChange={event => setImportStatusFilter(event.target.value)}><option value="ALL">Todos los estados</option><option value="RECEIVED">En cola</option><option value="PROCESSING">Analizando</option><option value="READY">Lista para revisar</option><option value="FAILED">Necesita atención</option><option value="IMPORTED">Incorporada</option><option value="CANCELLED">Cancelada</option></select></label>
+                <button type="button" className="secondary-btn" disabled={!importQuery && importStatusFilter === "ALL"} onClick={() => { setImportQuery(""); setImportStatusFilter("ALL"); }}>Limpiar filtros</button>
+              </div>
+              <p className="finance-muted" role="status">{visibleBankJobs.length} de {savedBankJobs.length} cargas consultadas{bankJobsCursor ? ". Hay más resultados: usa Ver más importaciones para ampliar la búsqueda." : "."}</p>
+              <div className="finance-saved-import-list">{visibleBankJobs.map((job) => <article key={job.id} className="finance-saved-import">
+                <div><strong>{job.sourceFile}</strong><FinanceImportStatus job={job} /></div>
                 <div className="finance-saved-import-actions">
                   {canManageImports && job.status === "READY" ? <button type="button" className="primary-btn" disabled={saving} onClick={() => void recoverBankImport(job)}>Recuperar revisión</button> : null}
                   {canManageImports && job.recoverable ? <button type="button" className="finance-link-button" disabled={saving} onClick={() => void recoverBankImport(job, true)}>Reanalizar original</button> : null}
@@ -1195,11 +1251,12 @@ function FinanceWorkspace() {
                 {canManageImports && ["RECEIVED", "FAILED"].includes(job.status) ? <FinanceBankLayout key={`${contextTenant}:${job.id}`} jobId={job.id} revision={job.revision} disabled={saving} onBusy={setSaving} onUpdated={(preview) => {
                   const account = { bankAccountId: preview.account.bankAccountId || "", currency: preview.account.currency || "CLP", bankKey: preview.account.bankKey || "", accountAlias: preview.account.accountAlias || "", accountType: preview.account.accountType || "Cuenta corriente", accountLast4: preview.account.accountLast4 || "" };
                   setBankStatementQueue((current) => [...current.filter((item) => item.id !== job.id), { id: job.id, file: null, preview, rows: preview.sourceRows, account, selected: !preview.duplicate?.blocked && !preview.periodProtection?.blocked }]);
-                  void refreshBankJobs().catch((error) => setMessage(error.message));
+                  void refreshBankJobs().catch((error) => setErrorMessage(error.message));
                 }} /> : null}
               </article>)}</div>
               {!savedBankJobs.length ? <p className="finance-empty">Las nuevas cartolas aparecerán aquí después de recibir el archivo completo. Los originales de cargas anteriores a esta mejora no se pueden recuperar si no fueron conservados.</p> : null}
-              {bankJobsCursor ? <button type="button" className="finance-link-button" disabled={saving} onClick={() => void refreshBankJobs(true).catch((error) => setMessage(error.message))}>Ver más importaciones</button> : null}
+              {savedBankJobs.length > 0 && !visibleBankJobs.length ? <p className="finance-empty">No hay cargas que coincidan en los resultados consultados. Cambia los filtros{bankJobsCursor ? " o consulta más importaciones" : ""}.</p> : null}
+              {bankJobsCursor ? <button type="button" className="finance-link-button" disabled={saving} onClick={() => void refreshBankJobs(true).catch((error) => setErrorMessage(error.message))}>Ver más importaciones</button> : null}
             </article>
             <article className="finance-card">
               <div className="finance-card-heading"><div><span className="finance-eyebrow">Vista previa de carga</span><h2>Cartolas preparadas para incorporar</h2></div><span>{bankStatementQueue.length} en revisión</span></div>
@@ -1210,7 +1267,7 @@ function FinanceWorkspace() {
                   <div className="finance-bank-statement-history-actions">{batch.importJobId ? <button type="button" className="finance-link-button" disabled={saving} onClick={() => void downloadBankOriginal(batch.importJobId!, batch.sourceFile)}>Descargar original</button> : <small>Original no conservado en esta carga anterior</small>}<span className={`finance-bank-statement-state ${batch.canDelete ? "is-removable" : "is-protected"}`}>{batch.canDelete ? "Sin conciliar" : "Protegida"}</span><button type="button" className="finance-danger-button" disabled={saving || !batch.canDelete} title={batch.deleteBlockReason || "Eliminar cartola y sus movimientos no conciliados"} onClick={() => void removeBankStatement(batch)}>Eliminar cartola</button>{!batch.canDelete ? <small>{batch.deleteBlockReason}</small> : null}</div>
                 </article>)}</div>
               </section> : <p className="finance-empty finance-bank-history-empty">Aún no hay cartolas importadas. Cuando incorpores una, podrás revisarla o eliminarla desde aquí antes de conciliar.</p>}
-              {bankStatementQueue.length ? <div className="finance-bank-selection"><label><input type="checkbox" disabled={saving} checked={bankStatementQueue.filter((item) => !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked).every((item) => item.selected)} onChange={(event) => setBankStatementQueue((current) => current.map((item) => ({ ...item, selected: event.target.checked && !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked })))} /> Seleccionar todas las cartolas nuevas</label><button type="button" className="primary-btn" disabled={saving || !bankStatementQueue.some((item) => item.selected)} onClick={() => void importBankStatements()}>Incorporar seleccionadas</button></div> : null}
+              {bankStatementQueue.length ? <div className="finance-bank-selection"><label><input type="checkbox" disabled={saving || bankStatementBusy} checked={bankStatementQueue.some((item) => !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked) && bankStatementQueue.filter((item) => !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked).every((item) => item.selected)} onChange={(event) => setBankStatementQueue((current) => current.map((item) => ({ ...item, selected: event.target.checked && !item.preview.duplicate?.blocked && !item.preview.periodProtection?.blocked })))} /> Seleccionar todas las cartolas nuevas</label><button type="button" className="primary-btn" disabled={saving || bankStatementBusy || !canImportSelected} onClick={() => void importBankStatements()}>Incorporar seleccionadas</button></div> : null}
               {bankStatementQueue.map((item) => <article className="finance-bank-statement-preview" key={item.id}>
                 <div className="finance-card-heading"><div><h3><label><input type="checkbox" checked={item.selected} disabled={saving || item.preview.periodProtection?.blocked || item.preview.duplicate?.blocked} onChange={(event) => setBankStatementQueue((current) => current.map((queued) => queued.id === item.id ? { ...queued, selected: event.target.checked } : queued))} /> {item.preview.sourceFile}</label></h3><small>{item.preview.detectedFormat || "Cartola detectada"} · {item.preview.summary.totalRows} filas · Abonos {money(item.preview.summary.credits, item.preview.account.currency)} · Cargos {money(item.preview.summary.debits, item.preview.account.currency)}</small>{item.preview.conversion ? <small className="finance-file-conversion">{item.preview.conversion}</small> : null}</div><button type="button" className="finance-link-button" disabled={saving} onClick={() => setBankStatementQueue((current) => current.filter((queued) => queued.id !== item.id))}>Ocultar revisión</button></div>
                 {item.preview.duplicate ? <div className={`finance-note finance-bank-statement-duplicate ${item.preview.duplicate.blocked ? "" : "is-reprocessable"}`}><strong>{item.preview.duplicate.blocked ? "Cartola repetida: importación bloqueada" : "Carga anterior sin movimientos válidos"}</strong><span>{item.preview.duplicate.message}</span>{item.preview.duplicate.blocked ? <span>{item.preview.duplicate.duplicateRows} de {item.preview.duplicate.validRows} movimientos válidos ya estaban registrados.</span> : <span>Al incorporarla, la carga anterior quedará marcada como reprocesada y sus excepciones técnicas se resolverán.</span>}</div> : null}

@@ -86,6 +86,12 @@ test("cobro posterior permite factura de período cerrado y conserva cierre", as
   const db = seeded(); close(db, "2026-01"); const old = structuredClone(db.controls[0]); const result = await pay(db);
   assert.equal(result.remainingBalance, 40); assert.deepEqual(db.controls[0], old); assert.equal(db.audits[0].metadata.period, "2026-02");
 });
+
+test("un proveedor legado no admite cobros de clientes aunque tenga tipo finance_invoice", async () => {
+  const db = seeded(); db.rows[0].data.documentSide = "SUPPLIER";
+  await assert.rejects(pay(db), /proveedor/);
+  assert.equal(db.rows.length, 1); assert.equal(db.rows[0].data.balance, 100); assert.equal(db.audits.length, 0);
+});
 test("bloquea fecha efectiva cerrada aunque la factura sea de otro mes", async () => {
   const db = seeded(); close(db, "2026-02"); await assert.rejects(pay(db), /cerrado/); assert.equal(db.rows.length, 1); assert.equal(db.audits.length, 0);
 });

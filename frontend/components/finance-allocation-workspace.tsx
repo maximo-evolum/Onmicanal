@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { FinanceFeedback, FinanceLoading } from "./finance-feedback";
 import { getFinanceAllocationWorkspace, applyManualFinanceAllocation, reverseFinanceReconciliation, type IndustryRecord, type FinanceAllocationPage, type FinanceWorkspaceContext } from "@/lib/api";
 
 type Row = FinanceAllocationPage["records"][number];
@@ -27,15 +28,15 @@ export function RecordBrowser({ context, kind, revision, disabled, selected, onS
   }, [context.period, context.accountKey, context.currency, kind, page, search, revision, customerRut]);
   return <div className="finance-bank-review">
     <label>Buscar por nombre, RUT, folio o referencia<input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Escribe para buscar" /></label>
-    {error ? <p role="alert">{error}</p> : null}
-    <div className="finance-review-table-wrap"><table><thead><tr><th>{kind === "history" ? "Conciliación" : "Registro"}</th><th>{kind === "invoices" ? "Saldo disponible" : "Monto"}</th><th>Acción</th></tr></thead><tbody>{result?.records.map((row) => {
+    {error ? <FinanceFeedback message={error} kind="error" /> : null}
+    <div className="finance-review-table-wrap" role="region" aria-label="Resultados de conciliación; desplázate horizontalmente si es necesario" tabIndex={0}><table><thead><tr><th>{kind === "history" ? "Conciliación" : "Registro"}</th><th>{kind === "invoices" ? "Saldo disponible" : "Monto"}</th><th>Acción</th></tr></thead><tbody>{result?.records.map((row) => {
       const data = dataOf(row); const entries = Array.isArray(data.allocations) ? data.allocations as Array<{ invoiceId: string; amount: number; documentTitle?: string }> : [];
       return <tr key={row.id}><td><strong>{row.title}</strong><small>{String(data.transactionDate || data.issueDate || "")} · {String(data.clientName || data.customerName || data.payerName || "")} · {String(data.clientRut || data.customerRut || data.rut || "")}</small>
         {kind === "movements" ? <small>{String(data.description || "")} · {String(data.direction === "DEBIT" ? "Cargo (no conciliable con clientes)" : data.direction === "CREDIT" ? "Abono" : "Tipo pendiente de identificar")}</small> : null}
         {kind === "history" ? <details><summary>{row.status === "REVERSED" ? "Revertida · ver trazabilidad" : "Aprobada · ver distribución"}</summary><p>{String(data.reason || "Aprobación de sugerencia")}</p><p>Aprobación: {String(data.approvedAt || "Sin fecha")}</p>{entries.map((item) => <p key={item.invoiceId}>{item.documentTitle || `Documento ${item.invoiceId}`}: {money(item.amount)}</p>)}{!entries.length ? <p>Conciliación histórica: la reversa comprobará sus comprobantes vinculados.</p> : null}{row.status === "REVERSED" ? <p>Reversa: {String(data.reversedAt)} · {String(data.reversalReason)}</p> : null}</details> : null}
       </td><td>{money(kind === "invoices" ? row.financial?.balance : data.amount)}</td><td>{kind === "history" ? data.groupId ? <a href="#finance-grouped-allocation">Consultar o revertir grupo completo</a> : <button type="button" className="finance-danger-button" disabled={disabled || row.status !== "APPROVED"} onClick={() => onReverse?.(row)}>Revertir con motivo</button> : <button type="button" className="finance-link-button" disabled={disabled} aria-pressed={selected.includes(row.id)} onClick={() => onSelect(row)}>{selected.includes(row.id) ? "Seleccionado · quitar" : "Seleccionar"}</button>}</td></tr>;
     })}</tbody></table></div>
-    {loading ? <p role="status">Consultando registros…</p> : !result?.total ? <p>No hay registros con estos filtros.</p> : null}
+    {loading ? <FinanceLoading label="Consultando registros…" /> : !error && !result?.total ? <p>No hay registros con estos filtros. Cambia el período o el texto de búsqueda.</p> : null}
     <div className="finance-review-toolbar"><button type="button" disabled={loading || page === 1} onClick={() => setPage(page - 1)}>Anterior</button><span>Página {page} de {result?.pages || 1} · {result?.total || 0} registros</span><button type="button" disabled={loading || !result || page >= result.pages} onClick={() => setPage(page + 1)}>Siguiente</button></div>
   </div>;
 }

@@ -58,6 +58,26 @@ test("montos y saldos inconsistentes se excluyen de indicadores y bloquean el ci
     assert.equal(close.metrics.issued, 0); assert.ok(close.blockers.some((b) => b.type === "DOCUMENTO_SALDO_INCONSISTENTE"));
   }
 });
+
+test("pesos fraccionarios y montos fuera de precisión segura no entran a saldos ni cierres", () => {
+  for (const fields of [
+    { amount: 100.5, balance: 100.5 },
+    { amount: 100.0000001, balance: 100.0000001 },
+    { amount: Number.MAX_SAFE_INTEGER + 1, balance: 0 },
+    { amount: Number.MAX_SAFE_INTEGER, debitNotesTotal: 1, balance: 0 },
+    { amount: 100, balance: 99.5, paidAmount: 0.5 },
+    { amount: 100, balance: 99, creditNotesTotal: 0.5, paidAmount: 0.5 }
+  ]) {
+    const record = doc("unsafe", fields), state = financeDocumentState(record, now);
+    assert.equal(state.included, false);
+    assert.equal(summarizeFinanceDocuments([record], now).customers.issued, 0);
+    assert.ok(buildFinanceMonthlyClosePreview([record], "2026-01", now).blockers.some(b => b.type === "DOCUMENTO_SALDO_INCONSISTENTE"));
+  }
+  assert.equal(financeDocumentState(doc("usd", { currency: "USD", amount: 100.5, balance: 100.5 }), now).included, true);
+  for (const [currency, amount] of [["USD", 10.001], ["EUR", 10.001], ["UF", 1.00001], ["INVALID", 100], ["USD", Number.MAX_SAFE_INTEGER]]) {
+    assert.equal(financeDocumentState(doc("bad-currency", { currency, amount, balance: amount }), now).included, false);
+  }
+});
 test("se usa emisión real y no creación para agrupar documentos", () => {
   const r = doc("d", { issueDate: "2025-12-01", transactionDate: "2026-01-02" });
   assert.equal(filterFinanceContext([r], context).length, 0);

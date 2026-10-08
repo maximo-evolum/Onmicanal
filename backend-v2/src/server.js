@@ -49,13 +49,17 @@ import { apiErrorHandler, requestContext } from "./middleware/request-context.js
 import { runAutonomousSalesFollowUps } from "./services/autonomous-sales-followup.service.js";
 import { observeRequest, prometheusMetrics, runtimeMetrics } from "./lib/runtime-metrics.js";
 import { operationsRouter } from "./routes/operations.routes.js";
-import { getRedisClient } from "./lib/redis.js";
+import { getRedisClient, closeRedisClient } from "./lib/redis.js";
+import { createRuntimeLifecycle, closeHttpServer } from "./lib/runtime-lifecycle.js";
+import { createReadinessProbe } from "./lib/readiness.js";
 import { realtyIntelligenceRouter } from "./routes/realty-intelligence.routes.js";
 import { brokerRouter } from "./routes/broker.routes.js";
 import { runPlatformJobs } from "./services/platform-jobs.service.js";
 import { mobileReleasesRouter } from "./routes/mobile-releases.routes.js";
 
 const app = express();
+const lifecycle = createRuntimeLifecycle();
+app.use(lifecycle.middleware);
 app.disable("x-powered-by");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const campaignAssetsDir = path.resolve(__dirname, "../public/campaign-assets");
@@ -142,24 +146,12 @@ app.use("/campaign-assets", express.static(campaignAssetsDir, {
   maxAge: "30d"
 }));
 
-async function readinessStatus() {
-  let database = false;
-  let redis = "not_configured";
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    database = true;
-  } catch {
-    database = false;
-  }
-  if (process.env.REDIS_URL) {
-    try {
-      redis = (await getRedisClient()) ? "connected" : "unavailable";
-    } catch {
-      redis = "unavailable";
-    }
-  }
-  return { ok: database, database, redis, timestamp: new Date().toISOString() };
-}
+const readinessStatus = createReadinessProbe({
+  databaseProbe: () => prisma.$queryRaw`SELECT 1`,
+  redisConfigured: Boolean(process.env.REDIS_URL),
+  requireRedis: process.env.READINESS_REQUIRE_REDIS === "true",
+  redisProbe: async () => { const redis = await getRedisClient(); return redis ? (await redis.ping()) === "PONG" : false; }
+});
 
 app.get("/health/live", (_req, res) => {
   res.json({ ok: true, service: "onmicanal-backend-v2", uptime: process.uptime(), timestamp: new Date().toISOString() });
@@ -238,48 +230,51 @@ app.get("/api/debug/session", ...protectedApi, async (req, res) => {
   });
 });
 
-app.use("/api", ...protectedApi, modulesRouter);
-app.use("/api", ...protectedApi, metadataRouter);
-app.use("/api", ...protectedApi, auditRouter);
-app.use("/api", ...protectedApi, searchRouter);
-app.use("/api", ...protectedApi, notificationsRouter);
-app.use("/api", ...protectedApi, backupsRouter);
-app.use("/api", ...protectedApi, architectureRouter);
-app.use("/api", ...protectedApi, operationsRouter);
-app.use("/api", ...protectedApi, industriesRouter);
-app.use("/api", ...protectedApi, industryRecordsRouter);
-app.use("/api", ...protectedApi, adminRouter);
-app.use("/api", ...protectedApi, saasRouter);
+// Public callbacks are mounted above. Authenticate each protected HTTP request
+// once, not again for every unrelated router traversed before its destination.
+app.use("/api", ...protectedApi);
+app.use("/api", modulesRouter);
+app.use("/api", metadataRouter);
+app.use("/api", auditRouter);
+app.use("/api", searchRouter);
+app.use("/api", notificationsRouter);
+app.use("/api", backupsRouter);
+app.use("/api", architectureRouter);
+app.use("/api", operationsRouter);
+app.use("/api", industriesRouter);
+app.use("/api", industryRecordsRouter);
+app.use("/api", adminRouter);
+app.use("/api", saasRouter);
 if (env.enableDevTools) {
   // El permiso de Bot Lab se aplica dentro de sus rutas. Colocarlo en este
   // montaje global bloqueaba por accidente todos los endpoints posteriores
   // (conexiones, campañas, agenda, etc.) para tenants sin bot_lab.
-  app.use("/api", ...protectedApi, devRouter);
+  app.use("/api", devRouter);
 }
-app.use("/api", ...protectedApi, onboardingRouter);
-app.use("/api", ...protectedApi, conversationsRouter); // Inbox: auth + tenant, sin bloqueo por módulo para evitar 403 en tenants configurados
-app.use("/api", ...protectedApi, messagesRouter); // Mensajes manuales del inbox: auth + tenant
-app.use("/api", ...protectedApi, leadsRouter); // Lead panel universal usado desde Inbox
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.PROPERTIES, "/realty"), realtyIntelligenceRouter);
+app.use("/api", onboardingRouter);
+app.use("/api", conversationsRouter); // Inbox: auth + tenant, sin bloqueo por módulo para evitar 403 en tenants configurados
+app.use("/api", messagesRouter); // Mensajes manuales del inbox: auth + tenant
+app.use("/api", leadsRouter); // Lead panel universal usado desde Inbox
+app.use("/api", requireModuleForPaths(MODULES.PROPERTIES, "/realty"), realtyIntelligenceRouter);
 // Broker OS reutiliza las capacidades inmobiliarias habilitadas del tenant,
 // pero su API valida además las etapas de cada operación y sus expedientes.
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.PROPERTIES, "/broker"), brokerRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.SALES, "/products"), productRoutes);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.DOCUMENTS, "/documents"), documentsRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.WORKFLOWS, "/workflows"), workflowsRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.INTEGRATIONS, "/integrations"), integrationsRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.INTEGRATIONS, "/connections"), connectionsRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.MARKETING, "/campaigns"), campaignsRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.BOOKINGS, "/services"), servicesRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.BOOKINGS, "/bookings"), bookingsRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.SALES, "/payments"), paymentsRouter);
-app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.ANALYTICS, ["/dashboard", "/sales/queue"]), dashboardRouter);
+app.use("/api", requireModuleForPaths(MODULES.PROPERTIES, "/broker"), brokerRouter);
+app.use("/api", requireModuleForPaths(MODULES.SALES, "/products"), productRoutes);
+app.use("/api", requireModuleForPaths(MODULES.DOCUMENTS, "/documents"), documentsRouter);
+app.use("/api", requireModuleForPaths(MODULES.WORKFLOWS, "/workflows"), workflowsRouter);
+app.use("/api", requireModuleForPaths(MODULES.INTEGRATIONS, "/integrations"), integrationsRouter);
+app.use("/api", requireModuleForPaths(MODULES.INTEGRATIONS, "/connections"), connectionsRouter);
+app.use("/api", requireModuleForPaths(MODULES.MARKETING, "/campaigns"), campaignsRouter);
+app.use("/api", requireModuleForPaths(MODULES.BOOKINGS, "/services"), servicesRouter);
+app.use("/api", requireModuleForPaths(MODULES.BOOKINGS, "/bookings"), bookingsRouter);
+app.use("/api", requireModuleForPaths(MODULES.SALES, "/payments"), paymentsRouter);
+app.use("/api", requireModuleForPaths(MODULES.ANALYTICS, ["/dashboard", "/sales/queue"]), dashboardRouter);
 // El PDF ejecutivo forma parte del Dashboard: usa la misma autorización y no
 // existe como módulo independiente.
-  app.use("/api", ...protectedApi, requireModuleForPaths(MODULES.ANALYTICS, "/reports"), reportsRouter);
+  app.use("/api", requireModuleForPaths(MODULES.ANALYTICS, "/reports"), reportsRouter);
   // Finance OS valida sus capacidades por operacion: no todas las cuentas de
   // finanzas necesariamente contratan conciliacion, cobranza y analitica a la vez.
-  app.use("/api", ...protectedApi, financeRouter);
+  app.use("/api", financeRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Ruta no encontrada" });
@@ -313,6 +308,7 @@ function getSocketToken(socket) {
 }
 
 async function authenticateSocket(socket, next) {
+  if (lifecycle.draining) return next(new Error("server_draining"));
   try {
     const token = getSocketToken(socket);
     if (!token) return next(new Error("socket_unauthorized"));
@@ -343,19 +339,17 @@ function canAccessTenant(socket, tenantId) {
 
 io.use(authenticateSocket);
 
-if (env.enableAutomation) {
-  setInterval(() => {
-    runAutomationCycle().catch((error) => console.error("Automation error:", error));
-  }, 60_000);
-
-  setInterval(() => {
-    runAutonomousSalesFollowUps({ dryRun: false, limit: 100 })
-      .catch((error) => console.error("Autonomous sales follow-up error:", error));
-  }, 15 * 60_000);
-
-  const executePlatformJobs = () => runPlatformJobs().catch((error) => console.error("Platform jobs error:", error));
-  executePlatformJobs();
-  setInterval(executePlatformJobs, 60_000);
+function startBackgroundJobs() {
+  if (!env.enableAutomation || lifecycle.draining) return;
+  const schedule = (key, action, interval, immediately = false) => {
+    const tick = () => lifecycle.run(key, action).catch(() => console.error(JSON.stringify({ event: "background_job.failed", job: key })));
+    const timer = setInterval(tick, interval);
+    lifecycle.onStop(() => clearInterval(timer));
+    if (immediately) void tick();
+  };
+  schedule("automation", runAutomationCycle, 60_000);
+  schedule("sales_followup", () => runAutonomousSalesFollowUps({ dryRun: false, limit: 100 }), 15 * 60_000);
+  schedule("platform_jobs", runPlatformJobs, 60_000, true);
 }
 
 io.on("connection", (socket) => {
@@ -387,8 +381,11 @@ io.on("connection", (socket) => {
 let stopBankImportWorker = () => {};
 async function bootstrap() {
   await prisma.$connect();
+  if (lifecycle.draining) return;
   // Authorized uploads are processed even when autonomous sales automation is off.
   stopBankImportWorker = startBankImportWorker(prisma, analyzeStoredBankStatement, { onError: (message) => console.warn("[BANK_IMPORT_WORKER]", message) });
+  lifecycle.onStop(() => stopBankImportWorker());
+  startBackgroundJobs();
 
   server.listen(env.port, "0.0.0.0", () => {
     console.log(`Servidor corriendo en http://0.0.0.0:${env.port}`);
@@ -412,14 +409,9 @@ process.on("uncaughtException", (error) => {
   process.exit(1);
 });
 
-process.on("SIGINT", async () => {
-  stopBankImportWorker();
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on("SIGTERM", async () => {
-  stopBankImportWorker();
-  await prisma.$disconnect();
-  process.exit(0);
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => {
+  void lifecycle.shutdown({ signal,
+    closeHttp: () => closeHttpServer(server, io),
+    closeResources: async () => { await closeRedisClient(); await prisma.$disconnect(); }
+  });
 });

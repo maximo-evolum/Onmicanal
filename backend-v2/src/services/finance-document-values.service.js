@@ -1,3 +1,5 @@
+import { financeCurrency, validFinanceAmount } from "./finance-currency.service.js";
+
 const dataOf = (r) => r?.data && typeof r.data === "object" && !Array.isArray(r.data) ? r.data : {};
 const text = (v) => String(v ?? "").trim();
 const upper = (v) => text(v).toUpperCase();
@@ -21,10 +23,12 @@ export function financeDocumentDate(record) {
 }
 export function financeDocumentState(record, now = new Date()) {
   const d = dataOf(record), issues = [];
+  const currency = financeCurrency(d.currency);
   const read = (value, name, fallback = 0) => {
     if (!supplied(value)) return fallback;
     const n = (typeof value === "number" || (typeof value === "string" && value.trim())) ? Number(value) : NaN;
     if (!Number.isFinite(n) || n < 0) { issues.push(`${name}: monto inválido.`); return fallback; }
+    if (!validFinanceAmount(n, currency)) issues.push(`${name}: monto fuera de precisión segura o de los decimales admitidos por la moneda.`);
     return n;
   };
   const rawAmount = d.amount ?? d.total ?? d.totalAmount ?? d.value;
@@ -32,6 +36,7 @@ export function financeDocumentState(record, now = new Date()) {
   if (!supplied(rawAmount)) issues.push("Falta el monto original del documento.");
   const creditNotes = read(d.creditNotesTotal ?? d.creditNoteAmount, "Notas de crédito"), debitNotes = read(d.debitNotesTotal ?? d.debitNoteAmount, "Notas de débito");
   const adjusted = originalAmount - creditNotes + debitNotes, amount = Math.max(0, adjusted);
+  if (!validFinanceAmount(amount, currency)) issues.push("El monto ajustado excede la precisión segura de la moneda.");
   const justifiedDifference = read(d.justifiedDifferenceTotal, "Diferencias justificadas");
   if (adjusted < 0) issues.push("Las notas de crédito superan el monto ajustable.");
   const storedPaid = supplied(d.paidAmount) ? read(d.paidAmount, "Pagos registrados") : null;

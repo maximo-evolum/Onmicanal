@@ -16,6 +16,9 @@
     "qa:recovery": "node scripts/finance-qa-recovery.mjs",
     "test:database": "node scripts/finance-qa.mjs database",
     "test:permissions": "node scripts/finance-qa.mjs permissions",
+    "test:integrity": "node scripts/finance-qa.mjs integrity",
+    "test:concurrency": "node scripts/finance-qa.mjs concurrency",
+    "test:startup": "node scripts/finance-qa.mjs startup",
     "test:integration": "node scripts/finance-qa.mjs all",
     "repair:admin": "node scripts/repair-admin-access.mjs",
     "audit:tenant-modules": "node scripts/normalize-tenant-modules.mjs",
@@ -30,6 +33,7 @@
     "configure:broker-demo-holding": "node scripts/configure-broker-demo-holding.mjs",
     "migrate:broker-relational": "node scripts/migrate-broker-relational-core.mjs",
     "prisma:deploy": "prisma migrate deploy",
+    "deploy:check": "prisma migrate status",
     "audit:production": "npm audit --omit=dev --json",
     "audit:security": "npm audit --audit-level=low",
     "load:test": "node scripts/load-test.mjs"

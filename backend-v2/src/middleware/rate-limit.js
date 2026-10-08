@@ -26,7 +26,7 @@ function keyFor(req) {
 export function basicRateLimit({ windowMs = 60_000, max = 240, keyPrefix = "api", keyForRequest } = {}) {
   return async (req, res, next) => {
     // No limitar preflight ni health.
-    if (req.method === "OPTIONS" || req.path === "/health" || req.path === "/api/health") return next();
+    if (req.method === "OPTIONS" || ["/health", "/api/health", "/health/live", "/health/ready"].includes(req.path)) return next();
 
     const now = Date.now();
     const key = String(keyForRequest?.(req) || keyFor(req));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { FinanceFeedback, FinanceLoading } from "./finance-feedback";
 import { getFinanceMonthlyClosePreview, registerFinanceMonthlyClose, reopenFinanceMonthlyPeriod, type FinanceMonthlyClosePreview } from "@/lib/api";
 import { FinancePeriodCoveragePanel } from "@/components/finance-period-coverage";
 import { FinanceHistoricalReviewPanel } from "@/components/finance-historical-review";
@@ -62,7 +63,7 @@ export function FinancePeriodWorkspace({ period, canManage, onBusy, onResolve }:
     {view?.metrics.justifiedDifferences !== undefined ? <p className="finance-note">Diferencias justificadas en este período: <strong>{money(view.metrics.justifiedDifferences)}</strong>. Reducen deuda con aprobación y respaldo, pero no incrementan los ingresos bancarios ni emiten documentos tributarios.</p> : null}
     {view?.coverage ? <FinancePeriodCoveragePanel key={`${view.coverage.fingerprint}:${view.coverage.review?.id || "pending"}:${view.snapshotId || "live"}`} coverage={view.coverage} version={control?.version ?? 0} editable={canManage && !busy && control?.status === "OPEN" && !view.snapshotId} onSaved={() => refresh()} onBusy={onBusy} /> : view?.snapshotId ? <p className="finance-note">Este cierre histórico no contiene la verificación de cobertura nueva. Se conserva sin modificar ni certificar retroactivamente.</p> : null}
     <article className="finance-card"><div className="finance-card-heading"><div><span className="finance-eyebrow">Control mensual · empresa completa · CLP</span><h2>Cierre y reapertura de {period}</h2><p>Estado actual del período: <strong>{control?.status === "CLOSED" ? "Cerrado" : control ? "Abierto" : "Consultando"}</strong>{control ? ` · versión ${control.version}` : ""}</p></div><button type="button" className="secondary-btn" disabled={busy} onClick={() => void refresh()}>Actualizar estado actual</button></div>
-      {error ? <p className="finance-note" role="alert">{error}</p> : null}{notice ? <p className="finance-note" role="status">{notice}</p> : null}{busy ? <p role="status">Procesando el período…</p> : null}
+      {error ? <FinanceFeedback message={error} kind="error" /> : null}{notice ? <FinanceFeedback message={notice} kind="success" /> : null}{busy ? <FinanceLoading label="Procesando el período…" /> : null}
       {view?.protection ? <p className="finance-note"><strong>Alcance del bloqueo actual</strong> {view.protection.message}</p> : null}
       {!canManage ? <p>Puedes consultar y exportar. Cerrar o reabrir requiere una cuenta administradora.</p> : null}
       {canManage && control?.status === "OPEN" && view?.status === "READY_TO_CLOSE" ? <div className="finance-form"><label>Nota interna<textarea value={note} maxLength={2000} disabled={busy} onChange={(e) => setNote(e.target.value)} /></label><label>Escribe CERRAR para confirmar<input value={confirmation} disabled={busy} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" /></label><button type="button" className="primary-btn" disabled={busy || confirmation !== "CERRAR"} onClick={() => void close()}>Cerrar período y guardar fotografía</button></div> : null}

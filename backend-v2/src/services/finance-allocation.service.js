@@ -30,7 +30,7 @@ export async function assertReconciliationPeriodOpen(tx, tenantId, movement) {
 
 export function planFinanceAllocation(movement, invoices, allocations) {
   const bank = dataOf(movement);
-  if (["MATCHED", "REVIEW", "REJECTED", "DELETED"].includes(String(movement.status).toUpperCase()) || bank.reconciliationId) fail(409, "El movimiento ya está conciliado, eliminado o pendiente de resolver una revisión.");
+  if (["MATCHED", "RECONCILED", "CLOSED", "EXCLUDED", "REVIEW", "REJECTED", "DELETED"].includes(String(movement.status).toUpperCase()) || bank.reconciliationId || bank.excluded) fail(409, "El movimiento ya está conciliado, excluido, eliminado o pendiente de resolver una revisión.");
   if (["COMMISSION_OR_FEE", "INTERNAL_TRANSFER"].includes(String(bank.movementKind || "").toUpperCase())) fail(400, "Comisiones y traspasos internos no se aplican a cuentas por cobrar.");
   if (String(bank.currency || "CLP").toUpperCase() !== "CLP") fail(400, "La asignación actual admite pesos chilenos; otras monedas requieren un flujo cambiario.");
   const amount = Number(bank.amount);
@@ -79,6 +79,11 @@ export async function applyFinanceAllocationInTransaction(tx, { tenantId, userId
       });
     }
     const plan = planFinanceAllocation(movement, invoices, requested);
+    // A stale/legacy status must not allow a second financial application.
+    const activeEvidence = await tx.industryRecord.findFirst({ where: { tenantId,
+      recordType: { in: ["finance_reconciliation", "finance_invoice_receipt"] },
+      status: { in: ["APPROVED", "RECONCILED"] }, data: { path: ["movementId"], equals: movementId } } });
+    if (activeEvidence) fail(409, "El movimiento conserva evidencia financiera activa. Revisa sus vínculos antes de volver a conciliar; no se duplicó el cobro.");
     const now = new Date().toISOString();
     const bank = dataOf(movement);
     const confidence = Math.min(...plan.map((item) => item.score.confidence));
@@ -126,13 +131,30 @@ export async function reverseFinanceAllocationInTransaction(tx, { tenantId, user
     if (!receipts.length || total !== Number(dataOf(movement).amount) || receipts.some((receipt) => receipt.status !== "RECONCILED" || !pesos(dataOf(receipt).amount) || dataOf(receipt).movementId !== movement.id)) fail(409, "Los comprobantes no cuadran con el abono. No se aplicó ninguna reversa.");
     const ids = receipts.map((receipt) => dataOf(receipt).invoiceId);
     if (new Set(ids).size !== ids.length) fail(409, "Hay comprobantes duplicados que requieren revisión.");
+    // Matching totals alone are not proof: preserve the exact approved split.
+    const allocations = Array.isArray(rec.allocations) ? rec.allocations : [];
+    const assignedIds = allocations.map(item => item?.invoiceId);
+    const bankData = dataOf(movement);
+    const currency = data => String(data.currency || "CLP").toUpperCase();
+    if (!allocations.length || allocations.length !== receipts.length || new Set(assignedIds).size !== assignedIds.length
+      || allocations.some(item => typeof item?.invoiceId !== "string" || !item.invoiceId || !pesos(item.amount))
+      || !Number.isSafeInteger(total) || Number(rec.amount) !== total || currency(rec) !== "CLP" || currency(bankData) !== "CLP"
+      || rec.reversedAt || bankData.excluded
+      || !["CREDIT", "ABONO"].includes(String(bankData.direction || bankData.movementType || "").toUpperCase())
+      || (rec.invoiceIds !== undefined && (!Array.isArray(rec.invoiceIds) || rec.invoiceIds.length !== assignedIds.length
+        || new Set(rec.invoiceIds).size !== assignedIds.length || rec.invoiceIds.some(id => !assignedIds.includes(id))))
+      || (rec.invoiceId && (assignedIds.length !== 1 || rec.invoiceId !== assignedIds[0]))
+      || receipts.some(receipt => {
+        const detail = dataOf(receipt), approved = allocations.find(item => item.invoiceId === detail.invoiceId);
+        return !approved || approved.amount !== detail.amount || detail.reversedAt || currency(detail) !== "CLP";
+      })) fail(409, "La evidencia de cobro no coincide con las asignaciones aprobadas. Requiere revisión; no se aplicó ninguna reversa.");
     const invoices = await tx.industryRecord.findMany({ where: { tenantId, recordType: "finance_invoice", id: { in: ids } } });
     const plan = receipts.map((receipt) => {
       const detail = dataOf(receipt); const invoice = invoices.find((item) => item.id === detail.invoiceId);
       if (!invoice) fail(409, "Falta un documento vinculado; no se puede revertir parcialmente.");
       const data = dataOf(invoice); const state = getInvoiceFinancialState(invoice);
       const paid = state.paidAmount;
-      if (!Number.isSafeInteger(paid) || !Number.isSafeInteger(state.balance) || ["ANNULLED", "CANCELLED", "REJECTED", "ANULADA"].includes(invoice.status) || paid < detail.amount || !state.included || state.balance + detail.amount + state.justifiedDifference > state.amount) fail(409, "El documento tiene ajustes posteriores incompatibles. Revisa sus pagos o notas antes de revertir.");
+      if (currency(data) !== "CLP" || !Number.isSafeInteger(paid) || !Number.isSafeInteger(state.balance) || ["ANNULLED", "CANCELLED", "REJECTED", "ANULADA"].includes(invoice.status) || paid < detail.amount || !state.included || state.balance + detail.amount + state.justifiedDifference > state.amount) fail(409, "El documento tiene ajustes posteriores incompatibles. Revisa sus pagos o notas antes de revertir.");
       return { receipt, invoice, data, amount: detail.amount, balance: state.balance + detail.amount, paid: paid - detail.amount };
     });
     const now = new Date().toISOString();

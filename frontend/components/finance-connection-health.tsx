@@ -36,6 +36,13 @@ export function FinanceConnectionHealth() {
       <div className={styles.cards}>{health.items.map((item) => <section className={styles.item} key={item.key}>
         <div className={styles.heading}><h3>{item.label}</h3><span className={`${styles.badge} ${item.status === "VERIFIED" ? styles.good : ["ERROR", "EXPIRED", "SYNC_STALLED"].includes(item.status) ? styles.bad : styles.neutral}`}>{item.statusLabel}</span></div>
         <p>{item.note}</p>
+        {item.capability && <div className={styles.capability}>
+          <strong>{item.capability.mode}</strong>
+          {item.capability.environment && <p>Ambiente configurado: <b>{({ CERTIFICATION: "Certificación / pruebas", PRODUCTION: "Producción", UNCONFIRMED: "Por confirmar con el proveedor" })[item.capability.environment]}</b>. No equivale a una conexión verificada.</p>}
+          <p><b>Qué permite:</b> {item.capability.available}</p>
+          <p><b>Límite actual:</b> {item.capability.limitation}</p>
+          <details><summary>¿Qué falta para operar?</summary><p>{item.capability.nextStep}</p></details>
+        </div>}
         {!["MANUAL", "COMING_SOON", "NOT_CONFIGURED"].includes(item.status) && <dl><dt>Última prueba registrada</dt><dd>{date(item.lastCheckedAt)}</dd><dt>Última respuesta exitosa</dt><dd>{date(item.lastSuccessAt)}</dd>{item.expiresAt && <><dt>Vencimiento registrado</dt><dd>{date(item.expiresAt)}</dd></>}</dl>}
         {item.key === "finance_nubox" && <div className={styles.sync}><strong>{syncLabels[item.sync.status] || "Estado sin confirmar"}</strong><p>Última sincronización exitosa: {date(item.sync.lastSuccessAt)}</p>{item.sync.period && <p>Período solicitado: {item.sync.period} (no acredita cobertura completa).</p>}{item.sync.startedAt && <p>Inicio: {date(item.sync.startedAt)}</p>}{item.sync.completedAt && <p>Resultado registrado: {date(item.sync.completedAt)}</p>}</div>}
         {item.banking && <p>Consentimientos: {item.banking.total} · Pendientes: {item.banking.pending} · Lotes recibidos: {item.banking.received} · Con incidencias: {item.banking.failed}<br />Última recepción: {date(item.banking.lastReceivedAt)}</p>}

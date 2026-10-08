@@ -9,10 +9,13 @@ const commands = {
   schema: ['node_modules/prisma/build/index.js', 'migrate', 'diff', '--from-schema-datasource', 'prisma/schema.prisma', '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code', '--config', 'scripts/prisma-qa.config.ts'],
   database: ['--test', 'integration/finance-database.integration.mjs'],
   permissions: ['--test', 'integration/finance-permissions.integration.mjs'],
-  all: ['--test', 'integration/finance-database.integration.mjs', 'integration/finance-permissions.integration.mjs', 'integration/finance-redis.integration.mjs']
+  integrity: ['--test', 'integration/finance-integrity.integration.mjs'],
+  concurrency: ['--test', 'integration/finance-concurrency.integration.mjs'],
+  startup: ['--test', 'integration/backend-startup.integration.mjs'],
+  all: ['--test', 'integration/finance-database.integration.mjs', 'integration/finance-permissions.integration.mjs', 'integration/finance-integrity.integration.mjs', 'integration/finance-concurrency.integration.mjs', 'integration/finance-redis.integration.mjs']
 };
 try {
-  if (!commands[mode]) throw new Error('Usa migrate, status, schema, database, permissions o all. No hay reset ni db push automático.');
+  if (!commands[mode]) throw new Error('Usa migrate, status, schema, database, permissions, integrity, concurrency, startup o all. No hay reset ni db push automático.');
   const env = qaEnvironment(process.env, { requireRedis: mode === 'all' });
   console.log(`Finance QA: ${mode}; solo base local evolum_finance_test; sin credenciales externas.`);
   const result = spawnSync(process.execPath, commands[mode], {

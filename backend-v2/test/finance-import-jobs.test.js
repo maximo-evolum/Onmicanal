@@ -253,6 +253,42 @@ test("otro worker no vuelve a analizar un trabajo ya terminado", async () => {
   const db = database(), job = await create(db); await analyze(db, job.id);
   await assert.rejects(analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, background: true, analyze: async () => { throw Error("no debe ejecutarse"); } }), (e) => e.status === 409);
 });
+
+test("la toma transaccional rechaza un cuarto intento aunque el worker tenga una lectura antigua", async () => {
+  const db = database(), job = await create(db);
+  Object.assign(db.state.jobs[0], { attempts: 3, status: "RECEIVED" });
+  await assert.rejects(analyzeBankImportJob(db, { tenantId: "empresa-a", id: job.id, background: true, analyze: () => assert.fail("cuarto intento") }), /agotó/);
+  assert.equal(db.state.jobs[0].revision, 0);
+  db.state.jobs[0].updatedAt = new Date(Date.now() - 31000);
+  await runBankImportWorker(db, { analyze: () => assert.fail("cuarto intento") });
+  assert.equal(db.state.jobs[0].status, "FAILED");
+});
+
+test("una respuesta perdida tras guardar recupera la revisión exacta sin repetir análisis", async () => {
+  const db = database(), job = await create(db), transaction = db.$transaction;
+  let transactions = 0, parses = 0;
+  db.$transaction = async (...args) => {
+    const result = await transaction(...args);
+    if (++transactions === 2) throw Object.assign(Error("Respuesta de COMMIT perdida"), { code: "P1017" });
+    return result;
+  };
+  const result = await analyze(db, job.id, async () => { parses++; return preview; });
+  assert.equal(result.revision, 1); assert.equal(parses, 1);
+  assert.equal(db.state.jobs[0].status, "READY"); assert.equal(db.state.revisions.length, 1);
+});
+
+test("un fallo al marcar una carga agotada no impide atender las demás", async () => {
+  const db = database(), exhausted = await create(db); await create(db, "empresa-b");
+  db.state.jobs.forEach(job => { job.updatedAt = new Date(Date.now() - 31000); });
+  db.state.jobs[0].attempts = 3;
+  const update = db.financeBankImportJob.updateMany;
+  db.financeBankImportJob.updateMany = args => {
+    if (args.where.id === exhausted.id) throw Object.assign(Error("Fallo transitorio"), { code: "P1001" });
+    return update(args);
+  };
+  const result = await runBankImportWorker(db, { analyze: async () => preview });
+  assert.equal(result[0].status, "REQUIRES_REVIEW"); assert.equal(result[1].status, "READY");
+});
 test("fallo de infraestructura al guardar conserva el trabajo recuperable", async () => {
   const db = database(), job = await create(db); const transaction = db.$transaction; let count = 0;
   db.$transaction = async (...args) => { if (++count > 1) throw Object.assign(Error("offline"), { code: "P1001" }); return transaction(...args); };

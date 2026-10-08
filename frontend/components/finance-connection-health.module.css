@@ -12,6 +12,9 @@
 .item dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 14px; font-size: .8rem; }
 .item dd { margin: 0; font-variant-numeric: tabular-nums; }
 .sync { border-left: 3px solid #168d99; padding-left: 12px; font-size: .85rem; }
+.capability { margin:12px 0; padding:12px; border:1px solid var(--border); border-radius:10px; }
+.capability summary { cursor:pointer; font-size:.85rem; padding:6px 0; }
+.capability summary:focus-visible { outline:2px solid #168d99; outline-offset:3px; }
 .error { border-left: 3px solid #c66355; padding: 12px; }
 .item a { display: inline-block; padding: 8px 0; text-decoration: underline; font-size: .85rem; color: inherit; }
 .panel button:disabled { opacity: .65; cursor: wait; }

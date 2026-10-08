@@ -1,4 +1,5 @@
 import { prisma } from "../lib/db.js";
+import { requestNubox, NuboxRequestError } from "./nubox-http.service.js";
 import { env } from "../lib/env.js";
 import { decryptSecret } from "../lib/credential-crypto.js";
 import { normalizeMetadata } from "../lib/metadata.js";
@@ -41,90 +42,9 @@ function periodsBetween(startPeriod, endPeriod, maxPeriods = 24) {
   });
 }
 
-function nuboxBaseUrl() {
-  const configured = String(env.nuboxApiBaseUrl || "").trim();
-  if (!configured) throw new Error("Falta configurar NUBOX_API_BASE_URL en el servidor.");
-  const parsed = new URL(configured);
-  // Nubox provee una base URL propia por ambiente (UAT o producción). La
-  // variable se administra sólo en Railway, por lo que aceptamos el host
-  // HTTPS que Nubox haya entregado sin exponerlo al usuario final.
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
-    throw new Error("NUBOX_API_BASE_URL debe ser una URL HTTPS válida, sin credenciales incluidas, entregada por Nubox.");
-  }
-  return configured.replace(/\/$/, "");
-}
-
-function authorization(value) {
-  const token = text(value);
-  return /^bearer\s+/i.test(token) ? token : `Bearer ${token}`;
-}
-
-function nuboxError(status, payload) {
-  const message = text(payload?.message);
-  if (status === 401 || status === 403) return "Nubox rechazó las credenciales. Revisa x-api-key y Authorization.";
-  if (status === 404) return "Nubox no encontró el recurso solicitado. Revisa la URL y el ambiente configurado.";
-  if (status >= 500) return "Nubox no está disponible temporalmente.";
-  return message ? `Nubox no pudo sincronizar: ${message.slice(0, 180)}` : `Nubox no pudo sincronizar (HTTP ${status}).`;
-}
-
-function nuboxNetworkError(error) {
-  const code = String(error?.cause?.code || error?.code || "").toUpperCase();
-  if (["ENOTFOUND", "EAI_AGAIN"].includes(code)) {
-    return "EVOLUM no pudo encontrar el servidor de Nubox. Revisa la URL base configurada y vuelve a intentar.";
-  }
-  if (["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET"].includes(code)) {
-    return "No fue posible establecer una conexión segura con Nubox desde el servidor. El servicio puede estar temporalmente no disponible; inténtalo nuevamente.";
-  }
-  return "No fue posible sincronizar con Nubox desde el servidor. Revisa el diagnóstico de Railway o intenta nuevamente en unos minutos.";
-}
-
-async function nuboxRequest(config, path, { method = "GET", body, responseType = "json", extraHeaders = {} } = {}) {
-  const apiKey = decryptSecret(config?.accessToken);
-  const auth = authorization(decryptSecret(config?.verifyToken));
-  if (!apiKey || !auth) throw new Error("Faltan las credenciales de Nubox.");
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
-  const baseUrl = nuboxBaseUrl();
-  try {
-    const response = await fetch(`${baseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: auth,
-        "X-Api-Key": apiKey,
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-        Accept: responseType === "binary" ? "application/pdf, application/xml, application/octet-stream" : "application/json",
-        ...extraHeaders
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      signal: controller.signal
-    });
-    const payload = responseType === "binary"
-      ? await response.arrayBuffer().catch(() => null)
-      : await response.json().catch(() => null);
-    if (!response.ok) throw new Error(nuboxError(response.status, payload));
-    if (responseType === "binary") {
-      return {
-        payload: Buffer.from(payload || new ArrayBuffer(0)),
-        contentType: response.headers.get("content-type") || "application/octet-stream",
-        total: 0
-      };
-    }
-    return { payload, total: Number(response.headers.get("x-total-count") || 0) || 0 };
-  } catch (error) {
-    if (error?.name === "AbortError") throw new Error("La sincronización con Nubox excedió el tiempo de espera.");
-    if (error instanceof TypeError && /fetch failed/i.test(String(error.message || ""))) {
-      console.warn("[NUBOX_REQUEST_FAILED]", {
-        host: new URL(baseUrl).host,
-        endpoint: String(path || "").split("?")[0],
-        code: error?.cause?.code || error?.code || "unknown"
-      });
-      throw new Error(nuboxNetworkError(error));
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
+async function nuboxRequest(config, path, options = {}) {
+  return requestNubox({ baseUrl: env.nuboxApiBaseUrl, apiKey: decryptSecret(config?.accessToken),
+    token: decryptSecret(config?.verifyToken), path, ...options });
 }
 
 function validNuboxDocumentId(value) {
@@ -136,6 +56,7 @@ function validNuboxDocumentId(value) {
 }
 
 async function nuboxConfigForTenant(tenantId) {
+  if (!tenantId) throw new FinanceOperationError(401, "Se requiere una empresa autenticada para consultar Nubox.");
   const config = await prisma.tenantChannelConfig.findFirst({
     where: { tenantId, channel: NUBOX_CHANNEL, isActive: true },
     orderBy: { updatedAt: "desc" }
@@ -172,7 +93,8 @@ export async function downloadNuboxSaleFile({ tenantId, documentId, format }) {
   if (!new Set(["pdf", "xml"]).has(normalizedFormat)) throw new Error("El formato solicitado no es válido.");
   const config = await nuboxConfigForTenant(tenantId);
   const id = validNuboxDocumentId(documentId);
-  return nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}/${normalizedFormat}`, { responseType: "binary" });
+  const query = normalizedFormat === "pdf" ? "?template=TEMPLATE_A4" : "";
+  return nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}/${normalizedFormat}${query}`, { responseType: "binary" });
 }
 
 // Esta operación permanece explícita y protegida: jamás se invoca desde la
@@ -225,6 +147,7 @@ async function importNuboxSales({ tenantId, config, period, limit }) {
 }
 
 function retryable(error) {
+  if (error instanceof NuboxRequestError) return error.retryable;
   if (error instanceof FinanceOperationError && error.status < 500) return false;
   const message = String(error?.message || "").toLocaleLowerCase("es");
   return !/credencial|x-api-key|authorization|url base|url https|faltan/.test(message);
@@ -290,7 +213,9 @@ export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), l
       } catch (error) {
         if (committed) return { ok: true, period, attempts: attempt, coordinated, ...committed, warning: "Los documentos se guardaron; no se pudo completar la actualización del estado de la conexión.", analysis: { analyzed: false, requiresReview: true } };
         lastError = error instanceof Error ? error : new Error("No se pudo sincronizar Nubox.");
-        if (attempt < attempts && retryable(lastError)) await pause(attempt * 1_000);
+        // Long Retry-After values are handed back to the caller, not slept
+        // through while the distributed sync lock may expire.
+        if (attempt < attempts && retryable(lastError) && !(lastError.retryAfterMs > 5000)) await pause(Math.max(attempt * 1_000, lastError.retryAfterMs || 0));
         else break;
       }
     }

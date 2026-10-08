@@ -29,7 +29,7 @@ import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { MODULES } from "../lib/modules.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
-import { ensureTenantModuleEligibility } from "../services/tenant-modules.service.js";
+import { ensureTenantModuleEligibility, getEligibleTenantModules } from "../services/tenant-modules.service.js";
 import {
   financeRecordData,
   financeAgingSegment,
@@ -345,7 +345,7 @@ financeRouter.get("/finance/connection-health", requireRole(ROLE_GROUPS.VIEWERS)
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
     const requested = [...new Set([...FINANCE_CONNECTION_SOURCES.map((s) => s.module), MODULES.INTEGRATIONS])];
     const allowedModules = (await Promise.all(requested.map(async (module) => req.user?.role === "SUPER_ADMIN" || await ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant }) ? module : null))).filter(Boolean);
-    const result = await readFinanceConnectionHealth(prisma, { tenantId: req.tenantId, allowedModules });
+    const result = await readFinanceConnectionHealth(prisma, { tenantId: req.tenantId, allowedModules, nuboxBaseUrl: env.nuboxApiBaseUrl });
     res.json({ ...result, canManage: ["SUPER_ADMIN", ...ROLE_GROUPS.MANAGERS].includes(req.user?.role) && allowedModules.includes(MODULES.INTEGRATIONS) });
   } catch (error) {
     res.status(error instanceof FinanceOperationError ? error.status : 503).json({ error: error instanceof FinanceOperationError ? error.message : "No se pudo consultar el estado de las conexiones. Esto no significa que estén desconectadas." });
@@ -355,8 +355,9 @@ financeRouter.get("/finance/connection-health", requireRole(ROLE_GROUPS.VIEWERS)
 financeRouter.get("/finance/overview", async (req, res) => {
   try {
     if (!(await requireFinanceModule(req, res, MODULES.FINANCE_ANALYTICS))) return;
-    const allowedModules = req.user.role === 'SUPER_ADMIN' ? null : (await Promise.all([...new Set(Object.values(FINANCE_RECORD_MODULES))].map(async module =>
-      await ensureTenantModuleEligibility({ tenantId: req.tenantId, module, tenant: req.tenant }) ? module : null))).filter(Boolean);
+    const allowedModules = req.user.role === 'SUPER_ADMIN' ? null : await getEligibleTenantModules({
+      tenantId: req.tenantId, modules: Object.values(FINANCE_RECORD_MODULES), tenant: req.tenant
+    });
     const overview = await getFinanceOverview({ tenantId: req.tenantId, context: parseFinanceContext(req.query), allowedModules });
     if (req.query.export === 'csv' && overview.restricted) return res.status(403).json({ error: 'La vista es parcial por permisos. Solicita acceso a los módulos de origen antes de exportar el informe consolidado.' });
     if (req.query.export === "csv") return res.set({ "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="indicadores-financieros.csv"', "Cache-Control": "no-store" }).send(overviewMetricsCsv(overview, req.tenantId));

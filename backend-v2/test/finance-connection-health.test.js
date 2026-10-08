@@ -18,6 +18,16 @@ test("estado: no inventa conexiones ni infiere conectividad desde credenciales",
   assert.equal(nubox({}, { accessToken: "secret", verifyToken: "secret" }).status, "CONFIGURED");
   assert.equal(nubox({ lastTestStatus: "OK" }).status, "CONFIGURED");
 });
+
+test("estado: alcance real y ambiente del proveedor no se confunden con conectividad", () => {
+  const result = health([config({})], { nuboxBaseUrl: "https://api.test-nubox.com/nbxpymapi-uat" });
+  const source = result.items.find(item => item.key === "finance_nubox");
+  assert.equal(source.capability.environment, "CERTIFICATION"); assert.equal(source.status, "CONFIGURED");
+  assert.match(source.capability.limitation, /no importa automáticamente facturas de proveedores/);
+  assert.match(result.items.find(item => item.key === "finance_open_banking").capability.limitation, /no abre por sí solo/);
+  assert.match(result.items.find(item => item.key === "finance_sii").capability.limitation, /No hay una conexión directa/);
+  assert.doesNotMatch(JSON.stringify(result), /api.test-nubox/);
+});
 test("estado: prueba reciente, antigua, fallida y desactivada", () => {
   assert.equal(nubox({ lastTestStatus: "OK", lastTestedAt: recent }).status, "VERIFIED");
   assert.equal(nubox({ lastTestStatus: "OK", lastTestedAt: "2026-09-22T12:00:00Z" }).status, "STALE");

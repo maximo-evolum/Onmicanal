@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { FinanceOperationError, withFinanceWrite } from "./finance-integrity.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";
 import { getInvoiceFinancialState } from "./finance.service.js";
+import { financeDocumentSide } from "./finance-document-values.service.js";
 
 const dataOf = (record) => record?.data || {};
 const fail = (status, message) => { throw new FinanceOperationError(status, message); };
@@ -45,6 +46,7 @@ export async function registerManualSettlement(db, { tenantId, userId, documentI
     // The payment affects its effective month, not the invoice's issue month.
     await assertFinancePeriodOpen(tx, tenantId, date.slice(0, 7));
     if (String(data.currency || "CLP").toUpperCase() !== "CLP") fail(422, "Este registro manual admite CLP. No se convierte moneda automáticamente.");
+    if (incoming && financeDocumentSide(document) !== "CUSTOMER") fail(409, "Este documento corresponde a un proveedor, no a una cuenta por cobrar. Revisa su clasificación antes de registrar el cobro.");
     if ([document.status, data.status].some((status) => ["CANCELLED", "CANCELED", "VOID", "ANULADA", "ANULADO", "DELETED", "REJECTED"].includes(String(status || "").toUpperCase()))) fail(409, "No se puede registrar un pago sobre un documento anulado o rechazado.");
     const state = getInvoiceFinancialState(document);
     if (!state.included) fail(409, "El documento requiere revisión o está fuera de la cartera operativa. No se registró el pago.");

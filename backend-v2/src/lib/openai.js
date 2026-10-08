@@ -1,7 +1,11 @@
 import OpenAI from "openai";
 import { env } from "./env.js";
+import { createLazyAIClient } from "./lazy-ai-client.js";
 
-const client = new OpenAI({ apiKey: env.openAiApiKey });
+export const getOpenAIClient = createLazyAIClient({
+  readApiKey: () => env.openAiApiKey,
+  createClient: apiKey => new OpenAI({ apiKey })
+});
 
 const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
 
@@ -17,6 +21,8 @@ export async function chatComplete({
   retries = 3,
   temperature = 0.7,
 } = {}) {
+  // Configuration errors are immediate; do not retry or make network requests.
+  const client = getOpenAIClient();
   let lastError;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
@@ -78,7 +84,14 @@ export function truncateHistory(messages = [], maxTokens = 3000) {
   return [...systemMessages, ...kept];
 }
 
-export { client as openaiClient };
+// Preserve the legacy named export without eagerly constructing the SDK.
+export const openaiClient = new Proxy({}, {
+  get(_target, property) {
+    const client = getOpenAIClient();
+    const value = Reflect.get(client, property, client);
+    return typeof value === "function" ? value.bind(client) : value;
+  }
+});
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
