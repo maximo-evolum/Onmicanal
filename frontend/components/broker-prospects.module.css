@@ -1,0 +1,49 @@
+/* Archivo: Implementa el componente de interfaz broker prospects.module para la aplicación web. */
+.root { display:grid; gap:20px; min-width:0; color:var(--text-primary,inherit); }
+.header,.actions { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.header h2,.panel h3 { margin:0 0 8px; }
+.root p { line-height:1.5; }
+.panel,.metrics>div,.funnel>button { border:1px solid var(--border-color,#81818e44); border-radius:16px; padding:20px; background:var(--surface,transparent); min-width:0; }
+.metrics,.funnel { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+.metrics strong { font-size:1.6rem; display:block; }
+.metrics span,.item span,.item small,.history small { display:block; }
+.funnel progress { width:100%; height:6px; display:block; margin-top:12px; accent-color:#14aaa3; }
+.layout { display:grid; grid-template-columns:minmax(250px, .75fr) minmax(0,2fr); gap:20px; align-items:start; }
+.layout > aside { max-height:min(75dvh,840px); overflow-y:auto; overscroll-behavior:contain; }
+@media(max-width:600px) { .layout > aside { max-height:320px; } }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; border:0; padding:0; }
+.root label { display:grid; gap:6px; font-size:.9rem; margin-bottom:12px; }
+.root input:not([type=checkbox]),.root select,.root textarea { width:100%; box-sizing:border-box; padding:10px 12px; border-radius:8px; background:var(--input-bg,transparent); color:inherit; border:1px solid #81818e77; min-height:42px; }
+.root button:not([class*="primary-btn"]) { color:inherit; background:transparent; border:1px solid #81818e77; border-radius:10px; padding:10px 14px; cursor:pointer; }
+.root button:disabled { opacity:.5; cursor:wait; }
+.root button:focus-visible,.root a:focus-visible { outline:3px solid #14aaa3; outline-offset:3px; }
+.root button[aria-pressed=true] { border-color:#14aaa3; background:#14aaa319; }
+.root .item { display:grid; text-align:left; gap:6px; width:100%; margin:10px 0; overflow-wrap:anywhere; }
+.steps { display:flex; flex-wrap:wrap; gap:24px; padding-left:20px; }
+.steps [aria-current] { color:#0fa79f; font-weight:700; }
+.subpanel { border-top:1px solid #81818e44; padding:16px 0; margin:16px 0; }
+.documentControls { display:flex; align-items:end; gap:12px; flex-wrap:wrap; }
+.documentControls label { min-width:min(260px,100%); }
+.uploadButton { display:inline-flex !important; min-height:42px; box-sizing:border-box; align-items:center; justify-content:center; padding:10px 14px; margin:0 0 12px; border:1px solid #14aaa3; border-radius:10px; background:#14aaa31c; color:inherit; cursor:pointer; font-weight:700; }
+.uploadButton:has(input:disabled) { opacity:.5; cursor:wait; }
+.documentList { display:grid; gap:8px; margin:12px 0 0; padding:0; list-style:none; }
+.documentList li { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid #81818e44; border-radius:10px; background:color-mix(in srgb, var(--surface, transparent) 86%, #14aaa314); }
+.documentList span,.documentList small { display:block; min-width:0; overflow-wrap:anywhere; }
+.documentList a { white-space:nowrap; }
+.muted { opacity:.8; }
+.notice { padding:14px; border-left:3px solid #14aaa3; background:#14aaa315; overflow-wrap:anywhere; }
+.actions { justify-content:flex-start; margin:12px 0; }
+.history { padding-left:20px; max-height:420px; overflow-y:auto; }
+.history li { padding:10px 0; border-bottom:1px solid #81818e44; }
+.root small { opacity:.85; line-height:1.5; }
+:global(html[data-design-system="dark"] body .vertical-shell.realty-product-workspace .vertical-main.realty-workspace):has(.root) :global(.vertical-hero.realty-hero .realty-hero-actions) button:not([class*="primary-btn"]) { background:#241a3e !important; color:#f0eaff !important; border-color:#695088 !important; }
+@media(max-width:900px) { .layout { grid-template-columns:1fr; } .grid { grid-template-columns:1fr; } }
+@media(max-width:600px) {
+  :global(.vertical-shell.realty-product-workspace) :global(.vertical-main.realty-workspace):has(.root),
+  :global(.vertical-shell.realty-product-workspace.nav-collapsed) :global(.vertical-main.realty-workspace):has(.root) { grid-template-columns:minmax(0,1fr) !important; width:100% !important; box-sizing:border-box; margin:0 !important; padding:72px 16px 24px !important; }
+  :global(.realty-workspace):has(.root) :global(.realty-hero-actions) { width:100%; min-width:0; display:flex; flex-wrap:wrap; }
+  :global(.realty-workspace):has(.root) :global(.realty-hero-actions)>* { min-width:0 !important; max-width:100%; box-sizing:border-box; }
+  .root { width:100%; overflow-wrap:anywhere; }
+  .metrics,.funnel { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .panel { padding:14px; }
+}

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio conversation. */
 import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { getIo } from "../lib/socket.js";
@@ -100,7 +101,7 @@ export async function updateContactProfile({ contactId, profile }) {
 }
 
 export async function getOrCreateOpenConversation({ tenantId, contactId }) {
-  // FIX: No crear chats duplicados para el mismo cliente/canal/tenant.
+  // Corrección: no crear chats duplicados para el mismo cliente, canal y tenant.
   // Antes solo reutilizaba OPEN/PENDING, por eso si una conversación estaba CLOSED/RESOLVED
   // y el cliente volvía a escribir, el sistema creaba otra conversación y se perdía memoria.
   const existing = await prisma.conversation.findFirst({

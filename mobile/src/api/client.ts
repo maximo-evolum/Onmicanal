@@ -1,3 +1,4 @@
+/** Archivo: Centraliza la comunicación móvil con la API para client. */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import * as SecureStore from "expo-secure-store";

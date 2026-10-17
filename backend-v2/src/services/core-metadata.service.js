@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio core metadata. */
 import { evaluateMetadataSchema } from "../lib/metadata-enforcement.js";
 import { getPublishedMetadataSchema } from "./metadata-schemas.service.js";
 

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance import jobs. */
 import { validateBankReviewConfig, bankReviewColumns } from "./finance-bank-review.service.js";
 import { createHash, randomUUID } from "node:crypto";
 import { FinanceOperationError, withFinanceWrite } from "./finance-integrity.service.js";
@@ -37,7 +38,7 @@ export async function createBankImportJob(db, { tenantId, userId, file, account 
   try {
   return await withFinanceWrite(db, async (tx) => {
     let original = await tx.financeBankOriginal.findUnique({ where: { tenantId_sha256: { tenantId, sha256 } }, select: { id: true } });
-    // A repeated click returns the pending job, not a second copy or analysis.
+    // Un clic repetido devuelve el trabajo pendiente, no una segunda copia ni análisis.
     if (original) {
       const existing = await tx.financeBankImportJob.findFirst({ where: { tenantId, originalId: original.id, status: { in: ACTIVE_IMPORT_STATUSES } }, orderBy: { createdAt: "desc" } });
       if (existing) return existing;
@@ -53,8 +54,8 @@ export async function createBankImportJob(db, { tenantId, userId, file, account 
     return tx.financeBankImportJob.create({ data: { tenantId, originalId: original.id, sourceFile, createdById: userId || null, account: importAccount(account) } });
   });
   } catch (error) {
-    // PostgreSQL can report a concurrent identical upload as P2002 rather than
-    // P2034. Reuse only the matching committed job; never hide other conflicts.
+// PostgreSQL puede informar una carga idéntica concurrente como P2002 en vez de
+    // P2034. Reutiliza solo el trabajo confirmado coincidente; nunca oculta otros conflictos.
     if (error?.code === "P2002") {
       const original = await db.financeBankOriginal.findUnique({ where: { tenantId_sha256: { tenantId, sha256 } }, select: { id: true } });
       if (original) {
@@ -112,8 +113,8 @@ export async function analyzeBankImportJob(db, { tenantId, id, account, reviewCo
     return { ...preview, jobId: id, revision: claimed.revision };
   } catch (error) {
     const transient = ["P1001", "P1002", "P1008", "P1017", "P2024"].includes(error?.code);
-    // The COMMIT may have succeeded even if its response was lost. Reuse only
-    // this exact persisted revision; never run the parser again to guess success.
+    // El COMMIT pudo tener éxito incluso si se perdió su respuesta. Reutiliza solo
+    // esta revisión persistida exacta; nunca ejecuta nuevamente el analizador para adivinar el resultado.
     if (transient) {
       const recovered = await readBankImportPreview(db, tenantId, id).catch(() => null);
       if (recovered?.job.status === "READY" && recovered.job.revision === claimed.revision && recovered.preview) return recovered.preview;
@@ -131,7 +132,7 @@ export async function analyzeBankImportJob(db, { tenantId, id, account, reviewCo
 }
 
 // A bounded queue backed by PostgreSQL. No financial movements are created here.
-// Parsing ends at READY; incorporation still requires an authorized confirmation.
+// El análisis termina en READY; la incorporación aún requiere una confirmación autorizada.
 export async function runBankImportWorker(db, { analyze, now = new Date(), limit = 5 } = {}) {
   const jobs = await db.financeBankImportJob.findMany({ where: { OR: [
     { status: "RECEIVED", updatedAt: { lte: new Date(now.getTime() - 30000) } },
@@ -140,7 +141,7 @@ export async function runBankImportWorker(db, { analyze, now = new Date(), limit
   const results = [];
   for (const job of jobs) {
     try {
-      // Repeated process crashes eventually require human review instead of an infinite loop.
+// Las caídas repetidas del proceso finalmente requieren revisión humana en vez de un ciclo infinito.
       if (Number(job.attempts || 0) >= IMPORT_MAX_AUTOMATIC_ATTEMPTS) {
         const result = await db.financeBankImportJob.updateMany({ where: { id: job.id, tenantId: job.tenantId, status: job.status, revision: job.revision, runToken: job.runToken, updatedAt: job.updatedAt }, data: { status: "FAILED", runToken: null, error: "El análisis se interrumpió tres veces. Original conservado; revisa la carga y reintenta manualmente." } });
         results.push({ id: job.id, status: result.count ? "FAILED" : "CHANGED" }); continue;
@@ -148,7 +149,7 @@ export async function runBankImportWorker(db, { analyze, now = new Date(), limit
       await analyzeBankImportJob(db, { tenantId: job.tenantId, id: job.id, analyze, background: true });
       results.push({ id: job.id, status: "READY" });
     } catch (error) {
-      // One bad file must not prevent the remaining queue from progressing.
+      // Un archivo defectuoso no debe impedir que avance el resto de la cola.
       results.push({ id: job.id, status: error?.status === 409 ? "CHANGED" : "REQUIRES_REVIEW" });
     }
   }
@@ -174,7 +175,7 @@ export async function cancelBankImportJob(db, tenantId, id) {
     return tx.financeBankImportJob.update({ where: { id }, data: { status: "CANCELLED", runToken: null } });
   });
 }
-// Called INSIDE the same Serializable transaction that creates movements.
+// Se llama DENTRO de la misma transacción Serializable que crea los movimientos.
 export async function bankImportConfirmation(tx, tenantId, id, expectedRevision) {
   if (!id || !Number.isInteger(expectedRevision)) throw new FinanceOperationError(400, "Recupera o vuelve a seleccionar la cartola para confirmar una revisión guardada.");
   const job = await getBankImportJob(tx, tenantId, id);

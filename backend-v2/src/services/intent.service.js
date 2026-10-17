@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio intent. */
 export async function detectIntent({ message }) {
   const text = (message || "").toLowerCase();
 

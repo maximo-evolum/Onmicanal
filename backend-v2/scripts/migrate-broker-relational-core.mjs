@@ -1,3 +1,4 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con migrate broker relational core. */
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { normalizeLegacyBrokerProperty } from "../src/services/broker-relational-data.service.js";

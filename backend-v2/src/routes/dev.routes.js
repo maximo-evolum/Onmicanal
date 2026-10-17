@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio dev y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { env } from "../lib/env.js";

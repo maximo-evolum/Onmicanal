@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance sync. */
 import { prisma } from "../lib/db.js";
 import { requestNubox, NuboxRequestError } from "./nubox-http.service.js";
 import { env } from "../lib/env.js";
@@ -185,8 +186,8 @@ export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), l
       try {
         const summary = await importNuboxSales({ tenantId, config, period, limit: Math.max(1, Math.min(100, Number(limit) || 100)) });
         committed = summary;
-        // Analysis is post-commit. Its failure must not re-import a committed
-        // batch or falsely tell the user that no documents were changed.
+        // El análisis ocurre después del commit. Su falla no debe reimportar un lote
+        // confirmado ni indicar falsamente al usuario que no cambiaron documentos.
         const analysis = await runFinancePostIngestionAnalysis({ tenantId, source: `nubox:${source}` })
           .catch(() => ({ analyzed: false, requiresReview: true, reason: "ANALYSIS_FAILED_AFTER_IMPORT" }));
         const completedAt = new Date().toISOString();
@@ -213,8 +214,8 @@ export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), l
       } catch (error) {
         if (committed) return { ok: true, period, attempts: attempt, coordinated, ...committed, warning: "Los documentos se guardaron; no se pudo completar la actualización del estado de la conexión.", analysis: { analyzed: false, requiresReview: true } };
         lastError = error instanceof Error ? error : new Error("No se pudo sincronizar Nubox.");
-        // Long Retry-After values are handed back to the caller, not slept
-        // through while the distributed sync lock may expire.
+        // Los valores extensos de Retry-After se devuelven a quien llama, no se espera
+        // durante ellos mientras el bloqueo distribuido de sincronización podría expirar.
         if (attempt < attempts && retryable(lastError) && !(lastError.retryAfterMs > 5000)) await pause(Math.max(attempt * 1_000, lastError.retryAfterMs || 0));
         else break;
       }

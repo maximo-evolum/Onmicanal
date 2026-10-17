@@ -1,3 +1,4 @@
+/** Archivo: Contiene soporte versionado para finance database.integration. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';

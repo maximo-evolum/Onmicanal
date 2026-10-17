@@ -1,3 +1,4 @@
+/** Archivo: Renderiza la página web de EVOLUM OS correspondiente a page. */
 "use client";
 
 import { ChangeEvent, FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -288,7 +289,7 @@ function FinanceWorkspace() {
     try {
       const saved = JSON.parse(sessionStorage.getItem("finance-context:" + contextTenant) || "null");
       if (saved && /^\d{4}-(0[1-9]|1[0-2])$/.test(saved.period)) restored = { period: saved.period, accountKey: /^[a-f0-9]{24}$/.test(saved.accountKey || "") ? saved.accountKey : "", currency: ["CLP", "USD", "EUR", "UF"].includes(saved.currency) ? saved.currency : "CLP" };
-    } catch { /* A corrupt preference never changes the authenticated company. */ }
+    } catch { /* Una preferencia corrupta nunca cambia la empresa autenticada. */ }
     loadGeneration.current += 1;
     setFinanceContext(restored);
     setContextCoverage(null);
@@ -324,7 +325,7 @@ function FinanceWorkspace() {
     setBankStatementBatches([]);
     setSelectedDocument(null);
     setNuboxResourcePanel(null);
-    try { sessionStorage.setItem("finance-context:" + contextTenant, JSON.stringify(next)); } catch { /* Optional local preference. */ }
+    try { sessionStorage.setItem("finance-context:" + contextTenant, JSON.stringify(next)); } catch { /* Preferencia local opcional. */ }
   }
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -743,7 +744,7 @@ function FinanceWorkspace() {
       try {
         const response = await getFinanceBankImportJobs();
         if (!alive || importTenantRef.current !== contextTenant) return;
-        // Refresh recent jobs without removing older pages opened with "Ver más".
+        // Actualiza trabajos recientes sin quitar páginas anteriores abiertas con "Ver más".
         setSavedBankJobs((current) => mergeImportJobs(current, response.jobs));
         setImportMonitor({ offline: !navigator.onLine, checking: false, error: "", checkedAt: new Date().toISOString() });
       } catch {

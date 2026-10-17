@@ -1,3 +1,4 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con finance qa recovery. */
 import { spawnSync } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID, createHash } from 'node:crypto';
@@ -6,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { qaEnvironment } from './lib/qa-environment.mjs';
 import { blockDotEnvReads } from './lib/qa-runtime.mjs';
 
-// Deliberately no DROP, reset or --clean option: the destination must be empty.
+// Deliberadamente no hay opción DROP, reset ni --clean: el destino debe estar vacío.
 async function main() {
   const sourceEnv = qaEnvironment(process.env, { requireRedis: false });
   const targetEnv = qaEnvironment({ ...process.env, QA_DATABASE_URL: process.env.QA_RECOVERY_DATABASE_URL }, { requireRedis: false });
@@ -80,7 +81,7 @@ async function main() {
     await writeFile(path.join(directory, `${run}.json`), JSON.stringify(result, null, 2));
     console.log(JSON.stringify({ ok: true, backup, steps }, null, 2));
   } finally {
-    // Only delete this script's synthetic tenant. The restored database is kept.
+    // Solo elimina el tenant sintético de este script. La base restaurada se conserva.
     try {
       if (tenantId) await source.tenant.deleteMany({ where: { id: tenantId } });
       if (tenantId && restored) await target.tenant.deleteMany({ where: { id: tenantId } });

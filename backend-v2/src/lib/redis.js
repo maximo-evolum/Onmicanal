@@ -1,3 +1,4 @@
+/** Archivo: Centraliza el cliente Redis y la coordinación distribuida de procesos. */
 import { createClient } from "redis";
 import crypto from "crypto";
 

@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de metadata access.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { redactMetadataForRole } from "../src/lib/metadata-access.js";

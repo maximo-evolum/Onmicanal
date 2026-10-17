@@ -1,8 +1,9 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance workflow guard. */
 import { FinanceOperationError } from "./finance-integrity.service.js";
 
 export function assertWorkflowFinancialSafety(actions, targetRecord) {
   const financial = (value) => /^(finance_|bank_)/.test(String(value || "").trim().toLowerCase());
-  // Preflight the complete action list before executing even its first mutation.
+  // Prevalida la lista completa de acciones antes de ejecutar siquiera su primera mutación.
   for (const action of actions || []) {
     const type = String(action.type || "").trim().toLowerCase();
     const recordType = type === "create_record" ? action.recordType : targetRecord?.recordType;

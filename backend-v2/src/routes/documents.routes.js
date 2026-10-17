@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio documents y delega su lógica a servicios protegidos. */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

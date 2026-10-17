@@ -1,3 +1,4 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con normalize tenant modules. */
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { findIncompatibleTenantModules } from "../src/lib/tenant-module-normalization.js";

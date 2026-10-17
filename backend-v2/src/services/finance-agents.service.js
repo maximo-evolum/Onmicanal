@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance agents. */
 import { prisma } from "../lib/db.js";
 import { findAllFinanceRecords } from "./finance-integrity.service.js";
 import { prepareFinanceExceptionCases } from "./finance-agent-actions.service.js";

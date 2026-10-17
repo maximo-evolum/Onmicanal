@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance sii dte.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseSiiDteFiles, sanitizeSiiDteDocuments, summarizeSiiDteDocuments } from "../src/services/finance-sii-dte.service.js";

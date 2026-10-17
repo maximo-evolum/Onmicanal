@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz filters bar para la aplicación web. */
 type Props = {
   search: string;
   channel: string;

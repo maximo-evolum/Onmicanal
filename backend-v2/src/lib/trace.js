@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para trace. */
 import { env } from "./env.js";
 
 export function createTrace(scope = "TRACE") {

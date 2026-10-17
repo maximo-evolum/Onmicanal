@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de qa environment.test. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { qaEnvironment } from '../scripts/lib/qa-environment.mjs';

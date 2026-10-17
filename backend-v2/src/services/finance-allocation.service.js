@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance allocation. */
 import { FinanceOperationError, withFinanceWrite, findAllFinanceRecords } from "./finance-integrity.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";
 import { financeRecordData as dataOf, getInvoiceFinancialState, sameFinanceInvoiceParty, scoreFinanceReconciliation } from "./finance.service.js";
@@ -53,12 +54,12 @@ export function planFinanceAllocation(movement, invoices, allocations) {
   return plan;
 }
 
-// Both suggestion approval and manual allocation use this same atomic writer.
+  // Tanto la aprobación de sugerencias como la asignación manual usan este mismo escritor atómico.
 export async function applyFinanceAllocation(db, input) {
   return withFinanceWrite(db, (tx) => applyFinanceAllocationInTransaction(tx, input));
 }
 
-// Internal helper: caller must hold a Serializable transaction.
+  // Ayudante interno: quien llama debe mantener una transacción Serializable.
 export async function applyFinanceAllocationInTransaction(tx, { tenantId, userId, movementId, allocations, invoiceIds, reason, manual = false }) {
   if (manual) reason = allocationReason(reason);
   const explicit = allocations !== undefined ? validateAllocationInput(allocations) : null;
@@ -70,8 +71,8 @@ export async function applyFinanceAllocationInTransaction(tx, { tenantId, userId
     const invoices = await tx.industryRecord.findMany({ where: { tenantId, recordType: "finance_invoice", id: { in: ids } } });
     let requested = explicit;
     if (!requested) {
-      // Old suggestion clients remain compatible; grouped suggestions must
-      // still cover every selected balance exactly, without database-order allocation.
+  // Los clientes de sugerencias anteriores siguen siendo compatibles; las sugerencias agrupadas deben
+  // cubrir exactamente cada saldo seleccionado, sin asignación según el orden de la base de datos.
       requested = ids.map((id) => {
         const invoice = invoices.find((item) => item.id === id);
         if (!invoice) fail(404, "Factura no encontrada.");
@@ -79,7 +80,7 @@ export async function applyFinanceAllocationInTransaction(tx, { tenantId, userId
       });
     }
     const plan = planFinanceAllocation(movement, invoices, requested);
-    // A stale/legacy status must not allow a second financial application.
+  // Un estado obsoleto o heredado no debe permitir una segunda aplicación financiera.
     const activeEvidence = await tx.industryRecord.findFirst({ where: { tenantId,
       recordType: { in: ["finance_reconciliation", "finance_invoice_receipt"] },
       status: { in: ["APPROVED", "RECONCILED"] }, data: { path: ["movementId"], equals: movementId } } });
@@ -112,7 +113,7 @@ export async function reverseFinanceAllocation(db, input) {
   return withFinanceWrite(db, (tx) => reverseFinanceAllocationInTransaction(tx, { ...input, groupId: null }));
 }
 
-// Internal helper: caller must hold a Serializable transaction.
+  // Ayudante interno: quien llama debe mantener una transacción Serializable.
 export async function reverseFinanceAllocationInTransaction(tx, { tenantId, userId, reconciliationId, reason, groupId = null }) {
   reason = allocationReason(reason);
     const reconciliation = await tx.industryRecord.findFirst({ where: { id: reconciliationId, tenantId, recordType: "finance_reconciliation" } });
@@ -131,7 +132,7 @@ export async function reverseFinanceAllocationInTransaction(tx, { tenantId, user
     if (!receipts.length || total !== Number(dataOf(movement).amount) || receipts.some((receipt) => receipt.status !== "RECONCILED" || !pesos(dataOf(receipt).amount) || dataOf(receipt).movementId !== movement.id)) fail(409, "Los comprobantes no cuadran con el abono. No se aplicó ninguna reversa.");
     const ids = receipts.map((receipt) => dataOf(receipt).invoiceId);
     if (new Set(ids).size !== ids.length) fail(409, "Hay comprobantes duplicados que requieren revisión.");
-    // Matching totals alone are not proof: preserve the exact approved split.
+  // Que los totales coincidan por sí solo no es prueba: conserva la división aprobada exacta.
     const allocations = Array.isArray(rec.allocations) ? rec.allocations : [];
     const assignedIds = allocations.map(item => item?.invoiceId);
     const bankData = dataOf(movement);

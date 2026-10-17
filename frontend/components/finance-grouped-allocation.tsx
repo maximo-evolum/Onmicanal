@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance grouped allocation para la aplicación web. */
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { RecordBrowser } from "@/components/finance-allocation-workspace";

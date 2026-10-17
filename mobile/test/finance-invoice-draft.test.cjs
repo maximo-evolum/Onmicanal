@@ -1,3 +1,4 @@
+/** Archivo: Verifica el comportamiento móvil de finance invoice draft.test. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

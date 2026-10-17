@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai ops. */
 
 import { prisma } from "../lib/db.js";
 

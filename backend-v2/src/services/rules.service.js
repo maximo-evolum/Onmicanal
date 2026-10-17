@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio rules. */
 import { prisma } from "../lib/db.js";
 
 export async function getRuleReply({ tenantId, channel, message }) {

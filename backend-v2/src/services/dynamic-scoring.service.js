@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio dynamic scoring. */
 export function calculateDynamicLeadScore({ lead, conversation }) {
   let score = conversation?.priorityScore || 0;
   const now = new Date();

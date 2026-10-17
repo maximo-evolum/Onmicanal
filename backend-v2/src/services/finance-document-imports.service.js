@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance document imports. */
 import { FinanceOperationError, withFinanceWrite, findAllFinanceRecords } from "./finance-integrity.service.js";
 import { MAX_MIGRATION_ROWS, normalizeHistoricalFinanceRows, summarizeHistoricalFinanceRows, historicalFinanceFingerprint } from "./finance-migration.service.js";
 import { sanitizeSiiDteDocuments, summarizeSiiDteDocuments, siiDteFingerprint } from "./finance-sii-dte.service.js";

@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance movement owner.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { assignMovementOwner, listMovementOwners } from "../src/services/finance-movement-owner.service.js";

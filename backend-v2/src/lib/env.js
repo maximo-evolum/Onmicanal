@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para env. */
 import "dotenv/config";
 
 function firstEnv(...keys) {
@@ -172,9 +173,9 @@ if (env.nodeEnv === "production") {
     console.warn("[ENV_WARNING] DEFAULT_TENANT_SLUG apunta a un tenant demo. Revisa configuración productiva.");
   }
 
-  // A signed Meta webhook cannot be accepted without this secret. We keep the
-  // backend available for tenants that do not use Meta, but make the condition
-  // explicit instead of looking like an unresponsive inbox AI.
+  // No se puede aceptar un webhook firmado de Meta sin este secreto. Mantenemos el
+  // backend disponible para los tenants que no usan Meta, pero hacemos explícita la condición
+  // en vez de que parezca una IA de bandeja de entrada sin respuesta.
   if (!env.metaAppSecret) {
     console.warn("[ENV_WARNING] META_APP_SECRET is not configured; signed Meta webhooks will be rejected.");
   }

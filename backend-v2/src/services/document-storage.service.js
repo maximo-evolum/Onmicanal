@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio document storage. */
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";

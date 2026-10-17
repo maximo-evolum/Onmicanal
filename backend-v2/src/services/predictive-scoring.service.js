@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio predictive scoring. */
 import { analyzeSalesSignals } from "./sales-brain.service.js";
 
 export function calculateCloseScore({ memory, lead, conversation, objection = null }) {

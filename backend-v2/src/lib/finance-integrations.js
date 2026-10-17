@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para finance integrations. */
 function cleanText(value, fallback = "") {
   const text = String(value ?? "").trim();
   return text || fallback;

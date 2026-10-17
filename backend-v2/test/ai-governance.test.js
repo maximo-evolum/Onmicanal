@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de ai governance.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateAiOutput, needsHumanApproval, normalizeAiGovernance } from "../src/services/ai-governance.service.js";

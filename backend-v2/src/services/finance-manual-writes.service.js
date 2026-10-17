@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance manual writes. */
 import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import { FinanceOperationError, withFinanceWrite } from "./finance-integrity.service.js";
@@ -43,7 +44,7 @@ export async function registerManualSettlement(db, { tenantId, userId, documentI
       if (previous.status === "REVERSED" || old.reversedAt) fail(409, "Esta operación fue revertida. No se registró otro cobro o pago; consulta el historial e inicia una operación nueva si corresponde.");
       return { [incoming ? "receipt" : "payment"]: previous, [incoming ? "invoice" : "payable"]: document, remainingBalance: getInvoiceFinancialState(document).balance, replayed: true };
     }
-    // The payment affects its effective month, not the invoice's issue month.
+    // El pago afecta su mes efectivo, no el mes de emisión de la factura.
     await assertFinancePeriodOpen(tx, tenantId, date.slice(0, 7));
     if (String(data.currency || "CLP").toUpperCase() !== "CLP") fail(422, "Este registro manual admite CLP. No se convierte moneda automáticamente.");
     if (incoming && financeDocumentSide(document) !== "CUSTOMER") fail(409, "Este documento corresponde a un proveedor, no a una cuenta por cobrar. Revisa su clasificación antes de registrar el cobro.");
@@ -72,8 +73,8 @@ function recordDate(recordType, data) {
   return financialDate(recordType === "bank_movement" ? data.transactionDate || data.date : data.issueDate || data.date);
 }
 
-// Validation and mutation share a transaction. Callers may have prepared metadata
-// outside it; stale versions are rejected instead of overwriting a concurrent payment.
+// La validación y mutación comparten una transacción. Quien llama puede haber preparado metadatos
+// fuera de ella; las versiones obsoletas se rechazan en vez de sobrescribir un pago concurrente.
 export async function writeManualFinanceRecord(db, { tenantId, userId, recordType, existing, nextData, nextStatus, operation, write, audit, idempotencyKey, creationContext = {} }) {
   if (!MANUAL_FINANCE_RECORDS.has(recordType)) return write(db);
   if (nextData && ("manualCreationKey" in nextData || "manualCreationHash" in nextData) && !existing) fail(422, "Los identificadores internos no se ingresan manualmente.");

@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance import jobs.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -8,8 +9,8 @@ import { createBankImportJob, analyzeBankImportJob, readBankImportPreview, cance
 import { addPendingImportsToClose } from "../src/services/finance-monthly-close.service.js";
 import { FinanceOperationError } from "../src/services/finance-integrity.service.js";
 
-// In-memory adapter tests lifecycle and tenant filtering; it does not replace
-// an integration test of the PostgreSQL migration and Serializable isolation.
+// El adaptador en memoria prueba el ciclo de vida y el filtro de tenant; no reemplaza
+// una prueba de integración de la migración PostgreSQL ni del aislamiento Serializable.
 function database() {
   const state = { originals: [], jobs: [], revisions: [], records: [] };
   let sequence = 0;

@@ -1,3 +1,4 @@
+/** Archivo: Renderiza la página web de EVOLUM OS correspondiente a page. */
 "use client";
 
 import Link from "next/link";

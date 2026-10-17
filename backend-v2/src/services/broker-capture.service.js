@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker capture. */
 const CAPTURE_STATUSES = new Set([
   "PROSPECTO",
   "VISITA_AGENDADA",
@@ -53,6 +54,9 @@ function normalized(value, allowed, fallback) {
 export function captureChecklist(input = {}) {
   const isApartment = upper(input.propertyType) === "DEPARTAMENTO";
   const photoUrls = stringList(input.photoUrls || input.gallery || input.galleryUrls || input.photoUrl);
+  const attachedRoles = new Set((Array.isArray(input.documentChecklist) ? input.documentChecklist : [])
+    .map((document) => upper(document?.role || document?.type))
+    .filter(Boolean));
   const checks = [
     { key: "propietario", label: "Propietario identificado", ready: Boolean(text(input.ownerName)) },
     { key: "direccion", label: "Dirección y comuna", ready: Boolean(text(input.address) && text(input.comuna || input.commune)) },
@@ -61,8 +65,8 @@ export function captureChecklist(input = {}) {
     { key: "tasacion", label: "Tasación y precio sugerido", ready: decimal(input.preliminaryAppraisal) !== null && decimal(input.suggestedPrice) !== null },
     { key: "titulo", label: "Preestudio de título", ready: ["REVISADO_SIN_OBSERVACIONES", "REVISADO_CON_OBSERVACIONES"].includes(upper(input.preliminaryTitleStatus)) },
     { key: "regularizacion", label: "Regularización revisada", ready: ["REGULARIZADA", "CON_OBSERVACIONES", "NO_REGULARIZADA"].includes(upper(input.regularizationStatus)) },
-    { key: "material", label: "Fotos o material visual", ready: photoUrls.length > 0 },
-    { key: "plano", label: "Plano o medición", ready: Boolean(text(input.floorPlanUrl)) },
+    { key: "material", label: "Fotos o material visual", ready: photoUrls.length > 0 || attachedRoles.has("FOTOGRAFIA") },
+    { key: "plano", label: "Plano o medición", ready: Boolean(text(input.floorPlanUrl)) || attachedRoles.has("PLANO") },
     { key: "aceptacion", label: "Precio aceptado por propietario", ready: Boolean(input.ownerAcceptedEvaluationAt) },
   ];
   if (isApartment) checks.push({ key: "edificio", label: "Datos de edificio", ready: integer(input.buildingFloors) !== null && integer(input.unitsPerFloor) !== null && integer(input.elevators) !== null });
@@ -84,7 +88,7 @@ export function normalizeBrokerCapture(input = {}) {
     captureOrigin: text(input.captureOrigin) || null,
     intendedService: normalized(input.intendedService || input.operation, SERVICES, "VENTA"),
     status: normalized(input.status || input.captureStatus, CAPTURE_STATUSES, "PROSPECTO"),
-    captureBrokerId: text(input.captureBrokerId || input.assignedToId) || null,
+    captureBrokerId: text(input.assignedToId || input.assignedBrokerId || input.captureBrokerId) || null,
     firstContactAt: date(input.firstContactAt || input.captureDate),
     siteVisitAt: date(input.siteVisitAt),
     ownerExpectedPrice,

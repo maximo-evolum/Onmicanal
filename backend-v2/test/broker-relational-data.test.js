@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de broker relational data.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { brokerRelationalCoverage, normalizeLegacyBrokerProperty } from "../src/services/broker-relational-data.service.js";

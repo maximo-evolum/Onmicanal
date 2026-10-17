@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance differences para la aplicación web. */
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getFinanceDifferences, proposeFinanceDifference, resolveFinanceDifference, type FinanceDifference, type FinanceDifferencePage, type FinanceAllocationPage, type FinanceWorkspaceContext } from "@/lib/api";

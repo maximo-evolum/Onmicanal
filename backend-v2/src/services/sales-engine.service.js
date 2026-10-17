@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio sales engine. */
 
 import { prisma } from "../lib/db.js";
 

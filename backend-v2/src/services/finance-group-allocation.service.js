@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance group allocation. */
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { planFinanceAllocation, assertReconciliationPeriodOpen, allocationReason, applyFinanceAllocationInTransaction, reverseFinanceAllocationInTransaction } from "./finance-allocation.service.js";
@@ -46,13 +47,13 @@ export function planFinanceGroup(records, input) {
 }
 async function checkedPlan(tx, tenantId, allocations) {
   const records = await load(tx, tenantId), plan = planFinanceGroup(records, allocations);
-  // Lock all involved periods in a stable order before any financial write.
+  // Bloquea todos los períodos involucrados en orden estable antes de cualquier escritura financiera.
   for (const m of [...plan.movements].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))) await assertReconciliationPeriodOpen(tx, tenantId, { data: { transactionDate: m.date } });
   return plan;
 }
 export async function previewFinanceGroup(db, { tenantId, userId, allocations }) {
   authenticated(tenantId, userId);
-  // Period locks serialize preview with close/reopen; no balances are modified.
+  // Los bloqueos de período serializan la vista previa con cierre o reapertura; no modifican saldos.
   return withFinanceWrite(db, (tx) => checkedPlan(tx, tenantId, allocations));
 }
 export async function approveFinanceGroup(db, { tenantId, userId, allocations, expectedVersion, reason, confirmation }) {

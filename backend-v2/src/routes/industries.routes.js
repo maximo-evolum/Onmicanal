@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio industries y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import {
   buildBalancedAssignments,

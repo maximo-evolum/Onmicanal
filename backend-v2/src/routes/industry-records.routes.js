@@ -1,4 +1,8 @@
+/** Archivo: Expone las rutas HTTP del dominio industry records y delega su lógica a servicios protegidos. */
 import { Router } from "express";
+import { brokerGenericAccessMiddleware, brokerGenericWhere, brokerResource } from "../services/broker-record-access.service.js";
+import { brokerRecordWhere } from "../services/broker-access.service.js";
+import { allowGenericBrokerMutation } from "../services/broker-operation-contract.service.js";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { MODULES } from "../lib/modules.js";
@@ -18,6 +22,7 @@ import { financeRecordModule, financeRecordRequiredModules, GENERIC_FINANCE_WRIT
 import { normalizeFinanceDocumentData, validateFinanceDocumentData } from "../services/finance-document.service.js";
 
 export const industryRecordsRouter = Router();
+industryRecordsRouter.use(brokerGenericAccessMiddleware(prisma));
 
 const RECORD_MODULES = Object.freeze({
   property: MODULES.PROPERTIES,
@@ -247,6 +252,7 @@ async function redactRecordForViewer(req, record) {
 }
 
 function tenantRecordWhere(req, extra = {}) {
+  if (req.brokerAccess) return brokerGenericWhere(req, extra);
   if (req.user?.role === "SUPER_ADMIN" && req.query?.tenantId) {
     return { tenantId: String(req.query.tenantId), ...extra };
   }
@@ -262,7 +268,8 @@ industryRecordsRouter.get("/industry-records/users", async (req, res) => {
     const users = await prisma.workspaceUser.findMany({
       where: {
         tenantId: req.user?.role === "SUPER_ADMIN" && req.query?.tenantId ? String(req.query.tenantId) : req.tenantId,
-        isActive: true
+        isActive: true,
+        ...(Array.isArray(req.brokerAccess?.scopeUserIds) ? { id: { in: req.brokerAccess.scopeUserIds } } : {})
       },
       select: { id: true, name: true, email: true, role: true, jobTitle: true },
       orderBy: [{ role: "asc" }, { name: "asc" }]
@@ -420,6 +427,13 @@ industryRecordsRouter.delete("/industry-records/brokers/:userId", requireRole(RO
       return brokerIds.has(String(property.assignedToId || "")) || brokerIds.has(String(data.assignedBrokerId || ""));
     });
 
+    const activeOperations = await prisma.industryRecord.count({ where: {
+      tenantId: req.tenantId, recordType: "broker_operation",
+      assignedToId: { in: [...brokerIds] },
+      status: { notIn: ["CLOSED", "ARCHIVED", "CANCELLED", "CERRADA", "CANCELADA", "PERDIDA"] },
+    } });
+    if (activeOperations) return res.status(409).json({ error: "Reasigna o finaliza las operaciones activas del corredor antes de eliminar su cuenta.", activeOperations });
+
     await prisma.$transaction(async (tx) => {
       for (const property of assignedProperties) {
         const currentData = property.data && typeof property.data === "object" && !Array.isArray(property.data)
@@ -464,6 +478,7 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
   try {
     assertFinancialDraftScope(req.body?.expectedScope, req.tenantId, req.user?.id);
     const recordType = normalizeRecordType(req.body?.recordType);
+    if (!allowGenericBrokerMutation(res, recordType)) return;
     if (!assertFinanceRecordMutation(req, res, recordType)) return;
     if (!(await assertRecordModule(req, recordType, req.body?.data))) {
       return res.status(403).json({ error: `Modulo no habilitado para ${recordType}` });
@@ -555,9 +570,10 @@ industryRecordsRouter.post("/industry-records", requireRole(ROLE_GROUPS.STAFF), 
 industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     const existing = await prisma.industryRecord.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId }
+      where: tenantRecordWhere(req, { id: req.params.id })
     });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
+    if (!allowGenericBrokerMutation(res, existing.recordType)) return;
     if (!assertFinanceRecordMutation(req, res, existing.recordType, existing)) return;
     if (!(await assertRecordModule(req, existing.recordType, existing.data)) || !(await assertRecordModule(req, existing.recordType, { ...existing.data, ...req.body?.data }))) {
       return res.status(403).json({ error: `Modulo no habilitado para ${existing.recordType}` });
@@ -596,7 +612,7 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
 
     const record = await writeManualFinanceRecord(prisma, { tenantId: req.tenantId, userId: req.user?.id, recordType: existing.recordType, existing: existing, nextData: data.data ?? existing.data, nextStatus: data.status ?? existing.status, operation: "UPDATE",
       write: (tx) => tx.industryRecord.update({
-      where: { id: existing.id },
+      where: { id: existing.id, ...(brokerResource(req, existing.recordType) ? brokerRecordWhere(req) : {}) },
       data,
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     }),
@@ -620,9 +636,10 @@ industryRecordsRouter.patch("/industry-records/:id", requireRole(ROLE_GROUPS.STA
 industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     const existing = await prisma.industryRecord.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId }
+      where: tenantRecordWhere(req, { id: req.params.id })
     });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
+    if (!allowGenericBrokerMutation(res, existing.recordType)) return;
     if (!assertFinanceRecordMutation(req, res, existing.recordType, existing)) return;
     if (!(await assertRecordModule(req, existing.recordType, existing.data)) || !(await assertRecordModule(req, existing.recordType, { ...existing.data, ...(req.body?.metadata ?? req.body?.data) }))) {
       return res.status(403).json({ error: `Modulo no habilitado para ${existing.recordType}` });
@@ -643,7 +660,7 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
     }
     const record = await writeManualFinanceRecord(prisma, { tenantId: req.tenantId, userId: req.user?.id, recordType: existing.recordType, existing: existing, nextData: nextMetadata, nextStatus: existing.status, operation: "UPDATE",
       write: (tx) => tx.industryRecord.update({
-      where: { id: existing.id },
+      where: { id: existing.id, ...(brokerResource(req, existing.recordType) ? brokerRecordWhere(req) : {}) },
       data: { data: nextMetadata, ...(evaluation.schemaVersion ? { schemaVersion: evaluation.schemaVersion } : {}) },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     }),
@@ -660,12 +677,13 @@ industryRecordsRouter.patch("/industry-records/:id/metadata", requireRole(ROLE_G
 
 industryRecordsRouter.delete("/industry-records/:id", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
   try {
-    const existing = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId } });
+    const existing = await prisma.industryRecord.findFirst({ where: tenantRecordWhere(req, { id: req.params.id }) });
     if (!existing) return res.status(404).json({ error: "Registro no encontrado" });
+    if (!allowGenericBrokerMutation(res, existing.recordType)) return;
     if (!assertFinanceRecordMutation(req, res, existing.recordType, existing)) return;
     if (!(await assertRecordModule(req, existing.recordType, existing.data))) return res.status(403).json({ error: "Módulo no habilitado para este registro." });
     await writeManualFinanceRecord(prisma, { tenantId: req.tenantId, userId: req.user?.id, recordType: existing.recordType, existing, operation: "DELETE",
-      write: (tx) => tx.industryRecord.delete({ where: { id: existing.id } }),
+      write: (tx) => tx.industryRecord.delete({ where: { id: existing.id, ...(brokerResource(req, existing.recordType) ? brokerRecordWhere(req) : {}) } }),
       audit: { action: "INDUSTRY_RECORD_DELETED", metadata: { recordType: existing.recordType, title: existing.title } }
     });
     if (!MANUAL_FINANCE_RECORDS.has(existing.recordType)) await recordAuditLog(req, "INDUSTRY_RECORD_DELETED", existing.recordType, existing.id, { recordType: existing.recordType, title: existing.title });
@@ -680,15 +698,16 @@ industryRecordsRouter.delete("/industry-records/:id", requireRole(ROLE_GROUPS.MA
 industryRecordsRouter.post("/industry-records/assignments/balance", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     const recordType = normalizeRecordType(req.body?.recordType || "property");
+    if (!allowGenericBrokerMutation(res, recordType)) return;
     if (isFinanceRecordType(recordType)) return res.status(409).json({ error: "Utiliza la asignación auditada de responsables en Finanzas." });
     if (!(await assertRecordModule(req, recordType))) return res.status(403).json({ error: "Módulo no habilitado." });
     const assigneeRole = cleanText(req.body?.assigneeRole, "SELLER").toUpperCase();
     const records = await prisma.industryRecord.findMany({
-      where: { tenantId: req.tenantId, recordType, status: { not: "ARCHIVED" } },
+      where: brokerResource(req, recordType) ? brokerRecordWhere(req, { recordType, status: { not: "ARCHIVED" } }) : { tenantId: req.tenantId, recordType, status: { not: "ARCHIVED" } },
       orderBy: [{ createdAt: "asc" }]
     });
     const assignees = await prisma.workspaceUser.findMany({
-      where: { tenantId: req.tenantId, isActive: true, role: assigneeRole },
+      where: { tenantId: req.tenantId, isActive: true, role: assigneeRole, ...(Array.isArray(req.brokerAccess?.scopeUserIds) ? { id: { in: req.brokerAccess.scopeUserIds } } : {}) },
       select: { id: true, name: true, email: true, role: true },
       orderBy: { name: "asc" }
     });

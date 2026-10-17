@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance integrations.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { CHILEAN_FINANCIAL_INSTITUTIONS, normalizeChileanBankAccounts } from "../src/lib/finance-integrations.js";

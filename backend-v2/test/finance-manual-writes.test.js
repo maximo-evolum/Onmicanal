@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance manual writes.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { financialDate, registerManualSettlement, writeManualFinanceRecord, assertFinancialDraftScope } from "../src/services/finance-manual-writes.service.js";

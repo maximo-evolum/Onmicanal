@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai recommendation engine. */
 export function buildAIRecommendations({ reasoning = null, adaptiveStrategy = null, learning = null, memory = null } = {}) {
   const recommendations = [];
 

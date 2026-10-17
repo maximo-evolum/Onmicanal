@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance context. */
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
 import { financeDocumentDate, financeDocumentSide } from "./finance-document-values.service.js";
@@ -9,7 +10,7 @@ const normalized = (value) => text(value).normalize("NFKC").toLowerCase();
 export const FINANCE_CONTEXT_TYPES = ["finance_bank_account", "bank_statement", "bank_movement", "finance_invoice", "finance_payable", "finance_exception", "finance_reconciliation", "finance_collection_case", "finance_customer_credit", "finance_credit_application", "finance_reconciliation_difference", "finance_reconciliation_group"];
 
 export function parseFinanceContext(input = {}) {
-  // The tenant is always supplied by authentication, never by a query parameter.
+  // La autenticación siempre entrega el tenant, nunca un parámetro de consulta.
   const period = text(input.period);
   const accountKey = text(input.accountKey);
   const currency = text(input.currency || "CLP").toUpperCase();
@@ -22,8 +23,8 @@ export function parseFinanceContext(input = {}) {
 export function financeAccountKey(account) {
   if (!account?.bankKey) return "";
   if (account.bankAccountId) return createHash("sha256").update(`registered:${account.bankAccountId}`).digest("hex").slice(0, 24);
-  // Legacy records contain a masked account, not its full number. Keep aliases
-  // distinct and expose identification as partial instead of asserting a bank ID.
+  // Los registros heredados contienen una cuenta enmascarada, no su número completo. Mantiene los alias
+  // diferenciados y expone la identificación como parcial en vez de afirmar un ID bancario.
   const identity = [account.bankKey, account.accountLast4, account.accountAlias, account.accountType].map(normalized);
   if (financeCurrency(account.currency) !== "CLP") identity.push(financeCurrency(account.currency));
   return createHash("sha256").update(identity.join("|" )).digest("hex").slice(0, 24);
@@ -62,14 +63,14 @@ export function financeRecordMatchesContext(record, context, index = new Map(), 
   if (context.accountKey && !document && financeAccountKey(financeRecordAccount(record, index)) !== context.accountKey) return false;
   if (!context.period) return true;
   const date = financeOperationalDate(record, index);
-  // Unknown dates must remain reachable for human review, not disappear from
-  // the very screen needed to clear a close-period blocker.
+  // Las fechas desconocidas deben mantenerse accesibles para revisión humana, no desaparecer de
+  // la misma pantalla necesaria para despejar un bloqueo de cierre de período.
   if (record.recordType === "finance_exception" && !date) return true;
   if (record.recordType === "bank_statement") {
     const from = text(data.coverage?.from);
     const to = text(data.coverage?.to);
     if (from && to) return from.slice(0, 7) <= context.period && to.slice(0, 7) >= context.period;
-    // Legacy statements are linked using their movements, not their upload date.
+// Las cartolas heredadas se vinculan mediante sus movimientos, no por su fecha de carga.
     return [...index.values()].some((item) => dataOf(item).importBatchId === record.id && financeOperationalDate(item, index).startsWith(context.period + "-"));
   }
   if (document && documentMode === "outstanding") return Boolean(date && date.slice(0, 7) <= context.period);

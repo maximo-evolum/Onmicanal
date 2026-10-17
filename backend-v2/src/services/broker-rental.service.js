@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker rental. */
 import { RENTAL_STAGES } from "./broker-workflows.service.js";
 
 const UPPER = (value, fallback = "") => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, "_") || fallback;

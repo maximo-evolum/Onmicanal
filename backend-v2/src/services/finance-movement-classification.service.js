@@ -1,5 +1,6 @@
-// Amounts are normalized by import. Do not guess localized separators or
-// assume that a positive amount without a bank mark is income.
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance movement classification. */
+// La importación normaliza los montos. No adivina separadores locales ni
+// asume que un monto positivo sin marca bancaria es un ingreso.
 export function classifyFinanceMovement(data = {}) {
   const value = data.amount;
   const validType = typeof value === "number" || (typeof value === "string" && value.trim() !== "");

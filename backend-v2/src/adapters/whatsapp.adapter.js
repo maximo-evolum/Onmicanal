@@ -1,3 +1,4 @@
+/** Archivo: Contiene soporte versionado para whatsapp.adapter. */
 import { normalizeText } from "../lib/text.js";
 
 export function parseWhatsAppStatuses(body) {

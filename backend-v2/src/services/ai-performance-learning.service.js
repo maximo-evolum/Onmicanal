@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai performance learning. */
 import { prisma } from "../lib/db.js";
 
 function safeJson(value, fallback = {}) {

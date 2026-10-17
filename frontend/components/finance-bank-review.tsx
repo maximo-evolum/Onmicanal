@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance bank review para la aplicación web. */
 "use client";
 import { FinanceFeedback } from "./finance-feedback";
 

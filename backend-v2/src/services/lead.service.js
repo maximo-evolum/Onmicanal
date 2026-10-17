@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio lead. */
 import { prisma } from "../lib/db.js";
 import { predictCloseProbability } from "./close-prediction.service.js";
 import { calculateDynamicLeadScore } from "./dynamic-scoring.service.js";

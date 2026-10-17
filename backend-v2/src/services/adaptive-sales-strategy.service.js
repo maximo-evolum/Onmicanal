@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio adaptive sales strategy. */
 import { analyzeSalesSignals } from "./sales-brain.service.js";
 
 function profile(memory) {

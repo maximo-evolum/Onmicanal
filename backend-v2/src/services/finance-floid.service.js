@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance floid. */
 import { randomUUID } from "node:crypto";
 import { normalizeBankStatementRows, withBankStatementNet, summarizeBankStatementRows } from "./finance-bank-statements.service.js";
 import { FinanceOperationError } from "./finance-integrity.service.js";

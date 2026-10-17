@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio reporting. */
 import { prisma } from "../lib/db.js";
 
 const INDUSTRY_LABELS = Object.freeze({

@@ -1,3 +1,4 @@
+/** Archivo: Contiene soporte versionado para bank import child. */
 import { qaEnvironment } from '../../scripts/lib/qa-environment.mjs';
 import { blockDotEnvReads } from '../../scripts/lib/qa-runtime.mjs';
 const env = qaEnvironment(process.env, { requireRedis: false });

@@ -1,3 +1,4 @@
+/* Archivo: Define estilos globales compartidos por la aplicación web. */
 /* =========================================================
    FASE 2 — UX/UI SaaS Premium
    Design System Gengar + Layout estable + Responsive
@@ -999,8 +1000,8 @@ a {
   }
 }
 
-/* EVOLUM Finance OS: a vertical for order-to-cash, deliberately separate from
-   the generic payments module and from all other industry data. */
+/* EVOLUM Finance OS: una vertical para el ciclo de cobro, deliberadamente separada del
+   módulo genérico de pagos y de todos los datos de otras verticales. */
 .finance-shell {
   min-height: 100vh;
   background: radial-gradient(circle at 78% 0%, rgba(34, 211, 238, .12), transparent 31%), #080712;
@@ -1106,9 +1107,9 @@ a {
 @media (max-width: 900px) { .finance-agent-layout { grid-template-columns: 1fr; }.finance-agent-safeguards > div { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .finance-agent-title-row { display: grid; }.finance-agent-title-row .primary-btn { width: 100%; } }
 
-/* Finance OS visual system. It intentionally follows the supplied mockup:
-   light financial workspace, dark navigation, teal actions and restrained
-   purple as a structural accent. It does not alter the shared EV navigation. */
+/* Sistema visual de Finance OS. Sigue intencionalmente el mockup proporcionado:
+   espacio financiero claro, navegación oscura, acciones turquesa y violeta
+   moderado como acento estructural. No altera la navegación compartida de EV. */
 .finance-shell { background: #f5f7f6; }
 .finance-workspace { width: 100%; max-width: 1320px; padding: 0 32px 64px; color: #17131f; background: #f5f7f6; }
 .finance-header { position: sticky; top: 0; z-index: 8; width: calc(100% + 64px); margin: 0 -32px 0; padding: 17px 32px; border: 0; border-bottom: 1px solid #d2dbd7; border-radius: 0; background: rgba(255,255,255,.95); box-shadow: none; backdrop-filter: blur(12px); }
@@ -10238,7 +10239,7 @@ html, body {
   background:rgba(59,130,246,.18);
 }
 
-/* EVOLUM polish: remove noisy separators and keep screens cleaner */
+/* Ajuste de EVOLUM: elimina separadores ruidosos y mantiene las pantallas más limpias */
 .topbar,
 .sidebar-header,
 .chat-header,
@@ -11832,7 +11833,7 @@ textarea:focus {
   }
 }
 
-/* Theme and EV menu hardening. Keep this block last so every module follows the active palette. */
+/* Refuerzo del tema y menú EV. Mantiene este bloque al final para que cada módulo siga la paleta activa. */
 :root {
   --ev-rail-width: max(96px, calc(env(safe-area-inset-left) + 92px));
   --ev-bubble-size: 54px;
@@ -12137,7 +12138,7 @@ textarea:focus {
   }
 }
 
-/* EVOLUM vertical modules: stable sidebar + grouped admin controls */
+/* Módulos verticales de EVOLUM: barra lateral estable y controles de administración agrupados */
 .vertical-shell {
   --ev-nav-width: 318px;
   display: grid;
@@ -13519,7 +13520,7 @@ textarea:focus {
   }
 }
 
-/* Workflow Studio */
+/* Estudio de flujos */
 .workflow-shell { min-height: 100vh; display: grid; grid-template-columns: 304px minmax(0, 1fr); background: radial-gradient(circle at 82% 0%, rgba(124, 58, 237, .16), transparent 31%), var(--bg-deep); color: var(--text); transition: grid-template-columns .2s ease; }
 .workflow-shell.nav-collapsed { grid-template-columns: minmax(0, 1fr); }
 .workflow-page { min-width: 0; width: 100%; padding: 30px; max-width: 1640px; transition: padding .2s ease; }
@@ -16472,7 +16473,7 @@ html[data-theme="dark"] .realty-capture-section { background: color-mix(in srgb,
   .realty-workspace :is(.realty-assignment-table, .realty-portal-table) .realty-ws-row { grid-template-columns: 1fr 1fr; }
 }
 
-/* Matching de compradores: panel de selección a la izquierda y resultados
+/* Coincidencias de compradores: panel de selección a la izquierda y resultados
    explicables a la derecha, como la vista aprobada de Clientes compradores. */
 .realty-workspace .realty-buyer-workspace { grid-template-columns: minmax(280px, .8fr) minmax(0, 1.5fr); gap: 18px; }
 .realty-workspace .realty-buyer-form,
@@ -17786,7 +17787,7 @@ html.dark .finance-bank-statement-state.is-protected,
 .finance-coverage-sources > div { display: flex; flex-direction: column; gap: 5px; border-left: 3px solid #0c949b; padding-left: 10px; }
 @media (max-width: 900px) { .finance-context-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 580px) { .finance-context-controls, .finance-coverage-sources { grid-template-columns: minmax(0, 1fr); } }
-/* Durable bank imports: readable history, independent of the preview queue. */
+/* Importaciones bancarias durables: historial legible, independiente de la cola de vista previa. */
 .finance-saved-imports { grid-column: 1 / -1; min-width: 0; }
 .finance-saved-import-list { display: grid; gap: 12px; }
 .finance-saved-import { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); color: var(--text); }
@@ -17855,7 +17856,7 @@ html.dark .finance-bank-statement-state.is-protected,
 .finance-group-matrix { max-height: 580px; overflow: auto; margin-bottom: 16px; }
 .finance-grouped-allocation button:disabled { opacity: .5; cursor: not-allowed; }
 
-/* Finance usability: scoped controls, keyboard navigation and narrow layouts. */
+/* Usabilidad de Finanzas: controles acotados, navegación por teclado y diseños estrechos. */
 .finance-import-filters { display:flex; align-items:end; flex-wrap:wrap; gap:12px; margin:16px 0 8px; }
 .finance-import-filters label { display:grid; gap:6px; flex:1 1 220px; min-width:0; color:var(--text); font-size:13px; font-weight:600; }
 .finance-import-filters input, .finance-import-filters select { width:100%; min-width:0; min-height:42px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--card); color:var(--text); }

@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance manual reversals.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";

@@ -1,3 +1,4 @@
+/** Archivo: Renderiza la página web de EVOLUM OS correspondiente a page. */
 import { InboxShell } from "@/components/inbox-shell";
 import { ModuleGate } from "@/components/module-gate";
 

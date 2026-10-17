@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio autonomous followup strategy. */
 function minutesFromPriority(priority) {
   if (priority === "CRITICAL") return 20;
   if (priority === "HIGH") return 60;

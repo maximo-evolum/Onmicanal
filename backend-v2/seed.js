@@ -1,3 +1,4 @@
+/** Archivo: Carga datos iniciales o de demostración para el entorno de desarrollo. */
 import bcrypt from "bcryptjs";
 import { prisma } from "./src/lib/db.js";
 import { ensureTenantSubscriptionAndModules, syncPlans } from "./src/services/tenant-modules.service.js";

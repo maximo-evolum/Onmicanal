@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de tenant module normalization.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findIncompatibleTenantModules } from "../src/lib/tenant-module-normalization.js";

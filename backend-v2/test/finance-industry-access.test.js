@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance industry access.test. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { filterModulesForIndustry, isModuleAllowedForIndustry } from "../src/lib/industry-module-access.js";

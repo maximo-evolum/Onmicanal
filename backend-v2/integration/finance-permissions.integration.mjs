@@ -1,3 +1,4 @@
+/** Archivo: Contiene soporte versionado para finance permissions.integration. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';

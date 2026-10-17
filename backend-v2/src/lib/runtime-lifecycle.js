@@ -1,5 +1,6 @@
-// Responses finishing during shutdown can leave a keep-alive socket idle.
-// Close only idle sockets; never destroy an accepted in-flight HTTP request.
+/** Archivo: Proporciona infraestructura y utilidades compartidas para runtime lifecycle. */
+// Las respuestas que terminan durante el apagado pueden dejar inactivo un socket keep-alive.
+// Cierra solo sockets inactivos; nunca destruye una solicitud HTTP aceptada que sigue en curso.
 export function closeHttpServer(server, io) {
   return new Promise((resolve, reject) => {
     const idleTimer = setInterval(() => server.closeIdleConnections?.(), 100);
@@ -17,8 +18,8 @@ export function closeHttpServer(server, io) {
   });
 }
 
-// Keep dependencies alive until accepted work has drained. A bounded timeout
-// exits unsuccessfully; it must never report an interrupted deployment as clean.
+// Mantiene las dependencias activas hasta terminar el trabajo aceptado. Un tiempo de espera acotado
+// finaliza con error; nunca debe informar como limpio un despliegue interrumpido.
 export function createRuntimeLifecycle({ timeoutMs = 25000, exit = code => process.exit(code), log = event => console.log(JSON.stringify(event)) } = {}) {
   let draining = false, shutdownPromise;
   const pending = new Map(), stops = [];

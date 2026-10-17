@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio priority. */
 export function classifyPriority({ intent, entities, message }) {
   let score = 0;
   const text = (message || "").toLowerCase();

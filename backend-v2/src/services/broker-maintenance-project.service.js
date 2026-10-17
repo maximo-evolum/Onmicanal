@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker maintenance project. */
 const UPPER = (value, fallback = "") => String(value ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, "_") || fallback;
 const text = (value, fallback = "") => String(value ?? "").trim() || fallback;
 const decimal = (value) => {

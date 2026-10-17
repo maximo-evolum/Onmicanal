@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para metadata retention. */
 export function retentionDueFields(record, schema, now = new Date()) {
   const fields = schema?.fields && typeof schema.fields === "object" ? schema.fields : {};
   const updatedAt = new Date(record.updatedAt || now);

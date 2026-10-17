@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica móvil compartida para theme. */
 export type EvolumThemeMode = "lumen" | "nexo";
 
 type ThemeColors = {

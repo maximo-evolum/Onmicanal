@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para meta webhook signature. */
 import crypto from "node:crypto";
 
 export function verifyMetaWebhookSignature({ rawBody, signature, appSecret }) {

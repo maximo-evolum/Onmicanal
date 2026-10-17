@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de vertical workflow isolation.test. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { INDUSTRY_TEMPLATES } from "../src/lib/industries.js";

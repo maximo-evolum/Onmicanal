@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de metadata enforcement.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateMetadataSchema } from "../src/lib/metadata-enforcement.js";

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance historical quality. */
 import { createHash } from "node:crypto";
 import { financeDocumentDate, financeDocumentSide, financeDocumentState } from "./finance-document-values.service.js";
 import { financeOperationalDate, financeRecordAccount } from "./finance-context.service.js";

@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz conversation list para la aplicación web. */
 import { Conversation } from "@/lib/types";
 import { getCommercialState } from "@/lib/commercial-state";
 

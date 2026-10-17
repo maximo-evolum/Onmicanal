@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker access. */
 export const BROKER_ACCESS_ACTIONS = Object.freeze(["VIEW", "CREATE", "EDIT", "DELETE", "IMPORT", "EXPORT", "APPROVE", "REJECT", "ASSIGN", "REASSIGN", "CONFIGURE"]);
 export const BROKER_ACCESS_SCOPES = Object.freeze(["ASSIGNED", "TEAM", "BRANCH", "COMPANY", "HOLDING"]);
 export const BROKER_BUSINESS_ROLES = Object.freeze([
@@ -18,7 +19,7 @@ const PROFILE_POLICIES = Object.freeze({
   ADMINISTRACION: { label: "Administración", defaultScope: "COMPANY", actions: { overview: ["VIEW"], rentals: ["VIEW", "CREATE", "EDIT", "EXPORT"], maintenance: ["VIEW", "CREATE", "EDIT"], post_sale: ["VIEW", "CREATE", "EDIT"], administration: ["VIEW", "CREATE", "EDIT"], documents: ["VIEW", "CREATE", "EDIT"] } },
   FINANZAS: { label: "Finanzas", defaultScope: "COMPANY", actions: { overview: ["VIEW", "EXPORT"], financing: ["VIEW", "CREATE", "EDIT", "APPROVE", "REJECT", "EXPORT"], commissions: ["VIEW", "CREATE", "EDIT", "APPROVE", "EXPORT"], administration: ["VIEW", "CREATE", "EDIT", "APPROVE", "EXPORT"], documents: ["VIEW", "EXPORT"] } },
   POSTVENTA: { label: "Postventa", defaultScope: "ASSIGNED", actions: { overview: ["VIEW"], post_sale: ["VIEW", "CREATE", "EDIT"], maintenance: ["VIEW", "CREATE", "EDIT"], documents: ["VIEW", "CREATE", "EDIT"] } },
-  LECTURA: { label: "Solo lectura", defaultScope: "ASSIGNED", actions: Object.fromEntries(ALL_AREAS.map((area) => [area, ["VIEW"]])) },
+  LECTURA: { label: "Solo lectura", defaultScope: "ASSIGNED", actions: Object.fromEntries(ALL_AREAS.filter(area => !["configuration", "access"].includes(area)).map((area) => [area, ["VIEW"]])) },
 });
 
 function text(value, fallback = "") { const result = String(value ?? "").trim(); return result || fallback; }
@@ -26,23 +27,14 @@ function upper(value, fallback = "") { return text(value, fallback).toUpperCase(
 
 export function defaultBrokerBusinessRole(user = {}) {
   if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(upper(user.role))) return "CEO";
-  const title = `${text(user.jobTitle)} ${text(user.name)}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-  if (title.includes("GERENTE")) return "GERENTE_COMERCIAL";
-  if (title.includes("COORDINADOR")) return "COORDINADOR_COMERCIAL";
-  if (title.includes("CAPTADOR")) return "CAPTADOR";
-  if (title.includes("MARKETING")) return "MARKETING";
-  if (title.includes("TASADOR")) return "TASADOR";
-  if (title.includes("JURID")) return "JURIDICO";
-  if (title.includes("ADMINISTR")) return "ADMINISTRACION";
-  if (title.includes("FINAN") || title.includes("CONTADOR")) return "FINANZAS";
-  if (title.includes("POSTVENTA")) return "POSTVENTA";
   if (upper(user.role) === "VIEWER") return "LECTURA";
-  if (upper(user.role) === "SELLER") return "CORREDOR";
-  return "COORDINADOR_COMERCIAL";
+  // Nombre y cargo son datos editables, nunca una fuente de privilegios.
+  if (["SELLER", "AGENT"].includes(upper(user.role))) return "CORREDOR";
+  return "LECTURA";
 }
 
 export function normalizeBrokerAccessProfile(input = {}, user = {}) {
-  const businessRole = BROKER_BUSINESS_ROLES.includes(upper(input.businessRole)) ? upper(input.businessRole) : defaultBrokerBusinessRole(user);
+  const businessRole = upper(user.role) === "VIEWER" ? "LECTURA" : BROKER_BUSINESS_ROLES.includes(upper(input.businessRole)) ? upper(input.businessRole) : input.businessRole ? "LECTURA" : defaultBrokerBusinessRole(user);
   const policy = PROFILE_POLICIES[businessRole];
   const requestedScope = upper(input.accessScope);
   const accessScope = BROKER_ACCESS_SCOPES.includes(requestedScope) ? requestedScope : policy.defaultScope;
@@ -60,8 +52,11 @@ export function normalizeBrokerAccessProfile(input = {}, user = {}) {
 }
 
 export function canBrokerAction(access, resource, action) {
-  if (upper(access?.technicalRole) === "SUPER_ADMIN" || ["OWNER", "ADMIN"].includes(upper(access?.technicalRole))) return true;
-  const policy = access?.policy || PROFILE_POLICIES[access?.businessRole] || PROFILE_POLICIES.LECTURA;
+  if (!access) return false;
+  if (upper(access.technicalRole) === "SUPER_ADMIN") return true;
+  if (upper(access.technicalRole) === "VIEWER" && upper(action) !== "VIEW") return false;
+  const policy = PROFILE_POLICIES[access.businessRole];
+  if (!policy) return false;
   const allowed = policy.actions[resource] || policy.actions["*"] || [];
   return allowed.includes(upper(action));
 }
@@ -84,15 +79,20 @@ export function profileRecordData(userId, input, user) {
 function profileData(record) { return record?.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data : {}; }
 
 export async function loadBrokerAccessContext({ prisma, tenantId, user }) {
-  const records = await prisma.industryRecord.findMany({ where: { tenantId, recordType: "broker_access_profile", status: "ACTIVE" }, select: { data: true } });
-  const current = records.map(profileData).find((profile) => String(profile.userId) === String(user?.id)) || {};
-  const access = normalizeBrokerAccessProfile(current, user);
-  const sameScopeUsers = records.map(profileData).filter((profile) => {
+  if (!tenantId || !user?.id || user.isActive === false) throw new Error("Sesión Broker no válida.");
+  const records = await prisma.industryRecord.findMany({ where: { tenantId, recordType: "broker_access_profile", status: "ACTIVE" }, select: { data: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }] });
+  const latest = [...new Map(records.map(profileData).reverse().map(profile => [String(profile.userId), profile])).values()];
+  const current = latest.find((profile) => String(profile.userId) === String(user?.id)) || {};
+  const access = normalizeBrokerAccessProfile(upper(user.role) === "SUPER_ADMIN" ? { businessRole: "CEO", accessScope: current.accessScope === "HOLDING" ? "HOLDING" : "COMPANY" } : current, user);
+  let sameScopeUsers = latest.filter((profile) => {
     if (!profile.userId) return false;
-    if (access.accessScope === "TEAM") return access.teamKey && String(profile.teamKey || "") === access.teamKey;
+    if (access.accessScope === "TEAM") return access.teamKey && String(profile.teamKey || "") === access.teamKey && String(profile.branchKey || "") === (access.branchKey || "");
     if (access.accessScope === "BRANCH") return access.branchKey && String(profile.branchKey || "") === access.branchKey;
     return false;
   }).map((profile) => String(profile.userId));
+  if (sameScopeUsers.length) {
+    sameScopeUsers = (await prisma.workspaceUser.findMany({ where: { tenantId, isActive: true, id: { in: sameScopeUsers } }, select: { id: true } })).map(item => item.id);
+  }
   let effectiveScope = access.accessScope;
   let scopeTenantIds = [tenantId];
   let holding = null;
@@ -113,7 +113,7 @@ export async function loadBrokerAccessContext({ prisma, tenantId, user }) {
     } else {
       // Si no existe gobierno multiempresa o el usuario no fue autorizado,
       // preservar la sesión dentro de su propia empresa es la opción segura.
-      effectiveScope = "COMPANY";
+      effectiveScope = "ASSIGNED";
     }
   }
 
@@ -122,13 +122,29 @@ export async function loadBrokerAccessContext({ prisma, tenantId, user }) {
 }
 
 export function brokerRecordWhere(req, extra = {}) {
-  const tenantIds = Array.isArray(req.brokerAccess?.scopeTenantIds) && req.brokerAccess.scopeTenantIds.length
+  const readOnly = !req.method || ["GET", "HEAD"].includes(req.method);
+  const tenantIds = readOnly && Array.isArray(req.brokerAccess?.scopeTenantIds) && req.brokerAccess.scopeTenantIds.length
     ? req.brokerAccess.scopeTenantIds
     : [req.tenantId];
-  const where = { tenantId: tenantIds.length === 1 ? tenantIds[0] : { in: tenantIds }, ...extra };
-  const ids = req.brokerAccess?.scopeUserIds;
-  if (Array.isArray(ids)) where.assignedToId = { in: ids };
-  return where;
+  const scope = { tenantId: tenantIds.length === 1 ? tenantIds[0] : { in: tenantIds } };
+  const ids = req.brokerAccess ? req.brokerAccess.scopeUserIds : [];
+  if (Array.isArray(ids) || ids !== null) scope.assignedToId = { in: Array.isArray(ids) ? ids : [] };
+  // Intersección: un filtro del llamador nunca sustituye tenant o responsable.
+  if (Object.keys(scope).some(key => Object.hasOwn(extra, key))) return { AND: [scope, extra] };
+  return { ...scope, ...extra };
+}
+
+export function validateBrokerAccessProfile(input = {}, user = {}) {
+  if (!BROKER_BUSINESS_ROLES.includes(upper(input.businessRole))) return "Selecciona un rol de negocio válido.";
+  if (!BROKER_ACCESS_SCOPES.includes(upper(input.accessScope))) return "Selecciona un alcance válido.";
+  if (upper(input.accessScope) === "TEAM" && !text(input.teamKey)) return "Indica el equipo para el alcance de equipo.";
+  if (upper(input.accessScope) === "BRANCH" && !text(input.branchKey)) return "Indica la sucursal para ese alcance.";
+  if (upper(user.role) === "VIEWER" && upper(input.businessRole) !== "LECTURA") return "Una cuenta de solo lectura no puede recibir un rol de escritura.";
+  return null;
+}
+
+export function brokerAssigneeAllowed(access, userId) {
+  return Boolean(access) && (access.scopeUserIds === null || access.scopeUserIds?.includes(String(userId)));
 }
 
 export function requireBrokerAction(resource, action) {

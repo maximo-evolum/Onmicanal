@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para finance money en la aplicación web. */
 export function formatFinanceMoney(value: unknown, currency = "CLP") {
   const code = String(currency || "CLP").toUpperCase(), n = Number(value);
   if (!Number.isFinite(n)) return "Monto por revisar";

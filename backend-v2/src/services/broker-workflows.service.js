@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker workflows. */
 /**
  * Flujos canónicos de Broker OS.
  *
@@ -15,6 +16,7 @@ export const BROKER_OPERATION_TYPES = Object.freeze({
 // normalizan mediante LEGACY_STAGE_MAP para no perder operaciones demo o
 // históricas que fueron creadas antes de esta versión.
 export const SALE_STAGES = Object.freeze([
+  "RECEPCION_MANDATO",
   "EVALUACION_COMERCIAL",
   "MANDATO_Y_PUBLICACION",
   "CALIFICACION_Y_VISITAS",
@@ -213,6 +215,7 @@ export const BROKER_AUTOMATION_RULES = Object.freeze([
 // sustituyen asesoría legal, bancaria ni la revisión de un corredor responsable.
 export const BROKER_OPERATION_CHECKLISTS = Object.freeze({
   SALE: Object.freeze({
+    RECEPCION_MANDATO: ["Revisar el mandato y sus condiciones de origen.", "Registrar y revisar el estudio de título inicial antes de tasar."],
     EVALUACION_COMERCIAL: ["Confirmar datos mínimos del inmueble y propietario.", "Registrar precio de referencia y objetivo de la operación."],
     MANDATO_Y_PUBLICACION: ["Revisar vigencia del mandato.", "Validar ficha, fotografías y textos antes de publicar."],
     CALIFICACION_Y_VISITAS: ["Registrar contraparte, presupuesto y fecha de visita.", "Dejar próximo paso después de cada visita."],
@@ -313,7 +316,8 @@ export function normalizeBrokerStage(operationType, value) {
   const raw = String(value || "").trim().toUpperCase();
   const stages = stagesForBrokerOperation(type);
   if (stages.includes(raw)) return raw;
-  return LEGACY_STAGE_MAP[type]?.[raw] || stages[0] || raw;
+  // Los valores históricos desconocidos deben seguir visibles; nunca se reinician a la etapa uno.
+  return LEGACY_STAGE_MAP[type]?.[raw] || raw;
 }
 
 export function brokerStageChecklist(operationType, stage) {
@@ -505,20 +509,21 @@ export function stagesForBrokerOperation(operationType) {
 export function validateBrokerStageTransition({ operationType, currentStage, nextStage }) {
   const stages = stagesForBrokerOperation(operationType);
   if (!String(nextStage || "").trim()) return { ok: false, error: "La etapa destino es requerida." };
-  const current = normalizeBrokerStage(operationType, currentStage || stages[0]);
+  const current = normalizeBrokerStage(operationType, currentStage);
   const next = normalizeBrokerStage(operationType, nextStage);
   if (!stages.includes(next) && !["CANCELADA", "PERDIDA"].includes(next)) {
     return { ok: false, error: "La etapa indicada no pertenece al flujo de esta operación." };
   }
+  if (TERMINAL_STAGES.has(current) && current !== next) {
+    return { ok: false, error: "La operación ya está cerrada. Crea una nueva operación si debe reiniciarse." };
+  }
+  if (!stages.includes(current) && !TERMINAL_STAGES.has(current)) return { ok: false, error: "La operación tiene una etapa actual inválida." };
   if (next === "CANCELADA" || next === "PERDIDA") return { ok: true, current, next, terminal: true };
   const currentIndex = stages.indexOf(current);
   const nextIndex = stages.indexOf(next);
   if (currentIndex === -1) return { ok: false, error: "La operación tiene una etapa actual inválida." };
   if (nextIndex > currentIndex + 1) {
     return { ok: false, error: "No se puede saltar etapas. Avanza una etapa a la vez o registra el evento faltante." };
-  }
-  if (TERMINAL_STAGES.has(current) && current !== next) {
-    return { ok: false, error: "La operación ya está cerrada. Crea una nueva operación si debe reiniciarse." };
   }
   return { ok: true, current, next, terminal: TERMINAL_STAGES.has(next) };
 }

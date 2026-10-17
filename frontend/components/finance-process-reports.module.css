@@ -1,3 +1,4 @@
+/* Archivo: Implementa el componente de interfaz finance process reports.module para la aplicación web. */
 .report { min-width: 0; }
 .controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 16px 0; }
 .controls label { display: grid; gap: 6px; flex: 1 1 220px; }

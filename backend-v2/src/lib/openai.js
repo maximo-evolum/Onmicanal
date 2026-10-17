@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para openai. */
 import OpenAI from "openai";
 import { env } from "./env.js";
 import { createLazyAIClient } from "./lazy-ai-client.js";
@@ -21,7 +22,7 @@ export async function chatComplete({
   retries = 3,
   temperature = 0.7,
 } = {}) {
-  // Configuration errors are immediate; do not retry or make network requests.
+  // Los errores de configuración son inmediatos; no reintenta ni realiza solicitudes de red.
   const client = getOpenAIClient();
   let lastError;
 
@@ -84,7 +85,7 @@ export function truncateHistory(messages = [], maxTokens = 3000) {
   return [...systemMessages, ...kept];
 }
 
-// Preserve the legacy named export without eagerly constructing the SDK.
+// Conserva la exportación nombrada heredada sin construir el SDK anticipadamente.
 export const openaiClient = new Proxy({}, {
   get(_target, property) {
     const client = getOpenAIClient();

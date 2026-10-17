@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio meta y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
@@ -83,8 +84,8 @@ metaRouter.get("/webhook", async (req, res) => {
 
 metaRouter.post("/webhook", async (req, res) => {
   if (!hasValidMetaSignature(req)) {
-    // Do not log payloads, tokens, or signatures. This is enough to diagnose
-    // whether the production Meta app secret is missing or simply mismatched.
+    // No registra cargas, tokens ni firmas. Esto basta para diagnosticar
+    // si falta el secreto de la app Meta de producción o simplemente no coincide.
     console.warn("[META_WEBHOOK_SIGNATURE_REJECTED]", {
       reason: env.metaAppSecret ? "signature_mismatch" : "missing_meta_app_secret",
       signatureReceived: Boolean(req.get("x-hub-signature-256")),

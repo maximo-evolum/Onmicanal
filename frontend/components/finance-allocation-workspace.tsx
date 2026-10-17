@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance allocation workspace para la aplicación web. */
 "use client";
 
 import { useEffect, useState } from "react";

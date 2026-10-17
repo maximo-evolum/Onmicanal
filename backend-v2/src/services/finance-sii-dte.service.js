@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance sii dte. */
 import { createHash } from "node:crypto";
 
 export const MAX_SII_DTE_FILES = 20;

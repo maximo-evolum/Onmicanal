@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance movement classification.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { classifyFinanceMovement } from "../src/services/finance-movement-classification.service.js";
@@ -58,6 +59,6 @@ test("la clasificación pendiente bloquea aunque el movimiento figure conciliado
   records[0].data.direction = "A";
   const result = buildFinanceMonthlyClosePreview(records, "2026-01");
   assert.equal(result.blockers.some((b) => b.type === "MOVIMIENTO_CLASIFICACION_PENDIENTE"), false);
-  assert.equal(result.status, "REQUIRES_REVIEW"); // A label alone is not reconciliation evidence.
+  assert.equal(result.status, "REQUIRES_REVIEW"); // Una etiqueta por sí sola no es evidencia de conciliación.
   assert.equal(result.metrics.incoming, 100);
 });

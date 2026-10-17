@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para modules. */
 export const MODULES = Object.freeze({
   INBOX: "inbox",
   SALES: "sales",

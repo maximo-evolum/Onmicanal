@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance period control. */
 import { FinanceOperationError, withFinanceWrite, findAllFinanceRecords } from "./finance-integrity.service.js";
 import { getFinanceMonthlyClosePreview, validFinancePeriod } from "./finance-monthly-close.service.js";
 
@@ -20,8 +21,8 @@ function publicControl(control, tenantId, period) {
   return { period, status: control?.status || "OPEN", version: control?.version || 0, latestCloseId: control?.latestCloseId || null, currency: "CLP" };
 }
 
-// Shared row write serializes lifecycle changes with participating operations.
-// Merely checking status before a transaction would leave a close/write race.
+// La escritura de fila compartida serializa cambios del ciclo de vida con las operaciones participantes.
+// Solo comprobar el estado antes de una transacción dejaría una carrera entre cierre y escritura.
 export async function lockFinancePeriod(tx, tenantId, period) {
   validatePeriod(tenantId, period);
   return tx.financePeriodControl.upsert({ where: { tenantId_period: { tenantId, period } },
@@ -65,8 +66,8 @@ export async function reopenFinancePeriod(db, { tenantId, userId, period, closeI
     const close = await tx.industryRecord.findFirst({ where: { id: closeId, tenantId, recordType: "finance_monthly_close", status: "CLOSED" } });
     if (!close || dataOf(close).period !== period) fail(409, "No se pudo verificar el cierre activo. No se reabrió el período.");
     const reopenedAt = new Date().toISOString();
-    // Keep each original snapshot immutable. Reopening is a separate record,
-    // not an overwrite of its original amounts, rows, date or approving user.
+    // Mantiene inmutable cada instantánea original. La reapertura es un registro separado,
+    // no una sobrescritura de sus montos, filas, fecha o usuario aprobador original.
     const event = await tx.industryRecord.create({ data: { tenantId, recordType: "finance_period_reopening", title: `Reapertura ${period}`, status: "APPLIED", data: { period, closeId, reopenedAt, reopenedById: userId || null, reason, lifecycleVersion: control.version + 1 } } });
     const updated = await tx.financePeriodControl.update({ where: { tenantId_period: { tenantId, period } }, data: { status: "OPEN", version: { increment: 1 } } });
     await tx.tenantAuditLog.create({ data: { tenantId, actorUserId: userId || null, action: "FINANCE_PERIOD_REOPENED", entity: "finance_period_reopening", entityId: event.id, metadata: { period, closeId, reason, version: updated.version } } });

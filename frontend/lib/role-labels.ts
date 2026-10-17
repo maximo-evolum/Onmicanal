@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para role labels en la aplicación web. */
 "use client";
 
 export const ROLE_LABELS: Record<string, string> = {

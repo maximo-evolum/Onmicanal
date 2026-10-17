@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para constants en la aplicación web. */
 export const SESSION_COOKIE = "inbox_session";
 export const SESSION_STORAGE_KEY = "inbox_session";
 // El snapshot de permisos vive por pestaña. Así una sesión ya validada no

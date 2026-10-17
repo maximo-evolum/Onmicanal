@@ -1,10 +1,11 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de broker access.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, defaultBrokerBusinessRole, loadBrokerAccessContext, normalizeBrokerAccessProfile, profileRecordData } from "../src/services/broker-access.service.js";
 
 test("Broker OS separa el rol de negocio del rol técnico", () => {
   assert.equal(defaultBrokerBusinessRole({ role: "SELLER", jobTitle: "Corredor inmobiliario" }), "CORREDOR");
-  assert.equal(defaultBrokerBusinessRole({ role: "AGENT", jobTitle: "Tasador" }), "TASADOR");
+  assert.equal(defaultBrokerBusinessRole({ role: "AGENT", jobTitle: "Tasador" }), "CORREDOR");
   assert.equal(defaultBrokerBusinessRole({ role: "ADMIN" }), "CEO");
 });
 
@@ -55,7 +56,8 @@ test("Holding sin autorización conserva los datos dentro de la empresa", async 
     brokerHoldingAccess: { findFirst: async () => null },
   };
   const access = await loadBrokerAccessContext({ prisma, tenantId: "tenant-1", user: { id: "u-1", role: "ADMIN" } });
-  assert.equal(access.accessScope, "COMPANY");
+  assert.equal(access.accessScope, "ASSIGNED");
+  assert.deepEqual(access.scopeUserIds, ["u-1"]);
   assert.deepEqual(access.scopeTenantIds, ["tenant-1"]);
 });
 

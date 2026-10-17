@@ -1,3 +1,4 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con seed training scenarios. */
 import { prisma } from "../src/lib/db.js";
 import { getFinanceOverview, getFinanceReconciliationSuggestions } from "../src/services/finance.service.js";
 import { getTenantSalesLearning } from "../src/services/ai-performance-learning.service.js";

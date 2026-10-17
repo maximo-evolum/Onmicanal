@@ -1,3 +1,4 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con finance qa. */
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { qaEnvironment } from './lib/qa-environment.mjs';

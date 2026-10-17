@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance overview metrics. */
 import { financeDocumentSide, financeDocumentState } from "./finance-document-values.service.js";
 import { auditCloseReconciliations } from "./finance-close-reconciliation.service.js";
 const dayMs = 86400000;

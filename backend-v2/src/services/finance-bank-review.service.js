@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance bank review. */
 import { normalizeBankStatementRows, MAX_BANK_STATEMENT_ROWS } from "./finance-bank-statements.service.js";
 import { FinanceOperationError } from "./finance-integrity.service.js";
 import { validateFileSelection } from "./finance-file-selection.service.js";
@@ -50,7 +51,7 @@ export function normalizeBankReviewRows(sourceRows, account, input = {}) {
     for (const field of BANK_REVIEW_FIELDS) {
       const column = config.mapping[field.key];
       if (!column) continue;
-      // Remove competing automatic aliases only for fields explicitly mapped.
+      // Elimina alias automáticos en competencia solo para campos mapeados explícitamente.
       for (const name of Object.keys(row)) if (field.aliases.includes(key(name)) || field.pattern?.test(key(name))) delete row[name];
       row[field.canonical] = column === "__IGNORE__" ? "" : source[column] ?? "";
     }

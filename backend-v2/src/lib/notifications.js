@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para notifications. */
 import { prisma } from "./db.js";
 import { normalizeMetadata } from "./metadata.js";
 import { sendTenantPushNotification } from "./push-notifications.js";

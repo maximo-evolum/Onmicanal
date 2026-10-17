@@ -7,22 +7,25 @@
   },
   "scripts": {
     "test:usability": "node --test test/finance-usability.test.cjs",
+    "test:broker": "node --test test/broker-access.test.cjs test/broker-journey.test.cjs test/broker-web-api.fixture.cjs",
+    "test:broker:e2e": "node scripts/run-broker-e2e.mjs",
     "dev": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",
     "start": "next start",
     "audit:security": "npm audit --audit-level=low"
   },
   "dependencies": {
-    "next": "16.3.7",
+    "next": "16.4.2",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "socket.io-client": "^4.8.3",
     "socket.io-parser": "4.2.7"
   },
   "devDependencies": {
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "typescript": "latest"
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "playwright": "1.64.1",
+    "typescript": "6.0.3"
   }
 }

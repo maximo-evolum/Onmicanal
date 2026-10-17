@@ -1,3 +1,4 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con qa environment. */
 import { fileURLToPath } from 'node:url';
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -21,8 +22,8 @@ export function qaEnvironment(input = process.env, { requireRedis = true } = {})
     if (redis.protocol !== 'redis:' || !LOCAL_HOSTS.has(redis.hostname) || redis.port !== '56379'
       || !['', '/', '/0'].includes(redis.pathname) || redis.search || redis.hash) throw new Error("Redis QA debe ser local, puerto 56379 y base 0.");
   } else if (requireRedis) throw new Error("Falta QA_REDIS_URL. No se declara Redis aprobado sin probarlo.");
-  // Do not inherit production provider credentials, job switches, proxy URLs,
-  // DATABASE_URL, or REDIS_URL from the developer's terminal or .env.
+  // No hereda credenciales de proveedores, interruptores de trabajos ni URL de proxy de producción,
+  // ni DATABASE_URL o REDIS_URL desde la terminal o el archivo .env del desarrollador.
   const env = Object.fromEntries(Object.entries(input).filter(([key]) =>
     /^(path|pathext|systemroot|windir|comspec|temp|tmp|tmpdir|home|userprofile|localappdata|appdata|programfiles|programfiles\(x86\)|os|node_test_context)$/i.test(key)));
   return {

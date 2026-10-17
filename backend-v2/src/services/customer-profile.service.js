@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio customer profile. */
 import { prisma } from "../lib/db.js";
 import { extractEventPreferences } from "./event-sales.service.js";
 import { detectSalesObjection, analyzeSalesSignals } from "./sales-brain.service.js";

@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance historical review.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { analyzeHistoricalRecord, historicalCoverageBlockers, historicalVersion } from "../src/services/finance-historical-quality.service.js";

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance bank accounts. */
 import { randomUUID } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { getChileanFinancialInstitution } from "../lib/finance-integrations.js";

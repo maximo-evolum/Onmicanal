@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance movement trace. */
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
 const text = (v) => String(v ?? "");
 const iso = (v) => v && Number.isFinite(new Date(v).getTime()) ? new Date(v).toISOString() : "";

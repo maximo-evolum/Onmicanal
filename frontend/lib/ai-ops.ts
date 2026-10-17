@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para ai ops en la aplicación web. */
 import { Conversation, Lead } from "./types";
 
 export type AiOpsProfile = {

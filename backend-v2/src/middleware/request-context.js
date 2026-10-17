@@ -1,3 +1,4 @@
+/** Archivo: Aplica controles transversales de solicitud para request context. */
 import multer from "multer";
 
 const uploadErrors = {

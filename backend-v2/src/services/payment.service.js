@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio payment. */
 
 import { prisma } from "../lib/db.js";
 import { resolveCoreMetadata } from "./core-metadata.service.js";

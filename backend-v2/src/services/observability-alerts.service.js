@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio observability alerts. */
 const lastNotificationAt = new Map();
 
 function webhookUrl() {

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance customer credit ledger. */
 import { financeDocumentSide, financeDocumentDate, financeDocumentState } from "./finance-document-values.service.js";
 
 export const creditData = (r) => r?.data || {};
@@ -13,7 +14,7 @@ export function validCreditRut(value) {
   return rut.at(-1) === (check === 11 ? "0" : check === 10 ? "K" : String(check));
 }
 
-// No side effects: the same evidence is used by balances, writes and closing.
+// Sin efectos secundarios: la misma evidencia se usa en saldos, escrituras y cierres.
 export function auditCustomerCredit(credit, records) {
   const d = creditData(credit), errors = [], index = new Map(records.map((r) => [r.id, r]));
   const movement = index.get(d.movementId), reconciliation = index.get(d.reconciliationId);

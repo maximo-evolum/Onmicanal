@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance customer credits para la aplicación web. */
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getFinanceCustomerCredits, registerFinanceCustomerCredit, applyFinanceCustomerCredit, reverseFinanceCustomerCredit, type FinanceCustomerCredit, type FinanceCustomerCreditPage, type FinanceAllocationPage, type FinanceWorkspaceContext } from "@/lib/api";

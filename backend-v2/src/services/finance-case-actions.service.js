@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance case actions. */
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";

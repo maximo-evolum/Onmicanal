@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance collection delivery. */
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";
@@ -50,7 +51,7 @@ export async function previewCollectionDelivery(db, ctx, dependencies = {}) {
   const { tenantId, input = {}, now = new Date() } = ctx;
   const recipient = collectionRecipient(input.channel, input.recipient);
   if (input.consentConfirmed !== true || typeof input.consentNote !== "string" || input.consentNote.trim().length < 10 || input.consentNote.length > 1000) fail(422, "Confirma que el destinatario corresponde al cliente y registra el respaldo de autorización de contacto (10–1.000 caracteres).");
-  // Check tenant/case before any provider access.
+  // Verifica el tenant y el caso antes de cualquier acceso al proveedor.
   await evidence(db, tenantId, input.caseId, now);
   const transport = await (dependencies.prepare || prepareCollectionTransport)(db, { tenantId, channel: input.channel, templateName: input.templateName, language: input.language });
   return withFinanceWrite(db, async (tx) => {
@@ -73,7 +74,7 @@ export async function sendCollectionDelivery(db, ctx, dependencies = {}) {
   if (input.approved !== true) fail(422, "Debes aprobar expresamente el destinatario y contenido antes de enviar.");
   const old = await record(db, tenantId, ctx.id, TYPE);
   if (input.previewHash !== old.data.previewHash) fail(409, "La vista previa no coincide. Revisa el mensaje de nuevo.");
-  if (old.status !== "DRAFT") return publicRow(old); // Replay only; never another send.
+  if (old.status !== "DRAFT") return publicRow(old); // Solo reproduce; nunca realiza otro envío.
   if (Date.parse(old.data.expiresAt) <= now.getTime()) fail(409, "La vista previa venció. Prepara una nueva para comprobar el saldo.");
   const transport = await (dependencies.prepare || prepareCollectionTransport)(db, { tenantId, channel: old.data.channel, templateName: old.data.templateName, language: old.data.language });
   const claimed = await withFinanceWrite(db, async (tx) => {
@@ -95,7 +96,7 @@ export async function sendCollectionDelivery(db, ctx, dependencies = {}) {
     return { row: next, claimed: true };
   });
   if (!claimed.claimed) return publicRow(claimed.row);
-  // Outside retriable transaction: financial serialization must never replay a network send.
+  // Fuera de una transacción reintentable: la serialización financiera nunca debe repetir un envío de red.
   let result;
   try { result = await (dependencies.dispatch || dispatchCollectionMessage)(transport, { id: claimed.row.id, ...claimed.row.data }); }
   catch { result = { status: "UNKNOWN", detail: "Resultado por verificar en el proveedor. No reenvíes el mensaje." }; }

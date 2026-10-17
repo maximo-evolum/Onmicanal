@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance manual reversals. */
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { financialDate } from "./finance-manual-writes.service.js";

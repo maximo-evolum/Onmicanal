@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance bank layout para la aplicación web. */
 "use client";
 import { FinanceFeedback } from "./finance-feedback";
 import { useEffect, useRef, useState } from "react";

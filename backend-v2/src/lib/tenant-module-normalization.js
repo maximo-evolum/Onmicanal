@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para tenant module normalization. */
 import { isModuleAllowedForIndustry } from "./industry-module-access.js";
 
 function normalizeModule(value) {

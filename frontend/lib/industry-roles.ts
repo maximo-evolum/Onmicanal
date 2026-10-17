@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para industry roles en la aplicación web. */
 export type IndustryRoleOption = {
   key: string;
   label: string;

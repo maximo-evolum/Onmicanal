@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance agent actions. */
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { lockFinancePeriod, assertFinancePeriodOpen } from "./finance-period-control.service.js";
 import { financialDate } from "./finance-manual-writes.service.js";
@@ -20,7 +21,7 @@ export async function prepareFinanceExceptionCases(db, { tenantId, userId, readP
       findAllFinanceRecords(tx, { where: { tenantId, recordType: "finance_exception" } }),
       findAllFinanceRecords(tx, { where: { tenantId, recordType: "bank_movement" } })
     ]);
-    // Resolved cases are evidence too. Do not recreate them on every analysis.
+  // Los casos resueltos también son evidencia. No los recrea en cada análisis.
     const known = new Set(existing.map((r) => keyOf(dataOf(r))));
     const suggested = new Map(suggestions.map((s) => [s.movement.id, s]));
     const candidates = []; const deferred = [];
@@ -60,8 +61,8 @@ export async function generateFinanceCollectionCases(db, { tenantId, userId, now
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now).map((p) => [p.type, p.value]));
   const activityDate = financialDate(`${parts.year}-${parts.month}-${parts.day}`);
   return withFinanceWrite(db, async (tx) => {
-    // A collection draft is an activity of today, not a rewrite of an old
-    // invoice. Closed historical invoices may still have outstanding debt.
+    // Un borrador de cobranza es una actividad de hoy, no una reescritura de una
+    // factura. Las facturas históricas cerradas aún pueden mantener deuda pendiente.
     await assertFinancePeriodOpen(tx, tenantId, activityDate.slice(0, 7));
     const [invoices, cases] = await Promise.all([
       findAllFinanceRecords(tx, { where: { tenantId, recordType: "finance_invoice" } }),

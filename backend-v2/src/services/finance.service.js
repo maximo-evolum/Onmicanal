@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance. */
 import { findAllFinanceRecords } from "./finance-integrity.service.js";
 import { financeRecordRequiredModules } from './finance-record-access.service.js';
 import { filterFinanceContext, parseFinanceContext } from "./finance-context.service.js";
@@ -251,8 +252,8 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
     context, schedule,
     documentQuality: summarizeFinanceDocuments(records.filter((r) => r.recordType === "finance_invoice" && financeDocumentSide(r) === "CUSTOMER"), now).excluded,
     scopeNote: "Facturas de clientes emitidas en el período seleccionado, con saldos actuales. Monto ajustado = total original − notas de crédito + notas de débito vinculadas. Cobrado = monto ajustado − saldo − diferencias justificadas; estas últimas no son dinero recibido. No equivale a cobros bancarios del mes. Se excluyen anuladas, notas independientes, proveedores y datos inconsistentes. La cuenta bancaria no filtra las facturas. No acredita cobertura ni reconstruye saldos históricos.",
-    // Contract used by the Finance OS workspace. Keep the legacy kpis below
-    // for backwards-compatible API consumers while exposing named domains.
+    // Contrato usado por el espacio de trabajo de Finance OS. Conserva abajo los KPI heredados
+    // para consumidores de API compatibles hacia atrás, mientras expone dominios nombrados.
     invoices: {
       total: invoices.length,
       justifiedDifferences: invoices.reduce((sum, invoice) => sum + getInvoiceFinancialState(invoice, now).justifiedDifference, 0),
@@ -274,7 +275,7 @@ export async function getFinanceOverview({ tenantId, now = new Date(), context =
     collections: { open: openCollections, promises: promiseCollections },
     recent: { invoices: invoices.slice(0, 8).map((r) => ({ ...r, data: { ...dataOf(r), balance: getInvoiceFinancialState(r, now).balance } })), exceptions: exceptions.slice(0, 8), collectionCases: collectionCases.slice(0, 8) },
     // Connection health is permission-filtered by /finance/connection-health.
-    // Never fabricate provider status from the presence of financial records.
+    // Nunca fabrica el estado de un proveedor a partir de la presencia de registros financieros.
     integrationReadiness: [],
     kpis: {
       invoices: invoices.length,
@@ -308,7 +309,7 @@ export async function getFinanceReconciliationSuggestions({ tenantId, movementId
   const eligibleRecords = filterFinanceContext([...invoices, ...movements], context, { documentMode: "outstanding" });
   const eligibleIds = new Set(eligibleRecords.map((record) => record.id));
   const openInvoices = invoices.filter((invoice) => eligibleIds.has(invoice.id) && getInvoiceFinancialState(invoice).status !== "PAID");
-  // null is reserved for internal full-universe analysis, not a UI page size.
+  // null se reserva para análisis interno del universo completo, no para un tamaño de página de interfaz.
   const maxResults = limit === null ? Infinity : Math.max(1, Math.min(Number(limit) || 30, 200));
   const serializable = (record) => ({ id: record.id, title: record.title, data: dataOf(record), status: record.status });
   const results = [];

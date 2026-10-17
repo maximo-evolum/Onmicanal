@@ -1,3 +1,4 @@
+/** Archivo: Centraliza las solicitudes de la interfaz web hacia la API de EVOLUM OS. */
 import { AgentSession, Booking, BookingSlot, Campaign, Conversation, Lead, LeadMetrics, Message, TenantSession } from "./types";
 import { API_BASE_URL, SESSION_STORAGE_KEY } from "./constants";
 import { canQueueOfflineMutation, OfflineQueuedError, queueOfflineMutation } from "./offline-queue";
@@ -1557,7 +1558,13 @@ export async function createRealtyBuyer(input: { name: string; phone?: string; e
 
 export type BrokerOperationType = "SALE" | "RENTAL" | "ADMINISTRATION";
 
+export type BrokerStageLabel = { key: string; label: string };
+export type BrokerJourneyCatalog = { version: string; capture: BrokerStageLabel[]; commercial: BrokerStageLabel[]; pipeline: BrokerStageLabel[]; tracker: BrokerStageLabel[] };
+
 export type BrokerOperation = IndustryRecord & {
+  journey?: { version: string; operationId: string; sourceStage: string; internalStage: string; commercial: BrokerStageLabel | null; pipeline: BrokerStageLabel | null; tracker: BrokerStageLabel | null; trackerApplicable: boolean; outcome: string | null; needsReview: boolean; evidencePolicy: string; warning: string | null };
+  identity?: { operationId: string; propertyRecordId: string | null; propertyId: string | null; ownerId: string | null; captureId: string | null; mandateId: string | null; buyerId: string | null; leaseTenantId: string | null };
+  relationStatus?: "LINKED" | "LEGACY_PENDING";
   data: Record<string, unknown> & {
     operationType: BrokerOperationType;
     propertyId?: string | null;
@@ -1832,6 +1839,7 @@ export type BrokerPropertyExpedient = {
 };
 
 export type BrokerCatalog = {
+  journey?: BrokerJourneyCatalog;
   areas: Record<BrokerRecordArea, string[]>;
   recordDefinitions: Record<string, BrokerRecordDefinition>;
   agents: BrokerAgent[];
@@ -1859,6 +1867,10 @@ export type BrokerAccessProfile = {
 
 export function getBrokerAccess(): Promise<BrokerAccessProfile> {
   return request<BrokerAccessProfile>("/broker/access/me");
+}
+
+export function getRealtyBuyers(): Promise<Lead[]> {
+  return request("/realty/buyers");
 }
 
 export type BrokerAccessTeamMember = { id: string; name: string; email: string; role: string; jobTitle: string | null; isActive: boolean; profile: { businessRole: string; accessScope: string; teamKey: string | null; branchKey: string | null } };
@@ -1940,6 +1952,7 @@ export type BrokerCapture = {
 };
 
 export type BrokerCapturePayload = {
+  journey?: { version: string; sourceStatus: string; stage: BrokerStageLabel | null; outcome: string | null };
   property: IndustryRecord;
   capture: BrokerCapture | null;
   readiness: NonNullable<BrokerCapture["readiness"]>;
@@ -1952,6 +1965,39 @@ export function getBrokerPropertyCapture(propertyId: string): Promise<BrokerCapt
 
 export function createBrokerPropertyCapture(input: Record<string, unknown>): Promise<BrokerCapturePayload> {
   return request<BrokerCapturePayload>("/broker/captures", { method: "POST", body: JSON.stringify(input) });
+}
+
+export type BrokerProspect = {
+  id: string; title: string; assignedToId: string | null; createdAt: string;
+  data: Record<string, any>; daysInStage: number; priceGapPct: number | null;
+  priceGapWarning: boolean; priority: string; nextAction: string;
+};
+export type BrokerConversionPreview = {
+  version: string; prospectId: string; prospectVersion: number;
+  operationType: BrokerOperationType; initialStage: string;
+  property: { title: string; address: string; comuna: string; region: string; propertyType: string };
+  owner: { name: string; rut: string; phone: string; email: string };
+  assignedToId: string; origin: string; intendedService: string;
+  terms: { publicationPrice: number; commissionPct: number; exclusivityDays: number; signedAt: string; expiresAt: string; evidenceReference: string; currency: string };
+  warnings: string[]; creates: string[]; externalActions: boolean;
+};
+export function previewBrokerConversion(id: string, input: Record<string, unknown>): Promise<BrokerConversionPreview> {
+  return request(`/broker/prospects/${encodeURIComponent(id)}/conversion-preview`, { method: "POST", body: JSON.stringify(input) });
+}
+export function getBrokerProspects(page = 1): Promise<{ items: BrokerProspect[]; total: number; page: number; pageSize: number }> {
+  return request(`/broker/prospects?page=${page}`);
+}
+export function getBrokerProspect(id: string): Promise<BrokerProspect> {
+  return request(`/broker/prospects/${encodeURIComponent(id)}`);
+}
+export function createBrokerProspect(input: Record<string, unknown>): Promise<BrokerProspect> {
+  return request("/broker/prospects", { method: "POST", body: JSON.stringify(input) });
+}
+export function actBrokerProspect(id: string, input: Record<string, unknown>): Promise<BrokerProspect> {
+  return request(`/broker/prospects/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify(input) });
+}
+export function getBrokerProspectOwner(id: string): Promise<{ id: string; name: string; rut: string; phone: string; email: string; propertyId: string; propertyTitle: string }> {
+  return request(`/broker/prospects/${encodeURIComponent(id)}/owner`);
 }
 
 export function saveBrokerPropertyCapture(propertyId: string, input: Record<string, unknown>): Promise<BrokerCapturePayload> {
@@ -2790,6 +2836,12 @@ export type TenantDocument = {
   createdAt: string;
   updatedAt: string;
 };
+
+// La descarga nunca usa una URL pública del archivo: esta ruta exige la sesión
+// vigente y el backend vuelve a comprobar el tenant antes de entregar el dato.
+export function tenantDocumentDownloadUrl(id: string): string {
+  return `${API_BASE_URL}/documents/${encodeURIComponent(id)}/download`;
+}
 
 export type WorkflowDefinition = {
   id: string;

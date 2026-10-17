@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio routing. */
 import { prisma } from "../lib/db.js";
 import { sendWhatsAppText } from "./whatsapp.service.js";
 import { sendInstagramText } from "./instagram.service.js";

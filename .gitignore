@@ -1,3 +1,4 @@
+# Archivo: Define exclusiones o valores de referencia para .gitignore.
 node_modules
 **/node_modules
 .next

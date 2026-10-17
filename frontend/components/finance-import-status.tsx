@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance import status para la aplicación web. */
 import type { FinanceBankImportJob } from "@/lib/api";
 import styles from "./finance-usability.module.css";
 

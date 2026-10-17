@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz chat panel para la aplicación web. */
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";

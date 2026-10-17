@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio tenant modules. */
 import { prisma } from "../lib/db.js";
 import { MODULES, PLAN_DEFINITIONS, getModulesForPlan, normalizePlanCode } from "../lib/modules.js";
 import { getAnyIndustryTemplate, getTemplateModules } from "./industry-templates.service.js";
@@ -215,8 +216,8 @@ export async function ensureTenantModuleEligibility({ tenantId, module, tenant: 
   return true;
 }
 
-// One request-scoped read for aggregate screens. Do not cache permissions
-// between requests: a manual revocation must affect the next request.
+// Una lectura delimitada a la solicitud para pantallas agregadas. No almacena permisos en caché
+// entre solicitudes: una revocación manual debe afectar la solicitud siguiente.
 export async function getEligibleTenantModules({ tenantId, modules = [], tenant = null } = {}) {
   if (!tenantId) return [];
   const requested = [...new Set(modules.filter(Boolean))];
@@ -229,7 +230,7 @@ export async function getEligibleTenantModules({ tenantId, modules = [], tenant 
   const allowed = [];
   for (const module of requested) {
     const rows = configured.filter(row => candidates.get(module).includes(row.module));
-    // Keep the same alias/configuration precedence as the single-module path.
+    // Mantiene la misma precedencia de alias y configuración que la ruta de módulo individual.
     if (rows.some(row => row.enabled)) allowed.push(module);
     else if (!rows.some(row => row.source === "MANUAL" && !row.enabled)
       && await ensureTenantModuleEligibility({ tenantId, module, tenant })) allowed.push(module);

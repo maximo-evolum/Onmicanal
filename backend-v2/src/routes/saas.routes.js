@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio saas y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";

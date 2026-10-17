@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz BackToInbox para la aplicación web. */
 "use client";
 import Link from "next/link";
 

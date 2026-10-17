@@ -1,5 +1,6 @@
-// Bound multipart metadata as well as file bytes. Multer's nesting/index
-// protections are opt-in; an updated package alone does not enable them.
+/** Archivo: Proporciona infraestructura y utilidades compartidas para upload limits. */
+// Limita los metadatos multipartes además de los bytes de archivos. El anidamiento e índices de Multer
+// son opcionales; actualizar el paquete por sí solo no los habilita.
 export function uploadLimits({ fileSize, files }) {
   return {
     fileSize,

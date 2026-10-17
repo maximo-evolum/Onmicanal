@@ -1,13 +1,15 @@
+/** Archivo: Renderiza la página web de EVOLUM OS correspondiente a page. */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getLeads, updateIndustryRecord, updateLeadApi, type IndustryRecord } from "@/lib/api";
+import { getLeads, updateLeadApi } from "@/lib/api";
 import { Lead } from "@/lib/types";
 import { useAgentSession } from "@/lib/auth";
 import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { AccountPill } from "@/components/account-pill";
 import { ModuleGate } from "@/components/module-gate";
-import { RealtyPipelineBoard, useRealtyWorkspace } from "@/components/realty-workspace";
+import { BrokerCanonicalPipeline } from "@/components/broker-journey";
+import { useModuleAccess } from "@/lib/module-access";
 
 const columns = [
   { id: "NEW", label: "Prospeccion", tone: "prospect" },
@@ -52,7 +54,7 @@ function getLeadSignal(lead: Lead) {
 
 export default function PipelinePage() {
   const agent = useAgentSession();
-  const { data: realtyData, reload: reloadRealty } = useRealtyWorkspace();
+  const brokerAccess = useModuleAccess("properties");
   const [leads, setLeads] = useState<Lead[]>([]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,15 +102,6 @@ export default function PipelinePage() {
     }
   }
 
-  async function moveProperty(property: IndustryRecord, stage: string) {
-    const current = property.data && typeof property.data === "object" ? property.data : {};
-    try {
-      await updateIndustryRecord(property.id, { data: { ...current, stage } });
-      await reloadRealty();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudo mover la propiedad");
-    }
-  }
 
   function openInbox(conversationId: string) {
     window.location.href = `/inbox?conversation=${conversationId}`;
@@ -235,11 +228,7 @@ export default function PipelinePage() {
 
         </div>
 
-        <RealtyPipelineBoard
-          properties={realtyData.properties}
-          brokers={realtyData.brokers}
-          onStageChange={moveProperty}
-        />
+        {brokerAccess.allowed && !brokerAccess.loading ? <BrokerCanonicalPipeline /> : null}
       </main>
     </div>
     </ModuleGate>

@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de observability alerts.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { publishObservabilityAlerts, resetObservabilityAlertState } from "../src/services/observability-alerts.service.js";

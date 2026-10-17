@@ -1,3 +1,4 @@
+/** Archivo: Contiene soporte versionado para dev. */
 import { spawn } from 'node:child_process';
 
 const isWin = process.platform === 'win32';

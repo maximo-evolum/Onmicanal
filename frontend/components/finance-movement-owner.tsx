@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance movement owner para la aplicación web. */
 "use client";
 import { useRef, useState } from "react";
 import { assignFinanceMovementOwner, type FinanceMovementOwner } from "@/lib/api";

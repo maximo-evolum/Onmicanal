@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de commercial state.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { deriveCommercialState } from "../src/lib/commercial-state.js";

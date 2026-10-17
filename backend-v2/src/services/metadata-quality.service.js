@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio metadata quality. */
 import { prisma } from "../lib/db.js";
 import { evaluateMetadataSchema } from "../lib/metadata-enforcement.js";
 

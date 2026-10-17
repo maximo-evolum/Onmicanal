@@ -1,3 +1,4 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con configure broker demo holding. */
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 

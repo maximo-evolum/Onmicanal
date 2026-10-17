@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance overview evidence para la aplicación web. */
 "use client";
 import { useRef, useState } from "react";
 import { exportFinanceOverview, type FinanceOverview } from "@/lib/api";

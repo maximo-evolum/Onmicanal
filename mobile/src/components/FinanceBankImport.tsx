@@ -1,10 +1,11 @@
+/** Archivo: Implementa el componente móvil FinanceBankImport de EVOLUM. */
 import { useRef, useState } from "react";
 import { ActivityIndicator, Alert, Text, TouchableOpacity, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { previewMobileBankFile, getMobileBankJobs, getMobileBankPreview, getMobileBankRows, confirmMobileBankImport, MobileBankPreview } from "../api/client";
 
-// No local parsing or generic record writes: the server retains the original,
-// validates every row and confirms exactly the immutable revision reviewed here.
+// Sin análisis local ni escrituras genéricas de registros: el servidor conserva el original,
+// valida cada fila y confirma exactamente la revisión inmutable revisada aquí.
 export function FinanceBankImport({ onImported, theme }: { onImported: () => Promise<void>; theme: { text: string; muted: string; purple: string; border: string } }) {
   const locked = useRef(false);
   const [busy, setBusy] = useState("");

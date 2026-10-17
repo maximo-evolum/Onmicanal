@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance document periods. */
 import { financialDate } from "./finance-manual-writes.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
@@ -72,7 +73,7 @@ export async function applyImportedDteAdjustments(tx, tenantId, batchId, importe
     const old = dataOf(target); const balance = state.balance + (credit ? -amount : amount);
     const status = balance === 0 ? "PAID" : Number(old.paidAmount || 0) > 0 ? "PARTIAL" : "OPEN";
     const updated = await tx.industryRecord.update({ where: { id: target.id }, data: { status, data: { ...old, status, balance, creditNotesTotal: Number(old.creditNotesTotal || 0) + (credit ? amount : 0), debitNotesTotal: Number(old.debitNotesTotal || 0) + (credit ? 0 : amount), lastAdjustmentId: note.id } } });
-    Object.assign(target, updated); // Next note uses the new balance, not the original snapshot.
+    Object.assign(target, updated); // La siguiente nota usa el nuevo saldo, no la instantánea original.
     await tx.industryRecord.update({ where: { id: note.id }, data: { status: "APPLIED", data: { ...d, [target.recordType === "finance_payable" ? "payableId" : "invoiceId"]: target.id, appliedAt: importedAt } } });
   }
   return pending;

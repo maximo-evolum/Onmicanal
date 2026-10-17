@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai tools. */
 import { prisma } from "../lib/db.js";
 import { createBooking, getAvailableSlots } from "./booking.service.js";
 import { createPaymentIntent, PAYMENT_STATUS } from "./payment.service.js";

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio stability. */
 
 export function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

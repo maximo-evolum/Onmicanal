@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz theme bootstrap para la aplicación web. */
 "use client";
 
 import { useEffect } from "react";

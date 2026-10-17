@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai expert. */
 import { env } from "../lib/env.js";
 import { buildProductContext, searchProducts } from "./product.service.js";
 

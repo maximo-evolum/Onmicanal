@@ -1,3 +1,4 @@
+/** Archivo: Inicia el servidor HTTP de EVOLUM OS y registra seguridad, rutas, salud y tiempo real. */
 import express from "express";
 import http from "node:http";
 import path from "node:path";
@@ -93,7 +94,7 @@ function validMetricsToken(req) {
 app.use(express.json({
   limit: "5mb",
   verify: (req, _res, buffer) => {
-    // Meta signs the original request bytes, not the parsed JSON object.
+    // Meta firma los bytes originales de la solicitud, no el objeto JSON ya interpretado.
     if (req.originalUrl?.split("?")[0] === "/meta/webhook") {
       req.rawBody = Buffer.from(buffer);
     }
@@ -230,8 +231,8 @@ app.get("/api/debug/session", ...protectedApi, async (req, res) => {
   });
 });
 
-// Public callbacks are mounted above. Authenticate each protected HTTP request
-// once, not again for every unrelated router traversed before its destination.
+// Los callbacks públicos se montan arriba. Cada solicitud HTTP protegida se autentica
+// una vez, no nuevamente por cada router no relacionado que atraviese antes de su destino.
 app.use("/api", ...protectedApi);
 app.use("/api", modulesRouter);
 app.use("/api", metadataRouter);
@@ -382,7 +383,7 @@ let stopBankImportWorker = () => {};
 async function bootstrap() {
   await prisma.$connect();
   if (lifecycle.draining) return;
-  // Authorized uploads are processed even when autonomous sales automation is off.
+  // Las cargas autorizadas se procesan incluso cuando la automatización autónoma de ventas está desactivada.
   stopBankImportWorker = startBankImportWorker(prisma, analyzeStoredBankStatement, { onError: (message) => console.warn("[BANK_IMPORT_WORKER]", message) });
   lifecycle.onStop(() => stopBankImportWorker());
   startBackgroundJobs();

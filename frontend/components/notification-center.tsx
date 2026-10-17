@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz notification center para la aplicación web. */
 "use client";
 
 import Link from "next/link";

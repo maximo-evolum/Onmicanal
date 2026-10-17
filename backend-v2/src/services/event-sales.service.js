@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio event sales. */
 import { prisma } from "../lib/db.js";
 
 const EVENT_KEYWORDS = /(asado|asados|parrillada|parrilladas|parrillero|evento|eventos|cumple|cumpleaños|matrimonio|boda|empresa|corporativo|cena|almuerzo|fiesta)/i;

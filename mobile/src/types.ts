@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica móvil compartida para types. */
 export type AgentSession = {
   id: string;
   tenantId?: string;

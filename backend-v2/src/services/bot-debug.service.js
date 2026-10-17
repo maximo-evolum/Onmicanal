@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio bot debug. */
 import { getRuleReply } from "./rules.service.js";
 import { classifyPriority } from "./priority.service.js";
 import { detectIntent } from "./intent.service.js";

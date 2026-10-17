@@ -1,3 +1,4 @@
+/** Archivo: Compone la aplicación móvil EVOLUM y sus capacidades nativas principales. */
 import { StatusBar } from "expo-status-bar";
 import { FinanceBankImport } from "./src/components/FinanceBankImport";
 import { FinanceInvoiceForm } from "./src/components/FinanceInvoiceForm";

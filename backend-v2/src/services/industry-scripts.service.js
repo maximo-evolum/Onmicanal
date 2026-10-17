@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio industry scripts. */
 
 export function normalizeIndustry(input = "") {
   const t = String(input || "").toLowerCase();

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio objection. */
 import { detectSalesObjection, salesBrainFallbackReply } from "./sales-brain.service.js";
 
 export function detectObjection(message = "") {

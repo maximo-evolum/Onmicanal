@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance bank statements. */
 import { createHash } from "node:crypto";
 import pdfParse from "pdf-parse";
 import ExcelJS from "exceljs";
@@ -201,8 +202,8 @@ export async function detectBankStatementInstitution(file, rows = [], selection 
   return { institution: null, method: "NO_IDENTIFICADO" };
 }
 
-// Only labelled metadata is evidence of currency. A mention of dollars in a
-// transaction description or filename must never change the statement currency.
+// Solo los metadatos etiquetados son evidencia de moneda. Mencionar dólares en la
+// descripción de una transacción o en el nombre del archivo nunca debe cambiar la moneda de la cartola.
 export async function detectBankStatementCurrency(file, selection = {}) {
   const source = await bankStatementFileText(file, selection);
   const matches = [...source.matchAll(/(?:^|[\s;|])(?:moneda|divisa|currency)\s*[:=]?\s*(PESOS DE CHILE|PESOS CHILENOS|PESO CHILENO|UNIDAD DE FOMENTO|D[ÓO]LARES|CLP|USD|EUR|UF|US\$)(?=$|[\s;|])/gim)];
@@ -359,8 +360,8 @@ export function bankMovementFingerprint(input = {}) {
     normalizeKey(input.reference),
     normalizeKey(input.description)
   ].join("|");
-  // Retain legacy CLP fingerprints; registered accounts and foreign currencies
-  // use exact amounts and a stable account identity, independent of alias edits.
+  // Conserva las huellas CLP heredadas; las cuentas registradas y monedas extranjeras
+  // usan montos exactos y una identidad de cuenta estable, independiente de cambios en alias.
   const currency = financeCurrency(input.currency);
   const identity = input.bankAccountId || currency !== "CLP"
     ? JSON.stringify(["v2", input.bankAccountId || [input.bankKey, input.accountLast4, input.accountAlias], currency, input.transactionDate || input.date, Number(input.amount), input.direction || "", normalizeKey(input.reference), normalizeKey(input.description)]) : source;
@@ -469,7 +470,7 @@ export async function readBankStatementFile(file, options = {}) {
   return readHistoricalFinanceFile(file, readOptions);
 }
 
-// Read-only, paged view of the original table, including cover/header/footer rows.
+// Vista paginada de solo lectura de la tabla original, incluidas filas de portada, encabezado y pie.
 export async function inspectBankStatementLayout(file, { sheet = "", delimiter = "", page = 1 } = {}) {
   page = Number(page);
   if (!Number.isSafeInteger(page) || page < 1 || page > 4000) throw new FinanceOperationError(400, "Página de origen inválida.");

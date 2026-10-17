@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio reports y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { getIndustryReports } from "../services/reporting.service.js";
 import { buildExecutiveReportPdf } from "../lib/executive-report-pdf.js";

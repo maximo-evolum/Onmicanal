@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica móvil compartida para industryProfiles. */
 export type IndustryProfile = {
   code: string;
   label: string;

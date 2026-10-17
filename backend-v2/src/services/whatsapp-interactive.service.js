@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio whatsapp interactive. */
 import { prisma } from "../lib/db.js";
 import { sendWhatsAppInteractive } from "./whatsapp.service.js";
 import { traceStep } from "../lib/trace.js";

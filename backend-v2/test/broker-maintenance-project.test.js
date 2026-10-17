@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de broker maintenance project.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { brokerMaintenanceReadiness, brokerProjectReadiness, normalizeBrokerMaintenance, normalizeBrokerProject } from "../src/services/broker-maintenance-project.service.js";

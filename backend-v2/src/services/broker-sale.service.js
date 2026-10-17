@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker sale. */
 import { SALE_STAGES } from "./broker-workflows.service.js";
 
 const UPPER = (value, fallback = "") => {
@@ -98,6 +99,9 @@ export function brokerSaleStageRequirements({ targetStage, saleCase, capture, re
   const add = (key, label, ready) => requirements.push({ key, label, ready: Boolean(ready) });
 
   if (!SALE_STAGES.includes(target)) return requirements;
+  if (target === "EVALUACION_COMERCIAL") {
+    add("titulo_inicial", "Estudio de título inicial revisado sin observaciones", UPPER(capture?.preliminaryTitleStatus) === "REVISADO_SIN_OBSERVACIONES");
+  }
   if (target === "MANDATO_Y_PUBLICACION") {
     add("captacion", "Captación lista para mandato o mandato firmado", ["LISTA_PARA_MANDATO", "MANDATO_FIRMADO"].includes(UPPER(capture?.status)) || hasRecord(relatedRecords, "property_mandate", ["SIGNED"]));
     add("tasacion", "Tasación o precio referencial validado", Boolean(capture?.preliminaryAppraisal || capture?.suggestedPrice) || hasRecord(relatedRecords, "property_appraisal", ["APPROVED"]));

@@ -1,3 +1,4 @@
+/** Archivo: Aplica controles transversales de solicitud para tenant access. */
 import { prisma } from "../lib/db.js";
 import { hasTenantModule, ensureTenantModuleEligibility, getTenantModules } from "../services/tenant-modules.service.js";
 import { isModuleAllowedForIndustry } from "../lib/industry-module-access.js";

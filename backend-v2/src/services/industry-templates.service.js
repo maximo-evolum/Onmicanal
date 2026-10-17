@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio industry templates. */
 import { prisma } from "../lib/db.js";
 import {
   getIndustryTemplate,

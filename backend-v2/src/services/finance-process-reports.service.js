@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance process reports. */
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
 import { FINANCE_CONTEXT_TYPES, parseFinanceContext, filterFinanceContext, financeOperationalDate, financeRecordAccount, buildFinanceContextCoverage, financeRecordMatchesContext } from "./finance-context.service.js";
@@ -26,7 +27,7 @@ export function processReportQuery(input = {}) {
 export function buildFinanceProcessReport(records, { tenantId, companyName, input, now = new Date() }) {
   if (!tenantId) throw new FinanceOperationError(401, "Se requiere una empresa autenticada.");
   const query = processReportQuery(input);
-  // Defense in depth: no foreign records may participate in evidence or exports.
+  // Defensa en profundidad: ningún registro ajeno puede participar en evidencia ni exportaciones.
   records = records.filter((r) => r.tenantId === tenantId).map((r) => data(r).sourceBatchId && !data(r).importBatchId ? { ...r, data: { ...data(r), importBatchId: data(r).sourceBatchId } } : r);
   const index = new Map(records.map((r) => [r.id, r]));
   const dateOf = (r) => {
@@ -35,7 +36,7 @@ export function buildFinanceProcessReport(records, { tenantId, companyName, inpu
   };
   const accountScope = records.filter((r) => financeRecordMatchesContext(r, { ...query, period: "" }, index));
   const scoped = filterFinanceContext(records, query).filter((r) => r.recordType !== "bank_movement" || dateOf(r));
-  buildFinanceContextCoverage(records, query); // Validate account ownership; do not expose unrelated source statistics.
+  buildFinanceContextCoverage(records, query); // Valida propiedad de cuentas; no expone estadísticas de fuentes no relacionadas.
   const movements = scoped.filter((r) => r.recordType === "bank_movement");
   const undatedEvidence = accountScope.filter((r) => ["finance_reconciliation", "finance_invoice_receipt"].includes(r.recordType) && !dateOf(r));
   const audit = query.kind === "reconciliation" ? auditCloseReconciliations(records, movements, query.period, dateOf, [...scoped, ...undatedEvidence]) : null;
@@ -78,7 +79,7 @@ export function buildFinanceProcessReport(records, { tenantId, companyName, inpu
   const counts = Object.fromEntries(Object.entries(REPORT_STATUSES[query.kind]).map(([key, label]) => [key, { label, count: rows.filter((r) => r.status === key).length }]));
   const decimals = query.currency === "CLP" ? 0 : query.currency === "UF" ? 4 : 2;
   function sum(direction) {
-    // Exceptions can refer to the same bank movement: never sum their amounts.
+  // Las excepciones pueden referirse al mismo movimiento bancario: nunca suma sus montos.
     if (query.kind !== "reconciliation") return null;
     const units = rows.filter((r) => r.status !== "EXCLUDED" && r.direction === direction && r.amount !== null).reduce((n, r) => n + BigInt(Math.round(r.amount * 10 ** decimals)), 0n);
     if (units > BigInt(Number.MAX_SAFE_INTEGER)) throw new FinanceOperationError(422, "Los totales exceden la precisión admitida. Acota el reporte por cuenta.");
@@ -88,7 +89,7 @@ export function buildFinanceProcessReport(records, { tenantId, companyName, inpu
     title: query.kind === "reconciliation" ? "Reporte de conciliación bancaria" : "Reporte de excepciones",
     company: { id: tenantId, name: text(companyName) || tenantId }, query, rows,
     summary: { total: rows.length, counts, credits: sum("Abono"), debits: sum("Cargo"), undated: rows.filter((r) => !r.date).length, withoutAmount: rows.filter((r) => r.amount === null).length },
-    // Full-scope blockers stay visible even when a status/search filter hides rows.
+  // Los bloqueos de alcance completo siguen visibles incluso si un filtro de estado o búsqueda oculta filas.
     issues: audit?.blockers || [],
     notices: ["Instantánea de los registros disponibles, no certificación de cierre ni de cobertura completa del período.", "Los filtros se aplican al detalle y sus totales. Las observaciones de evidencia abarcan toda la cuenta y período seleccionados.", "Los excluidos no suman abonos ni cargos. Los importes sin validar se informan, no se convierten en cero.", `${accountScope.filter((r) => r.recordType === "bank_movement" && !dateOf(r)).length} movimiento(s) de la cuenta y moneda sin fecha válida no se atribuyen a este período; consulta su revisión en Cartolas.`, ...(query.kind === "exceptions" ? ["Los montos de excepciones son referencias: pueden repetirse entre casos y no representan una deuda total.", "Los casos sin fecha operativa se incluyen para revisión, sin atribuirlos al mes seleccionado."] : []), ...(query.currency !== "CLP" ? ["Consulta en moneda original, sin conversión. La verificación operativa de conciliaciones admite actualmente CLP."] : [])]
   };

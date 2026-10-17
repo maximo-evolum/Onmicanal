@@ -1,3 +1,4 @@
+/** Archivo: Gestiona autenticación, sesión y utilidades de autorización de la aplicación. */
 import jwt from "jsonwebtoken";
 import { env } from "./env.js";
 import { prisma } from "./db.js";
@@ -78,8 +79,8 @@ export async function authMiddleware(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, env.jwtSecret, { algorithms: ['HS256'] });
-    // Undefined Prisma filters are ignored: reject incomplete signed claims
-    // before querying, rather than accidentally selecting the first user.
+    // Los filtros indefinidos de Prisma se ignoran: rechaza afirmaciones firmadas incompletas
+    // antes de consultar, en vez de seleccionar accidentalmente al primer usuario.
     if (!decoded || typeof decoded !== 'object' || typeof decoded.userId !== 'string' || !decoded.userId.trim()
       || typeof decoded.tenantId !== 'string' || !decoded.tenantId.trim()) {
       return res.status(401).json({ error: "Sesión inválida. Inicia sesión nuevamente." });

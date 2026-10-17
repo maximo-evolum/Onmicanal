@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio saas commercial. */
 import { prisma } from "../lib/db.js";
 import { DEFAULT_AI_GOVERNANCE, normalizeAiGovernance } from "./ai-governance.service.js";
 import { PLAN_DEFINITIONS, normalizePlanCode, getModulesForPlan } from "../lib/modules.js";

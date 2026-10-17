@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance planning. */
 import { prisma } from "../lib/db.js";
 import { financeRecordData, getInvoiceFinancialState } from "./finance.service.js";
 

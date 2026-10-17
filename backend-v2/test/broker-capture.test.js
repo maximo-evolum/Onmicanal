@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de broker capture.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { captureReadiness, normalizeBrokerCapture, validateBrokerCapture } from "../src/services/broker-capture.service.js";
@@ -30,6 +31,14 @@ test("la ficha de captación calcula brecha de precio y controles completos", ()
   const readiness = captureReadiness({ ...completeCapture, ...normalized });
   assert.equal(readiness.score, 100);
   assert.equal(readiness.missing.length, 0);
+});
+
+test("los adjuntos privados de fotografía y plano cuentan para la preparación sin inventar una revisión jurídica", () => {
+  const withoutUrls = { ...completeCapture, photoUrls: [], floorPlanUrl: "", documentChecklist: [{ id: "documento-foto", role: "FOTOGRAFIA" }, { id: "documento-plano", role: "PLANO" }] };
+  const readiness = captureReadiness(withoutUrls);
+  assert.equal(readiness.missing.includes("Fotos o material visual"), false);
+  assert.equal(readiness.missing.includes("Plano o medición"), false);
+  assert.equal(readiness.missing.includes("Preestudio de título"), false);
 });
 
 test("no permite avanzar al mandato si faltan antecedentes de captación", () => {

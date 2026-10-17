@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio finance y delega su lógica a servicios protegidos. */
 import { bankPeriodImpact, bankPeriodRestrictions, assertBankPeriodsOpen, deleteBankStatementInOpenPeriods } from "../services/finance-bank-periods.service.js";
 import { closeFinancePeriod, reopenFinancePeriod, getFinancePeriodWorkspace } from "../services/finance-period-control.service.js";
 import { reviewFinancePeriodCoverage } from "../services/finance-period-coverage.service.js";
@@ -88,8 +89,8 @@ import { parseFinanceContext, buildFinanceContextCoverage, loadFinanceContextRec
 
 export const financeRouter = Router();
 export const financePublicRouter = Router();
-// Defence in depth: never allow Prisma's undefined tenant filter to become
-// an unscoped read if this router is accidentally mounted without auth.
+// Defensa en profundidad: nunca permite que el filtro de tenant indefinido de Prisma se convierta
+// en una lectura sin alcance si este router se monta accidentalmente sin autenticación.
 financeRouter.use('/finance', (req, res, next) => {
   if (!req.user?.id || !req.tenantId || req.user.tenantId !== req.tenantId) {
     return res.status(401).json({ error: "Se requiere una sesión y empresa válidas." });
@@ -100,7 +101,7 @@ financeRouter.use('/finance', (req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
 });
-// Derived workspaces must not reveal documents/movements whose source modules
+// Los espacios de trabajo derivados no deben revelar documentos o movimientos cuyos módulos de origen
 // are disabled. Applies to reads as well as approval/reversal endpoints.
 financeRouter.use('/finance', async (req, res, next) => {
   const dependencies = /^\/(reconciliation|differences|customer-credits|agents(?:\/analyze)?$)/.test(req.path)
@@ -951,7 +952,7 @@ financeRouter.patch("/finance/bank-accounts/:id", requireRole(ROLE_GROUPS.MANAGE
 async function bankPreviewForClient(preview, tenantId) {
   if (!preview) return null;
   const { normalizedRows: _normalized, sourceRows: _source, ...summary } = preview;
-  // Raw rows stay on the server. The UI queries the immutable revision in pages.
+  // Las filas sin procesar permanecen en el servidor. La interfaz consulta la revisión inmutable por páginas.
   const rows = (preview.normalizedRows || normalizeBankReviewRows(preview.sourceRows, preview.account, preview.reviewConfig || {})).filter((row) => !row.excluded);
   return { ...summary, sourceRows: [], periodProtection: await bankPeriodRestrictions(prisma, tenantId, rows) };
 }
@@ -1161,7 +1162,7 @@ financeRouter.post("/finance/bank-statements/import", requireRole(ROLE_GROUPS.MA
     const exceptionIdsToResolve = previousExceptions
       .filter((record) => cleanText(financeRecordData(record).importBatchId) === existingBatch?.id)
       .map((record) => record.id);
-    // Lock old and revised months together in chronological order before any write.
+  // Bloquea juntos los meses anterior y revisado en orden cronológico antes de cualquier escritura.
     await assertBankPeriodsOpen(tx, req.tenantId, [...rows, ...previousExceptions.filter((record) => exceptionIdsToResolve.includes(record.id))], job.sourceFile);
     const result = await (async () => {
       const batch = await tx.industryRecord.create({
@@ -1840,7 +1841,7 @@ financeRouter.post("/finance/reconciliations/:movementId/reject", requireRole(RO
 
 function collectionDeliveryError(res, error) {
   if (error instanceof FinanceOperationError) return res.status(error.status).json({ error: error.message });
-  // Do not log provider payloads, contacts or tokens.
+  // No registra cargas de proveedores, contactos ni tokens.
   return res.status(500).json({ error: "No se pudo confirmar el resultado. Consulta el historial antes de intentar otro envío." });
 }
 async function collectionChannelPermission(req, res, channel) {

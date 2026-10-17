@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para industry roles. */
 import { normalizeIndustryCode } from "./industries.js";
 
 // El rol del workspace controla permisos. El cargo operacional describe la

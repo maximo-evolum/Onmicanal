@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para finance process report files. */
 import ExcelJS from "exceljs";
 import { FinanceOperationError } from "../services/finance-integrity.service.js";
 
@@ -34,7 +35,7 @@ export async function financeProcessReportExcel(report) {
   const columns = PROCESS_REPORT_COLUMNS.filter(([key]) => report.query.kind === "exceptions" ? !["reconciliationId", "documents", "approvedBy", "approvedAt"].includes(key) : !["category", "resolution", "resolvedBy", "resolvedAt"].includes(key));
   const sheet = book.addWorksheet("Detalle"); sheet.columns = columns.map(([key, header, width]) => ({ key, header, width }));
   for (const item of report.rows) {
-    // Plain string values cannot become spreadsheet formulas or external links.
+    // Los valores de texto plano no pueden convertirse en fórmulas de planilla ni enlaces externos.
     for (const [key] of columns) if (typeof item[key] === "string" && item[key].length > 32767) throw new FinanceOperationError(422, "Un campo excede el tamaño de una celda Excel. No se exportaron datos truncados.");
     const row = sheet.addRow(Object.fromEntries(columns.map(([key]) => [key, item[key] === "" ? "Sin registro" : typeof item[key] === "string" ? compact(item[key]) : item[key]])));
     row.getCell("amount").numFmt = report.query.currency === "CLP" ? '#,##0;[Red](#,##0);"-"' : report.query.currency === "UF" ? '#,##0.0000;[Red](#,##0.0000);"-"' : '#,##0.00;[Red](#,##0.00);"-"';
@@ -58,8 +59,8 @@ export async function financeProcessReportExcel(report) {
   return Buffer.from(await book.xlsx.writeBuffer());
 }
 
-// A deliberately simple, paginated text report. Fixed-width font permits exact
-// line wrapping; WinAnsi preserves Spanish accents without a runtime font service.
+// Informe de texto deliberadamente simple y paginado. La fuente de ancho fijo permite un ajuste exacto
+// ajuste de línea; WinAnsi conserva tildes españolas sin un servicio de fuentes en tiempo de ejecución.
 export function financeProcessReportPdf(report) {
   const lines = [];
   function add(value) {

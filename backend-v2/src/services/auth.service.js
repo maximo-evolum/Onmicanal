@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio auth. */
 import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { signAuthToken } from "../lib/auth.js";
@@ -76,7 +77,7 @@ export async function registerTenantOwner({ companyName, name, email, password, 
 
 export async function loginUser({ email, password }) {
   const normalizedEmail = String(email || "").trim().toLowerCase();
-  // A passwordless user must never receive an authenticated session.
+  // Un usuario sin contraseña nunca debe recibir una sesión autenticada.
   if (typeof password !== "string" || password.length === 0) {
     throw new Error("Invalid credentials");
   }

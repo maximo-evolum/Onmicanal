@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de mobile releases.test. */
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";

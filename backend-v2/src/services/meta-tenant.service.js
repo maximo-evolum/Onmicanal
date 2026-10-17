@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio meta tenant. */
 import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { getDefaultTenant } from "./conversation.service.js";

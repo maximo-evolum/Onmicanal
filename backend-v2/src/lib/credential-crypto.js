@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para credential crypto. */
 import crypto from "crypto";
 import { env } from "./env.js";
 
@@ -22,7 +23,7 @@ function encryptionKey() {
     const decoded = Buffer.from(raw, "base64");
     if (decoded.length === 32) return decoded;
   } catch {
-    // Ignore invalid base64 and derive a stable key below.
+    // Ignora base64 no válido y deriva una clave estable más abajo.
   }
 
   return crypto.createHash("sha256").update(raw).digest();

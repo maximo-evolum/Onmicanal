@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio product. */
 import { prisma } from "../lib/db.js";
 
 const STOP_WORDS = new Set([

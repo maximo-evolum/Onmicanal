@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz lead panel para la aplicación web. */
 "use client";
 
 import { Conversation, Lead } from "@/lib/types";

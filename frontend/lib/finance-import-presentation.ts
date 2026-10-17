@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para finance import presentation en la aplicación web. */
 type ImportSelection = { selected?: boolean; reviewDirty?: boolean; staleReview?: boolean; account: { bankKey?: string }; preview: { duplicate?: { blocked?: boolean } | null; periodProtection?: { blocked?: boolean } | null } };
 export function canIncorporateSelectedImports(items: ImportSelection[]) {
   const selected = items.filter(item => item.selected);
@@ -5,8 +6,8 @@ export function canIncorporateSelectedImports(items: ImportSelection[]) {
 }
 
 type ImportJobState = { id: string; revision: number; status: string; updatedAt: string };
-// Polling and manual requests may finish out of order. Never replace a newer
-// revision (or state within that revision) with an older network response.
+// El sondeo y las solicitudes manuales pueden terminar desordenados. Nunca reemplaza una
+// revisión más reciente (ni su estado interno) con una respuesta de red anterior.
 export function mergeImportJobs<T extends ImportJobState>(current: T[], incoming: T[]): T[] {
   const jobs = new Map(current.map(job => [job.id, job]));
   for (const job of incoming) {

@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance bank accounts para la aplicación web. */
 "use client";
 import { useRef, useState } from "react";
 import { saveFinanceBankAccount, type FinanceBankAccount } from "@/lib/api";

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio sales brain. */
 // Sales Brain Engine
 // Inspirado en principios comerciales del playbook de ventas cargado por el usuario.
 // No usa el libro completo en prompts: transforma principios en señales, modos y estrategias reutilizables.

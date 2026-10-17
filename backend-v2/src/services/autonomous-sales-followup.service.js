@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio autonomous sales followup. */
 
 import { prisma } from "../lib/db.js";
 

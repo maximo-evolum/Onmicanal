@@ -1,4 +1,6 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio realty intelligence. */
 import { prisma } from "../lib/db.js";
+import { brokerRecordWhere, canBrokerAction } from "./broker-access.service.js";
 
 function dataOf(record) {
   return record?.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data : {};
@@ -144,14 +146,21 @@ export function scoreRealtyLeadMatch(lead, property) {
   return { score: Math.min(100, score), reasons };
 }
 
-export async function getRealtyIntelligence({ tenantId, sampleLimit = 12 }) {
+export function realtyLeadScope(tenantId, access, extra = {}) {
+  const ids = access?.scopeUserIds;
+  const scope = { tenantId, ...(ids === null ? {} : { conversation: { assignedToId: { in: ids || [] }, tenantId } }) };
+  return { AND: [scope, extra] };
+}
+
+export async function getRealtyIntelligence({ tenantId, access, sampleLimit = 12, db = prisma }) {
+  const scoped = extra => brokerRecordWhere({ tenantId, brokerAccess: access, method: "POST" }, extra);
   const [properties, visits, owners, brokers, leads, campaigns] = await Promise.all([
-    prisma.industryRecord.findMany({ where: { tenantId, recordType: "property", status: { not: "ARCHIVED" } }, include: { assignedTo: { select: { id: true, name: true } } }, orderBy: { updatedAt: "desc" }, take: 2000 }),
-    prisma.industryRecord.findMany({ where: { tenantId, recordType: "visit" }, orderBy: { updatedAt: "desc" }, take: 1000 }),
-    prisma.industryRecord.findMany({ where: { tenantId, recordType: "owner" }, take: 1000 }),
-    prisma.workspaceUser.findMany({ where: { tenantId, isActive: true, role: { in: ["SELLER", "AGENT", "ADMIN", "OWNER"] } }, select: { id: true, name: true, role: true } }),
-    prisma.lead.findMany({ where: { tenantId, status: { notIn: ["WON", "LOST"] } }, orderBy: { closeProbability: "desc" }, take: 500 }),
-    prisma.campaign.findMany({ where: { tenantId }, orderBy: { updatedAt: "desc" }, take: 200 })
+    db.industryRecord.findMany({ where: scoped({ recordType: "property", status: { not: "ARCHIVED" } }), include: { assignedTo: { select: { id: true, name: true } } }, orderBy: { updatedAt: "desc" }, take: 2000 }),
+    db.industryRecord.findMany({ where: scoped({ recordType: "visit" }), orderBy: { updatedAt: "desc" }, take: 1000 }),
+    db.industryRecord.findMany({ where: scoped({ recordType: "owner" }), take: 1000 }),
+    db.workspaceUser.findMany({ where: { tenantId, isActive: true, ...(access?.scopeUserIds === null ? {} : { id: { in: access?.scopeUserIds || [] } }), role: { in: ["SELLER", "AGENT", "ADMIN", "OWNER"] } }, select: { id: true, name: true, role: true } }),
+    db.lead.findMany({ where: realtyLeadScope(tenantId, access, { status: { notIn: ["WON", "LOST"] } }), orderBy: { closeProbability: "desc" }, take: 500 }),
+    access?.scopeUserIds === null && canBrokerAction(access, "projects", "VIEW") ? db.campaign.findMany({ where: { tenantId }, orderBy: { updatedAt: "desc" }, take: 200 }) : []
   ]);
 
   const prices = properties.map(propertyPrice).filter(Boolean);
@@ -191,10 +200,10 @@ export async function getRealtyIntelligence({ tenantId, sampleLimit = 12 }) {
   };
 }
 
-export async function getRealtyLeadMatches({ tenantId, leadId, limit = 8 }) {
+export async function getRealtyLeadMatches({ tenantId, access, leadId, limit = 8, db = prisma }) {
   const [lead, properties] = await Promise.all([
-    prisma.lead.findFirst({ where: { id: leadId, tenantId } }),
-    prisma.industryRecord.findMany({ where: { tenantId, recordType: "property", status: { not: "ARCHIVED" } }, select: { id: true, title: true, status: true, data: true, assignedToId: true, updatedAt: true }, take: 1000 })
+    db.lead.findFirst({ where: realtyLeadScope(tenantId, access, { id: leadId }) }),
+    db.industryRecord.findMany({ where: brokerRecordWhere({ tenantId, brokerAccess: access, method: "POST" }, { recordType: "property", status: { not: "ARCHIVED" } }), select: { id: true, title: true, status: true, data: true, assignedToId: true, updatedAt: true }, take: 1000 })
   ]);
   if (!lead) return null;
   return {
@@ -203,10 +212,10 @@ export async function getRealtyLeadMatches({ tenantId, leadId, limit = 8 }) {
   };
 }
 
-export async function getRealtyPropertyMatches({ tenantId, propertyId, limit = 8 }) {
+export async function getRealtyPropertyMatches({ tenantId, access, propertyId, limit = 8, db = prisma }) {
   const [property, leads] = await Promise.all([
-    prisma.industryRecord.findFirst({ where: { id: propertyId, tenantId, recordType: "property", status: { not: "ARCHIVED" } } }),
-    prisma.lead.findMany({ where: { tenantId, status: { notIn: ["WON", "LOST"] } }, orderBy: [{ closeProbability: "desc" }, { updatedAt: "desc" }], take: 1000 })
+    db.industryRecord.findFirst({ where: brokerRecordWhere({ tenantId, brokerAccess: access, method: "POST" }, { id: propertyId, recordType: "property", status: { not: "ARCHIVED" } }) }),
+    db.lead.findMany({ where: realtyLeadScope(tenantId, access, { status: { notIn: ["WON", "LOST"] } }), orderBy: [{ closeProbability: "desc" }, { updatedAt: "desc" }], take: 1000 })
   ]);
   if (!property) return null;
   return {
@@ -219,7 +228,8 @@ export async function buildRealtyBuyerReply({ tenantId, conversationId, detected
   if (!detectedBudget) return null;
   const lead = await prisma.lead.findUnique({ where: { conversationId } });
   if (!lead || lead.tenantId !== tenantId || !lead.budget) return null;
-  const result = await getRealtyLeadMatches({ tenantId, leadId: lead.id, limit: 3 });
+  // Automatización interna: tenant verificado por la conversación, sin cruzar empresas.
+  const result = await getRealtyLeadMatches({ tenantId, access: { scopeUserIds: null, scopeTenantIds: [tenantId] }, leadId: lead.id, limit: 3 });
   if (!result?.matches.length) return "Gracias, ya registré tu presupuesto. Por ahora no veo una propiedad disponible que calce bien; si me indicas la comuna y el tipo de propiedad que buscas, puedo afinar la búsqueda.";
   const suggestions = result.matches.map((match, index) => {
     const property = match.property;

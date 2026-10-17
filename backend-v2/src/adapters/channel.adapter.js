@@ -1,3 +1,4 @@
+/** Archivo: Contiene soporte versionado para channel.adapter. */
 import { parseWhatsAppPayload } from "./whatsapp.adapter.js";
 import { parseInstagramPayload } from "./instagram.adapter.js";
 

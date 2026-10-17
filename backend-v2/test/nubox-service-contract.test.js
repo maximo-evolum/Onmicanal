@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de nubox service contract.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../src/lib/db.js";

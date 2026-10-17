@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance document values.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { financeDocumentSide, financeDocumentState, financeDocumentAmounts, summarizeFinanceDocuments, financeDocumentDate } from "../src/services/finance-document-values.service.js";

@@ -1,10 +1,11 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con run tests. */
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
-// Expand test paths without depending on shell globbing or Node's changing
-// directory discovery rules. Fixtures are not executable tests.
+// Expande rutas de pruebas sin depender de comodines de la consola ni de reglas cambiantes
+// de descubrimiento de directorios de Node. Los fixtures no son pruebas ejecutables.
 const root = fileURLToPath(new URL("../", import.meta.url));
 async function collect(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

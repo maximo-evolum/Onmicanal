@@ -1,3 +1,4 @@
+/* Archivo: Implementa el componente de interfaz finance movement trace.module para la aplicación web. */
 .panel { display:grid; gap:12px; margin-top:20px; padding-top:16px; border-top:1px solid var(--border,#64748b); white-space:normal; overflow-wrap:anywhere; }
 .panel h4 { margin:0; font-size:1rem; }
 .panel ul { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; list-style:none; margin:0; padding:0; }

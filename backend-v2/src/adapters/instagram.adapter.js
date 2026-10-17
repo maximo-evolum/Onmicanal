@@ -1,3 +1,4 @@
+/** Archivo: Contiene soporte versionado para instagram.adapter. */
 import { normalizeText } from "../lib/text.js";
 export function parseInstagramPayload(body) {
   const entry = body?.entry?.[0];

@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz module gate para la aplicación web. */
 "use client";
 
 import type { ReactNode } from "react";

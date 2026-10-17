@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para commercial state en la aplicación web. */
 import { Conversation, Lead } from "./types";
 
 export const COMMERCIAL_STATE_OPTIONS = [

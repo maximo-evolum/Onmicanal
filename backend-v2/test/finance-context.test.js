@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance context.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseFinanceContext, financeAccountKey, filterFinanceContext, buildFinanceContextCoverage, loadFinanceContextRecords, restrictFinanceCoverage } from "../src/services/finance-context.service.js";

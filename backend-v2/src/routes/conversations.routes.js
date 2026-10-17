@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio conversations y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { releaseConversation, takeConversation } from "../services/conversation.service.js";
@@ -240,7 +241,7 @@ conversationsRouter.delete("/conversations/:id", requireRole(ROLE_GROUPS.MANAGER
     const conversation = await findAccessibleConversation(req, req.params.id);
     if (!conversation) return res.status(404).json({ error: "Conversación no encontrada" });
 
-    // FIX REAL:
+    // Corrección definitiva:
     // Antes solo cambiábamos status=CLOSED y la conversación reaparecía.
     // Ahora eliminamos completamente mensajes, memoria y conversación.
     await prisma.$transaction(async (tx) => {

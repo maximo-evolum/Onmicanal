@@ -1,6 +1,7 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance document. */
 // Contrato común de documentos financieros. Los registros viven en el JSON
 // versionado de IndustryRecord, pero esta capa evita que cada fuente (manual,
-// histórico, DTE o ERP) use nombres y cálculos distintos.
+// histórico, DTE o ERP) utilice nombres y cálculos distintos.
 
 function text(value, fallback = "") {
   const normalized = String(value ?? "").trim();

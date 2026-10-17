@@ -1,9 +1,11 @@
+/** Archivo: Implementa el componente de interfaz evolum sidebar para la aplicación web. */
 "use client";
 
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { getMe } from "@/lib/api";
+import { getMe, getBrokerAccess, type BrokerAccessProfile } from "@/lib/api";
+import { canBrokerLink } from "@/lib/broker-access";
 import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import { getVerticalProduct, type VerticalProductCode } from "@/lib/vertical-products";
@@ -269,6 +271,15 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
   const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [industry, setIndustry] = useState<string | null>(null);
   const [menuReady, setMenuReady] = useState(false);
+  const [brokerAccess, setBrokerAccess] = useState<BrokerAccessProfile | null>(null);
+  useEffect(() => {
+    if (!isRealtyIndustry(industry)) { setBrokerAccess(null); return; }
+    let active = true;
+    const refresh = () => getBrokerAccess().then(value => { if (active) setBrokerAccess(value); }).catch(() => { if (active) setBrokerAccess(null); });
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => { active = false; window.removeEventListener("focus", refresh); };
+  }, [industry]);
   const [openGroupId, setOpenGroupId] = useState<NavigationGroup["id"] | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const pathname = usePathname();
@@ -354,14 +365,14 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
 
     // El workspace del producto encabeza la navegación. Las opciones de
     // plataforma siguen ordenadas para que el menú sea predecible.
-    return [...availableItems].sort(([leftLabel, leftHref], [rightLabel, rightHref]) => {
+    return availableItems.filter(([, href]) => !isRealtyIndustry(industry) || canBrokerLink(brokerAccess, href)).sort(([leftLabel, leftHref], [rightLabel, rightHref]) => {
       if (product && leftHref === product.href) return -1;
       if (product && rightHref === product.href) return 1;
       if (leftLabel === "CRM") return -1;
       if (rightLabel === "CRM") return 1;
       return leftLabel.localeCompare(rightLabel, "es");
     });
-  }, [enabledModules, industry, isDeveloper, jobTitle, role]);
+  }, [enabledModules, industry, isDeveloper, jobTitle, role, brokerAccess]);
 
   const navigationGroups = useMemo<NavigationGroup[]>(() => {
     const product = getVerticalProduct(industry);

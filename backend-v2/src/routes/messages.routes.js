@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio messages y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { normalizeText } from "../lib/text.js";
 import { prisma } from "../lib/db.js";

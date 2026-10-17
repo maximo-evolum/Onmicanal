@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para metadata governance. */
 const FIELD_TYPES = new Set(["string", "number", "boolean", "array", "object", "json", "date", "relation"]);
 const SENSITIVITIES = new Set(["PUBLIC", "INTERNAL", "CONFIDENTIAL", "PERSONAL", "SENSITIVE"]);
 const ROLES = new Set(["SUPER_ADMIN", "OWNER", "ADMIN", "AGENT", "SELLER", "VIEWER"]);

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker relational data. */
 const PROPERTY_TYPES = new Set(["CASA", "DEPARTAMENTO", "OFICINA", "LOCAL", "TERRENO", "BODEGA", "PARCELA", "OTRA"]);
 
 function text(value, fallback = "") {

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio onboarding intelligence. */
 import ExcelJS from "exceljs";
 import pdfParse from "pdf-parse";
 import { env } from "../lib/env.js";

@@ -1,3 +1,4 @@
+/* Archivo: Implementa el componente de interfaz finance collection delivery.module para la aplicación web. */
 .panel { min-width: 0; display: grid; gap: 16px; }
 .panel h2, .panel h3, .panel p { margin: 0; }
 .panel label { display: grid; gap: 8px; min-width: 0; }

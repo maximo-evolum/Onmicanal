@@ -1,8 +1,9 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance record access. */
 import { MODULES } from '../lib/modules.js';
 import { financeDocumentSide } from './finance-document-values.service.js';
 
-// Single module classification for generic record access. Unknown financial
-// types are denied until explicitly classified, including for superadmins.
+// Clasificación única de módulo para acceso genérico a registros. Los tipos financieros desconocidos
+// se deniegan hasta clasificarse explícitamente, incluso para superadministradores.
 export const FINANCE_RECORD_MODULES = Object.freeze({
   finance_invoice: MODULES.FINANCE_INVOICES,
   finance_invoice_receipt: MODULES.FINANCE_INVOICES,
@@ -44,8 +45,8 @@ export const FINANCE_CLOSE_SOURCE_MODULES = Object.freeze([
   MODULES.FINANCE_EXCEPTIONS, MODULES.FINANCE_COLLECTIONS
 ]);
 
-// Stored summaries can contain copied document data, not only foreign IDs.
-// A disabled source must therefore also hide its derived records.
+// Los resúmenes almacenados pueden contener datos copiados de documentos, no solo IDs ajenos.
+// Por ello, una fuente deshabilitada también debe ocultar sus registros derivados.
 export function financeRecordRequiredModules(recordType, data) {
   const owner = financeRecordModule(recordType, data);
   if (!owner) return [];

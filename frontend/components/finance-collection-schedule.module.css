@@ -1,3 +1,4 @@
+/* Archivo: Implementa el componente de interfaz finance collection schedule.module para la aplicación web. */
 .schedule { display:grid; gap:12px; color:inherit; min-width:0; }
 .schedule p { font-size:.85rem; line-height:1.5; margin:0; }
 .bars { height:120px; display:flex; gap:12px; align-items:end; }

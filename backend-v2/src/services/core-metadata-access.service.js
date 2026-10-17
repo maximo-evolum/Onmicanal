@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio core metadata access. */
 import { redactMetadataForRole } from "../lib/metadata-access.js";
 import { getPublishedMetadataSchema } from "./metadata-schemas.service.js";
 

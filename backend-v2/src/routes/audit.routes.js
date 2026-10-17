@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio audit y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";

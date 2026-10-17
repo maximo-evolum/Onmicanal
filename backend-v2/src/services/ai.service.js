@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai. */
 import { buildEventQuote } from "./quote.service.js";
 import { registerSalesSignal } from "./sales-engine.service.js";
 

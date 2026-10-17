@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai action orchestrator. */
 import { prisma } from "../lib/db.js";
 import { normalizeIndustry } from "./industry-scripts.service.js";
 import { extractEventPreferences, isEventServiceIntent } from "./event-sales.service.js";

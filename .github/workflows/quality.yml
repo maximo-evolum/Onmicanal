@@ -1,3 +1,4 @@
+# Archivo: Configura automatización o servicios para quality.
 name: Quality checks
 
 on:
@@ -106,6 +107,52 @@ jobs:
       - run: npm run audit:security
       - run: npm run test:usability
       - run: npm run build
+
+  broker-quality:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: evolum_test
+          POSTGRES_PASSWORD: evolum_local_test_only
+          POSTGRES_DB: evolum_broker_test
+        ports: ["55434:5432"]
+        options: >-
+          --health-cmd "pg_isready -U evolum_test -d evolum_broker_test"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      NODE_ENV: test
+      CONFIRM_BROKER_QA: "YES"
+      QA_BROKER_DATABASE_URL: postgresql://evolum_test:evolum_local_test_only@127.0.0.1:55434/evolum_broker_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: backend-v2/.node-version
+          cache: npm
+          cache-dependency-path: backend-v2/package-lock.json
+      - name: Backend Broker OS
+        working-directory: backend-v2
+        run: |
+          npm ci
+          npm run qa:broker:all
+          npm run test:broker
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend Broker OS y recorridos de navegador
+        working-directory: frontend
+        env:
+          QA_OUTPUT: ${{ runner.temp }}/broker-e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run test:broker
+          npm run build
+          npm run test:broker:e2e
 
   mobile:
     runs-on: ubuntu-latest

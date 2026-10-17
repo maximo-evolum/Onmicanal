@@ -1,4 +1,5 @@
-﻿"use client";
+﻿/** Archivo: Implementa el componente de interfaz inbox shell para la aplicación web. */
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {

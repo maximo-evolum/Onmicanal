@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance customer credit.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { registerCustomerCredit, applyCustomerCredit, reverseCustomerCredit, reverseCustomerCreditApplication, listCustomerCredits } from "../src/services/finance-customer-credit.service.js";

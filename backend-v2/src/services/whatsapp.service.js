@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio whatsapp. */
 import { env } from "../lib/env.js";
 import { resolveOutboundChannelConfig } from "./tenant-channel-config.service.js";
 import { traceError, traceStep } from "../lib/trace.js";

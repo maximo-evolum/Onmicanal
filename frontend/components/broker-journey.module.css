@@ -1,0 +1,25 @@
+/* Archivo: Implementa el componente de interfaz broker journey.module para la aplicación web. */
+.panel { margin-top: 1.5rem; padding: 1.25rem; border: 1px solid #8797a544; border-radius: 16px; min-width: 0; }
+.panel header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.panel h2, .panel h3 { color: inherit; margin: 0 0 .7rem; }
+.panel button { padding: .6rem 1rem; border: 1px solid #8797a566; border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
+.board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(230px, 1fr); gap: .8rem; overflow-x: auto; padding: .5rem 0 1rem; }
+.column { padding: .8rem; border: 1px solid #8797a533; border-radius: 12px; }
+.card { padding: .9rem; margin: .7rem 0; border: 1px solid #8797a566; border-radius: 10px; overflow-wrap: anywhere; }
+.card a { display: block; color: inherit; text-decoration: underline; margin-top: .8rem; }
+.summary { min-width: 0; padding: .8rem 0; overflow-wrap: anywhere; }
+.summary dl { display: flex; flex-wrap: wrap; gap: 1rem; margin: .4rem 0; }
+.summary dt { font-size: .8rem; opacity: .8; }
+.summary dd { margin: .25rem 0; font-weight: 600; }
+.summary p { font-size: .9rem; line-height: 1.5; }
+.tracker { padding-left: 1.5rem; display: grid; gap: .5rem; }
+.tracker [aria-current="step"] { font-weight: 700; text-decoration: underline; }
+.other { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: .8rem; }
+.handoff { margin: 1rem 0; padding: 1rem; border: 1px solid #8797a555; border-radius: 12px; background: transparent; color: inherit; overflow-wrap: anywhere; }
+.handoff h4 { margin: 0 0 .7rem; color: inherit; }
+.handoff a { display: inline-block; margin: .5rem 0; color: inherit; text-decoration: underline; }
+.handoff summary { cursor: pointer; padding: .5rem 0; }
+.handoff li { margin: .7rem 0; }
+:global(.broker-operation-card):has(.handoff) { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; align-items: start !important; }
+:global(.broker-operation-card):has(.handoff) > .summary { width: 100%; box-sizing: border-box; }
+:global(.broker-operation-card):has(.handoff) > :global(.broker-operation-actions) { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: .6rem; }

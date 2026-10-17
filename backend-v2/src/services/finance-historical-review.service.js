@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance historical review. */
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { analyzeHistoricalRecord, historicalTarget, historicalDay, historicalVersion, HISTORICAL_TYPES } from "./finance-historical-quality.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";

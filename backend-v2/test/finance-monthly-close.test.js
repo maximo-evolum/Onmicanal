@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance monthly close.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildFinanceMonthlyClosePreview, validFinancePeriod } from "../src/services/finance-monthly-close.service.js";
@@ -29,7 +30,7 @@ test("la conciliación y su excepción usan la fecha del movimiento enlazado", (
     { ...base, id: "error", recordType: "finance_exception", status: "OPEN", data: { movementId: "movement" } }
   ];
   const preview = buildFinanceMonthlyClosePreview(records, "2026-01");
-  assert.equal(preview.metrics.reconciliations, 0); // Missing reciprocal link and payment evidence.
+  assert.equal(preview.metrics.reconciliations, 0); // Falta vínculo recíproco y evidencia de pago.
   assert.ok(preview.blockers.some((b) => b.type === "CONCILIACION_INCONSISTENTE"));
   assert.equal(preview.metrics.openExceptions, 1);
   assert.equal(preview.status, "REQUIRES_REVIEW");

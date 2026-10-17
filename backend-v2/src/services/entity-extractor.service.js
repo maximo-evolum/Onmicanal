@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio entity extractor. */
 function extractBudget(text) {
   const normalized = text
     .toLowerCase()

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance collection transport. */
 import { decryptSecret, encryptSecret } from "../lib/credential-crypto.js";
 import { FinanceOperationError } from "./finance-integrity.service.js";
 
@@ -23,7 +24,7 @@ async function readProvider(fetcher, url, options = {}) {
   }
 }
 
-// Preflight only. No messages here, and never use global/default-tenant tokens.
+// Solo prevalidación. No envía mensajes aquí ni usa tokens globales o del tenant predeterminado.
 export async function prepareCollectionTransport(db, { tenantId, channel, templateName, language = "es" }, fetcher = fetch) {
   if (!["gmail", "whatsapp"].includes(channel)) fail("Este canal todavía no admite envíos efectivos de cobranza.");
   let config = await db.tenantChannelConfig.findFirst({ where: { tenantId, channel: { in: channel === "whatsapp" ? ["whatsapp", "meta_whatsapp"] : [channel] } }, orderBy: [{ updatedAt: "desc" }, { id: "asc" }] });
@@ -38,7 +39,7 @@ export async function prepareCollectionTransport(db, { tenantId, channel, templa
       const data = await readProvider(fetcher, "https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh, client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET }) });
       if (!data.access_token || !(Number(data.expires_in) > 60)) fail("Gmail no devolvió una autorización vigente.");
       token = data.access_token;
-      // Conditional update avoids restoring a channel disconnected during refresh.
+      // La actualización condicional evita restaurar un canal desconectado durante la renovación.
       const saved = await db.tenantChannelConfig.updateMany({ where: { id: config.id, tenantId, isActive: true, updatedAt: config.updatedAt }, data: { accessToken: encryptSecret(token), metadata: { ...config.metadata, oauthExpiresAt: new Date(Date.now() + Number(data.expires_in) * 1000).toISOString() } } });
       if (saved.count !== 1) fail("La conexión cambió. Actualiza la vista antes de enviar.");
       config = await db.tenantChannelConfig.findFirst({ where: { id: config.id, tenantId, isActive: true } });
@@ -54,7 +55,7 @@ export async function prepareCollectionTransport(db, { tenantId, channel, templa
   const template = templates.data?.find((t) => t.name === templateName && t.language === language && t.status === "APPROVED");
   const components = template?.components || [];
   const body = components.find((c) => c.type === "BODY")?.text;
-  // Only the documented four-value text template is supported. Never hide media/buttons in the preview.
+  // Solo admite la plantilla de texto documentada de cuatro valores. Nunca oculta medios ni botones en la vista previa.
   if (!body || components.some((c) => c.type !== "BODY" && c.type !== "FOOTER") || [1, 2, 3, 4].some((n) => !body.includes(`{{${n}}}`)) || /{{(?![1-4]}})/.test(body)) fail("Usa una plantilla aprobada de solo texto: {{1}} cliente, {{2}} documento, {{3}} saldo y {{4}} vencimiento. No se admiten botones ni encabezados en esta versión.");
   return { configId: config.id, configUpdatedAt: config.updatedAt, channel, sender: config.phoneNumberId, token, templateName, language, templateBody: body, footer: components.find((c) => c.type === "FOOTER")?.text || "" };
 }
@@ -69,13 +70,13 @@ export async function dispatchCollectionMessage(transport, message, fetcher = fe
     url = `https://graph.facebook.com/v23.0/${transport.sender}/messages`;
     payload = { messaging_product: "whatsapp", to: message.recipient.slice(1), type: "template", template: { name: transport.templateName, language: { code: transport.language }, components: [{ type: "body", parameters: message.parameters.map((value) => ({ type: "text", text: value })) }] } };
   }
-  // Exactly one attempt. A timeout/5xx may have sent the message already.
+  // Exactamente un intento. Un timeout o 5xx puede haber enviado ya el mensaje.
   try {
     const response = await fetcher(url, { method: "POST", redirect: "error", signal: AbortSignal.timeout(10000), headers: { Authorization: `Bearer ${transport.token}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     const data = await response.json().catch(() => ({}));
     const id = transport.channel === "gmail" ? data.id : data.messages?.[0]?.id;
     if (response.ok && typeof id === "string" && id) return { status: "ACCEPTED", providerMessageId: id.slice(0, 250), detail: "Aceptado por el proveedor. Esto no confirma entrega ni lectura." };
     if (response.status >= 400 && response.status < 500 && response.status !== 408) return { status: "REJECTED", detail: `El proveedor rechazó el envío (HTTP ${response.status}). Revisa el canal, destinatario o plantilla antes de preparar otro.` };
-  } catch { /* Never leak provider bodies, credentials or contact data. */ }
+  } catch { /* Nunca expone cuerpos del proveedor, credenciales ni datos de contacto. */ }
   return { status: "UNKNOWN", detail: "Resultado por verificar en el proveedor. No reenvíes: el mensaje podría haber salido." };
 }

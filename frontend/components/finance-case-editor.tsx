@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance case editor para la aplicación web. */
 "use client";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { saveFinanceCase, type IndustryRecord } from "@/lib/api";

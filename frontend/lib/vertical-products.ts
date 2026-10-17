@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para vertical products en la aplicación web. */
 import type { ModuleAccessKey } from "@/lib/module-access";
 
 /**

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance period coverage. */
 import { createHash } from "node:crypto";
 import { FinanceOperationError, withFinanceWrite } from "./finance-integrity.service.js";
 import { financeAccountKey, financeRecordAccount, financeOperationalDate } from "./finance-context.service.js";
@@ -20,8 +21,8 @@ export function periodBounds(period) {
   return { from: `${period}-01`, to: `${period}-${new Date(Date.UTC(year, month, 0)).getUTCDate()}` };
 }
 
-// A range of movement dates is NOT proof that a statement covers a whole month.
-// External completeness requires an accountable human review, invalidated by changes.
+// Un rango de fechas de movimientos NO prueba que una cartola cubra un mes completo.
+// La completitud externa requiere una revisión humana responsable, invalidada por cambios.
 export function buildPeriodCoverage({ tenantId, period, records, jobs = [], accounts = [], now = new Date() }) {
   const bounds = periodBounds(period);
   records = records.filter((r) => r.tenantId === tenantId);

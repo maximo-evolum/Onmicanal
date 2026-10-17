@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance movement trace para la aplicación web. */
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getFinanceMovementTrace, type FinanceMovementTrace } from "@/lib/api";

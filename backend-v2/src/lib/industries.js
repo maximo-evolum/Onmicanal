@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para industries. */
 import { MODULES, normalizePlanCode } from "./modules.js";
 
 export const PLAN_RANK = Object.freeze({

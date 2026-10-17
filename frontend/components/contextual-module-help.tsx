@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz contextual module help para la aplicación web. */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

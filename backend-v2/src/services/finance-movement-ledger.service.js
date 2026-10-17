@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance movement ledger. */
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
 import { parseFinanceContext, financeRecordMatchesContext, financeRecordAccount, financeOperationalDate } from "./finance-context.service.js";
 import { financialDate } from "./finance-manual-writes.service.js";

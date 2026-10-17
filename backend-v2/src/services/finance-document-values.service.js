@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance document values. */
 import { financeCurrency, validFinanceAmount } from "./finance-currency.service.js";
 
 const dataOf = (r) => r?.data && typeof r.data === "object" && !Array.isArray(r.data) ? r.data : {};
@@ -41,7 +42,7 @@ export function financeDocumentState(record, now = new Date()) {
   if (adjusted < 0) issues.push("Las notas de crédito superan el monto ajustable.");
   const storedPaid = supplied(d.paidAmount) ? read(d.paidAmount, "Pagos registrados") : null;
   if (!supplied(d.balance) && storedPaid === null && amount > 0) issues.push("No se conoce el saldo ni el pago acumulado; requiere respaldo histórico.");
-  // Stored balance is already net of applied adjustments. Never deduct NC twice.
+  // El saldo almacenado ya es neto de ajustes aplicados. Nunca descuenta una NC dos veces.
   const balance = supplied(d.balance) ? read(d.balance, "Saldo") : Math.max(0, amount - (storedPaid ?? 0) - justifiedDifference);
   if (balance > amount || (storedPaid !== null && storedPaid > amount)) issues.push("El saldo o los pagos superan el monto ajustado.");
   if (balance + justifiedDifference > amount) issues.push("El saldo y las diferencias justificadas superan el monto del documento.");

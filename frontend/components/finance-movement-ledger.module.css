@@ -1,3 +1,4 @@
+/* Archivo: Implementa el componente de interfaz finance movement ledger.module para la aplicación web. */
 .workspace { width:100%; min-width:0; display:grid; gap:16px; color:inherit; }
 .workspace p { margin:0; line-height:1.5; }
 .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }

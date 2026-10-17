@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para nubox sync client en la aplicación web. */
 export const NUBOX_SYNC_TIMEOUT_MS = 120_000;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 
@@ -23,8 +24,8 @@ export function nuboxPeriodsBetween(start, end) {
 }
 
 /**
- * One request per month. A timeout cannot confirm whether the server committed,
- * so stop rather than retry or overlap the following months.
+ * Una solicitud por mes. Un timeout no puede confirmar si el servidor confirmó el cambio,
+ * por lo que se detiene en vez de reintentar o superponer los meses siguientes.
  * @param {{startPeriod: string, endPeriod: string, syncPeriod: (period: string) => Promise<any>, onProgress?: (progress: {completed: number, total: number, period: string}) => void}} options
  */
 export async function runNuboxHistory({ startPeriod, endPeriod, syncPeriod, onProgress }) {

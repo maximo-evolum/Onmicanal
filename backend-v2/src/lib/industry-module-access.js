@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para industry module access. */
 import { normalizeIndustryCode } from "./industries.js";
 import { allowedIndustriesForVerticalModule, VERTICAL_PRODUCT_DEFINITIONS } from "./vertical-products.js";
 

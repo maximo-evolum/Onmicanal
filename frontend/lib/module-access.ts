@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para module access en la aplicación web. */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

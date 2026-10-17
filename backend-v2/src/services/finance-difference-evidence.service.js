@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance difference evidence. */
 import { createHash } from "node:crypto";
 import { financeDocumentState } from "./finance-document-values.service.js";
 export const DIFFERENCE_CATEGORIES = Object.freeze({ BANK_FEE: "Comisión bancaria o del intermediario", WITHHOLDING: "Retención respaldada", DISCOUNT: "Descuento comercial respaldado", ROUNDING: "Redondeo" });

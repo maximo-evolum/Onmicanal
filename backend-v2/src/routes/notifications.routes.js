@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio notifications y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { recordAuditLog } from "../lib/audit.js";

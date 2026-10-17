@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio tenant ai context. */
 import { prisma } from "../lib/db.js";
 
 function normalizeList(value) {

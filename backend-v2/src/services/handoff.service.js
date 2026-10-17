@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio handoff. */
 
 export function shouldHandoff({ memory, objection, closeScore, message = "" }) {
   const t = String(message || "").toLowerCase();

@@ -1,5 +1,6 @@
-// A probe is shared until the underlying I/O settles, even after a timeout.
-// Repeated healthchecks must not queue unbounded database queries on an outage.
+/** Archivo: Proporciona infraestructura y utilidades compartidas para readiness. */
+// Una sonda se comparte hasta que termina la operación de E/S subyacente, incluso tras un tiempo de espera.
+// Los healthchecks repetidos no deben acumular consultas ilimitadas a la base durante una caída.
 export function createReadinessProbe({ databaseProbe, redisProbe, redisConfigured = false, requireRedis = false, timeoutMs = 2500, cacheMs = 1000 }) {
   let pending, cached, cachedAt = 0;
   return async function readiness() {

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai personalization. */
 export async function generateBusinessPrompt({ name, type = "BUSINESS", industry = "" }) {
   const key = String(industry || "").toLowerCase();
 

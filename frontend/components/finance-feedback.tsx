@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance feedback para la aplicación web. */
 "use client";
 import styles from "./finance-usability.module.css";
 

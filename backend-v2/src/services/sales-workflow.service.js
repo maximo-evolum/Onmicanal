@@ -1,5 +1,6 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio sales workflow. */
 /**
- * Fase 3.3 — Sales Workflow / Human-assisted close.
+ * Fase 3.3 — Flujo de ventas / cierre asistido por personas.
  *
  * Regla de producto: la IA NO debe cobrar ni enviar links de pago reales.
  * Su trabajo es detectar que el cliente está listo para pagar/reservar,

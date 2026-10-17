@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance floid.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createFloidConsentCase, normalizeFloidTransactions } from "../src/services/finance-floid.service.js";

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance monthly close. */
 import { prisma } from "../lib/db.js";
 import { financeRecordData, getInvoiceFinancialState } from "./finance.service.js";
 import { findAllFinanceRecords } from "./finance-integrity.service.js";
@@ -26,7 +27,7 @@ export function validFinancePeriod(period) {
 }
 
 function recordDate(record, recordsById = new Map(), visited = new Set()) {
-  if (record.recordType === "finance_reconciliation_group") return ""; // A group can affect several source periods, never its upload month.
+  if (record.recordType === "finance_reconciliation_group") return ""; // Un grupo puede afectar varios períodos de origen, nunca su mes de carga.
   if (record.recordType === "finance_credit_application") return dateText(financeRecordData(record).applicationDate);
   if (["finance_invoice", "finance_payable"].includes(record.recordType)) return financeDocumentDate(record);
   const data = financeRecordData(record);
@@ -38,7 +39,7 @@ function recordDate(record, recordsById = new Map(), visited = new Set()) {
     const movement = data.movement || {};
     const sourceDate = data.transactionDate || data.operatingDate || data.paymentDate || movement.transactionDate || movement.date;
     if (sourceDate) return dateText(sourceDate);
-    // A missing source date is unknown, not the upload month.
+  // Una fecha de origen ausente es desconocida, no el mes de carga.
     if (data.importBatchId || data.movementId || record.recordType === "finance_reconciliation" || record.recordType === "finance_invoice_receipt") return "";
   }
   return dateText(data.transactionDate || data.date || data.issueDate || data.paymentDate || data.createdAt || record.createdAt);
@@ -143,7 +144,7 @@ export function buildFinanceMonthlyClosePreview(records, period, now = new Date(
 export function addPendingImportsToClose(preview, jobs) {
   const pending = jobs.filter((job) => {
     if (!ACTIVE_IMPORT_STATUSES.includes(job.status)) return false;
-    // A failed/interrupted analysis has no trustworthy period: resolve it first.
+  // Un análisis fallido o interrumpido no tiene un período confiable: se resuelve primero.
     const range = job.status === "READY" ? job.periodRange : null;
     return !range?.from || !range?.to || (range.from.slice(0, 7) <= preview.period && range.to.slice(0, 7) >= preview.period);
   });
@@ -156,14 +157,14 @@ export async function getFinanceMonthlyClosePreview({ tenantId, period, db = pri
   const records = await findAllFinanceRecords(db, {
     where: { tenantId, recordType: { in: ["finance_bank_account", "finance_invoice", "finance_payable", "bank_statement", "bank_movement", "finance_reconciliation", "finance_invoice_receipt", "finance_exception", "finance_period_coverage", "finance_period_reopening", "finance_open_banking_consent", "finance_customer_credit", "finance_credit_application", "finance_reconciliation_difference", "finance_reconciliation_group"] } },
   });
-  // The current close is company-wide in CLP. Never sum foreign currencies as
-  // pesos; account-specific and multicurrency closes need their own workflow.
+  // El cierre actual abarca toda la empresa en CLP. Nunca suma monedas extranjeras como
+  // pesos; los cierres por cuenta y multimoneda requieren su propio flujo.
   const jobs = await db.financeBankImportJob.findMany({ where: { tenantId, status: { in: ACTIVE_IMPORT_STATUSES } },
     select: { id: true, status: true, sourceFile: true, periodRange: true } });
   const channels = await db.tenantChannelConfig.findMany({ where: { tenantId, channel: { in: ["finance_bank_statements", "finance_open_banking"] } }, select: { metadata: true } });
   const accounts = channels.flatMap((c) => Array.isArray(c.metadata?.bankAccounts) ? c.metadata.bankAccounts : []).map((a) => ({ bankKey: a.bankKey, bank: a.bank, accountAlias: a.accountAlias || a.alias, accountLast4: a.accountLast4, accountType: a.accountType, currency: a.currency, bankAccountId: a.bankAccountId }));
-  // Keep foreign-currency evidence available for detecting invalid links, but
-  // never include its amounts or unrelated approvals in this CLP close.
+  // Mantiene disponible la evidencia en moneda extranjera para detectar vínculos inválidos, pero
+  // nunca incluye sus montos ni aprobaciones no relacionadas en este cierre CLP.
   const now = new Date();
   const preview = addPendingImportsToClose(buildFinanceMonthlyClosePreview(filterFinanceContext(records.filter((r) => !["finance_bank_account", "bank_statement", "finance_period_coverage", "finance_period_reopening", "finance_open_banking_consent"].includes(r.recordType)), { period: "", accountKey: "", currency: "CLP" }), period, now, records), jobs);
   return applyPeriodCoverage(preview, buildPeriodCoverage({ tenantId, period, records, jobs, accounts, now }));

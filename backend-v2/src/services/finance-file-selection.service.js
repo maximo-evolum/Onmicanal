@@ -1,6 +1,7 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance file selection. */
 import { FinanceOperationError } from "./finance-integrity.service.js";
 
-// Selection is separate from mapping: changing it invalidates row identities.
+// La selección es independiente del mapeo: cambiarla invalida las identidades de filas.
 export function validateFileSelection(value = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new FinanceOperationError(400, "La selección de tabla no es válida.");
   const result = {};

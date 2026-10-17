@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para types en la aplicación web. */
 export type Conversation = {
   id: string;
   tenantId: string;

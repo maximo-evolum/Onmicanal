@@ -1,3 +1,4 @@
+/** Archivo: Define estructura, configuración o estilo de la ruta web layout. */
 import "./globals.css";
 import type { Metadata } from "next";
 import { ThemeBootstrap } from "@/components/theme-bootstrap";

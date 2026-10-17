@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance currency. */
 import { FinanceOperationError } from "./finance-integrity.service.js";
 
 export const FINANCE_CURRENCIES = { CLP: 0, USD: 2, EUR: 2, UF: 4 };

@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio campaign assets. */
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";

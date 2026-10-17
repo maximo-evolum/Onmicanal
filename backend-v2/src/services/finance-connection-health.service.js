@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance connection health. */
 import { MODULES } from "../lib/modules.js";
 import { nuboxEnvironment } from "./nubox-http.service.js";
 import { FinanceOperationError, findAllFinanceRecords } from "./finance-integrity.service.js";
@@ -22,7 +23,7 @@ const metadata = (r) => r?.metadata && typeof r.metadata === "object" && !Array.
 const timestamp = (v) => { if (!v || !["string", "number"].includes(typeof v) && !(v instanceof Date)) return null; const date = new Date(v); return Number.isFinite(date.getTime()) ? date.toISOString() : null; };
 const millis = (v) => timestamp(v) ? Date.parse(v) : 0;
 
-// Verification and synchronization results are server facts, never editable form fields.
+// Los resultados de verificación y sincronización son hechos del servidor, nunca campos editables de formulario.
 export function editableConnectionMetadata(value = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(Object.entries(value).filter(([key]) => !/^(lastTest|lastSync|lastConnection|lastAutomation|connectionConfigChangedAt|connectionReady|connectedAt|disconnectedAt|oauthExpiresAt|oauthConnectedAt|oauthDiscovery|hasRefreshToken)/i.test(key)));

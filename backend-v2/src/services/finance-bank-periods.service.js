@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance bank periods. */
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";
 
@@ -26,8 +27,8 @@ export async function bankPeriodRestrictions(db, tenantId, rows) {
   return { ...impact, closedPeriods, blocked: Boolean(messages.length), message: messages.join(" ") };
 }
 
-// Called within the SAME Serializable transaction as the writes. Sorted locks
-// keep multi-month statements from acquiring period rows in opposite order.
+// Se llama dentro de la MISMA transacción Serializable que las escrituras. Los bloqueos ordenados
+// evitan que las cartolas de varios meses adquieran filas de período en orden contrario.
 export async function assertBankPeriodsOpen(tx, tenantId, rows, sourceFile = "Cartola") {
   const impact = bankPeriodImpact(rows);
   if (impact.undatedRows.length) throw new FinanceOperationError(409, `${sourceFile}: no se puede determinar el período de ${impact.undatedRows.length} fila(s). Revisa las fechas antes de modificar datos.`, { invalidDateRows: impact.undatedRows.slice(0, 25), invalidDateCount: impact.undatedRows.length });

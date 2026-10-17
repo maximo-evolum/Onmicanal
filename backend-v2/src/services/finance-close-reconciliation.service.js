@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance close reconciliation. */
 import { classifyFinanceMovement } from "./finance-movement-classification.service.js";
 import { auditCustomerCredit } from "./finance-customer-credit-ledger.service.js";
 import { auditDifference } from "./finance-difference-evidence.service.js";
@@ -14,8 +15,8 @@ function validDay(value) {
 }
 export const excludedCloseMovement = (r) => Boolean(data(r).excluded) || ["DELETED", "EXCLUDED"].includes(upper(r.status));
 
-// Read-only evidence check. Historical states are never repaired or inferred.
-// Operational dates are supplied by the close so linked records share a period.
+// Comprobación de evidencia de solo lectura. Los estados históricos nunca se reparan ni infieren.
+// El cierre entrega fechas operativas para que los registros vinculados compartan un período.
 export function auditCloseReconciliations(records, periodMovements, period, operationalDate, scopedRecords = records) {
   const index = new Map(records.map((r) => [r.id, r]));
   const scopedIds = new Set(scopedRecords.map((r) => r.id));
@@ -84,8 +85,8 @@ export function auditCloseReconciliations(records, periodMovements, period, oper
       blockers.push({ type: "CONCILIACION_INCONSISTENTE", id: `reconciliation-${m.id}`, title: `${m.title || m.id}: ${[...new Set(reasons)].join(" ")}` });
     } else { validIds.add(m.id); validatedRecIds.add(rec.id); }
   }
-  // An orphan approval must not disappear simply because its movement was
-  // deleted. An unknown operational period blocks until evidence is repaired.
+  // Una aprobación huérfana no debe desaparecer simplemente porque su movimiento fue
+  // eliminado. Un período operativo desconocido bloquea hasta reparar la evidencia.
   for (const rec of reconciliations.filter((r) => upper(r.status) === "APPROVED")) {
     if (!scopedIds.has(rec.id) && !periodMovementIds.has(data(rec).movementId)) continue;
     if (validatedRecIds.has(rec.id)) continue;
@@ -95,8 +96,8 @@ export function auditCloseReconciliations(records, periodMovements, period, oper
     if (movement?.recordType === "bank_movement" && inconsistentIds.has(movement.id) && periodMovementIds.has(movement.id)) continue;
     blockers.push({ type: "CONCILIACION_SIN_RESPALDO", id: `approval-${rec.id}`, title: `${rec.title || rec.id}: aprobación sin movimiento conciliado verificable${date ? " en el período" : " ni fecha operativa acreditada"}. Revisa su vínculo antes de cerrar.` });
   }
-  // Orphan live receipts also indicate a potentially applied payment; they
-  // cannot be silently ignored when their reconciliation disappeared/reversed.
+  // Los recibos activos huérfanos también indican un pago posiblemente aplicado; no se
+  // pueden ignorar silenciosamente cuando su conciliación desapareció o fue revertida.
   for (const receipt of receipts.filter((r) => upper(r.status) === "RECONCILED" && (data(r).reconciliationId || data(r).movementId || data(r).source === "bank_reconciliation"))) {
     if (!scopedIds.has(receipt.id) && !periodMovementIds.has(data(receipt).movementId)) continue;
     const d = data(receipt), movement = index.get(d.movementId);

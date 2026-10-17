@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para runtime metrics. */
 const startedAt = Date.now();
 const requests = {
   total: 0,

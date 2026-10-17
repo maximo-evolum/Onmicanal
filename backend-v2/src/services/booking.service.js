@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio booking. */
 import { prisma } from "../lib/db.js";
 import { resolveCoreMetadata } from "./core-metadata.service.js";
 export function getAvailableSlots({ date }) {

@@ -1,4 +1,5 @@
-// Optional AI configuration must not prevent database/HTTP startup.
+/** Archivo: Proporciona infraestructura y utilidades compartidas para lazy ai client. */
+// La configuración opcional de IA no debe impedir el inicio de la base de datos ni de HTTP.
 export function createLazyAIClient({ readApiKey, createClient }) {
   let client, previousKey;
   return () => {

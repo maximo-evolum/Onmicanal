@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai reasoning. */
 import { analyzeSalesSignals } from "./sales-brain.service.js";
 import { detectConversationState, CONVERSATION_STATES } from "./sales-workflow.service.js";
 import { extractEventPreferences } from "./event-sales.service.js";

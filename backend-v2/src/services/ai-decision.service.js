@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio ai decision. */
 
 import { prisma } from "../lib/db.js";
 import { detectObjection } from "./objection.service.js";

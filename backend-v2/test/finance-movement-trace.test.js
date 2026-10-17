@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance movement trace.test. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readMovementTrace } from '../src/services/finance-movement-trace.service.js';

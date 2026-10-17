@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para metadata access. */
 export function redactMetadataForRole(data, schema, role) {
   const source = data && typeof data === "object" && !Array.isArray(data) ? data : {};
   const fields = schema?.fields && typeof schema.fields === "object" ? schema.fields : {};

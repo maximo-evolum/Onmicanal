@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance automation. */
 import { prisma } from "../lib/db.js";
 import { createTenantNotification } from "../lib/notifications.js";
 import { getFinanceAgentWorkspace, prepareFinanceAgentExceptions } from "./finance-agents.service.js";

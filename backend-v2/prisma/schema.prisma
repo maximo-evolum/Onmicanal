@@ -1,3 +1,4 @@
+// Archivo: Define el modelo Prisma y las relaciones de la base de datos PostgreSQL.
 generator client {
   provider = "prisma-client-js"
 }

@@ -1,11 +1,12 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con qa runtime. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { syncBuiltinESMExports } from 'node:module';
 
-// Prisma 6's generated client reads .env independently of dotenv/config and
-// DOTENV_CONFIG_PATH. This test-only boundary blocks that implicit read too.
-// It does not mock database, HTTP, application logic, or financial data.
+// El cliente generado de Prisma 6 lee .env de manera independiente de dotenv/config y
+// DOTENV_CONFIG_PATH. Este límite exclusivo de pruebas también bloquea esa lectura implícita.
+// No simula la base de datos, HTTP, lógica de aplicación ni datos financieros.
 export function blockDotEnvReads() {
   const isEnv = value => {
     const filename = value instanceof URL ? fileURLToPath(value) : Buffer.isBuffer(value) ? value.toString() : value;

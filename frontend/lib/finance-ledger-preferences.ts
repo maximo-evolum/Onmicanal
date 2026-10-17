@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para finance ledger preferences en la aplicación web. */
 export const ledgerDefaults = { owner: "", search: "", from: "", to: "", min: "", max: "", direction: "ALL", status: "ALL", dateScope: "PERIOD", importRevision: "", confidence: "ALL", sort: "date_desc", pageSize: "25" };
 export type LedgerFilters = typeof ledgerDefaults;
 export const ledgerColumns = { date: "Fecha", description: "Descripción / contraparte", direction: "Tipo", amount: "Monto", status: "Estado", sourceFile: "Cartola", bank: "Banco", reference: "Referencia", importRevision: "Revisión importada", confidenceLabel: "Puntaje de conciliación" };

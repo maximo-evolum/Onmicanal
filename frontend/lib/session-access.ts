@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para session access en la aplicación web. */
 import { SESSION_ACCESS_STORAGE_KEY } from "./constants";
 import type { AgentSession } from "./types";
 

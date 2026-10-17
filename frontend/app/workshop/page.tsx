@@ -1,3 +1,4 @@
+/** Archivo: Renderiza la página web de EVOLUM OS correspondiente a page. */
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent, type ChangeEvent } from "react";

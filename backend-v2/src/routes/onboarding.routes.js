@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio onboarding y delega su lógica a servicios protegidos. */
 
 function getUploadLimitByPlan(plan) {
   const normalized = String(plan || "").toUpperCase();
@@ -17,7 +18,7 @@ function getUploadLimitByPlan(plan) {
     return 850 * 1024 * 1024;
   }
 
-  // Default
+  // Valor predeterminado
   return 150 * 1024 * 1024;
 }
 

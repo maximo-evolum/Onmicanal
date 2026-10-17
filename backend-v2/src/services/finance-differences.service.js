@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance differences. */
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { planFinanceAllocation, assertReconciliationPeriodOpen } from "./finance-allocation.service.js";
 import { financeDocumentState } from "./finance-document-values.service.js";

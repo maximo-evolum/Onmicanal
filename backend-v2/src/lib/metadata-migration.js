@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para metadata migration. */
 import { normalizeMetadata } from "./metadata.js";
 
 export function migrateMetadataValue(data, migration = {}) {

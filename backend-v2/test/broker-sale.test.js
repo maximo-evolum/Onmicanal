@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de broker sale.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { brokerSaleReadiness, normalizeBrokerSaleCase } from "../src/services/broker-sale.service.js";

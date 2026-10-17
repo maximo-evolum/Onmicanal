@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para vertical products. */
 import { MODULES } from "./modules.js";
 import { normalizeIndustryCode } from "./industries.js";
 

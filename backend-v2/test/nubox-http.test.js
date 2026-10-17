@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de nubox http.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { requestNubox, nuboxEnvironment } from "../src/services/nubox-http.service.js";

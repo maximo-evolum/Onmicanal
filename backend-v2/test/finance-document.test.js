@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance document.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeFinanceDocumentData, validateFinanceDocumentData } from "../src/services/finance-document.service.js";

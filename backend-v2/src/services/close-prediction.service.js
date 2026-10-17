@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio close prediction. */
 export function predictCloseProbability({ lead, conversation }) {
   let score = 0;
   const reasons = [];

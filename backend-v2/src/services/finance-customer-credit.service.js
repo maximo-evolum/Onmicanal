@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance customer credit. */
 import { FinanceOperationError, withFinanceWrite, findAllFinanceRecords } from "./finance-integrity.service.js";
 import { assertFinancePeriodOpen } from "./finance-period-control.service.js";
 import { financeDocumentState, financeDocumentSide, financeDocumentDate } from "./finance-document-values.service.js";

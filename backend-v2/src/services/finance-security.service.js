@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance security. */
 // Matriz explícita para Finance OS. Los permisos se validan además de los
 // módulos contratados: tener el módulo no convierte a un agente en aprobador.
 export const FINANCE_ACTIONS = Object.freeze({

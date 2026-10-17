@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio automation. */
 import { prisma } from "../lib/db.js";
 import { sendChannelMessage } from "./routing.service.js";
 import { persistOutboundMessage } from "./message.service.js";

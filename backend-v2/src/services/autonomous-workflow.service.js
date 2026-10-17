@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio autonomous workflow. */
 import { AI_TOOLS } from "./ai-tools.service.js";
 import { CONVERSATION_STATES } from "./sales-workflow.service.js";
 

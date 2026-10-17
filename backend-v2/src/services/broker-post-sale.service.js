@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker post sale. */
 function UPPER(value) {
   return String(value || "").trim().toUpperCase();
 }

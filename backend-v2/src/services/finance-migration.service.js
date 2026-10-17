@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance migration. */
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import { createHash } from "node:crypto";

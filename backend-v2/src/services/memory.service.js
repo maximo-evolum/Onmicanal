@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio memory. */
 
 import { prisma } from "../lib/db.js";
 import { detectEmotionSignals } from "./emotion.service.js";

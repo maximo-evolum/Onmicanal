@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio metadata schemas. */
 import { prisma } from "../lib/db.js";
 import { normalizeMetadata } from "../lib/metadata.js";
 import { validateMetadataSchemaDefinition } from "../lib/metadata-governance.js";

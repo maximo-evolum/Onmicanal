@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para text. */
 function looksLikeMojibake(value) {
   if (typeof value !== 'string' || !value) return false;
   return /(?:Ã.|Â.|â.|ðŸ|Ð|Ñ)/.test(value);

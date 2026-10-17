@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance period control.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { closeFinancePeriod, reopenFinancePeriod, getFinancePeriodWorkspace, assertFinancePeriodOpen } from "../src/services/finance-period-control.service.js";
@@ -11,7 +12,7 @@ function database() {
   const db = {
     tenantChannelConfig: { findMany: async () => [] },
     get records() { return records; }, get controls() { return controls; }, get audits() { return audits; },
-    // Deterministic serialization for lifecycle tests, not a PostgreSQL stress test.
+    // Serialización determinista para pruebas de ciclo de vida, no una prueba de carga de PostgreSQL.
     $transaction: (fn, options) => {
       assert.equal(options.isolationLevel, "Serializable");
       const result = tail.then(async () => { const old = structuredClone({ records, controls, audits }); try { return await fn(db); } catch (e) { records = old.records; controls = old.controls; audits = old.audits; throw e; } });

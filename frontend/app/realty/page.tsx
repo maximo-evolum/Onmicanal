@@ -1,3 +1,4 @@
+/** Archivo: Renderiza la página web de EVOLUM OS correspondiente a page. */
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
@@ -69,9 +70,9 @@ function RealtyDashboardContent() {
     };
 
     const snapshot = getStoredTenantAccess(session);
-    // Use the cached session immediately, then refresh it once from the
-    // server. This prevents stale module permissions after an administrator
-    // enables a module without revalidating on every internal navigation.
+    // Usa de inmediato la sesión en caché y luego la actualiza una vez desde el
+    // servidor. Esto evita permisos de módulo obsoletos después de que un administrador
+    // habilita un módulo, sin revalidar en cada navegación interna.
     if (snapshot) resolveAccess(snapshot);
 
     // Respaldo para una sesión abierta antes de esta mejora. En sesiones

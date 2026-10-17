@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio crm operational. */
 import { prisma } from "../lib/db.js";
 
 function startOfDay(date = new Date()) {

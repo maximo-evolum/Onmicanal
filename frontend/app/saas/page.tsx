@@ -1,4 +1,5 @@
-﻿"use client";
+﻿/** Archivo: Renderiza la página web de EVOLUM OS correspondiente a page. */
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { createTeamUser, getSaasOverview, getTeamManagement, SaasOverview, updateMyProfile } from "@/lib/api";

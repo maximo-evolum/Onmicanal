@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio message. */
 import { prisma } from "../lib/db.js";
 import { getIo } from "../lib/socket.js";
 import { normalizeObjectStrings, normalizeText } from "../lib/text.js";

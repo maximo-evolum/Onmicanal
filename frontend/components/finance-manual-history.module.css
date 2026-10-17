@@ -1,3 +1,4 @@
+/* Archivo: Implementa el componente de interfaz finance manual history.module para la aplicación web. */
 .panel { min-width: 0; margin-block: 18px; }
 .panel p { line-height: 1.5; }
 .filters { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; margin-block: 16px; }

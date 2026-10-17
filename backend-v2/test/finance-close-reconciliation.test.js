@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance close reconciliation.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildFinanceMonthlyClosePreview, getFinanceMonthlyClosePreview } from "../src/services/finance-monthly-close.service.js";
@@ -19,7 +20,7 @@ test("acepta evidencia completa con factura histórica y estado RECONCILED", () 
   const original = structuredClone(rows), result = preview(rows);
   assert.equal(result.status, "READY_TO_CLOSE"); assert.equal(result.metrics.reconciliations, 1);
   assert.equal(result.metrics.unreconciledMovements, 0); assert.deepEqual(rows, original);
-  assert.equal(result.rows.length, 1); // Receipt is evidence, not a second cash movement.
+  assert.equal(result.rows.length, 1); // El comprobante es evidencia, no un segundo movimiento de caja.
 });
 
 const invalidCases = [

@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance collection schedule para la aplicación web. */
 import type { FinanceOverview } from "@/lib/api";
 import styles from "./finance-collection-schedule.module.css";
 export function FinanceCollectionSchedule({ overview }: { overview: FinanceOverview }) {

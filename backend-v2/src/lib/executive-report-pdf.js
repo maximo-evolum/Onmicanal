@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para executive report pdf. */
 const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
 const LEFT = 44;

@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance differences.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -197,7 +198,7 @@ test("HTTP real de rutas: propuesta, consulta, aprobación y reversa; rechaza by
   t.after(() => { prisma.$transaction = originalTransaction; prisma.industryRecord.findMany = originalFindMany; });
   assert.equal(prisma.$transaction, transactionStub); assert.equal(prisma.industryRecord.findMany, readStub);
   const app = express(); app.use(express.json());
-  // Authentication is supplied by the test, not bypassed in production code.
+  // La prueba entrega autenticación; el código de producción no la omite.
   app.use((req, _res, next) => { req.user = { id: "test-user", role: req.headers["x-test-role"] || "SUPER_ADMIN", tenantId: "a" }; req.tenantId = "a"; req.tenant = { id: "a", industry: "FINANCE" }; next(); });
   app.use(financeRouter); app.use(industryRecordsRouter);
   const server = createServer(app); await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));

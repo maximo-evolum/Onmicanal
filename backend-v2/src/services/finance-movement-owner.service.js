@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance movement owner. */
 import { FinanceOperationError, withFinanceWrite } from "./finance-integrity.service.js";
 import { canPerformFinanceAction, FINANCE_ACTIONS } from "./finance-security.service.js";
 import { financialDate } from "./finance-manual-writes.service.js";
@@ -42,7 +43,7 @@ export async function assignMovementOwner(db, { tenantId, userId, role, movement
     const oldOwner = movement.assignedToId ? await tx.workspaceUser.findFirst({ where: { tenantId, id: movement.assignedToId }, select: { name: true } }) : null;
     const assignmentSummary = `${movement.assignedToId ? oldOwner?.name || "Responsable anterior no disponible" : "Sin responsable"} → ${assignedName}`;
     let date = "";
-    try { date = financialDate(financeOperationalDate(movement)); } catch { /* Administrative assignment does not fabricate an accounting period. */ }
+    try { date = financialDate(financeOperationalDate(movement)); } catch { /* La asignación administrativa no fabrica un período contable. */ }
     if (date) await assertFinancePeriodOpen(tx, tenantId, date.slice(0, 7));
     const updated = await tx.industryRecord.update({ where: { id: movementId }, data: { assignedToId } });
     await tx.tenantAuditLog.create({ data: { tenantId, actorUserId: userId, action: "FINANCE_MOVEMENT_OWNER_CHANGED", entity: "bank_movement", entityId: movementId, metadata: { operationKey, reason, assignmentSummary, previousAssignedToId: movement.assignedToId || null, assignedToId, dateUnresolved: !date } } });

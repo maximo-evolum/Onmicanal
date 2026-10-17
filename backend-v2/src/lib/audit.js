@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para audit. */
 import { prisma } from "./db.js";
 import { normalizeMetadata } from "./metadata.js";
 

@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz composer para la aplicación web. */
 "use client";
 
 import { FormEvent, KeyboardEvent, useEffect, useState } from "react";

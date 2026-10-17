@@ -1,3 +1,4 @@
+/** Archivo: Automatiza una tarea operativa, de calidad o mantenimiento relacionada con load test. */
 import { pathToFileURL } from "node:url";
 import { performance } from "node:perf_hooks";
 

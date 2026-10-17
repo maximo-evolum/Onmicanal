@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance record access.test. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MODULES } from '../src/lib/modules.js';

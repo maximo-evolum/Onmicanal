@@ -1,3 +1,4 @@
+/** Archivo: Contiene soporte versionado para next.config. */
 /** @type {import("next").NextConfig} */
 const nextConfig = {
   reactStrictMode: true,

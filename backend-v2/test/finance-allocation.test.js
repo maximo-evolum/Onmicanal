@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance allocation.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyFinanceAllocation, reverseFinanceAllocation, planFinanceAllocation, validateAllocationInput, sendFinanceMovementToReview } from "../src/services/finance-allocation.service.js";
@@ -18,8 +19,8 @@ test("revisión masiva rechaza versión obsoleta sin escribir", async () => {
   assert.equal(db.rows.length, 1); assert.equal(db.rows[0].status, "PENDING");
 });
 const invoice = (id = "i", amount = 100) => ({ id, tenantId: "a", recordType: "finance_invoice", title: `Factura ${id}`, status: "OPEN", data: { amount, balance: amount, paidAmount: 0, currency: "CLP", clientRut: "11111111-1", clientName: "Cliente de pruebas", issueDate: "2026-01-01" } });
-// Local transaction adapter with rollback and tenant/JSON filtering. PostgreSQL
-// serialization still requires integration tests against a disposable database.
+// Adaptador local de transacción con rollback y filtros de tenant y JSON. La serialización de PostgreSQL
+// aún requiere pruebas de integración contra una base de datos desechable.
 function database(initial) {
   let rows = structuredClone(initial); let seq = 0;
   let controls = initial.filter((row) => row.recordType === "finance_monthly_close" && row.status === "CLOSED").map((row) => ({ tenantId: row.tenantId, period: row.data.period, status: "CLOSED", version: 1, lockVersion: 0, latestCloseId: row.id }));

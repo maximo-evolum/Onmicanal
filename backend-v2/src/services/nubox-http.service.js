@@ -1,5 +1,6 @@
-// Shared by connection checks, document reads and explicit issuance. Never
-// echo provider response bodies: they may contain credentials or party data.
+/** Archivo: Implementa reglas de negocio y procesos del dominio nubox http. */
+// Compartido por comprobaciones de conexión, lecturas de documentos y emisión explícita. Nunca
+// replica cuerpos de respuesta del proveedor: pueden contener credenciales o datos de contrapartes.
 export class NuboxRequestError extends Error {
   constructor(code, message, { status = null, retryable = false, retryAfterMs = 0 } = {}) {
     super(message); this.name = "NuboxRequestError";
@@ -13,7 +14,7 @@ export function nuboxEnvironment(baseUrl) {
     const host = new URL(baseUrl).hostname;
     if (host === "api.test-nubox.com") return "CERTIFICATION";
     if (host === "api.pyme.nubox.com") return "PRODUCTION";
-  } catch { /* The request validator reports invalid configuration. */ }
+  } catch { /* El validador de solicitud informa la configuración inválida. */ }
   return "UNCONFIRMED";
 }
 
@@ -49,8 +50,8 @@ export async function requestNubox({ baseUrl, apiKey, token, path, method = "GET
   const url = endpoint(baseUrl, path);
   const key = String(apiKey || "").trim(), secret = String(token || "").trim().replace(/^Bearer(?:\s+|$)/i, "").trim();
   if (!key || !secret || /[\r\n]/.test(key + secret)) throw failure("CREDENTIALS", "Faltan credenciales válidas de Nubox. Revisa x-api-key y Authorization.");
-  // Allow only the documented issuance idempotency header; callers cannot
-  // replace authentication or change the target through arbitrary headers.
+  // Solo permite el encabezado documentado de idempotencia de emisión; quien llama no puede
+  // reemplazar autenticación ni cambiar el destino mediante encabezados arbitrarios.
   const idempotence = extraHeaders["X-Idempotence-Id"];
   const isPdf = /\/pdf(?:\?|$)/.test(path);
   const controller = new AbortController();

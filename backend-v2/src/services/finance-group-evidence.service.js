@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance group evidence. */
 import { financeDocumentState } from "./finance-document-values.service.js";
 import { creditDay, invoiceCreditRut } from "./finance-customer-credit-ledger.service.js";
 import { classifyFinanceMovement } from "./finance-movement-classification.service.js";

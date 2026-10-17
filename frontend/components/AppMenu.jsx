@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz AppMenu para la aplicación web. */
 "use client";
 
 import { useEffect, useRef, useState } from "react";

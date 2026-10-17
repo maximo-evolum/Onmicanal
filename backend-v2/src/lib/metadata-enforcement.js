@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para metadata enforcement. */
 import { validateMetadata } from "./metadata.js";
 
 export function evaluateMetadataSchema({ data, schema }) {

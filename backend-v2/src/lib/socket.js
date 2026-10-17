@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para socket. */
 let ioInstance = null;
 
 export function setIo(io) {

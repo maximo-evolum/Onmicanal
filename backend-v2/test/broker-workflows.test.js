@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de broker workflows.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -28,8 +29,8 @@ import {
 } from "../src/services/broker-workflows.service.js";
 
 test("Broker OS expone los flujos oficiales de venta y arriendo", () => {
-  assert.equal(SALE_STAGES.length, 9);
-  assert.equal(SALE_STAGES[0], "EVALUACION_COMERCIAL");
+  assert.equal(SALE_STAGES.length, 10);
+  assert.equal(SALE_STAGES[0], "RECEPCION_MANDATO");
   assert.equal(SALE_STAGES.at(-1), "ENTREGA_Y_POSTVENTA");
   assert.equal(RENTAL_STAGES.includes("CONTRATO"), true);
   assert.equal(stagesForBrokerOperation("RENTAL")[0], "CAPTACION");

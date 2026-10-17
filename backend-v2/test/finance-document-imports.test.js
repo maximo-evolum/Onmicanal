@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance document imports.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { importHistoricalDocuments, importSiiDocuments } from "../src/services/finance-document-imports.service.js";

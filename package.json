@@ -2,7 +2,8 @@
   "scripts": {
     "mobile": "npm --prefix mobile run start",
     "mobile:web": "npm --prefix mobile run web",
-    "mobile:typecheck": "npm --prefix mobile run typecheck"
+    "mobile:typecheck": "npm --prefix mobile run typecheck",
+    "broker:verify": "node scripts/verify-broker-phase0.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

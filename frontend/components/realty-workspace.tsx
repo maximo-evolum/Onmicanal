@@ -1,4 +1,7 @@
+/** Archivo: Implementa el componente de interfaz realty workspace para la aplicación web. */
 "use client";
+import { canBroker } from "@/lib/broker-access";
+import { BrokerProspects } from "@/components/broker-prospects";
 
 import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
@@ -7,7 +10,6 @@ import { EvolumSidebar } from "@/components/evolum-sidebar";
 import { ModuleGate } from "@/components/module-gate";
 import {
   createIndustryBrokerUser,
-  createBrokerPropertyCapture,
   createRealtyPropertyCampaignDraft,
   createRealtyBuyer,
   getRealtyLeadMatches,
@@ -17,12 +19,15 @@ import {
   deleteIndustryBrokerUser,
   getRealtyIntelligence,
   getIndustryRecords,
-  getLeads,
+  getRealtyBuyers,
+  getBrokerAccess,
+  type BrokerAccessProfile,
   getMyModules,
   getIndustryUsers,
   updateIndustryRecord,
   saveBrokerPropertyCapture,
   type BrokerCapture,
+  type BrokerCapturePayload,
   type IndustryRecord,
   type IndustryUser,
   type RealtyIntelligence
@@ -30,17 +35,6 @@ import {
 import { getStoredSession, useAgentSession } from "@/lib/auth";
 import type { ModuleAccessKey } from "@/lib/module-access";
 import type { Lead } from "@/lib/types";
-
-export const REALTY_STAGES = [
-  { key: "LEAD", label: "Lead" },
-  { key: "CONTACT", label: "Contacto" },
-  { key: "QUALIFIED", label: "Calificado" },
-  { key: "VISIT_SCHEDULED", label: "Visita agendada" },
-  { key: "OFFER", label: "Oferta" },
-  { key: "NEGOTIATION", label: "Negociacion" },
-  { key: "CLOSING", label: "Cierre" },
-  { key: "POSTSALE", label: "Postventa" }
-];
 
 type Broker = {
   id: string;
@@ -420,6 +414,7 @@ function RealtyIntelligencePanel() {
 }
 
 export function useRealtyWorkspace() {
+  const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
   const [data, setData] = useState<RealtyData>(emptyData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -428,17 +423,20 @@ export function useRealtyWorkspace() {
     try {
       setLoading(true);
       setError(null);
+      const currentAccess = await getBrokerAccess();
+      setAccess(currentAccess);
+      const records = (type: string, area: string) => canBroker(currentAccess, area) ? getIndustryRecords(type) : Promise.resolve([]);
       const [properties, owners, visits, deals, alerts, followups, imports, training, users, brokerProfiles] = await Promise.all([
-        getIndustryRecords("property"),
-        getIndustryRecords("owner"),
-        getIndustryRecords("visit"),
-        getIndustryRecords("deal"),
-        getIndustryRecords("realty_alert"),
-        getIndustryRecords("broker_followup"),
-        getIndustryRecords("property_import"),
-        getIndustryRecords("property_training"),
+        records("property", "commercial"),
+        records("owner", "commercial"),
+        records("visit", "commercial"),
+        records("deal", "operations"),
+        records("realty_alert", "overview"),
+        records("broker_followup", "commercial"),
+        records("property_import", "commercial"),
+        records("property_training", "ai"),
         getIndustryUsers(),
-        getIndustryRecords("broker_profile")
+        records("broker_profile", "access")
       ]);
 
       const profileUserIds = new Set(brokerProfiles.map((record) => text(asData(record).userId || record.assignedToId)).filter(Boolean));
@@ -476,7 +474,7 @@ export function useRealtyWorkspace() {
     load();
   }, []);
 
-  return { data, loading, error, reload: load };
+  return { data, access, loading, error, reload: load };
 }
 
 export function RealtyShell({
@@ -517,16 +515,6 @@ export function RealtyDashboardPageContent() {
   const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
   const [message, setMessage] = useState("");
 
-  async function updateStage(property: IndustryRecord, stage: string) {
-    try {
-      await updateIndustryRecord(property.id, { data: { ...asData(property), stage } });
-      setMessage(`Etapa actualizada: ${property.title}`);
-      await reload();
-    } catch (updateError) {
-      setMessage(updateError instanceof Error ? updateError.message : "No se pudo actualizar la etapa.");
-    }
-  }
-
   const activeProperties = data.properties
     .filter((item) => item.status !== "ARCHIVED")
     .slice(0, 6);
@@ -565,15 +553,15 @@ export function RealtyDashboardPageContent() {
 
       <section className="realty-ws-card">
           <div className="realty-ws-card-head"><div><span>Propiedades activas</span><h2>Portafolio en movimiento</h2><p>Vista visual para reconocer rápidamente cada propiedad y entrar a su ficha.</p></div><Link className="realty-card-link-button" href="/realty?view=properties">Ver cartera completa</Link></div>
-        {loading ? <p className="empty-state">Cargando propiedades...</p> : <PropertyPortalCards properties={activeProperties} brokers={data.brokers} onStageChange={updateStage} onOpen={setSelectedProperty} />}
+        {loading ? <p className="empty-state">Cargando propiedades...</p> : <PropertyPortalCards properties={activeProperties} brokers={data.brokers} onOpen={setSelectedProperty} />}
       </section>
 
       <section className="realty-ws-two-columns">
         <article className="realty-ws-card">
           <div className="realty-ws-card-head"><div><span>Cartera activa</span><h2>Propiedades que requieren atención</h2><p>Prioriza según etapa, visitas, interés y tiempo sin movimiento.</p></div><Link className="realty-card-link-button" href="/realty?view=properties">Ver todas</Link></div>
           <div className="realty-ws-table">
-            <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Etapa</span><span>Corredor</span><span>Estado</span></div>
-            {data.properties.slice(0, 5).map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Captación"}</span><span>{getBrokerName(property, data.brokers)}</span><b>{numberValue(asData(property).price) ? "Ficha completa" : "Completar ficha"}</b></button>)}
+            <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Estado de ficha</span><span>Corredor</span><span>Estado</span></div>
+            {data.properties.slice(0, 5).map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{propertyStageLabel(property.status)}</span><span>{getBrokerName(property, data.brokers)}</span><b>{numberValue(asData(property).price) ? "Ficha completa" : "Completar ficha"}</b></button>)}
             {!data.properties.length ? <p className="empty-state">Aún no hay propiedades para revisar.</p> : null}
           </div>
           <footer className="realty-ws-statbar"><span><b>{unassigned.length}</b> registros pendientes</span><span><b>{data.visits.length}</b> visitas registradas</span><span><b>{data.properties.length ? Math.round((data.properties.filter((item) => numberValue(asData(item).price)).length / data.properties.length) * 100) : 0}%</b> fichas con precio</span></footer>
@@ -644,13 +632,11 @@ export function RealtyKpis({ data }: { data: RealtyData }) {
 export function PropertyPortalCards({
   properties,
   brokers,
-  onStageChange,
   onBrokerChange,
   onOpen
 }: {
   properties: IndustryRecord[];
   brokers: Broker[];
-  onStageChange?: (property: IndustryRecord, stage: string) => Promise<void> | void;
   onBrokerChange?: (property: IndustryRecord, brokerId: string) => Promise<void> | void;
   onOpen?: (property: IndustryRecord) => void;
 }) {
@@ -694,13 +680,7 @@ export function PropertyPortalCards({
                 ) : (
                   <span>{getBrokerName(property, brokers)}</span>
                 )}
-                {onStageChange ? (
-                  <select value={text(data.stage, "LEAD")} onChange={(event) => onStageChange(property, event.target.value)}>
-                    {REALTY_STAGES.map((stage) => <option key={stage.key} value={stage.key}>{stage.label}</option>)}
-                  </select>
-                ) : (
-                  <span>{propertyStageLabel(data.stage)}</span>
-                )}
+                <Link href={`/realty?view=broker_os&tab=operations&propertyId=${encodeURIComponent(property.id)}`}>Ver negocios de esta propiedad</Link>
               </div>
               {onOpen ? <button className="secondary-btn property-open-btn" type="button" onClick={() => onOpen(property)}>Ver ficha completa</button> : null}
             </div>
@@ -757,6 +737,7 @@ function buyerMoney(value?: number | null) {
 
 /** Submódulo autónomo de compradores dentro de la vertical inmobiliaria. */
 export function RealtyBuyersPageContent() {
+  const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
   const [buyers, setBuyers] = useState<Lead[]>([]);
   const [selectedBuyerId, setSelectedBuyerId] = useState<string | null>(null);
   const [matches, setMatches] = useState<Array<{ score: number; reasons: string[]; property: { id: string; title: string; status: string; price: number; commune: string; operation: string } }>>([]);
@@ -768,7 +749,8 @@ export function RealtyBuyersPageContent() {
   async function loadBuyers(preselected?: string) {
     try {
       setLoading(true);
-      const result = await getLeads();
+      setAccess(await getBrokerAccess());
+      const result = await getRealtyBuyers();
       const active = result.filter((buyer) => !["WON", "LOST", "ARCHIVED"].includes(String(buyer.status || "").toUpperCase()));
       setBuyers(active);
       if (preselected) setSelectedBuyerId(preselected);
@@ -789,6 +771,7 @@ export function RealtyBuyersPageContent() {
 
   async function saveBuyer(event: FormEvent) {
     event.preventDefault();
+    if (!canBroker(access, "commercial", "CREATE")) { setMessage("Tu perfil solo permite consultar los compradores."); return; }
     const budget = numberValue(form.budget);
     if (!form.name.trim() || !budget) { setMessage("Indica el nombre y un presupuesto para recomendar propiedades."); return; }
     try {
@@ -813,7 +796,7 @@ export function RealtyBuyersPageContent() {
         <div className="vertical-two"><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="Teléfono" /><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="Correo" /></div>
         <div className="vertical-two"><input type="number" min="1" value={form.budget} onChange={(event) => setForm({ ...form, budget: event.target.value })} placeholder="Presupuesto en CLP" /><input value={form.commune} onChange={(event) => setForm({ ...form, commune: event.target.value })} placeholder="Comuna de interés" /></div>
         <div className="vertical-two"><select value={form.propertyType} onChange={(event) => setForm({ ...form, propertyType: event.target.value })}><option value="">Tipo de propiedad</option><option value="DEPARTAMENTO">Departamento</option><option value="CASA">Casa</option><option value="OFICINA">Oficina</option><option value="TERRENO">Terreno</option></select><select value={form.interest} onChange={(event) => setForm({ ...form, interest: event.target.value })}><option value="COMPRA">Compra</option><option value="ARRIENDO">Arriendo</option></select></div>
-        <button className="primary-btn" disabled={saving}>{saving ? "Guardando..." : "Guardar y recomendar"}</button>
+        <button className="primary-btn" disabled={saving || !canBroker(access, "commercial", "CREATE")}>{saving ? "Guardando..." : "Guardar y recomendar"}</button>
       </form>
       <section className="realty-buyer-results">
         <div className="vertical-card-head"><div><span>Compradores activos</span><h2>Clientes y preferencias</h2></div></div>
@@ -857,7 +840,7 @@ export function PropertyDetailModal({
     ["Año de construcción", text(data.yearBuilt, "No informado")],
     ["Orientación", text(data.orientation, "No informado")],
     ["Gastos comunes", money(data.commonExpenses)],
-    ["Etapa comercial", propertyStageLabel(data.stage)]
+    ["Estado de la ficha", propertyStageLabel(property.status)]
   ];
 
   return (
@@ -930,16 +913,19 @@ export function PropertyDetailModal({
 }
 
 export function RealtyLoadsPageContent() {
-  const { data, error, reload } = useRealtyWorkspace();
+  const { data, access, error, reload } = useRealtyWorkspace();
   const [propertyForm, setPropertyForm] = useState(emptyProperty);
   const [importRows, setImportRows] = useState<Array<Record<string, unknown>>>([]);
   const [message, setMessage] = useState("");
   const [editingPropertyId, setEditingPropertyId] = useState("");
   const [savingCapture, setSavingCapture] = useState(false);
   const [captureReadiness, setCaptureReadiness] = useState<{ score: number; missing: string[]; completed: number; total: number } | null>(null);
+  const [captureJourney, setCaptureJourney] = useState<BrokerCapturePayload["journey"]>();
 
   async function createProperty(event: FormEvent) {
     event.preventDefault();
+    if (!editingPropertyId) { setMessage("Registra las nuevas captaciones desde Nuevo prospecto."); return; }
+    if (!canBroker(access, "commercial", editingPropertyId ? "EDIT" : "CREATE")) { setMessage("Tu perfil no permite guardar captaciones."); return; }
     try {
       setSavingCapture(true);
       const broker = data.brokers.find((item) => item.id === propertyForm.assignedBrokerId);
@@ -952,10 +938,9 @@ export function RealtyLoadsPageContent() {
         assignedBrokerName: broker?.name || "",
         source: "captacion_broker"
       };
-      const saved = editingPropertyId
-        ? await saveBrokerPropertyCapture(editingPropertyId, payload)
-        : await createBrokerPropertyCapture(payload);
+      const saved = await saveBrokerPropertyCapture(editingPropertyId, payload);
       setCaptureReadiness(saved.readiness);
+      setCaptureJourney(saved.journey);
       setEditingPropertyId(saved.property.id);
       setPropertyForm((current) => ({ ...current, title: saved.property.title }));
       setMessage(editingPropertyId ? "Ficha de captación actualizada." : "Captación creada. Completa los antecedentes antes de emitir el mandato.");
@@ -970,6 +955,7 @@ export function RealtyLoadsPageContent() {
   async function selectPropertyForCapture(propertyId: string) {
     setEditingPropertyId(propertyId);
     setCaptureReadiness(null);
+    setCaptureJourney(undefined);
     if (!propertyId) {
       setPropertyForm(emptyProperty);
       return;
@@ -978,6 +964,7 @@ export function RealtyLoadsPageContent() {
     if (!property) return;
     try {
       const result = await getBrokerPropertyCapture(propertyId);
+      setCaptureJourney(result.journey);
       const propertyData = asData(result.property);
       const capture = (result.capture || {}) as BrokerCapture;
       setPropertyForm({
@@ -1051,6 +1038,7 @@ export function RealtyLoadsPageContent() {
   }
 
   async function importProperties() {
+    if (!canBroker(access, "commercial", "CREATE")) { setMessage("Tu perfil no permite importar propiedades."); return; }
     for (const row of importRows) {
       const title = csvValue(row, "Nombre", "Título", "Titulo", "Propiedad", "Nombre de propiedad") || "Propiedad importada";
       const address = csvValue(row, "Dirección", "Direccion", "Dirección de la propiedad", "Direccion de la propiedad");
@@ -1133,17 +1121,20 @@ export function RealtyLoadsPageContent() {
     <>
       <RealtyHeader
         eyebrow="Rubro inmobiliario"
-        title="Cargas inmobiliarias"
-        description="Creacion, importacion, capacitacion, corredores, recordatorios, agenda comercial y comisiones."
+        title="Captación e inventario"
+        description="Gestiona prospectos antes del mandato y completa las propiedades existentes."
         actions={<button className="secondary-btn" onClick={autoAssign}>Asignar automatico</button>}
       />
       {message ? <div className="module-toast">{message}</div> : null}
       {error ? <div className="sales-queue-error">{error}</div> : null}
 
+      <BrokerProspects access={access} brokers={data.brokers} onConverted={reload} />
+      <details><summary>Fichas del inventario existente e importación CSV</summary>
       <section className="realty-ws-operation-layout">
         <form className="realty-ws-card realty-property-form" onSubmit={createProperty}>
-          <div className="realty-ws-card-head"><div><span>Captación inmobiliaria</span><h2>{editingPropertyId ? "Completar ficha de propiedad" : "Nueva captación"}</h2><p>Levanta antecedentes, visita, evaluación y mandato sin mezclar el trabajo de captación con la publicación.</p></div></div>
-          <label className="realty-capture-existing">Continuar una ficha existente<select value={editingPropertyId} onChange={(event) => selectPropertyForCapture(event.target.value)}><option value="">Crear nueva captación</option>{data.properties.map((property) => <option key={property.id} value={property.id}>{propertyTitle(property.title)}</option>)}</select></label>
+          <div className="realty-ws-card-head"><div><span>Inventario existente</span><h2>Completar ficha de propiedad</h2><p>Las captaciones nuevas se registran en el embudo superior. Esta sección conserva las fichas ya incorporadas al inventario.</p></div></div>
+          <label className="realty-capture-existing">Continuar una ficha existente<select value={editingPropertyId} onChange={(event) => selectPropertyForCapture(event.target.value)}><option value="">Selecciona una propiedad</option>{data.properties.map((property) => <option key={property.id} value={property.id}>{propertyTitle(property.title)}</option>)}</select></label>
+          {captureJourney ? <p role="status">Etapa guardada de captación: <strong>{captureJourney.stage?.label || (captureJourney.outcome === "CONVERTED" ? "Mandato informado como firmado" : captureJourney.outcome === "DISCARDED" ? "Descartada" : "Pendiente de revisión")}</strong>. Los cambios del formulario se aplican al guardar.</p> : null}
           {captureReadiness ? <div className="realty-capture-readiness"><strong>{captureReadiness.score}% completa</strong><span>{captureReadiness.completed}/{captureReadiness.total} controles listos</span>{captureReadiness.missing.length ? <small>Falta: {captureReadiness.missing.join(" · ")}</small> : <small>Lista para avanzar a mandato.</small>}</div> : null}
           <div className="realty-capture-section"><span>1 · Origen y propietario</span>
           <div className="form-grid-2"><select value={propertyForm.captureOrigin} onChange={(e) => setPropertyForm({ ...propertyForm, captureOrigin: e.target.value })}><option>Referido</option><option>Portal</option><option>Campaña</option><option>Walk-in</option><option>Base histórica</option><option>Captación EVOLUM</option></select><select value={propertyForm.intendedService} onChange={(e) => setPropertyForm({ ...propertyForm, intendedService: e.target.value })}><option value="VENTA">Venta</option><option value="ARRIENDO">Arriendo</option><option value="ADMINISTRACION">Administración</option></select></div>
@@ -1197,7 +1188,7 @@ export function RealtyLoadsPageContent() {
           <div className="form-grid-2"><input type="date" value={propertyForm.ownerAcceptedEvaluationAt} onChange={(e) => setPropertyForm({ ...propertyForm, ownerAcceptedEvaluationAt: e.target.value })} /><select value={propertyForm.publicationReadiness} onChange={(e) => setPropertyForm({ ...propertyForm, publicationReadiness: e.target.value })}><option value="PENDIENTE">Publicación pendiente</option><option value="EN_PREPARACION">En preparación</option><option value="LISTA_PARA_PUBLICAR">Lista para publicar</option><option value="BLOQUEADA">Bloqueada</option></select></div>
           {propertyForm.captureStatus === "DESCARTADA" ? <textarea value={propertyForm.rejectionReason} onChange={(e) => setPropertyForm({ ...propertyForm, rejectionReason: e.target.value })} placeholder="Motivo por el que se descarta la captación" required /> : null}
           </div>
-          <button className="primary-btn" type="submit" disabled={savingCapture}>{savingCapture ? "Guardando ficha..." : editingPropertyId ? "Guardar ficha de captación" : "Crear captación"}</button>
+          <button className="primary-btn" type="submit" disabled={!editingPropertyId || savingCapture || !canBroker(access, "commercial", "EDIT")}>{savingCapture ? "Guardando ficha..." : "Guardar ficha existente"}</button>
         </form>
 
         <aside className="realty-ws-card realty-import-assistant">
@@ -1206,12 +1197,13 @@ export function RealtyLoadsPageContent() {
           </div>
           <label className="realty-dropzone"><b>↑</b><strong>Carga propiedades desde CSV</strong><small>Selecciona un archivo y EVOLUM detectará sus columnas.</small><input type="file" accept=".csv,text/csv" hidden onChange={onCsvFile} /></label>
           <div className="realty-import-steps"><div><b>1</b><span><strong>Selecciona tu archivo</strong><small>CSV de propiedades o base de captación.</small></span></div><div><b>2</b><span><strong>Revisa la vista previa</strong><small>{importRows.length ? `${importRows.length} filas detectadas` : "Aún no hay filas cargadas."}</small></span></div><div><b>3</b><span><strong>Confirma el destino</strong><small>Importa como inventario activo y trazable.</small></span></div></div>
-          <div className="realty-import-actions"><button className="primary-btn" type="button" disabled={!importRows.length} onClick={importProperties}>Importar {importRows.length || ""} propiedades</button><button className="secondary-btn" type="button" onClick={autoAssign}>Asignar automáticamente</button></div>
+          <div className="realty-import-actions"><button className="primary-btn" type="button" disabled={!importRows.length || !canBroker(access, "commercial", "CREATE")} onClick={importProperties}>Importar {importRows.length || ""} propiedades</button><button className="secondary-btn" type="button" disabled={!canBroker(access, "commercial", "REASSIGN")} onClick={autoAssign}>Asignar automáticamente</button></div>
           <div className="realty-assignment-summary"><strong>{data.brokers.length} corredores activos</strong><span>{data.properties.filter((item) => !text(asData(item).assignedBrokerId || item.assignedToId)).length} propiedades sin responsable</span><Link className="realty-inline-action" href="/realty?view=brokers">Gestionar reparto</Link></div>
           <button className="secondary-btn realty-template-btn" type="button" onClick={downloadTemplate}>Descargar plantilla CSV</button>
         </aside>
       </section>
 
+      </details>
       <section className="realty-ws-card realty-import-history">
         <div className="realty-ws-card-head">
           <div><span>Últimas cargas</span><h2>Historial de importaciones</h2><p>Todo cambio queda trazable y se puede revisar antes de afectar el inventario.</p></div>
@@ -1255,11 +1247,6 @@ export function RealtyPropertiesPageContent() {
       || operation === filter;
     return matchesQuery && matchesFilter;
   });
-
-  async function updateStage(property: IndustryRecord, stage: string) {
-    await updateIndustryRecord(property.id, { data: { ...asData(property), stage } });
-    await reload();
-  }
 
   async function updateBroker(property: IndustryRecord, brokerId: string) {
     const broker = data.brokers.find((item) => item.id === brokerId);
@@ -1322,7 +1309,7 @@ export function RealtyPropertiesPageContent() {
           <button type="button" className={filter === "VISITED" ? "active" : ""} onClick={() => setFilter("VISITED")}>Con visita ({data.properties.filter((property) => data.visits.some((visit) => text(asData(visit).propertyId) === property.id)).length})</button>
           <button type="button" className={filter === "STALE" ? "active" : ""} onClick={() => setFilter("STALE")}>Sin actividad ({data.properties.filter((property) => !data.visits.some((visit) => text(asData(visit).propertyId) === property.id) && !data.followups.some((followup) => text(asData(followup).propertyId) === property.id)).length})</button>
         </div>
-        <PropertyPortalCards properties={visibleProperties} brokers={data.brokers} onStageChange={updateStage} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
+        <PropertyPortalCards properties={visibleProperties} brokers={data.brokers} onBrokerChange={updateBroker} onOpen={setSelectedProperty} />
         <div className="realty-ws-table realty-inventory-table">
           <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Operación</span><span>Precio</span><span>Estado</span></div>
           {visibleProperties.slice(0, 12).map((property) => <button type="button" className="realty-ws-row" key={`${property.id}-row`} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{propertyOperation(asData(property).operation)}</span><span>{money(asData(property).price)}</span><b>{propertyStageLabel(asData(property).stage)}</b></button>)}
@@ -1523,13 +1510,14 @@ export function BrokerPortalPageContent() {
 }
 
 export function BrokersPageContent() {
-  const { data, error, reload } = useRealtyWorkspace();
+  const { data, access, error, reload } = useRealtyWorkspace();
   const [brokerForm, setBrokerForm] = useState(emptyBroker);
   const [message, setMessage] = useState("");
   const [deletingBrokerId, setDeletingBrokerId] = useState<string | null>(null);
 
   async function createBroker(event: FormEvent) {
     event.preventDefault();
+    if (!canBroker(access, "access", "CONFIGURE")) { setMessage("No tienes permiso para administrar usuarios."); return; }
     if (!brokerForm.name.trim() || !brokerForm.email.trim() || brokerForm.password.trim().length < 6) {
       setMessage("Ingresa nombre, correo y una contrasena de al menos 6 caracteres.");
       return;
@@ -1551,6 +1539,7 @@ export function BrokersPageContent() {
   }
 
   async function assignProperty(property: IndustryRecord, brokerId: string) {
+    if (!canBroker(access, "commercial", "REASSIGN")) { setMessage("No tienes permiso para reasignar cartera."); return; }
     const broker = data.brokers.find((item) => item.id === brokerId);
     await updateIndustryRecord(property.id, {
       assignedToId: brokerId || null,
@@ -1560,6 +1549,7 @@ export function BrokersPageContent() {
   }
 
   async function removeBroker(broker: Broker) {
+    if (!canBroker(access, "access", "CONFIGURE")) { setMessage("No tienes permiso para eliminar usuarios."); return; }
     const confirmed = window.confirm(`Eliminar a ${broker.name} y desasignar sus propiedades? Esta accion no se puede deshacer.`);
     if (!confirmed) return;
     try {
@@ -1614,7 +1604,7 @@ export function BrokersPageContent() {
           <div className="realty-ws-card-head"><div><span>Equipo comercial</span><h2>Corredores activos</h2><p>Revisa carga de trabajo y abre cada cartera desde una sola vista.</p></div></div>
           <div className="seller-load-grid">
             {data.brokers.map((broker) => (
-              <BrokerProfileCard key={broker.id} broker={broker} properties={data.properties} onDelete={removeBroker} isDeleting={deletingBrokerId === broker.id} />
+              <BrokerProfileCard key={broker.id} broker={broker} properties={data.properties} onDelete={canBroker(access, "access", "CONFIGURE") ? removeBroker : undefined} isDeleting={deletingBrokerId === broker.id} />
             ))}
             {!data.brokers.length ? <p className="empty-state">Aún no hay corredores creados.</p> : null}
           </div>
@@ -1625,7 +1615,7 @@ export function BrokersPageContent() {
           <input value={brokerForm.email} onChange={(e) => setBrokerForm({ ...brokerForm, email: e.target.value })} placeholder="Email" />
           <input type="password" value={brokerForm.password} onChange={(e) => setBrokerForm({ ...brokerForm, password: e.target.value })} placeholder="Contrasena inicial" />
           <input value={brokerForm.phone} onChange={(e) => setBrokerForm({ ...brokerForm, phone: e.target.value })} placeholder="Telefono" />
-          <button className="primary-btn" type="submit">Crear usuario corredor</button>
+          <button className="primary-btn" type="submit" disabled={!canBroker(access, "access", "CONFIGURE")}>Crear usuario corredor</button>
         </form>
       </section>
       <section className="realty-ws-two-columns realty-broker-distribution">
@@ -1636,7 +1626,7 @@ export function BrokersPageContent() {
           {data.properties.filter((property) => !text(asData(property).assignedBrokerId || property.assignedToId)).map((property) => (
             <div className="realty-ws-row" key={property.id}>
               <strong>{propertyTitle(property.title)}</strong>
-              <span>{REALTY_STAGES.find((stage) => stage.key === text(asData(property).stage, "LEAD"))?.label || "Lead"}</span>
+              <span>{propertyStageLabel(property.status)}</span>
               <span>{getBrokerName(property, data.brokers)}</span>
               <select value={text(asData(property).assignedBrokerId || property.assignedToId)} onChange={(event) => assignProperty(property, event.target.value)}>
                 <option value="">Sin corredor</option>
@@ -1701,44 +1691,5 @@ export function BrokerTrainingPageContent() {
       </section>
       <section className="realty-ws-card realty-training-catalog"><div className="realty-ws-card-head"><div><span>Ruta de aprendizaje</span><h2>Capacitación disponible</h2><p>Material breve, aplicado a las pantallas que usará el corredor.</p></div></div><div className="realty-training-grid">{brokerTrainingCourses.map((course, index) => <article key={course.id}><span>Módulo {index + 1}</span><h3>{course.title}</h3><p>{course.description}</p><small>{course.duration}</small><button type="button" className={completed.has(course.id) ? "secondary-btn" : "primary-btn"} onClick={() => completeCourse(course)}>{completed.has(course.id) ? "Completado" : "Marcar como completado"}</button></article>)}</div></section>
     </>
-  );
-}
-
-export function RealtyPipelineBoard({
-  properties,
-  brokers,
-  onStageChange
-}: {
-  properties: IndustryRecord[];
-  brokers: Broker[];
-  onStageChange: (property: IndustryRecord, stage: string) => Promise<void> | void;
-}) {
-  return (
-    <section className="vertical-card realty-pipeline-section">
-      <div className="vertical-card-head"><div><span>Pipeline inmobiliario</span><h2>Propiedad a postventa</h2></div></div>
-      <div className="realty-pipeline">
-        {REALTY_STAGES.map((stage) => {
-          const items = properties.filter((property) => text(asData(property).stage, "LEAD") === stage.key);
-          return (
-            <section className="realty-stage-column" key={stage.key}>
-              <header><strong>{stage.label}</strong><span>{items.length}</span></header>
-              <div className="realty-stage-list">
-                {items.length ? items.map((property) => (
-                  <article className="realty-stage-card" key={property.id}>
-                    <strong>{propertyTitle(property.title)}</strong>
-                    <small>{text(asData(property).address, "Sin direccion")}</small>
-                    <span>{money(asData(property).price)}</span>
-                    <small>{getBrokerName(property, brokers)}</small>
-                    <select value={stage.key} onChange={(event) => onStageChange(property, event.target.value)}>
-                      {REALTY_STAGES.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
-                    </select>
-                  </article>
-                )) : <p>No hay propiedades aqui todavia.</p>}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-    </section>
   );
 }

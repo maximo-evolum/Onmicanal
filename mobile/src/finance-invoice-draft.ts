@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica móvil compartida para finance invoice draft. */
 export type InvoiceScope = { tenantId: string; userId: string };
 export type InvoiceFields = { number: string; customer: string; rut: string; amount: string; issueDate: string; dueDate: string };
 export type InvoiceDraft = { version: 1; scope: InvoiceScope; operationKey: string; phase: "editing" | "pending"; fields: InvoiceFields };

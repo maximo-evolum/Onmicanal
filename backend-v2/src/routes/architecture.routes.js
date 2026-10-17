@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio architecture y delega su lógica a servicios protegidos. */
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { prisma } from "../lib/db.js";

@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente móvil FinanceInvoiceForm de EVOLUM. */
 import { useEffect, useRef, useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
 import * as SecureStore from "expo-secure-store";
@@ -30,7 +31,7 @@ export function FinanceInvoiceForm({ scope, theme, onSaved }: { scope: InvoiceSc
     try {
       const payload = invoicePayload(selected);
       const pending: InvoiceDraft = { ...selected, phase: "pending" };
-      // Persist exact payload identity BEFORE any network request.
+      // Persiste la identidad exacta de la carga ANTES de cualquier solicitud de red.
       await repository.save(pending);
       current.current = pending; if (mounted.current) { setDraft(pending); setNotice("Confirmando con el servidor…"); }
       sent = true;
@@ -44,11 +45,11 @@ export function FinanceInvoiceForm({ scope, theme, onSaved }: { scope: InvoiceSc
         await onSaved();
       }
     } catch (error) {
-      // Only definite validation rejection makes the original draft editable.
+      // Solo un rechazo definitivo de validación vuelve editable el borrador original.
       const status = (error as { status?: number })?.status;
       if (sent && (status === 400 || status === 422)) {
         const editable: InvoiceDraft = { ...selected, phase: "editing" };
-        try { await repository.save(editable); current.current = editable; if (mounted.current) setDraft(editable); } catch { /* keep persisted pending identity */ }
+        try { await repository.save(editable); current.current = editable; if (mounted.current) setDraft(editable); } catch { /* conserva la identidad pendiente persistida */ }
       }
       if (mounted.current) setNotice(`${error instanceof Error ? error.message : "No se pudo confirmar."} ${current.current?.phase === "pending" ? "Se conserva el intento. Pulsa Reintentar confirmación; no crees otra factura." : "El formulario se conserva para corregir o reintentar."}`);
     } finally { submitting.current = false; if (mounted.current) setBusy(false); }

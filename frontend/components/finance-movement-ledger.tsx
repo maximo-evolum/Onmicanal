@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance movement ledger para la aplicación web. */
 "use client";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { reviewFinanceMovementBatch, getFinanceMovementLedger, exportFinanceMovementLedger, type FinanceLedger, type FinanceWorkspaceContext } from "@/lib/api";

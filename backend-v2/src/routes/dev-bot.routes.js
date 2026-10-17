@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio dev bot y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { getDefaultTenant } from "../services/conversation.service.js";
 import { testBotMessage } from "../services/bot-debug.service.js";

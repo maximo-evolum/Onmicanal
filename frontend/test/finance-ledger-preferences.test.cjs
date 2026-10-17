@@ -1,3 +1,4 @@
+/** Archivo: Comprueba el comportamiento de interfaz o integración de finance ledger preferences.test. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

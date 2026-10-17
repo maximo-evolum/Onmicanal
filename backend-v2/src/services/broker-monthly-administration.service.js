@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio broker monthly administration. */
 import { calculateBrokerAdministrationLiquidation } from "./broker-workflows.service.js";
 
 function dataOf(record) {

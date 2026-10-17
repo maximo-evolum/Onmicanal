@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance movement bulk. */
 import { FinanceOperationError } from "./finance-integrity.service.js";
 import { sendFinanceMovementToReview } from "./finance-allocation.service.js";
 export async function reviewMovementBatch(db, { tenantId, userId, items, reason, operationKey }, review = sendFinanceMovementToReview) {

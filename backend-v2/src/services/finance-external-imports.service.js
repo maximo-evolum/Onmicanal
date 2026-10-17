@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance external imports. */
 import { createHash } from "node:crypto";
 import { FinanceOperationError, findAllFinanceRecords, withFinanceWrite } from "./finance-integrity.service.js";
 import { lockDocumentImportPeriods } from "./finance-document-periods.service.js";
@@ -13,7 +14,7 @@ const snapshot = (invoice) => ({ title: invoice.title, status: invoice.status, d
 
 export function externalDocumentDate(value) {
   const raw = String(value || "").trim();
-  // Keep the issuer's calendar date; do not shift it through UTC/local time.
+  // Conserva la fecha calendario del emisor; no la desplaza por UTC ni hora local.
   const date = /^\d{4}-\d{2}-\d{2}T/.test(raw) && Number.isFinite(Date.parse(raw)) ? raw.slice(0, 10) : raw;
   return financialDate(date);
 }
@@ -26,8 +27,8 @@ export function nuboxScheduledOutcome(details) {
     : { status: "COMPLETED", error: null };
 }
 
-// Fetch every page BEFORE starting a financial transaction. A malformed,
-// repeated or incomplete response must never produce a partial import.
+// Obtiene cada página ANTES de iniciar una transacción financiera. Una respuesta malformada,
+// repetida o incompleta nunca debe producir una importación parcial.
 export async function collectNuboxSales(request, { period, limit = 100, maxRows = 20000 }) {
   const size = Math.max(1, Math.min(100, Number(limit) || 100));
   const sales = []; const ids = new Set(); let expected = null;
@@ -89,8 +90,8 @@ export async function importNuboxDocuments(db, { tenantId, configId, period, inv
     let created = 0; let updated = 0; let adjustmentsCreated = 0; let adjustmentsUpdated = 0;
     for (const { invoice, current, hash, adjustment } of changes) {
       if (adjustment) {
-        // Nubox's balance may already include this note. Never apply it again
-        // without verified references and evidence of the provider's balance.
+        // El saldo de Nubox puede incluir ya esta nota. Nunca la aplica nuevamente
+        // sin referencias verificadas y evidencia del saldo del proveedor.
         const reason = 'Nota de Nubox pendiente de verificar contra su documento de origen y el saldo del proveedor. No se aplicó automáticamente para evitar duplicar el ajuste.';
         const next = { recordType: 'finance_document_adjustment', title: invoice.title, status: 'PENDING_REVIEW', data: {
           ...dataOf(current), ...invoice.data, status: 'PENDING_REVIEW', sourceStatus: invoice.status,

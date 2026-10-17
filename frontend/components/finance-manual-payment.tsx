@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance manual payment para la aplicación web. */
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";

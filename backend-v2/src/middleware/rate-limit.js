@@ -1,3 +1,4 @@
+/** Archivo: Aplica controles transversales de solicitud para rate limit. */
 
 import { getRedisClient } from "../lib/redis.js";
 import { observeRateLimitedRequest } from "../lib/runtime-metrics.js";

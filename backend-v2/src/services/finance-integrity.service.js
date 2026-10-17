@@ -1,5 +1,6 @@
-// Financial writes must validate the same snapshot they update. Prisma reports
-// serialization conflicts as P2034; only that transient failure is retried.
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance integrity. */
+// Las escrituras financieras deben validar la misma instantánea que actualizan. Prisma informa
+// conflictos de serialización como P2034; solo se reintenta esa falla transitoria.
 export class FinanceOperationError extends Error {
   constructor(status, message, details = {}) {
     super(message);
@@ -22,8 +23,8 @@ export async function withFinanceWrite(db, operation) {
   }
 }
 
-// Never use a capped result as the complete financial universe. Cursor paging
-// keeps individual queries bounded without silently discarding older records.
+// Nunca usa un resultado limitado como universo financiero completo. La paginación por cursor
+// mantiene acotadas las consultas individuales sin descartar silenciosamente registros antiguos.
 export async function findAllFinanceRecords(db, query) {
   const records = [];
   let cursor;

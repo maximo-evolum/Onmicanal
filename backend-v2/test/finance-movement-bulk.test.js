@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de finance movement bulk.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reviewMovementBatch } from "../src/services/finance-movement-bulk.service.js";

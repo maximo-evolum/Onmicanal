@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio business knowledge. */
 const ALTA_BRASA_KEYWORDS = /(alta\s*brasa|parrillad|asado|asados|parrillero|cóctel|cocktail|coctel|matrimonio|boda|empresa|corporativo|evento|cumple|fiesta)/i;
 
 export const ALTA_BRASA_KNOWLEDGE = {

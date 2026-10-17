@@ -1,3 +1,4 @@
+/** Archivo: Proporciona lógica cliente compartida para offline queue en la aplicación web. */
 import { API_BASE_URL } from "./constants";
 import { isNuboxSyncRequest } from './nubox-sync-client.mjs';
 
@@ -49,8 +50,8 @@ export function canQueueOfflineMutation(path: string, init?: RequestInit) {
   return ["POST", "PUT", "PATCH", "DELETE"].includes(method)
     && !path.startsWith("/auth/")
     && !isNuboxSyncRequest(path)
-    // Financial proposals and approvals need current evidence and session.
-    // Never replay them later from the generic offline queue.
+    // Las propuestas y aprobaciones financieras necesitan evidencia y sesión vigentes.
+    // Nunca las repite más tarde desde la cola genérica sin conexión.
     && !/^\/finance\/differences(?:\/|\?|$)/.test(path)
     && !/^\/finance\/reconciliation-groups(?:\/|\?|$)/.test(path)
     && !/^\/finance\/manual-settlements(?:\/|\?|$)/.test(path)
@@ -83,8 +84,8 @@ export async function syncOfflineQueue() {
   const pending: QueuedMutation[] = [];
   let synced = 0;
   for (const item of queue) {
-    // Preserve older queued requests for manual review, but never replay a
-    // provider synchronization whose previous outcome may be unknown.
+    // Conserva solicitudes en cola antiguas para revisión manual, pero nunca repite una
+    // sincronización con un proveedor cuyo resultado anterior pueda ser desconocido.
     if (isNuboxSyncRequest(item.path)) { pending.push(item); continue; }
     try {
       const response = await fetch(`${API_BASE_URL}${item.path}`, {

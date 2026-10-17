@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio connections y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import crypto from "crypto";
 import { prisma } from "../lib/db.js";

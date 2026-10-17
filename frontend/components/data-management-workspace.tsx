@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz data management workspace para la aplicación web. */
 "use client";
 
 import { useState, type FormEventHandler, type ReactNode } from "react";

@@ -1,3 +1,4 @@
+/** Archivo: Verifica mediante pruebas automatizadas el comportamiento de metadata governance.test. */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { validateMetadataSchemaDefinition } from "../src/lib/metadata-governance.js";

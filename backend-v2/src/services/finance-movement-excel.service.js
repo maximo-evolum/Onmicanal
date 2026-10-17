@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio finance movement excel. */
 import ExcelJS from "exceljs";
 import { FinanceOperationError } from "./finance-integrity.service.js";
 export async function movementLedgerExcel(result, context = {}) {
@@ -10,7 +11,7 @@ export async function movementLedgerExcel(result, context = {}) {
   const labels = { CREDIT: "Abono", DEBIT: "Cargo", UNKNOWN: "Por identificar", MATCHED: "Conciliado", PENDING: "Pendiente", REVIEW: "En revisión", EXCLUDED: "Excluido", OTHER: "Otro estado" };
   sheet.columns = keys.map((key, i) => ({ key, header: headers[i], width: ["description", "sourceFile", "payer"].includes(key) ? 42 : key === "id" ? 32 : 20 }));
   for (const record of result.records) {
-    // Explicit strings never become ExcelJS formula or hyperlink objects.
+    // Las cadenas explícitas nunca se convierten en objetos de fórmula o hipervínculo de ExcelJS.
     sheet.addRow(keys.map((key) => key === "amount" ? record.amount : String(key === "direction" || key === "status" ? labels[record[key]] || record[key] : record[key] ?? "")));
   }
   sheet.autoFilter = { from: "A1", to: "R1" };

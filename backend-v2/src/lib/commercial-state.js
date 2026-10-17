@@ -1,3 +1,4 @@
+/** Archivo: Proporciona infraestructura y utilidades compartidas para commercial state. */
 export const COMMERCIAL_STATES = Object.freeze({
   NEW: { code: "NEW", label: "Nuevo", priority: "low" },
   CONTACTED: { code: "CONTACTED", label: "Contactado", priority: "medium" },

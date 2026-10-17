@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio operations y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { getRedisClient } from "../lib/redis.js";

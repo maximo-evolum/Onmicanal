@@ -1,3 +1,4 @@
+/** Archivo: Expone las rutas HTTP del dominio metadata y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { MODULES, PLAN_DEFINITIONS } from "../lib/modules.js";
 import { metadataFields, normalizeMetadata, validateMetadata } from "../lib/metadata.js";

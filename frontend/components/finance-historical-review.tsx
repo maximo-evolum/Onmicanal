@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance historical review para la aplicación web. */
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getFinanceHistoricalReview, correctFinanceHistoricalRecord, type FinanceHistoricalReview, type FinanceHistoricalReviewRow } from "@/lib/api";

@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance manual history para la aplicación web. */
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { getFinanceManualHistory, previewFinanceManualReversal, reverseFinanceManualSettlement, type FinanceManualKind, type FinanceManualHistoryPage, type FinanceManualReversalPreview } from "@/lib/api";

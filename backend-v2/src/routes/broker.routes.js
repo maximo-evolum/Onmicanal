@@ -1,4 +1,7 @@
+/** Archivo: Expone las rutas HTTP del dominio broker y delega su lógica a servicios protegidos. */
 import { Router } from "express";
+import { createBrokerProspectsRouter } from "./broker-prospects.routes.js";
+import { convertBrokerProspect } from "../services/broker-prospect-conversion.service.js";
 import { prisma } from "../lib/db.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { recordAuditLog } from "../lib/audit.js";
@@ -41,12 +44,15 @@ import { BROKER_SALE_OPTIONS, brokerSaleReadiness, normalizeBrokerSaleCase } fro
 import { BROKER_RENTAL_OPTIONS, brokerRentalReadiness, normalizeBrokerRentalCase } from "../services/broker-rental.service.js";
 import { BROKER_MAINTENANCE_OPTIONS, brokerMaintenanceReadiness, brokerProjectReadiness, normalizeBrokerMaintenance, normalizeBrokerMaintenanceQuote, normalizeBrokerProject } from "../services/broker-maintenance-project.service.js";
 import { BROKER_POST_SALE_OPTIONS, brokerPostSaleReadiness, normalizeBrokerHandover, normalizeBrokerInspection, normalizeBrokerPostSaleCase, normalizeBrokerWarrantyCase, postSaleStages } from "../services/broker-post-sale.service.js";
-import { brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
+import { brokerAssigneeAllowed, validateBrokerAccessProfile, brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
+import { BROKER_RECORD_RESOURCES } from "../services/broker-record-access.service.js";
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
+import { BROKER_JOURNEY_CATALOG, BROKER_JOURNEY_VERSION, brokerOperationPayload, captureJourney, projectBrokerOperations, validateBrokerOperationReferences, persistBrokerOperationStage, updateBrokerOperationSnapshot } from "../services/broker-operation-contract.service.js";
 
 export const brokerRouter = Router();
 
 brokerRouter.use(async (req, res, next) => {
+  if (!/^\/broker\//i.test(req.path)) return next();
   try {
     req.brokerAccess = await loadBrokerAccessContext({ prisma, tenantId: req.tenantId, user: req.user });
     next();
@@ -90,6 +96,9 @@ function brokerWhere(req, extra = {}) {
   return brokerRecordWhere(req, extra);
 }
 
+brokerRouter.use("/broker/prospects", createBrokerProspectsRouter({ prisma, assertAssignedUser, convert: (db, req, prospect, terms) => convertBrokerProspect(db, req, prospect, terms, { ensureBrokerCaptureProperty, propertyDataFromCapture, ensureBrokerSaleCase, ensureBrokerRentalCase }) }));
+
+
 function allowBrokerAreaAction(req, res, area, action) {
   if (canBrokerAction(req.brokerAccess, area, action)) return true;
   res.status(403).json({ error: "No tienes permiso para esta acción en el área de Broker OS.", area, action, scope: req.brokerAccess?.accessScope || "ASSIGNED" });
@@ -116,19 +125,7 @@ async function monthlyAdministrationSnapshot(req, period) {
 }
 
 function operationPayload(record) {
-  const data = dataOf(record);
-  const operationType = normalizeBrokerOperationType(data.operationType) || "SALE";
-  const stages = stagesForBrokerOperation(operationType);
-  return {
-    ...record,
-    data: {
-      ...data,
-      operationType,
-      stage: normalizeBrokerStage(operationType, text(data.stage, stages[0])),
-      checklist: brokerStageChecklist(operationType, data.stage || stages[0]),
-      timeline: Array.isArray(data.timeline) ? data.timeline : []
-    }
-  };
+  return brokerOperationPayload(record);
 }
 
 const BROKER_AGENT_MODULES = Object.freeze({
@@ -281,7 +278,7 @@ async function assertRelatedProperty(req, propertyId) {
   if (!propertyId) return null;
   const property = await prisma.industryRecord.findFirst({
     where: brokerWhere(req, { id: String(propertyId), recordType: "property" }),
-    select: { id: true, title: true }
+    select: { id: true, title: true, data: true, assignedToId: true, tenantId: true, status: true }
   });
   if (!property) throw new Error("La propiedad relacionada no pertenece a esta cuenta.");
   return property;
@@ -289,6 +286,7 @@ async function assertRelatedProperty(req, propertyId) {
 
 async function assertAssignedUser(req, assignedToId) {
   if (!assignedToId) return null;
+  if (!brokerAssigneeAllowed(req.brokerAccess, assignedToId)) throw new Error("El responsable está fuera de tu alcance autorizado.");
   const user = await prisma.workspaceUser.findFirst({
     where: { id: String(assignedToId), tenantId: req.tenantId, isActive: true },
     select: { id: true }
@@ -346,13 +344,18 @@ async function ensureBrokerCaptureProperty(db, { tenantId, property, propertyDat
   const normalized = normalizeLegacyBrokerProperty({ ...property, data: propertyData });
   if (normalized.errors.length) throw new Error(normalized.errors.join(" "));
   const ownerData = normalized.owner;
+  const existing = await db.brokerProperty.findUnique({ where: { legacyRecordId: property.id } });
+  if (existing && existing.tenantId !== tenantId) throw new Error("La propiedad relacionada no pertenece a esta cuenta.");
+  // Un vínculo existente identifica. Un nombre visible no: dos propietarios distintos
+  // pueden compartirlo. Conserva el ID cuando no hay RUT disponible.
+  const linkedOwner = existing ? await db.brokerOwner.findFirst({ where: { id: existing.ownerId, tenantId } }) : null;
   const owner = ownerData.rut
     ? await db.brokerOwner.upsert({
       where: { tenantId_rut: { tenantId, rut: ownerData.rut } },
       create: { tenantId, ...ownerData },
       update: { name: ownerData.name, phone: ownerData.phone || null, email: ownerData.email || null }
     })
-    : await db.brokerOwner.findFirst({ where: { tenantId, name: ownerData.name } }) || await db.brokerOwner.create({ data: { tenantId, ...ownerData } });
+    : linkedOwner || await db.brokerOwner.create({ data: { tenantId, ...ownerData } });
 
   const strictData = {
     ...normalized.property,
@@ -365,7 +368,6 @@ async function ensureBrokerCaptureProperty(db, { tenantId, property, propertyDat
     coverImageUrl: text(propertyData.photoUrl) || null,
     metadata: normalized.property.metadata,
   };
-  const existing = await db.brokerProperty.findUnique({ where: { legacyRecordId: property.id } });
   if (existing) return db.brokerProperty.update({ where: { id: existing.id }, data: { ...strictData, ownerId: owner.id, assignedBrokerId: property.assignedToId || null } });
   return db.brokerProperty.create({ data: { tenantId, ownerId: owner.id, legacyRecordId: property.id, ...strictData } });
 }
@@ -375,6 +377,7 @@ function capturePayload(property, capture) {
   const merged = { ...propertyData, ...(capture || {}) };
   return {
     property,
+    journey: captureJourney(capture?.status || propertyData.captureStatus),
     capture: capture ? { ...capture, readiness: captureReadiness({ ...merged, ...capture }) } : null,
     readiness: captureReadiness(merged),
     options: BROKER_CAPTURE_OPTIONS,
@@ -403,9 +406,14 @@ async function persistBrokerCapture(req, { property, rawInput, created = false }
   if (!ownerName) throw new Error("Indica el nombre del propietario para iniciar la captación.");
   if (!address || !comuna || !propertyType) throw new Error("La ficha requiere dirección, comuna y tipo de propiedad.");
 
-  const captureValidation = validateBrokerCapture(raw);
+  const requestedStatus = normalizeBrokerCapture(raw).status;
+  const previouslySigned = baseData.captureStatus === "MANDATO_FIRMADO";
+  if (requestedStatus === "MANDATO_FIRMADO" && !previouslySigned) throw new Error("Registra el mandato desde el embudo de prospectos con su evidencia y condiciones comerciales.");
+  // La evidencia de firma no desaparece por completar después un dato técnico.
+  // El checklist de publicación sigue mostrando los antecedentes faltantes.
+  const captureValidation = validateBrokerCapture(previouslySigned && requestedStatus === "MANDATO_FIRMADO" ? { ...raw, status: "PROSPECTO", captureStatus: "PROSPECTO" } : raw);
   if (!captureValidation.ok) throw new Error(captureValidation.errors.join(" "));
-  const capture = captureValidation.normalized;
+  const capture = normalizeBrokerCapture(raw);
   const requestedAssignment = text(raw.assignedToId || capture.captureBrokerId);
   const assignedToId = requestedAssignment || (Array.isArray(req.brokerAccess?.scopeUserIds) ? req.user?.id : null);
   if (requestedAssignment && requestedAssignment !== req.user?.id && !canBrokerAction(req.brokerAccess, "commercial", "ASSIGN")) throw new Error("No puedes asignar esta captación a otro usuario.");
@@ -428,8 +436,9 @@ async function persistBrokerCapture(req, { property, rawInput, created = false }
       create: { tenantId: req.tenantId, propertyId: strictProperty.id, ...capture, captureBrokerId: assignedToId || null },
       update: { ...capture, captureBrokerId: assignedToId || null }
     });
-    const ownerRecord = await db.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "owner", title: ownerName } });
-    if (!ownerRecord) await db.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "owner", title: ownerName, status: "ACTIVE", data: { phone: text(raw.ownerPhone), email: text(raw.ownerEmail), rut: text(raw.ownerRut), propertyId: updatedProperty.id, propertyTitle: updatedProperty.title, source: "captacion_broker" } } });
+    const ownerRecord = await db.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "owner", OR: [{ data: { path: ["brokerOwnerId"], equals: strictProperty.ownerId } }, { data: { path: ["propertyId"], equals: updatedProperty.id } }] } });
+    if (ownerRecord && !dataOf(ownerRecord).brokerOwnerId) await db.industryRecord.update({ where: { id: ownerRecord.id }, data: { data: { ...dataOf(ownerRecord), brokerOwnerId: strictProperty.ownerId } } });
+    if (!ownerRecord) await db.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "owner", title: ownerName, status: "ACTIVE", data: { brokerOwnerId: strictProperty.ownerId, phone: text(raw.ownerPhone), email: text(raw.ownerEmail), rut: text(raw.ownerRut), propertyId: updatedProperty.id, propertyTitle: updatedProperty.title, source: "captacion_broker" } } });
     return { property: updatedProperty, capture: savedCapture };
   });
   await recordAuditLog(req, created ? "BROKER_CAPTURE_CREATED" : "BROKER_CAPTURE_UPDATED", "broker_property_capture", saved.capture.id, { propertyId: saved.property.id, status: saved.capture.status, readiness: captureValidation.readiness.score });
@@ -441,11 +450,11 @@ async function ensureBrokerSaleBuyer(db, { tenantId, buyerId, buyerName }) {
   if (requestedId) {
     const existingById = await db.brokerBuyer.findFirst({ where: { id: requestedId, tenantId } });
     if (existingById) return existingById;
+    throw Object.assign(new Error("El comprador indicado no pertenece a esta empresa."), { status: 422 });
   }
   const name = text(buyerName);
   if (!name) return null;
-  const existingByName = await db.brokerBuyer.findFirst({ where: { tenantId, name }, orderBy: { updatedAt: "desc" } });
-  if (existingByName) return existingByName;
+  // Un nombre visible compartido no prueba que dos compradores sean la misma persona.
   return db.brokerBuyer.create({ data: { tenantId, name, status: "INTERESADO" } });
 }
 
@@ -454,7 +463,7 @@ async function ensureBrokerSaleCase(db, { tenantId, operation, property, buyerId
   const strictProperty = await ensureBrokerCaptureProperty(db, { tenantId, property, propertyData });
   const buyer = await ensureBrokerSaleBuyer(db, { tenantId, buyerId, buyerName });
   const operationData = dataOf(operation);
-  const stage = normalizeBrokerStage("SALE", operationData.stage || SALE_STAGES[0]);
+  const stage = normalizeBrokerStage("SALE", operationData.stage);
   return db.brokerSaleCase.upsert({
     where: { operationId: operation.id },
     create: {
@@ -481,11 +490,11 @@ async function ensureBrokerLeaseTenant(db, { tenantId, leaseTenantId, tenantName
   if (requestedId) {
     const existingById = await db.brokerLeaseTenant.findFirst({ where: { id: requestedId, tenantId } });
     if (existingById) return existingById;
+    throw Object.assign(new Error("El arrendatario indicado no pertenece a esta empresa."), { status: 422 });
   }
   const name = text(tenantName);
   if (!name) return null;
-  const existingByName = await db.brokerLeaseTenant.findFirst({ where: { tenantId, name }, orderBy: { updatedAt: "desc" } });
-  if (existingByName) return existingByName;
+  // Reutiliza solo un ID explícito, nunca el primer tenant con el mismo nombre.
   return db.brokerLeaseTenant.create({
     data: {
       tenantId,
@@ -505,7 +514,7 @@ async function ensureBrokerRentalCase(db, { tenantId, operation, property, lease
   const strictProperty = await ensureBrokerCaptureProperty(db, { tenantId, property, propertyData });
   const leaseTenant = await ensureBrokerLeaseTenant(db, { tenantId, leaseTenantId, tenantName, input });
   const operationData = dataOf(operation);
-  const stage = normalizeBrokerStage("RENTAL", operationData.stage || RENTAL_STAGES[0]);
+  const stage = normalizeBrokerStage("RENTAL", operationData.stage);
   return db.brokerRentalCase.upsert({
     where: { operationId: operation.id },
     create: {
@@ -532,7 +541,8 @@ async function brokerSaleContext(req, operation) {
   const propertyId = text(operationData.propertyId);
   if (!propertyId) throw new Error("La operación de venta debe tener una propiedad asociada.");
   const property = await assertRelatedProperty(req, propertyId);
-  const saleCase = await prisma.$transaction((db) => ensureBrokerSaleCase(db, {
+  const persistedCase = await prisma.brokerSaleCase.findFirst({ where: { tenantId: req.tenantId, operationId: operation.id } });
+  const saleCase = persistedCase || await prisma.$transaction((db) => ensureBrokerSaleCase(db, {
     tenantId: req.tenantId,
     operation,
     property,
@@ -548,12 +558,13 @@ async function brokerSaleContext(req, operation) {
     }),
   ]);
   const related = relatedRecords.filter((record) => String(dataOf(record).propertyId || "") === property.id);
-  const currentIndex = SALE_STAGES.indexOf(normalizeBrokerStage("SALE", operationData.stage || SALE_STAGES[0]));
-  const nextStage = SALE_STAGES[currentIndex + 1] || null;
+  const currentStage = normalizeBrokerStage("SALE", operationData.stage);
+  const currentIndex = SALE_STAGES.indexOf(currentStage);
+  const nextStage = currentIndex >= 0 ? SALE_STAGES[currentIndex + 1] || null : null;
   return {
-    operation: operationPayload(operation),
+    operation: (await projectBrokerOperations(prisma, [operation]))[0],
     property,
-    saleCase,
+    saleCase: { ...saleCase, currentStage },
     capture: strictProperty?.capture || null,
     relatedRecords: related,
     nextStage,
@@ -578,7 +589,8 @@ async function brokerRentalContext(req, operation) {
   const propertyId = text(operationData.propertyId);
   if (!propertyId) throw new Error("La operación de arriendo debe tener una propiedad asociada.");
   const property = await assertRelatedProperty(req, propertyId);
-  const rentalCase = await prisma.$transaction((db) => ensureBrokerRentalCase(db, {
+  const persistedCase = await prisma.brokerRentalCase.findFirst({ where: { tenantId: req.tenantId, operationId: operation.id } });
+  const rentalCase = persistedCase || await prisma.$transaction((db) => ensureBrokerRentalCase(db, {
     tenantId: req.tenantId,
     operation,
     property,
@@ -594,12 +606,13 @@ async function brokerRentalContext(req, operation) {
     }),
   ]);
   const related = relatedRecords.filter((record) => String(dataOf(record).propertyId || "") === property.id);
-  const currentIndex = RENTAL_STAGES.indexOf(normalizeBrokerStage("RENTAL", operationData.stage || RENTAL_STAGES[0]));
-  const nextStage = RENTAL_STAGES[currentIndex + 1] || null;
+  const currentStage = normalizeBrokerStage("RENTAL", operationData.stage);
+  const currentIndex = RENTAL_STAGES.indexOf(currentStage);
+  const nextStage = currentIndex >= 0 ? RENTAL_STAGES[currentIndex + 1] || null : null;
   return {
-    operation: operationPayload(operation),
+    operation: (await projectBrokerOperations(prisma, [operation]))[0],
     property,
-    rentalCase,
+    rentalCase: { ...rentalCase, currentStage },
     capture: strictProperty?.capture || null,
     relatedRecords: related,
     nextStage,
@@ -803,33 +816,9 @@ function postSaleRecordData(kind, record, entity) {
   return { ...common, description: entity.description, providerName: entity.providerName || "", warrantyUntil: entity.warrantyUntil?.toISOString?.() || "", coverageType: entity.coverageType, claimReference: entity.claimReference || "", resolution: entity.resolution || "" };
 }
 
-brokerRouter.post("/broker/captures", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "CREATE"), async (req, res) => {
-  try {
-    const input = dataOf({ data: req.body });
-    const title = text(input.title);
-    if (!title) return res.status(400).json({ error: "Indica un nombre para la propiedad." });
-    if (!text(input.ownerName) || !text(input.address) || !text(input.comuna || input.commune) || !text(input.propertyType)) {
-      return res.status(400).json({ error: "La ficha requiere propietario, dirección, comuna y tipo de propiedad." });
-    }
-    const validation = validateBrokerCapture(input);
-    if (!validation.ok) return res.status(422).json({ error: validation.errors.join(" ") });
-    const preliminaryCapture = normalizeBrokerCapture(input);
-    const property = await prisma.industryRecord.create({
-      data: {
-        tenantId: req.tenantId,
-        recordType: "property",
-        title,
-        status: "ACTIVE",
-        assignedToId: text(input.assignedToId || preliminaryCapture.captureBrokerId) || null,
-        data: { ...input, captureStatus: preliminaryCapture.status, source: text(input.source, "captacion_broker") }
-      }
-    });
-    const saved = await persistBrokerCapture(req, { property, rawInput: input, created: true });
-    res.status(201).json(saved);
-  } catch (error) {
-    console.error("Create broker capture error:", error);
-    res.status(422).json({ error: error?.message || "No se pudo crear la captación." });
-  }
+// Compatibilidad explícita: nunca crear inventario activo por el alta antigua.
+brokerRouter.post("/broker/captures", requireBrokerAction("commercial", "CREATE"), (_req, res) => {
+  res.status(409).json({ error: "Las nuevas captaciones se registran desde Nuevo prospecto, antes del mandato.", nextEndpoint: "/broker/prospects" });
 });
 
 brokerRouter.put("/broker/properties/:propertyId/capture", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "EDIT"), async (req, res) => {
@@ -846,20 +835,22 @@ brokerRouter.put("/broker/properties/:propertyId/capture", requireRole(ROLE_GROU
 
 brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), async (req, res) => {
   try {
+    // El resumen no debe revelar importes ni expedientes de áreas restringidas.
+    const overviewWhere = (extra) => ({ AND: [brokerWhere(req, extra), { recordType: { in: Object.keys(BROKER_RECORD_RESOURCES).filter(type => canBrokerAction(req.brokerAccess, BROKER_RECORD_RESOURCES[type], "VIEW")) } }] });
     const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations, brokerRecords] = await Promise.all([
-      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "property" }) }),
-      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), orderBy: { updatedAt: "desc" }, take: 12 }),
-      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 50 }),
-      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "visit", status: { in: ["SCHEDULED", "PENDING", "ACTIVE"] } }) }),
-      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "realty_alert", status: { not: "RESOLVED" } }) }),
-      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "rental_contract", status: { in: ["ACTIVE", "PENDING_RENEWAL"] } }) }),
-      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "maintenance_ticket", status: { notIn: ["CLOSED", "CANCELLED"] } }) }),
-      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "post_sale_case", status: { notIn: ["CLOSED", "RESOLVED"] } }) }),
-      prisma.industryRecord.count({ where: brokerWhere(req, { recordType: "operation_financing", status: { in: ["REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED"] } }) }),
-      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 100 }),
-      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: { in: BROKER_RECORD_TYPES } }), orderBy: { updatedAt: "desc" }, take: 500 })
+      prisma.industryRecord.count({ where: overviewWhere({ recordType: "property" }) }),
+      prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), orderBy: { updatedAt: "desc" }, take: 100 }),
+      prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 50 }),
+      prisma.industryRecord.count({ where: overviewWhere({ recordType: "visit", status: { in: ["SCHEDULED", "PENDING", "ACTIVE"] } }) }),
+      prisma.industryRecord.count({ where: overviewWhere({ recordType: "realty_alert", status: { not: "RESOLVED" } }) }),
+      prisma.industryRecord.count({ where: overviewWhere({ recordType: "rental_contract", status: { in: ["ACTIVE", "PENDING_RENEWAL"] } }) }),
+      prisma.industryRecord.count({ where: overviewWhere({ recordType: "maintenance_ticket", status: { notIn: ["CLOSED", "CANCELLED"] } }) }),
+      prisma.industryRecord.count({ where: overviewWhere({ recordType: "post_sale_case", status: { notIn: ["CLOSED", "RESOLVED"] } }) }),
+      prisma.industryRecord.count({ where: overviewWhere({ recordType: "operation_financing", status: { in: ["REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED"] } }) }),
+      prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 100 }),
+      prisma.industryRecord.findMany({ where: overviewWhere({ recordType: { in: BROKER_RECORD_TYPES } }), orderBy: { updatedAt: "desc" }, take: 500 })
     ]);
-    const normalizedOperations = operations.map(operationPayload);
+    const normalizedOperations = await projectBrokerOperations(prisma, operations);
     const kpis = {
       properties: propertyCount,
       activeOperations: normalizedOperations.filter((item) => !TERMINAL_STAGES.has(String(item.data.stage))).length,
@@ -872,11 +863,11 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
     };
     res.json({
       kpis,
-      properties,
+      properties: canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : properties.map(({ id, title, tenantId, recordType, status, assignedToId, createdAt, updatedAt }) => ({ id, title, tenantId, recordType, status, assignedToId, createdAt, updatedAt, data: {} })),
       operations: normalizedOperations,
-      recommendations: brokerRecommendations({ properties, operations, maintenance, postSale, financing, brokerRecords }),
+      recommendations: brokerRecommendations({ properties: canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : [], operations, maintenance, postSale, financing, brokerRecords }),
       agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload),
-      reporting: brokerReporting({ properties, operations, evaluations, brokerRecords }),
+      reporting: brokerReporting({ properties: canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : [], operations, evaluations, brokerRecords }),
       aiTraining: {
         scenarios: BROKER_AGENT_SCENARIOS,
         evaluations: evaluations.map(evaluationPayload),
@@ -889,9 +880,10 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
   }
 });
 
-brokerRouter.get("/broker/catalog", requireBrokerAction("overview", "VIEW"), (_req, res) => {
+brokerRouter.get("/broker/catalog", requireBrokerAction("overview", "VIEW"), (req, res) => {
   res.json({
-    areas: BROKER_RECORD_AREAS,
+    journey: BROKER_JOURNEY_CATALOG,
+    areas: Object.fromEntries(Object.entries(BROKER_RECORD_AREAS).map(([area, types]) => [area, types.filter(type => canBrokerAction(req.brokerAccess, BROKER_RECORD_RESOURCES[type] || area, "VIEW"))])),
     recordDefinitions: BROKER_RECORD_DEFINITIONS,
     agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload),
     aiScenarios: BROKER_AGENT_SCENARIOS,
@@ -992,6 +984,9 @@ brokerRouter.put("/broker/access/users/:userId", requireBrokerAction("access", "
   try {
     const user = await prisma.workspaceUser.findFirst({ where: { id: req.params.userId, tenantId: req.tenantId }, select: { id: true, name: true, email: true, role: true, jobTitle: true } });
     if (!user) return res.status(404).json({ error: "Usuario no encontrado en esta empresa." });
+    const validationError = validateBrokerAccessProfile(req.body, user);
+    if (validationError) return res.status(422).json({ error: validationError });
+    if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(user.role) && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(req.user.role)) return res.status(403).json({ error: "No puedes cambiar el acceso de una cuenta administradora." });
     if (String(req.body?.accessScope || "").toUpperCase() === "HOLDING" && req.user?.role !== "SUPER_ADMIN") {
       return res.status(422).json({ error: "El alcance holding requiere una estructura multiempresa y solo puede ser asignado por un superadministrador." });
     }
@@ -1302,7 +1297,7 @@ brokerRouter.get("/broker/operations", requireBrokerAction("operations", "VIEW")
       orderBy: { updatedAt: "desc" },
       take: Math.min(Number(req.query.limit || 200), 500)
     });
-    const operations = records.map(operationPayload).filter((item) => !type || item.data.operationType === type);
+    const operations = (await projectBrokerOperations(prisma, records)).filter((item) => !type || item.data.operationType === type);
     res.json(operations);
   } catch (error) {
     console.error("List broker operations error:", error);
@@ -1327,6 +1322,7 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), requireB
     if (!stages.includes(stage)) return res.status(400).json({ error: "La etapa inicial no pertenece a este flujo." });
     const now = new Date().toISOString();
     const record = await prisma.$transaction(async (db) => {
+      await validateBrokerOperationReferences(db, { tenantId: req.tenantId, propertyId, buyerId: text(req.body?.buyerId), leaseTenantId: text(req.body?.leaseTenantId), mandateId: text(req.body?.mandateId) });
       const created = await db.industryRecord.create({
         data: {
           tenantId: req.tenantId,
@@ -1339,6 +1335,9 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), requireB
             operationType,
             propertyId: propertyId || null,
             buyerId: text(req.body?.buyerId) || null,
+            leaseTenantId: text(req.body?.leaseTenantId) || null,
+            mandateId: text(req.body?.mandateId) || null,
+            journeyVersion: BROKER_JOURNEY_VERSION,
             stage,
             checklist: brokerStageChecklist(operationType, stage),
             timeline: [{ at: now, type: "OPERATION_CREATED", stage, note: "Operación creada" }]
@@ -1348,17 +1347,21 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), requireB
       });
       if (operationType === "SALE") {
         const property = await db.industryRecord.findUnique({ where: { id: propertyId } });
-        await ensureBrokerSaleCase(db, { tenantId: req.tenantId, operation: created, property, buyerId: text(req.body?.buyerId), buyerName: text(dataOf({ data: req.body?.data }).clientName) });
+        const sale = await ensureBrokerSaleCase(db, { tenantId: req.tenantId, operation: created, property, buyerId: text(req.body?.buyerId), buyerName: text(dataOf({ data: req.body?.data }).clientName) });
+        created.data.buyerId = sale.buyerId;
       }
       if (operationType === "RENTAL") {
         const property = await db.industryRecord.findUnique({ where: { id: propertyId } });
-        await ensureBrokerRentalCase(db, { tenantId: req.tenantId, operation: created, property, leaseTenantId: text(req.body?.leaseTenantId), tenantName: text(dataOf({ data: req.body?.data }).clientName), input: dataOf({ data: req.body?.data }) });
+        const rental = await ensureBrokerRentalCase(db, { tenantId: req.tenantId, operation: created, property, leaseTenantId: text(req.body?.leaseTenantId), tenantName: text(dataOf({ data: req.body?.data }).clientName), input: dataOf({ data: req.body?.data }) });
+        created.data.leaseTenantId = rental.leaseTenantId;
       }
+      if (["SALE", "RENTAL"].includes(operationType)) await db.industryRecord.update({ where: { id: created.id }, data: { data: created.data } });
       return created;
     });
     await recordAuditLog(req, "BROKER_OPERATION_CREATED", "broker_operation", record.id, { operationType, stage, propertyId: propertyId || null });
     res.status(201).json(operationPayload(record));
   } catch (error) {
+    if (error.status === 422) return res.status(422).json({ error: error.message });
     if (error?.message?.includes("propiedad relacionada") || error?.message?.includes("usuario asignado")) return res.status(400).json({ error: error.message });
     console.error("Create broker operation error:", error);
     res.status(500).json({ error: "No se pudo crear la operación." });
@@ -1386,20 +1389,20 @@ brokerRouter.put("/broker/sales/:operationId", requireRole(ROLE_GROUPS.STAFF), r
     const context = await brokerSaleContext(req, operation);
     const incoming = dataOf({ data: req.body });
     const normalized = normalizeBrokerSaleCase({ ...context.saleCase, ...incoming });
-    const buyer = await ensureBrokerSaleBuyer(prisma, { tenantId: req.tenantId, buyerId: normalized.buyerId, buyerName: normalized.buyerName });
-    const saved = await prisma.brokerSaleCase.update({
-      where: { id: context.saleCase.id },
-      data: { ...normalized, buyerId: buyer?.id || null, reviewedById: context.saleCase.reviewedById || null, metadata: { ...(context.saleCase.metadata && typeof context.saleCase.metadata === "object" ? context.saleCase.metadata : {}), lastUpdatedBy: req.user?.id || null } },
-    });
-    await prisma.industryRecord.update({
-      where: { id: operation.id },
-      data: { data: { ...dataOf(operation), clientName: saved.buyerName || dataOf(operation).clientName || "", buyerId: saved.buyerId || dataOf(operation).buyerId || null } },
+    const saved = await prisma.$transaction(async db => {
+      const buyer = await ensureBrokerSaleBuyer(db, { tenantId: req.tenantId, buyerId: normalized.buyerId, buyerName: normalized.buyerName });
+      await updateBrokerOperationSnapshot(db, operation, { ...dataOf(operation), clientName: normalized.buyerName || "", buyerId: buyer?.id || null });
+      return db.brokerSaleCase.update({
+        where: { id: context.saleCase.id },
+        data: { ...normalized, buyerId: buyer?.id || null, reviewedById: context.saleCase.reviewedById || null, metadata: { ...(context.saleCase.metadata && typeof context.saleCase.metadata === "object" ? context.saleCase.metadata : {}), lastUpdatedBy: req.user?.id || null } },
+      });
     });
     await recordAuditLog(req, "BROKER_SALE_CASE_UPDATED", "broker_sale_case", saved.id, { operationId: operation.id, stage: saved.currentStage });
     const refreshed = await brokerSaleContext(req, await prisma.industryRecord.findUnique({ where: { id: operation.id } }));
     res.json(brokerSalePayload(refreshed));
   } catch (error) {
     console.error("Update broker sale case error:", error);
+    if ([409, 422].includes(error.status)) return res.status(error.status).json({ error: error.message });
     res.status(500).json({ error: "No se pudo actualizar el expediente de venta." });
   }
 });
@@ -1453,20 +1456,20 @@ brokerRouter.put("/broker/rentals/:operationId", requireRole(ROLE_GROUPS.STAFF),
     const context = await brokerRentalContext(req, operation);
     const incoming = dataOf({ data: req.body });
     const normalized = normalizeBrokerRentalCase({ ...context.rentalCase, ...incoming });
-    const leaseTenant = await ensureBrokerLeaseTenant(prisma, { tenantId: req.tenantId, leaseTenantId: normalized.leaseTenantId, tenantName: normalized.tenantName, input: normalized });
-    const saved = await prisma.brokerRentalCase.update({
-      where: { id: context.rentalCase.id },
-      data: { ...normalized, leaseTenantId: leaseTenant?.id || null, reviewedById: context.rentalCase.reviewedById || null, metadata: { ...(context.rentalCase.metadata && typeof context.rentalCase.metadata === "object" ? context.rentalCase.metadata : {}), lastUpdatedBy: req.user?.id || null } },
-    });
-    await prisma.industryRecord.update({
-      where: { id: operation.id },
-      data: { data: { ...dataOf(operation), clientName: saved.tenantName || dataOf(operation).clientName || "", leaseTenantId: saved.leaseTenantId || dataOf(operation).leaseTenantId || null } },
+    const saved = await prisma.$transaction(async db => {
+      const leaseTenant = await ensureBrokerLeaseTenant(db, { tenantId: req.tenantId, leaseTenantId: normalized.leaseTenantId, tenantName: normalized.tenantName, input: normalized });
+      await updateBrokerOperationSnapshot(db, operation, { ...dataOf(operation), clientName: normalized.tenantName || "", leaseTenantId: leaseTenant?.id || null });
+      return db.brokerRentalCase.update({
+        where: { id: context.rentalCase.id },
+        data: { ...normalized, leaseTenantId: leaseTenant?.id || null, reviewedById: context.rentalCase.reviewedById || null, metadata: { ...(context.rentalCase.metadata && typeof context.rentalCase.metadata === "object" ? context.rentalCase.metadata : {}), lastUpdatedBy: req.user?.id || null } },
+      });
     });
     await recordAuditLog(req, "BROKER_RENTAL_CASE_UPDATED", "broker_rental_case", saved.id, { operationId: operation.id, stage: saved.currentStage });
     const refreshed = await brokerRentalContext(req, await prisma.industryRecord.findUnique({ where: { id: operation.id } }));
     res.json(brokerRentalPayload(refreshed));
   } catch (error) {
     console.error("Update broker rental case error:", error);
+    if ([409, 422].includes(error.status)) return res.status(error.status).json({ error: error.message });
     res.status(500).json({ error: "No se pudo actualizar el expediente de arriendo." });
   }
 });
@@ -1745,8 +1748,10 @@ brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "broker_operation" }) });
     if (!existing) return res.status(404).json({ error: "Operación no encontrada." });
     const current = operationPayload(existing);
+    if (current.journey.needsReview) return res.status(422).json({ error: current.journey.warning });
     const transition = validateBrokerStageTransition({ operationType: current.data.operationType, currentStage: current.data.stage, nextStage: req.body?.stage });
     if (!transition.ok) return res.status(422).json({ error: transition.error });
+    if (transition.current === transition.next) return res.json((await projectBrokerOperations(prisma, [existing]))[0]);
     if (current.data.operationType === "SALE" && transition.next !== transition.current && !["CANCELADA", "PERDIDA"].includes(transition.next)) {
       const context = await brokerSaleContext(req, existing);
       const readiness = brokerSaleReadiness({ targetStage: transition.next, saleCase: context.saleCase, capture: context.capture, relatedRecords: context.relatedRecords });
@@ -1759,22 +1764,12 @@ brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF
     }
     const now = new Date().toISOString();
     const timeline = [...current.data.timeline, { at: now, type: "STAGE_CHANGED", from: transition.current, stage: transition.next, note: text(req.body?.note, `Etapa cambiada a ${transition.next}`) }];
-    const record = await prisma.industryRecord.update({
-      where: { id: existing.id },
-      data: { status: transition.terminal ? "COMPLETED" : "ACTIVE", data: { ...current.data, stage: transition.next, checklist: brokerStageChecklist(current.data.operationType, transition.next), timeline } }
-    });
-    if (current.data.operationType === "SALE") {
-      const saleCase = await prisma.brokerSaleCase.findUnique({ where: { operationId: existing.id } });
-      if (saleCase) await prisma.brokerSaleCase.update({ where: { id: saleCase.id }, data: { currentStage: transition.next, status: transition.terminal ? (transition.next === "ENTREGA_Y_POSTVENTA" ? "CERRADA" : "CANCELADA") : "ACTIVA" } });
-    }
-    if (current.data.operationType === "RENTAL") {
-      const rentalCase = await prisma.brokerRentalCase.findUnique({ where: { operationId: existing.id } });
-      if (rentalCase) await prisma.brokerRentalCase.update({ where: { id: rentalCase.id }, data: { currentStage: transition.next, status: transition.terminal ? (transition.next === "ENTREGA_LLAVES" ? "CERRADA" : "CANCELADA") : "ACTIVA" } });
-    }
+    const record = await persistBrokerOperationStage(prisma, { existing, type: current.data.operationType, stage: transition.next, terminal: transition.terminal, data: { ...current.data, journeyVersion: BROKER_JOURNEY_VERSION, stage: transition.next, checklist: brokerStageChecklist(current.data.operationType, transition.next), timeline } });
     await recordAuditLog(req, "BROKER_OPERATION_STAGE_CHANGED", "broker_operation", record.id, { from: transition.current, to: transition.next });
     res.json(operationPayload(record));
   } catch (error) {
     console.error("Advance broker operation error:", error);
+    if (error.status === 409) return res.status(409).json({ error: error.message });
     res.status(500).json({ error: "No se pudo actualizar la etapa de la operación." });
   }
 });
@@ -1787,11 +1782,15 @@ brokerRouter.post("/broker/operations/:id/timeline", requireRole(ROLE_GROUPS.STA
     if (!note) return res.status(400).json({ error: "Describe el evento que quieres registrar." });
     const operation = operationPayload(existing);
     const event = { at: new Date().toISOString(), type: text(req.body?.type, "NOTE").toUpperCase(), stage: operation.data.stage, note };
-    const record = await prisma.industryRecord.update({ where: { id: existing.id }, data: { data: { ...operation.data, timeline: [...operation.data.timeline, event] } } });
+    const record = await prisma.$transaction(async db => {
+      await updateBrokerOperationSnapshot(db, existing, { ...dataOf(existing), timeline: [...operation.data.timeline, event] });
+      return db.industryRecord.findFirst({ where: { id: existing.id, tenantId: existing.tenantId } });
+    });
     await recordAuditLog(req, "BROKER_OPERATION_EVENT_RECORDED", "broker_operation", record.id, event);
     res.status(201).json(operationPayload(record));
   } catch (error) {
     console.error("Create broker timeline event error:", error);
+    if (error.status === 409) return res.status(409).json({ error: error.message });
     res.status(500).json({ error: "No se pudo registrar el evento." });
   }
 });
@@ -1802,7 +1801,7 @@ brokerRouter.get("/broker/records/:area", async (req, res) => {
     if (!isBrokerRecordArea(area)) return res.status(404).json({ error: "Área operativa no encontrada." });
     if (!allowBrokerAreaAction(req, res, area, "VIEW")) return;
     const records = await prisma.industryRecord.findMany({
-      where: brokerWhere(req, { recordType: { in: BROKER_RECORD_AREAS[area] } }),
+      where: brokerWhere(req, { recordType: { in: BROKER_RECORD_AREAS[area].filter(type => canBrokerAction(req.brokerAccess, BROKER_RECORD_RESOURCES[type] || area, "VIEW")) } }),
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } },
       orderBy: { updatedAt: "desc" },
       take: Math.min(Number(req.query.limit || 200), 500)
@@ -1820,7 +1819,7 @@ brokerRouter.post("/broker/records", requireRole(ROLE_GROUPS.STAFF), async (req,
     const title = text(req.body?.title);
     if (!BROKER_RECORD_TYPES.includes(recordType)) return res.status(400).json({ error: "Tipo de registro Broker no válido." });
     if (!title) return res.status(400).json({ error: "El nombre del registro es requerido." });
-    const area = BROKER_RECORD_DEFINITIONS[recordType]?.area;
+    const area = BROKER_RECORD_RESOURCES[recordType] || BROKER_RECORD_DEFINITIONS[recordType]?.area;
     if (!area || !allowBrokerAreaAction(req, res, area, "CREATE")) return;
     const requestedAssignment = text(req.body?.assignedToId);
     const assignedToId = requestedAssignment || (Array.isArray(req.brokerAccess?.scopeUserIds) ? req.user?.id : null);
@@ -1866,7 +1865,7 @@ brokerRouter.patch("/broker/records/:id", requireRole(ROLE_GROUPS.STAFF), async 
   try {
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: { in: BROKER_RECORD_TYPES } }) });
     if (!existing) return res.status(404).json({ error: "Registro operativo no encontrado." });
-    const area = BROKER_RECORD_DEFINITIONS[existing.recordType]?.area;
+    const area = BROKER_RECORD_RESOURCES[existing.recordType] || BROKER_RECORD_DEFINITIONS[existing.recordType]?.area;
     if (!area || !allowBrokerAreaAction(req, res, area, "EDIT")) return;
     if (req.body?.assignedToId !== undefined && text(req.body.assignedToId) !== req.user?.id && !canBrokerAction(req.brokerAccess, area, "ASSIGN")) return res.status(403).json({ error: "No puedes reasignar este registro." });
     const nextData = req.body?.data === undefined
@@ -1907,7 +1906,7 @@ brokerRouter.get("/broker/properties/:propertyId/expedient", requireBrokerAction
   try {
     const property = await assertRelatedProperty(req, req.params.propertyId);
     const records = await prisma.industryRecord.findMany({
-      where: brokerWhere(req, { recordType: { in: [...BROKER_RECORD_TYPES, "broker_operation", "visit", "realty_alert"] } }),
+      where: brokerWhere(req, { recordType: { in: [...BROKER_RECORD_TYPES, "broker_operation", "visit", "realty_alert"].filter(type => canBrokerAction(req.brokerAccess, BROKER_RECORD_RESOURCES[type], "VIEW")) } }),
       orderBy: { updatedAt: "desc" },
       take: 500
     });

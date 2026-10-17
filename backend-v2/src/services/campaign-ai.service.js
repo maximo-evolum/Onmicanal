@@ -1,3 +1,4 @@
+/** Archivo: Implementa reglas de negocio y procesos del dominio campaign ai. */
 import { ensurePublicCampaignImage } from "./campaign-assets.service.js";
 import { sendWhatsAppImage, sendWhatsAppText } from "./whatsapp.service.js";
 

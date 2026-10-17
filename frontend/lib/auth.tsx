@@ -1,3 +1,4 @@
+/** Archivo: Gestiona autenticación, sesión y utilidades de autorización de la aplicación. */
 "use client";
 
 import { useEffect, useState } from "react";

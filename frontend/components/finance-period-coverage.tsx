@@ -1,3 +1,4 @@
+/** Archivo: Implementa el componente de interfaz finance period coverage para la aplicación web. */
 "use client";
 import { useRef, useState } from "react";
 import { reviewFinanceCoverage, type FinancePeriodCoverage, type FinanceCoverageDeclaration } from "@/lib/api";
