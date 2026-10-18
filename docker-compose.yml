@@ -1,0 +1,124 @@
+# Archivo: Levanta EVOLUM OS localmente con frontend, backend, PostgreSQL y Redis reproducibles.
+name: evolum-local
+
+services:
+  postgres:
+    image: postgres:16.12-bookworm
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-evolum_local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-evolum_local_password}
+      POSTGRES_DB: ${POSTGRES_DB:-evolum_local}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - evolum_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:8.4.0-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-evolum_local_redis_password}
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-evolum_local_redis_password}"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - evolum_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-evolum_local}:${POSTGRES_PASSWORD:-evolum_local_password}@postgres:5432/${POSTGRES_DB:-evolum_local}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD:-evolum_local_redis_password}@redis:6379
+      READINESS_REQUIRE_REDIS: "true"
+      JWT_SECRET: ${EVOLUM_JWT_SECRET:-local_development_only_change_before_exposing_2026}
+      FRONTEND_ORIGIN: http://localhost:${FRONTEND_PORT:-3001}
+      CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-3001}
+      PAYMENT_BASE_URL: http://localhost:${FRONTEND_PORT:-3001}
+      PUBLIC_BASE_URL: http://localhost:${BACKEND_PORT:-3000}
+      BACKEND_PUBLIC_URL: http://localhost:${BACKEND_PORT:-3000}
+      DEFAULT_TENANT_SLUG: demo-inmobiliaria
+      ENABLE_DEV_TOOLS: "true"
+      ENABLE_AUTOMATION: "false"
+      DOCUMENT_STORAGE_DRIVER: local
+      DOCUMENT_STORAGE_REQUIRE_DURABLE: "false"
+      METRICS_TOKEN: ${METRICS_TOKEN:-local_metrics_token_change_me}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-3000}:3000"
+    volumes:
+      - evolum_tenant_documents:/app/backend-v2/public/tenant-documents
+      - evolum_campaign_assets:/app/backend-v2/public/campaign-assets
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health/ready').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_PORT:-3000}
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:${BACKEND_PORT:-3000}/api
+        NEXT_PUBLIC_SOCKET_URL: http://localhost:${BACKEND_PORT:-3000}
+        NEXT_PUBLIC_APP_NAME: EVOLUM OS
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3001}:3001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/login').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  demo-data:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-evolum_local}:${POSTGRES_PASSWORD:-evolum_local_password}@postgres:5432/${POSTGRES_DB:-evolum_local}?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD:-evolum_local_redis_password}@redis:6379
+      JWT_SECRET: ${EVOLUM_JWT_SECRET:-local_development_only_change_before_exposing_2026}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-admin@platform.local}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-CambiarAntesDeExponer2026!}
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: ["sh", "-c", "node seed.js && node scripts/seed-realty-demo-properties.mjs"]
+    restart: "no"
+
+volumes:
+  evolum_postgres_data:
+  evolum_redis_data:
+  evolum_tenant_documents:
+  evolum_campaign_assets:

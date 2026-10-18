@@ -3,7 +3,11 @@
     "mobile": "npm --prefix mobile run start",
     "mobile:web": "npm --prefix mobile run web",
     "mobile:typecheck": "npm --prefix mobile run typecheck",
-    "broker:verify": "node scripts/verify-broker-phase0.mjs"
+    "broker:verify": "node scripts/verify-broker-phase0.mjs",
+    "docker:up": "docker compose -f docker-compose.yml up --build",
+    "docker:demo": "docker compose -f docker-compose.yml --profile demo up --build",
+    "docker:down": "docker compose -f docker-compose.yml down",
+    "docker:reset": "docker compose -f docker-compose.yml down --volumes --remove-orphans"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
