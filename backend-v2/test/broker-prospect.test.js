@@ -135,10 +135,15 @@ test("HTTP vincula adjuntos privados por tenant y conserva su tipo de expediente
   assert.equal(linked.status,200,JSON.stringify(linked.data));
   assert.deepEqual(linked.data.data.captureDocuments.map(d=>[d.id,d.role]),[["documento-a1","PLANO"],["documento-b2","MANDATO"]]);
   assert.equal(f.logs().at(-1).action,"DOCUMENTOS_VINCULADOS");
-  const duplicated=await f.call(`/${row.id}/actions`,{action:"LINK_DOCUMENTS",version:2,documents:[{id:"documento-a1",role:"PLANO"},{id:"documento-a1",role:"OTRO"}]});
+  const unlinked=await f.call(`/${row.id}/actions`,{action:"UNLINK_DOCUMENT",version:2,documentId:"documento-a1"});
+  assert.equal(unlinked.status,200,JSON.stringify(unlinked.data));
+  assert.deepEqual(unlinked.data.data.captureDocuments.map(d=>d.id),["documento-b2"]);
+  assert.equal(f.logs().at(-1).action,"DOCUMENTO_DESVINCULADO");
+  assert.ok(f.rows().some(item=>item.id==="documento-a1"&&item.tenantId==="t1"),"desvincular no borra el archivo del tenant");
+  const duplicated=await f.call(`/${row.id}/actions`,{action:"LINK_DOCUMENTS",version:3,documents:[{id:"documento-a1",role:"PLANO"},{id:"documento-a1",role:"OTRO"}]});
   assert.equal(duplicated.status,422);
   f.rows().push({id:"documento-ajeno",tenantId:"t2",recordType:"document",title:"Ajeno",status:"ACTIVE",data:{}});
-  const foreign=await f.call(`/${row.id}/actions`,{action:"LINK_DOCUMENTS",version:2,documents:[{id:"documento-ajeno",role:"OTRO"}]});
+  const foreign=await f.call(`/${row.id}/actions`,{action:"LINK_DOCUMENTS",version:3,documents:[{id:"documento-ajeno",role:"OTRO"}]});
   assert.equal(foreign.status,404);
 });
 test("Conversión conserva adjuntos en propiedad, captación, mandato y negocio",async()=>{

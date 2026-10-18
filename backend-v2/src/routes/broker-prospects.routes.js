@@ -73,7 +73,7 @@ export function createBrokerProspectsRouter({ prisma, assertAssignedUser, conver
   }));
   router.post("/:id/actions", requireBrokerAction("commercial", "EDIT"), handle(async (req, res) => {
     const { action, version } = req.body;
-    const allowed = ["SAVE", "ASSIGN", "ADVANCE", "NOTE", "VALUE", "ESTIMATE", "LINK_DOCUMENTS", "DISCARD", "REOPEN", "CONVERT_REFERRAL", "SIGN"];
+    const allowed = ["SAVE", "ASSIGN", "ADVANCE", "NOTE", "VALUE", "ESTIMATE", "LINK_DOCUMENTS", "UNLINK_DOCUMENT", "DISCARD", "REOPEN", "CONVERT_REFERRAL", "SIGN"];
     if (!allowed.includes(action)) return res.status(422).json({ error: "Acción desconocida." });
     if (action === "SIGN" && !canBrokerAction(req.brokerAccess, "operations", "CREATE")) return res.status(403).json({ error: "Tu perfil no permite convertir mandatos en negocios." });
     const saved = await prisma.$transaction(async db => {
@@ -129,6 +129,17 @@ export function createBrokerProspectsRouter({ prisma, assertAssignedUser, conver
         data = { ...data, captureDocuments: [...previous, ...additions] };
         details = { documentIds: additions.map((document) => document.id), documentRoles: additions.map((document) => document.role), documentCount: additions.length };
       }
+      if (action === "UNLINK_DOCUMENT") {
+        const documentId = String(req.body.documentId || "").trim();
+        if (!/^[a-zA-Z0-9_-]{8,160}$/.test(documentId)) throw Object.assign(new Error("El documento indicado no es válido."), { status: 422 });
+        const previous = Array.isArray(data.captureDocuments) ? data.captureDocuments : [];
+        const linked = previous.find((document) => document?.id === documentId);
+        if (!linked) throw Object.assign(new Error("Ese documento no está vinculado a esta captación."), { status: 404 });
+        // Solo se elimina la referencia de esta captación. El archivo sigue disponible para
+        // otros expedientes del mismo tenant y no se borra del almacenamiento compartido.
+        data = { ...data, captureDocuments: previous.filter((document) => document?.id !== documentId) };
+        details = { documentId, documentRole: linked.role || "OTRO" };
+      }
       if (action === "ADVANCE") data = prospectTransition(data, req.body.stage);
       if (action === "NOTE") {
         const note = String(req.body.note || "").trim();
@@ -173,7 +184,7 @@ export function createBrokerProspectsRouter({ prisma, assertAssignedUser, conver
         data = { ...data, outcome: "CONVERTED", convertedAt: new Date().toISOString(), conversion: links, mandate: terms };
         details = { ...links, ...terms };
       }
-      const events = { SAVE: "FICHA_ACTUALIZADA", ASSIGN: "RESPONSABLE_REASIGNADO", ADVANCE: "ETAPA_ACTUALIZADA", NOTE: "NOTA_REGISTRADA", VALUE: "VALORIZACION_REGISTRADA", ESTIMATE: "VALORIZACION_GENERADA", LINK_DOCUMENTS: "DOCUMENTOS_VINCULADOS", SIGN: "MANDATO_FIRMADO", DISCARD: "PROSPECTO_DESCARTADO", REOPEN: "PROSPECTO_REABIERTO", CONVERT_REFERRAL: "REFERIDO_CONVERTIDO" };
+      const events = { SAVE: "FICHA_ACTUALIZADA", ASSIGN: "RESPONSABLE_REASIGNADO", ADVANCE: "ETAPA_ACTUALIZADA", NOTE: "NOTA_REGISTRADA", VALUE: "VALORIZACION_REGISTRADA", ESTIMATE: "VALORIZACION_GENERADA", LINK_DOCUMENTS: "DOCUMENTOS_VINCULADOS", UNLINK_DOCUMENT: "DOCUMENTO_DESVINCULADO", SIGN: "MANDATO_FIRMADO", DISCARD: "PROSPECTO_DESCARTADO", REOPEN: "PROSPECTO_REABIERTO", CONVERT_REFERRAL: "REFERIDO_CONVERTIDO" };
       const updated = await db.industryRecord.update({ where: { id: row.id }, data: { assignedToId, title: data.title, status: data.outcome ? "ARCHIVED" : "ACTIVE", data: prospectEvent(data, events[action], req.user.id, { ...details, stage: data.stage }) } });
       await audited(db, { ...req, tenantId: row.tenantId }, row.id, events[action], details);
       return updated;

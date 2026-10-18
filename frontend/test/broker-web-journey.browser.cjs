@@ -25,20 +25,26 @@ const frontendUrl=(process.env.BROKER_WEB_URL||'http://localhost:3001').replace(
     for(const [destination,currency] of [['VENTA','UF'],['ARRIENDO','CLP'],['ADMINISTRACION','USD']]) {
       const api=await startFixture();
       const context=await browser.newContext({viewport:{width:1440,height:1050}});
-      let role='CORREDOR',failList=true,loseSign=true,postCount=0;
+      let role='CORREDOR',failList=true,loseSign=true,postCount=0,authenticated=false;
       const errors=[];
       const user={id:'qa-u1',tenantId:'qa-t1',name:'Corredora QA',email:'qa@example.invalid',role:'SELLER'};
       const modules=['properties','realty_loads','brokers','realty_activity','broker_portal','realty_clients'];
       const prospect=()=>api.rows().find(r=>r.recordType==='broker_capture_prospect'&&!r.id.startsWith('padding'));
       const operations=()=>api.rows().filter(r=>r.recordType==='broker_operation').map(contract.brokerOperationPayload);
       try {
-        await context.addInitScript(({user})=>{localStorage.setItem('inbox_session',JSON.stringify(user));document.cookie=`inbox_session=${encodeURIComponent(JSON.stringify(user))};path=/`;},{user});
         await context.route('**/*',async route=>{
           const url=new URL(route.request().url()),p=url.pathname.replace(/^\/api/,''),method=route.request().method();
           if(url.origin===frontendUrl&&!url.pathname.startsWith('/api/'))return route.continue();
           const headers={'access-control-allow-origin':frontendUrl,'access-control-allow-credentials':'true','access-control-allow-headers':'Content-Type','access-control-allow-methods':'GET,POST,PUT,OPTIONS'};
           const send=(body,status=200)=>route.fulfill({status,headers,contentType:'application/json',body:JSON.stringify(body)});
           if(method==='OPTIONS')return route.fulfill({status:204,headers});
+          if(p==='/auth/login'&&method==='POST') {
+            const credentials=route.request().postDataJSON();
+            if(credentials.email!=='qa-broker@example.invalid'||credentials.password!=='BrokerQA-2026!') return send({error:'Credenciales de prueba inválidas'},401);
+            authenticated=true;
+            return send({user,tenant:{id:user.tenantId,industry:'REAL_ESTATE',name:'Broker QA'},modules});
+          }
+          if(!authenticated&&['/auth/me','/modules/me','/broker/access/me'].includes(p)) return send({error:'Sesión de prueba requerida'},401);
           if(p.startsWith('/broker/prospects')) {
             if(method==='GET'&&p==='/broker/prospects'&&failList){failList=false;return send({error:'Fallo temporal de prueba'},503);}
             if(method==='POST'&&p==='/broker/prospects'){postCount++;await new Promise(r=>setTimeout(r,250));}
@@ -66,6 +72,14 @@ const frontendUrl=(process.env.BROKER_WEB_URL||'http://localhost:3001').replace(
         const page=await context.newPage();
         page.setDefaultTimeout(Number(process.env.PLAYWRIGHT_TIMEOUT_MS||10000));
         page.on('pageerror',e=>errors.push(e.message));
+        // El recorrido comienza en la pantalla real de acceso. La API se mantiene
+        // aislada y local, pero no se inyecta sesión en localStorage ni cookies.
+        await page.goto(`${frontendUrl}/login`);
+        await page.getByPlaceholder('Correo electrónico').fill('qa-broker@example.invalid');
+        await page.getByPlaceholder('Contraseña').fill('BrokerQA-2026!');
+        await page.getByRole('button',{name:'Entrar',exact:true}).click();
+        await page.waitForURL(/\/realty(?:\?|$)/);
+        assert.equal(authenticated,true,'El escenario debe iniciar sesión mediante la pantalla de acceso.');
         await page.goto(`${frontendUrl}/realty?view=operations`);
         const root=page.getByRole('region',{name:'Captación de propietarios'});
         await root.getByRole('alert').filter({hasText:'No se pudo actualizar la cartera'}).waitFor();

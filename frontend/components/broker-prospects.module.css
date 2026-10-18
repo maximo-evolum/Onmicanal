@@ -30,6 +30,9 @@
 .documentList li { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid #81818e44; border-radius:10px; background:color-mix(in srgb, var(--surface, transparent) 86%, #14aaa314); }
 .documentList span,.documentList small { display:block; min-width:0; overflow-wrap:anywhere; }
 .documentList a { white-space:nowrap; }
+.documentActions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.uploadProgress { display:grid; gap:6px; padding:10px 12px; border-radius:10px; background:#14aaa315; border:1px solid #14aaa344; }
+.uploadProgress progress { width:100%; height:8px; accent-color:#14aaa3; }
 .muted { opacity:.8; }
 .notice { padding:14px; border-left:3px solid #14aaa3; background:#14aaa315; overflow-wrap:anywhere; }
 .actions { justify-content:flex-start; margin:12px 0; }

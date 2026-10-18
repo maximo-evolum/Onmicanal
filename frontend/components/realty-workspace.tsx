@@ -287,6 +287,21 @@ function assignedPropertyCount(properties: IndustryRecord[], brokerId: string) {
   return properties.filter((item) => text(asData(item).assignedBrokerId || item.assignedToId) === brokerId).length;
 }
 
+// Las propiedades heredadas conservan su información original, pero nunca se presentan
+// como completas solo por tener precio. Esta señal permite priorizar qué debe regularizarse.
+export function propertyCompleteness(property: IndustryRecord) {
+  const data = asData(property);
+  const checks: Array<[string, boolean]> = [
+    ["ubicación", Boolean(text(data.address) && text(data.comuna || data.commune))],
+    ["precio", numberValue(data.price) > 0],
+    ["ficha técnica", Boolean(text(data.propertyType || data.type) && numberValue(data.meters || data.usableSquareMeters) > 0)],
+    ["foto principal", Boolean(propertyPhotos(data)[0])],
+    ["propietario", Boolean(text(data.ownerName))]
+  ];
+  const missing = checks.filter(([, ready]) => !ready).map(([label]) => label);
+  return { complete: missing.length === 0, missing };
+}
+
 function BrokerProfileCard({
   broker,
   properties,
@@ -561,7 +576,7 @@ export function RealtyDashboardPageContent() {
           <div className="realty-ws-card-head"><div><span>Cartera activa</span><h2>Propiedades que requieren atención</h2><p>Prioriza según etapa, visitas, interés y tiempo sin movimiento.</p></div><Link className="realty-card-link-button" href="/realty?view=properties">Ver todas</Link></div>
           <div className="realty-ws-table">
             <div className="realty-ws-row realty-ws-row-head"><span>Propiedad</span><span>Estado de ficha</span><span>Corredor</span><span>Estado</span></div>
-            {data.properties.slice(0, 5).map((property) => <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{propertyStageLabel(property.status)}</span><span>{getBrokerName(property, data.brokers)}</span><b>{numberValue(asData(property).price) ? "Ficha completa" : "Completar ficha"}</b></button>)}
+            {data.properties.slice(0, 5).map((property) => { const completeness = propertyCompleteness(property); return <button type="button" className="realty-ws-row" key={property.id} onClick={() => setSelectedProperty(property)}><strong>{propertyTitle(property.title)}</strong><span>{propertyStageLabel(property.status)}</span><span>{getBrokerName(property, data.brokers)}</span><b>{completeness.complete ? "Ficha completa" : `Requiere completar: ${completeness.missing.join(", ")}`}</b></button>; })}
             {!data.properties.length ? <p className="empty-state">Aún no hay propiedades para revisar.</p> : null}
           </div>
           <footer className="realty-ws-statbar"><span><b>{unassigned.length}</b> registros pendientes</span><span><b>{data.visits.length}</b> visitas registradas</span><span><b>{data.properties.length ? Math.round((data.properties.filter((item) => numberValue(asData(item).price)).length / data.properties.length) * 100) : 0}%</b> fichas con precio</span></footer>
@@ -650,6 +665,7 @@ export function PropertyPortalCards({
         const data = asData(property);
         const photoUrl = propertyPhotos(data)[0] || "";
         const assignedBrokerId = text(data.assignedBrokerId || property.assignedToId);
+        const completeness = propertyCompleteness(property);
         return (
           <article className="property-portal-card" key={property.id}>
             <div className="property-portal-media">
@@ -668,6 +684,7 @@ export function PropertyPortalCards({
                 <span>{text(data.meters, "0")} m2</span>
               </div>
               <small>{text(data.observations, "Sin observaciones")}</small>
+              {!completeness.complete ? <small>Requiere completar: {completeness.missing.join(", ")}.</small> : <small>Ficha operativa completa.</small>}
               <div className="property-card-actions">
                 {onBrokerChange ? (
                   <label className="property-assignment-row">
@@ -1183,8 +1200,9 @@ export function RealtyLoadsPageContent() {
               <option value="">Sin corredor asignado</option>
               {data.brokers.map((broker) => <option key={broker.id} value={broker.id}>{broker.name}</option>)}
             </select>
-            <select value={propertyForm.captureStatus} onChange={(e) => setPropertyForm({ ...propertyForm, captureStatus: e.target.value })}><option value="PROSPECTO">Prospecto</option><option value="VISITA_AGENDADA">Visita agendada</option><option value="EVALUACION_COMERCIAL">Evaluación comercial</option><option value="PENDIENTE_DECISION_PROPIETARIO">Pendiente decisión propietario</option><option value="LISTA_PARA_MANDATO">Lista para mandato</option><option value="MANDATO_FIRMADO">Mandato firmado</option><option value="DESCARTADA">Descartada</option></select>
+            <select value={propertyForm.captureStatus} onChange={(e) => setPropertyForm({ ...propertyForm, captureStatus: e.target.value })}><option value="PROSPECTO">Prospecto</option><option value="VISITA_AGENDADA">Visita agendada</option><option value="EVALUACION_COMERCIAL">Evaluación comercial</option><option value="PENDIENTE_DECISION_PROPIETARIO">Pendiente decisión propietario</option><option value="LISTA_PARA_MANDATO">Lista para mandato</option><option value="DESCARTADA">Descartada</option></select>
           </div>
+          <small>El mandato firmado se registra desde la captación, con su evidencia y condiciones comerciales; no se puede declarar desde esta ficha.</small>
           <div className="form-grid-2"><input type="date" value={propertyForm.ownerAcceptedEvaluationAt} onChange={(e) => setPropertyForm({ ...propertyForm, ownerAcceptedEvaluationAt: e.target.value })} /><select value={propertyForm.publicationReadiness} onChange={(e) => setPropertyForm({ ...propertyForm, publicationReadiness: e.target.value })}><option value="PENDIENTE">Publicación pendiente</option><option value="EN_PREPARACION">En preparación</option><option value="LISTA_PARA_PUBLICAR">Lista para publicar</option><option value="BLOQUEADA">Bloqueada</option></select></div>
           {propertyForm.captureStatus === "DESCARTADA" ? <textarea value={propertyForm.rejectionReason} onChange={(e) => setPropertyForm({ ...propertyForm, rejectionReason: e.target.value })} placeholder="Motivo por el que se descarta la captación" required /> : null}
           </div>

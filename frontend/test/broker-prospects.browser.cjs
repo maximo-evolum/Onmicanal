@@ -48,17 +48,20 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
         const row={id:'qa-prospect',title:data.title,assignedToId:user.id,createdAt:new Date().toISOString(),data:core.prospectEvent({...data,stage:'PROSPECCION',stageEnteredAt:new Date().toISOString()},'PROSPECTO_CREADO',user.id)};
         rows=[row];body=core.prospectPresentation(row);
       } else if(p==='/broker/prospects')body={items:rows.map(r=>core.prospectPresentation(r)),total:rows.length,page:1,pageSize:100};
+      else if(p==='/documents'&&route.request().method()==='POST')body={documents:[{id:'qa-document-0001',title:'Mandato QA',data:{originalName:'mandato-qa.pdf',mimeType:'application/pdf'}}]};
       else if(p.endsWith('/conversion-preview'))body=brokerConversionPlan(rows[0],route.request().postDataJSON());
       else if(p.endsWith('/actions')){
         const input=route.request().postDataJSON(),r=rows[0];let d=r.data;
         if(input.action==='ADVANCE')d=core.prospectTransition(d,input.stage);
         if(input.action==='VALUE')d={...d,valuation:{amount:Number(input.amount),rationale:input.rationale,method:'EVALUACION_PROFESIONAL'}};
+        if(input.action==='LINK_DOCUMENTS')d={...d,captureDocuments:input.documents.map(document=>({id:document.id,role:document.role,title:'Mandato QA',originalName:'mandato-qa.pdf',mimeType:'application/pdf'}))};
+        if(input.action==='UNLINK_DOCUMENT')d={...d,captureDocuments:(d.captureDocuments||[]).filter(document=>document.id!==input.documentId)};
         if(input.action==='SIGN'){
           const plan=brokerConversionPlan(r,input);
           operation=brokerOperationPayload({id:'qa-op',title:'Venta · Casa de prueba',data:{operationType:'SALE',stage:plan.initialStage,propertyId:'qa-p',timeline:[],conversion:{...plan,ownerName:plan.owner.name,propertyTitle:plan.property.title,address:plan.property.address,comuna:plan.property.comuna,convertedAt:new Date().toISOString(),convertedBy:user.id,captureHistory:d.timeline}}});
           d={...d,mandate:plan.terms,outcome:'CONVERTED',conversion:{propertyId:'qa-p',ownerId:'qa-o',operationId:'qa-op',mandateId:'qa-m'},convertedAt:new Date().toISOString()};
         }
-        const events={ADVANCE:'ETAPA_ACTUALIZADA',NOTE:'NOTA_REGISTRADA',VALUE:'VALORIZACION_REGISTRADA',SIGN:'MANDATO_FIRMADO'};
+        const events={ADVANCE:'ETAPA_ACTUALIZADA',NOTE:'NOTA_REGISTRADA',VALUE:'VALORIZACION_REGISTRADA',LINK_DOCUMENTS:'DOCUMENTOS_VINCULADOS',UNLINK_DOCUMENT:'DOCUMENTO_DESVINCULADO',SIGN:'MANDATO_FIRMADO'};
         r.data=core.prospectEvent(d,events[input.action],user.id,{note:input.note});body=core.prospectPresentation(r);
       } else if(p.endsWith('/owner'))body={id:'qa-o',name:'Ana Pérez',rut:'',phone:'56912345678',email:'',propertyId:'qa-p',propertyTitle:'Casa de prueba'};
       else if(p==='/broker/prospects/qa-prospect')body=core.prospectPresentation(rows[0]);
@@ -75,6 +78,11 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     for(const [label,value] of [['Nombre del propietario','Ana Pérez'],['Teléfono','56912345678'],['Nombre del inmueble','Casa de prueba'],['Dirección','Los Alerces 120'],['Comuna','Providencia'],['Expectativa de precio','120000000']])await root.getByLabel(label,{exact:true}).fill(value);
     await root.getByLabel(/^Origen \(obligatorio\)/).selectOption('Formulario web');
     await root.getByRole('button',{name:'Guardar prospecto',exact:true}).click();
+    const attachment=root.locator('input[type="file"]');
+    await attachment.setInputFiles({name:'mandato-qa.pdf',mimeType:'application/pdf',buffer:Buffer.from('antecedente privado de captación QA')});
+    await root.getByText('mandato-qa.pdf',{exact:true}).waitFor();
+    await root.getByRole('button',{name:'Desvincular',exact:true}).click();
+    await root.getByText('Aún no hay documentos adjuntos a esta captación.',{exact:true}).waitFor();
     await root.getByRole('button',{name:'Avanzar a Contacto',exact:true}).click();
     await root.getByRole('button',{name:'Avanzar a Tasación preliminar',exact:true}).click();
     await root.getByLabel('Valor preliminar',{exact:true}).fill('100000000');

@@ -16,7 +16,7 @@ const fields = [
   ["bedrooms", "Dormitorios"], ["bathrooms", "Baños"], ["siteVisitAt", "Fecha de visita"], ["referredBy", "Referido por"], ["photoUrl", "URL foto principal"], ["floorPlanUrl", "URL plano"], ["observations", "Antecedentes y observaciones"],
 ];
 const empty: Record<string, string> = { intendedService: "VENTA", currency: "CLP", propertyType: "casa", captureOrigin: "" };
-const eventLabels: Record<string,string> = { PROSPECTO_CREADO:"Prospecto creado", FICHA_ACTUALIZADA:"Ficha actualizada", ETAPA_ACTUALIZADA:"Etapa actualizada", NOTA_REGISTRADA:"Nota interna", VALORIZACION_REGISTRADA:"Evaluación registrada", VALORIZACION_GENERADA:"Estimación por comparables", DOCUMENTOS_VINCULADOS:"Documentos de captación vinculados", MANDATO_FIRMADO:"Mandato registrado y conversión realizada", PROSPECTO_DESCARTADO:"Prospecto descartado", PROSPECTO_REABIERTO:"Prospecto reabierto", REFERIDO_CONVERTIDO:"Referido incorporado al embudo" };
+const eventLabels: Record<string,string> = { PROSPECTO_CREADO:"Prospecto creado", FICHA_ACTUALIZADA:"Ficha actualizada", ETAPA_ACTUALIZADA:"Etapa actualizada", NOTA_REGISTRADA:"Nota interna", VALORIZACION_REGISTRADA:"Evaluación registrada", VALORIZACION_GENERADA:"Estimación por comparables", DOCUMENTOS_VINCULADOS:"Documentos de captación vinculados", DOCUMENTO_DESVINCULADO:"Documento desvinculado de la captación", MANDATO_FIRMADO:"Mandato registrado y conversión realizada", PROSPECTO_DESCARTADO:"Prospecto descartado", PROSPECTO_REABIERTO:"Prospecto reabierto", REFERIDO_CONVERTIDO:"Referido incorporado al embudo" };
 const money = (value: unknown, currency: string) => `${new Intl.NumberFormat("es-CL", { maximumFractionDigits: currency === "CLP" ? 0 : 2 }).format(Number(value) || 0)} ${currency}`;
 const documentRoles: Array<[string, string]> = [["FOTOGRAFIA", "Fotografía"], ["PLANO", "Plano o medición"], ["TITULO", "Antecedente de título"], ["MANDATO", "Mandato firmado"], ["OTRO", "Otro antecedente"]];
 type CaptureDocument = { id: string; role: string; title?: string; originalName?: string; mimeType?: string; linkedAt?: string };
@@ -37,6 +37,7 @@ export function BrokerProspects({ access, brokers, onConverted }: { access: Brok
   const [owner, setOwner] = useState<Awaited<ReturnType<typeof getBrokerProspectOwner>> | null>(null);
   const [assignee, setAssignee] = useState("");
   const [documentRole, setDocumentRole] = useState("FOTOGRAFIA");
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const lock = useRef(false), requestKey = useRef("");
   const row = items.find(r => r.id === selected) || (linked?.id === selected ? linked : null), d = row?.data;
   const edit = canBroker(access, "commercial", "EDIT"), create = canBroker(access, "commercial", "CREATE");
@@ -80,11 +81,16 @@ export function BrokerProspects({ access, brokers, onConverted }: { access: Brok
     event.target.value = "";
     if (!row || !files.length || !edit) return;
     await run(async () => {
-      const uploaded = await uploadTenantDocuments({
-        files,
-        category: "broker-captacion",
-        description: `Antecedentes privados de captación: ${row.title}`
-      });
+      setUploadProgress(0);
+      let uploaded;
+      try {
+        uploaded = await uploadTenantDocuments({
+          files,
+          category: "broker-captacion",
+          description: `Antecedentes privados de captación: ${row.title}`,
+          onProgress: setUploadProgress
+        });
+      } finally { setUploadProgress(null); }
       const saved = await actBrokerProspect(row.id, {
         action: "LINK_DOCUMENTS",
         version: row.data.version,
@@ -94,6 +100,10 @@ export function BrokerProspects({ access, brokers, onConverted }: { access: Brok
       setLinked((current) => current?.id === saved.id ? saved : current);
       setMessage(`${uploaded.documents.length} archivo(s) privado(s) vinculado(s) a la captación.`);
     });
+  }
+  async function unlinkCaptureDocument(documentId: string) {
+    if (!row || !edit) return;
+    await action("UNLINK_DOCUMENT", { documentId });
   }
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -141,7 +151,8 @@ export function BrokerProspects({ access, brokers, onConverted }: { access: Brok
         {!d.outcome && <div className={styles.actions}><button disabled={!edit||busy} onClick={()=>{setForm({...empty,...Object.fromEntries(Object.entries(d).filter(([,v])=>typeof v!=="object").map(([k,v])=>[k,String(v??"")]))});setEditing(true);setShowForm(true);}}>Editar ficha</button>{stages.indexOf(d.stage)<3 && <button disabled={!edit||busy} onClick={()=>action("ADVANCE",{stage:stages[stages.indexOf(d.stage)+1]})}>Avanzar a {labels[stages.indexOf(d.stage)+1]}</button>}{d.ownerPhone && <a target="_blank" rel="noreferrer" href={`https://wa.me/${String(d.ownerPhone).replace(/\D/g,"")}`}>Abrir WhatsApp</a>}</div>}
         <section className={styles.subpanel} aria-label="Documentos privados de captación"><h4>Documentos privados de captación</h4><p>Se almacenan por empresa y quedan asociados a esta ficha. No se publican junto al inmueble.</p>
           {!d.outcome && <div className={styles.documentControls}><label>Tipo de antecedente<select value={documentRole} disabled={!edit || busy} onChange={(event)=>setDocumentRole(event.target.value)}>{documentRoles.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label className={styles.uploadButton}>Adjuntar archivo<input hidden type="file" multiple accept=".pdf,.csv,.xls,.xlsx,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp" disabled={!edit || busy} onChange={attachCaptureDocuments}/></label></div>}
-          {Array.isArray(d.captureDocuments) && d.captureDocuments.length > 0 ? <ul className={styles.documentList}>{(d.captureDocuments as CaptureDocument[]).map((document)=><li key={document.id}><span><strong>{documentRoles.find(([value])=>value===document.role)?.[1] || "Antecedente"}</strong><small>{document.originalName || document.title || "Documento"}</small></span><a href={tenantDocumentDownloadUrl(document.id)}>Descargar</a></li>)}</ul> : <p className={styles.muted}>Aún no hay documentos adjuntos a esta captación.</p>}
+          {uploadProgress !== null && <div className={styles.uploadProgress} role="status" aria-live="polite"><span>Subiendo antecedentes: {uploadProgress}%</span><progress max={100} value={uploadProgress} /></div>}
+          {Array.isArray(d.captureDocuments) && d.captureDocuments.length > 0 ? <ul className={styles.documentList}>{(d.captureDocuments as CaptureDocument[]).map((document)=><li key={document.id}><span><strong>{documentRoles.find(([value])=>value===document.role)?.[1] || "Antecedente"}</strong><small>{document.originalName || document.title || "Documento"}</small></span><div className={styles.documentActions}><a href={tenantDocumentDownloadUrl(document.id)}>Descargar</a>{!d.outcome && <button type="button" disabled={!edit || busy} onClick={()=>unlinkCaptureDocument(document.id)}>Desvincular</button>}</div></li>)}</ul> : <p className={styles.muted}>Aún no hay documentos adjuntos a esta captación.</p>}
         </section>
         {(stages.indexOf(d.stage)>=2 || d.valuation) && <section className={styles.subpanel}><h4>Tasación preliminar</h4>{d.valuation && <><strong>{money(d.valuation.amount,d.currency)}</strong><p>{d.valuation.rationale}</p><small>{d.valuation.method === "MEDIANA_COMPARABLES" ? "Estimación estadística de cartera; no es una tasación certificada ni una inferencia de IA." : "Evaluación profesional registrada."}</small></>}{row.priceGapWarning && <p role="alert">Brecha de {row.priceGapPct?.toFixed(1)}% con la expectativa. Alinea el precio antes de negociar.</p>}
         {!d.outcome && <><label>Valor preliminar<input type="number" min="0" step="any" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Fundamento y fuentes<textarea value={rationale} onChange={e=>setRationale(e.target.value)}/></label><div className={styles.actions}><button disabled={!edit||busy} onClick={()=>action("VALUE",{amount,rationale})}>Guardar evaluación</button><button disabled={!edit||busy} onClick={()=>action("ESTIMATE")}>Estimar con comparables de mi cartera</button>{d.valuation && d.ownerPhone && <a target="_blank" rel="noreferrer" href={`https://wa.me/${String(d.ownerPhone).replace(/\D/g,"")}?text=${encodeURIComponent(`Hola ${d.ownerName}. La valorización preliminar de ${row.title} es ${money(d.valuation.amount,d.currency)}. ${d.valuation.rationale}. Estimación sujeta a revisión profesional.`)}`}>Preparar envío por WhatsApp</a>}</div><small>WhatsApp abre un borrador; el envío lo confirma el corredor.</small></>}

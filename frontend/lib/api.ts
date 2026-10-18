@@ -2959,6 +2959,7 @@ export async function uploadTenantDocuments(input: {
   title?: string;
   category?: string;
   description?: string;
+  onProgress?: (percentage: number) => void;
 }): Promise<{ documents: TenantDocument[] }> {
   const form = new FormData();
   for (const file of input.files) form.append("files", file);
@@ -2966,19 +2967,25 @@ export async function uploadTenantDocuments(input: {
   if (input.category) form.append("category", input.category);
   if (input.description) form.append("description", input.description);
 
-  const response = await fetch(`${API_BASE_URL}/documents`, {
-    method: "POST",
-    body: form,
-    cache: "no-store",
-    credentials: "include"
+  // fetch aún no expone progreso de carga estable entre navegadores. XHR conserva
+  // las cookies de sesión y permite informar avance real sin enviar el archivo dos veces.
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `${API_BASE_URL}/documents`);
+    request.withCredentials = true;
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) input.onProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    };
+    request.onerror = () => reject(new Error("No se pudo conectar al subir los documentos."));
+    request.onload = () => {
+      let data: { documents?: TenantDocument[]; error?: string } | null = null;
+      try { data = JSON.parse(request.responseText || "null"); } catch { /* usa el mensaje seguro de respaldo */ }
+      if (request.status < 200 || request.status >= 300) return reject(new Error(data?.error || "No se pudieron subir documentos"));
+      input.onProgress?.(100);
+      resolve(data as { documents: TenantDocument[] });
+    };
+    request.send(form);
   });
-
-  if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.error || "No se pudieron subir documentos");
-  }
-
-  return response.json();
 }
 
 export async function deleteTenantDocument(id: string): Promise<{ ok: true }> {
