@@ -26,6 +26,9 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     const user={id:'qa-u1',tenantId:'qa-t1',name:'Corredora de prueba',email:'qa@example.invalid',role:'SELLER'};
     const modules=['properties','realty_loads','brokers','realty_activity','broker_portal','realty_clients'];
     const access={businessRole:'CORREDOR',technicalRole:'SELLER',accessScope:'ASSIGNED',scopeUserIds:[user.id],policy:{actions:{commercial:['VIEW','CREATE','EDIT'],operations:['VIEW','CREATE','EDIT'],overview:['VIEW']}}};
+    // Fuente conocida: la prueba verifica que la misma imagen de la ficha se
+    // conserva en la tarjeta y en el detalle, sin depender de producción.
+    const sourcePhoto=`data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420"><rect width="640" height="420" fill="#137f83"/><text x="48" y="214" fill="white" font-size="42">Propiedad QA</text></svg>').toString('base64')}`;
     let rows=[],operation=null;
     await context.addInitScript(({user})=>{localStorage.setItem('inbox_session',JSON.stringify(user));document.cookie=`inbox_session=${encodeURIComponent(JSON.stringify(user))};path=/`;}, {user});
     await context.route('**/*',async route=>{
@@ -39,6 +42,10 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
       else if(p==='/modules/me')body={modules,industry:'REAL_ESTATE',role:'SELLER'};
       else if(p==='/broker/access/me')body=access;
       else if(p==='/broker/overview')body={properties:[],recommendations:[]};
+      else if(p==='/industry-records'){
+        const type=url.searchParams.get('type');
+        body=type==='property'?[{id:'qa-p',title:'Casa de prueba',status:'ACTIVE',assignedToId:user.id,data:{photoUrl:sourcePhoto,gallery:[sourcePhoto],price:120000000,address:'Los Alerces 120',comuna:'Providencia',operation:'venta',propertyType:'CASA',bedrooms:3,bathrooms:2,parking:1,meters:140,ownerName:'Ana Pérez'}}]:[];
+      }
       else if(p==='/broker/catalog')body={operationStages:{SALE:workflow.SALE_STAGES,RENTAL:workflow.RENTAL_STAGES,ADMINISTRATION:workflow.ADMINISTRATION_STAGES},journey:BROKER_JOURNEY_CATALOG,recordDefinitions:{},recordAreas:{}};
       else if(p==='/broker/operations')body=operation?[operation]:[];
       else if(p==='/broker/sales/qa-op')body={operation,property:{id:'qa-p',title:'Casa de prueba',data:{}},saleCase:{...sale.normalizeBrokerSaleCase(),id:'qa-case',currentStage:operation.data.stage},capture:null,nextStage:'EVALUACION_COMERCIAL',readiness:sale.brokerSaleReadiness({targetStage:'EVALUACION_COMERCIAL'}),options:sale.BROKER_SALE_OPTIONS};
@@ -109,8 +116,8 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     await root.getByRole('heading',{name:'Propietario registrado: Ana Pérez',exact:true}).scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(out,'captacion-convertida.png')});
     await page.setViewportSize({width:390,height:844});
-    const closeMenu=page.locator('button').filter({hasText:'×'}).first();
-    if(await closeMenu.isVisible())await closeMenu.click();
+    await page.waitForFunction(() => !document.querySelector('aside.evolum-unified-nav'));
+    assert.equal(await page.getByRole('button',{name:'Abrir menu EVOLUM',exact:true}).count(),1,'En móvil el menú debe iniciar plegado y no cubrir la ficha');
     await root.getByRole('heading',{name:'Propietario registrado: Ana Pérez',exact:true}).scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(out,'captacion-movil.png')});
     if(process.env.QA_DEBUG) console.log(await root.evaluate(el=>{const a=[];for(let n=el;n;n=n.parentElement){const r=n.getBoundingClientRect(),s=getComputedStyle(n);a.push({class:n.className,width:r.width,left:r.left,min:s.minWidth,grid:s.gridTemplateColumns,pad:s.padding});}return a;}));
@@ -131,6 +138,17 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     await page.screenshot({path:path.join(out,'conversion-en-negocios.png')});
     await handoff.getByRole('link',{name:'Ver captación de origen'}).click();
     await page.getByRole('link',{name:'Abrir negocio',exact:true}).waitFor();
+    await page.goto(`${frontendUrl}/realty?view=properties`);
+    const cardImage=page.locator('.property-portal-card img').first();
+    await cardImage.waitFor();
+    assert.equal(await cardImage.getAttribute('src'),sourcePhoto,'La tarjeta debe conservar exactamente la imagen de origen');
+    assert.equal(await cardImage.evaluate(image=>image.complete&&image.naturalWidth>0),true,'La imagen de origen debe cargar en la tarjeta');
+    await page.getByRole('button',{name:'Ver ficha completa',exact:true}).click();
+    const detailImage=page.locator('.property-detail-primary-media img');
+    await detailImage.waitFor();
+    assert.equal(await detailImage.getAttribute('src'),sourcePhoto,'La ficha debe mostrar la misma imagen de origen que la tarjeta');
+    assert.equal(await detailImage.evaluate(image=>image.complete&&image.naturalWidth>0),true,'La imagen de origen debe cargar en la ficha');
+    await page.screenshot({path:path.join(out,'imagen-origen-comparada.png')});
     assert.deepEqual(errors,[],'No debe haber errores JavaScript');
     console.log('QA web: alta, etapas, tasación, brecha, nota, mandato, propietario y ancho móvil OK. API simulada; sin acceso a producción.');
   } finally { await browser.close(); }

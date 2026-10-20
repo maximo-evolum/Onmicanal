@@ -504,6 +504,20 @@ export function RealtyShell({
   const agent = useAgentSession();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // En teléfonos el menú no puede abrirse sobre el contenido: ocuparía casi
+  // todo el viewport antes de que la persona alcance a ver el módulo. En
+  // escritorio se conserva abierto; al cruzar al breakpoint móvil se pliega.
+  useEffect(() => {
+    const mobileViewport = window.matchMedia("(max-width: 980px)");
+    const collapseOnMobile = () => {
+      if (mobileViewport.matches) setSidebarOpen(false);
+    };
+
+    collapseOnMobile();
+    mobileViewport.addEventListener("change", collapseOnMobile);
+    return () => mobileViewport.removeEventListener("change", collapseOnMobile);
+  }, []);
+
   return (
     <ModuleGate moduleKey={moduleKey}>
       <div className={`vertical-shell product-workspace realty-product-workspace ${sidebarOpen ? "" : "nav-collapsed"}`}>

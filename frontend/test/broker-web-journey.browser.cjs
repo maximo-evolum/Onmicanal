@@ -152,7 +152,8 @@ const frontendUrl=(process.env.BROKER_WEB_URL||'http://localhost:3001').replace(
         await root.getByRole('link',{name:'Abrir negocio',exact:true}).waitFor();assert.equal(await root.getByRole('button',{name:'Nuevo prospecto',exact:true}).isDisabled(),true);
         const denied=await fetch(`${api.url}/broker/prospects/${prospect().id}/actions`,{method:'POST',headers:{'content-type':'application/json','x-qa-role':'LECTURA'},body:JSON.stringify({action:'NOTE',version:prospect().data.version,note:'No permitido'})});assert.equal(denied.status,403);
         await page.setViewportSize({width:390,height:844});
-        const closeMenu=page.locator('button').filter({hasText:'×'}).first();if(await closeMenu.isVisible())await closeMenu.click();
+        await page.waitForFunction(() => !document.querySelector('aside.evolum-unified-nav'));
+        assert.equal(await page.getByRole('button',{name:'Abrir menu EVOLUM',exact:true}).count(),1,'En móvil el menú debe iniciar plegado y no cubrir la ficha');
         await root.scrollIntoViewIfNeeded();
         assert.equal(await root.evaluate(el=>el.scrollWidth<=el.clientWidth+2&&el.getBoundingClientRect().right<=innerWidth+1),true);
         await page.screenshot({path:path.join(output,`${destination}-movil.png`)});
