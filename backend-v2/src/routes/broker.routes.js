@@ -51,6 +51,12 @@ import { BROKER_JOURNEY_CATALOG, BROKER_JOURNEY_VERSION, brokerOperationPayload,
 
 export const brokerRouter = Router();
 
+// Broker OS se puede consultar por todos los roles operativos del tenant.
+// Las capacidades concretas se resuelven después mediante el perfil Broker
+// (área + acción + alcance), por lo que un corredor SELLER no queda bloqueado
+// antes de que pueda recibir su política ASSIGNED.
+brokerRouter.use("/broker", requireRole(ROLE_GROUPS.VIEWERS));
+
 brokerRouter.use(async (req, res, next) => {
   if (!/^\/broker\//i.test(req.path)) return next();
   try {
