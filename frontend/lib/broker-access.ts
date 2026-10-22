@@ -9,11 +9,11 @@ export function canBroker(access: BrokerAccessProfile | null, area: string, acti
 }
 
 export function brokerTabArea(tab: string) {
-  return ({ agents: "ai", training: "ai", administration_preview: "administration", guides: "overview", compliance: "documents" } as Record<string, string>)[tab] || tab;
+  return ({ agents: "ai", training: "ai", administration_preview: "administration", guides: "overview", compliance: "documents", governance: "access" } as Record<string, string>)[tab] || tab;
 }
 
 export function canBrokerTab(access: BrokerAccessProfile | null, tab: string) {
-  return canBroker(access, brokerTabArea(tab), tab === "access" ? "CONFIGURE" : "VIEW");
+  return canBroker(access, brokerTabArea(tab), ["access", "governance"].includes(tab) ? "CONFIGURE" : "VIEW");
 }
 
 export function canBrokerLink(access: BrokerAccessProfile | null, href: string) {

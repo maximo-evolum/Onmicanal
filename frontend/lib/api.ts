@@ -2113,6 +2113,48 @@ export function runBrokerAutomationScan(): Promise<{ recommendations: BrokerReco
   return request("/broker/automation-scan", { method: "POST" });
 }
 
+export type BrokerGovernanceAlert = {
+  id: string;
+  title: string;
+  status: string;
+  priority: "HIGH" | "MEDIUM" | "LOW" | string;
+  area: string;
+  detail: string;
+  propertyId: string | null;
+  operationId: string | null;
+  requiresHumanApproval: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+  resolutionNote: string | null;
+};
+
+export type BrokerGovernanceActivity = {
+  id: string;
+  action: string;
+  entity: string;
+  entityId: string | null;
+  createdAt: string | null;
+  actor: { id: string; name: string; email: string } | null;
+  metadata: Record<string, unknown> | null;
+};
+
+export type BrokerGovernanceSummary = {
+  summary: { openAlerts: number; highPriorityAlerts: number; resolvedLast30Days: number; activityLast30Days: number; totalAuditedEvents: number };
+  alerts: BrokerGovernanceAlert[];
+  recentActivity: BrokerGovernanceActivity[];
+  actionCounts: Array<{ action: string; total: number }>;
+};
+
+export function getBrokerGovernance(): Promise<BrokerGovernanceSummary> {
+  return request<BrokerGovernanceSummary>("/broker/governance");
+}
+
+export function resolveBrokerAlert(id: string, note: string): Promise<IndustryRecord> {
+  return request<IndustryRecord>(`/broker/alerts/${encodeURIComponent(id)}/resolve`, { method: "PATCH", body: JSON.stringify({ note }) });
+}
+
 export function getBrokerFinancing(): Promise<IndustryRecord[]> {
   return request<IndustryRecord[]>("/broker/financing");
 }

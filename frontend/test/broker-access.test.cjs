@@ -18,12 +18,14 @@ test('No muestra rutas de administración a un corredor', () => {
   assert.equal(canBrokerLink(context, '/realty?view=brokers'), false);
   assert.equal(canBrokerLink(context, '/realty?view=buyers'), true);
   assert.equal(canBrokerTab(context, 'access'), false);
+  assert.equal(canBrokerTab(context, 'governance'), false);
   assert.equal(canBrokerTab(context, 'configuration'), false);
   assert.equal(canBrokerTab(context, 'financing'), false);
 });
 test('Los parámetros de subárea no evitan los permisos', () => {
   assert.equal(canBrokerLink(context, '/realty?view=broker_os&area=financing'), false);
   assert.equal(canBrokerLink(context, '/realty?view=broker_os&tab=access'), false);
+  assert.equal(canBrokerLink(context, '/realty?view=broker_os&tab=governance'), false);
   assert.equal(canBrokerLink(context, '/realty?view=broker_os&area=documents'), true);
 });
 test('Admin restringido y solo lectura no reciben escritura adicional', () => {
@@ -42,6 +44,7 @@ test('Las decisiones de la web coinciden con todas las políticas backend', asyn
       for (const area of ['operations', 'commercial', 'documents', 'financing', 'access', 'configuration', 'ai']) {
         for (const action of api.BROKER_ACCESS_ACTIONS) assert.equal(canBroker(access, area, action), api.canBrokerAction(access, area, action), `${businessRole}/${technicalRole}/${area}/${action}`);
       }
+      assert.equal(canBrokerTab(access, 'governance'), api.canBrokerAction(access, 'access', 'CONFIGURE'), `${businessRole}/${technicalRole}/governance`);
     }
   }
 });

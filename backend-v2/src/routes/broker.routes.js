@@ -49,6 +49,7 @@ import { brokerAssigneeAllowed, validateBrokerAccessProfile, brokerFinancingActi
 import { BROKER_RECORD_RESOURCES } from "../services/broker-record-access.service.js";
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 import { BROKER_JOURNEY_CATALOG, BROKER_JOURNEY_VERSION, brokerOperationPayload, captureJourney, projectBrokerOperations, validateBrokerOperationReferences, persistBrokerOperationStage, updateBrokerOperationSnapshot } from "../services/broker-operation-contract.service.js";
+import { buildBrokerGovernanceSummary, normalizeBrokerAlertResolution } from "../services/broker-governance.service.js";
 
 export const brokerRouter = Router();
 
@@ -1256,6 +1257,65 @@ brokerRouter.post("/broker/automation-scan", requireRole(ROLE_GROUPS.STAFF), req
   } catch (error) {
     console.error("Broker automation scan error:", error);
     res.status(500).json({ error: "No se pudo ejecutar la revisión automática interna." });
+  }
+});
+
+// Gobierno operativo: el panel se reserva a quienes administran accesos de
+// Broker OS. Expone actividad y alertas del tenant, nunca secretos ni acciones
+// externas; resolver una alerta requiere una decisión humana trazable.
+brokerRouter.get("/broker/governance", requireBrokerAction("access", "CONFIGURE"), async (req, res) => {
+  try {
+    const tenantIds = Array.isArray(req.brokerAccess?.scopeTenantIds) && req.brokerAccess.scopeTenantIds.length
+      ? req.brokerAccess.scopeTenantIds
+      : [req.tenantId];
+    const [alerts, auditLogs] = await Promise.all([
+      prisma.industryRecord.findMany({
+        where: brokerWhere(req, { recordType: "realty_alert" }),
+        include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } },
+        orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+        take: 120
+      }),
+      prisma.tenantAuditLog.findMany({
+        // El gobierno de Broker solo ve su propia bitácora; no convierte este
+        // panel en una ventana a acciones de otras verticales del tenant.
+        where: { tenantId: tenantIds.length === 1 ? tenantIds[0] : { in: tenantIds }, action: { startsWith: "BROKER_" } },
+        orderBy: { createdAt: "desc" },
+        take: 120
+      })
+    ]);
+    const actorIds = [...new Set(auditLogs.map((item) => item.actorUserId).filter(Boolean))];
+    const users = actorIds.length
+      ? await prisma.workspaceUser.findMany({ where: { tenantId: tenantIds.length === 1 ? tenantIds[0] : { in: tenantIds }, id: { in: actorIds } }, select: { id: true, name: true, email: true } })
+      : [];
+    res.json(buildBrokerGovernanceSummary({ alerts, auditLogs, users }));
+  } catch (error) {
+    console.error("Broker governance summary error:", error);
+    res.status(500).json({ error: "No se pudo obtener el gobierno operativo de Broker OS." });
+  }
+});
+
+brokerRouter.patch("/broker/alerts/:id/resolve", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("access", "CONFIGURE"), async (req, res) => {
+  try {
+    const normalized = normalizeBrokerAlertResolution(req.body || {});
+    if (!normalized.ok) return res.status(422).json({ error: normalized.error });
+    const alert = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "realty_alert" }) });
+    if (!alert) return res.status(404).json({ error: "Alerta no encontrada." });
+    if (String(alert.status).toUpperCase() === "RESOLVED") return res.status(409).json({ error: "La alerta ya está resuelta." });
+
+    const resolvedAt = new Date().toISOString();
+    const resolvedBy = req.user?.name || req.user?.email || "Usuario autorizado";
+    const record = await prisma.industryRecord.update({
+      where: { id: alert.id },
+      data: {
+        status: "RESOLVED",
+        data: { ...dataOf(alert), resolution: { resolvedAt, resolvedBy, note: normalized.note, source: "broker_governance" } }
+      }
+    });
+    await recordAuditLog(req, "BROKER_ALERT_RESOLVED", "realty_alert", record.id, { note: normalized.note, previousStatus: alert.status, nextStatus: "RESOLVED" });
+    res.json(record);
+  } catch (error) {
+    console.error("Resolve broker alert error:", error);
+    res.status(500).json({ error: "No se pudo resolver la alerta." });
   }
 });
 

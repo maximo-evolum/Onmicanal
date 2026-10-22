@@ -75,6 +75,7 @@ try {
   };
   await execute(process.execPath, ['test/broker-prospects.browser.cjs'], { cwd: frontendRoot, env: testEnvironment });
   await execute(process.execPath, ['test/broker-web-journey.browser.cjs'], { cwd: frontendRoot, env: testEnvironment });
+  await execute(process.execPath, ['test/broker-governance.browser.cjs'], { cwd: frontendRoot, env: testEnvironment });
   console.log(`QA Broker OS finalizada. Evidencia disponible en ${evidenceRoot}`);
 } finally {
   if (server && !server.killed) {

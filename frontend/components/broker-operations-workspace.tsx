@@ -25,6 +25,7 @@ import {
   getBrokerAssignableUsers,
   getBrokerHoldingConfig,
   getBrokerFinancing,
+  getBrokerGovernance,
   getBrokerLegalReadiness,
   getBrokerMonthlyAdministration,
   getBrokerMaintenanceWorkspace,
@@ -41,6 +42,7 @@ import {
   previewBrokerCommission,
   prepareBrokerMonthlyLiquidation,
   runBrokerAutomationScan,
+  resolveBrokerAlert,
   saveBrokerAiEvaluation,
   saveBrokerSaleWorkspace,
   saveBrokerRentalWorkspace,
@@ -74,10 +76,11 @@ import {
   type BrokerAccessTeamMember,
   type BrokerAssignableUser,
   type BrokerHoldingConfig,
+  type BrokerGovernanceSummary,
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | "training" | "commissions" | "administration_preview" | "guides" | "configuration" | "compliance" | "access" | BrokerRecordArea;
+type Tab = "operations" | "agents" | "training" | "commissions" | "administration_preview" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -270,6 +273,33 @@ function readable(value: unknown) {
     || raw.replaceAll("_", " ").toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
 }
 
+const BROKER_AUDIT_ACTION_LABELS: Record<string, string> = {
+  BROKER_AUTOMATION_SCAN: "Revisión automática interna ejecutada",
+  BROKER_ALERT_RESOLVED: "Alerta resuelta",
+  BROKER_OPERATION_EVENT_RECORDED: "Evento operativo registrado",
+  BROKER_OPERATION_STAGE_CHANGED: "Etapa de operación actualizada",
+  BROKER_RECORD_CREATED: "Registro operativo creado",
+  BROKER_RECORD_UPDATED: "Registro operativo actualizado",
+  BROKER_ACCESS_PROFILE_UPDATED: "Perfil de acceso actualizado",
+  BROKER_HOLDING_UPDATED: "Gobierno de holding actualizado",
+  BROKER_AI_EVALUATION_RECORDED: "Evaluación de IA registrada"
+};
+
+const BROKER_AUDIT_ENTITY_LABELS: Record<string, string> = {
+  realty_alert: "Alerta interna",
+  broker_operation: "Operación",
+  broker_access_profile: "Perfil de acceso",
+  broker_holding: "Holding"
+};
+
+function brokerAuditActionLabel(action: string) {
+  return BROKER_AUDIT_ACTION_LABELS[String(action || "").toUpperCase()] || readable(action);
+}
+
+function brokerAuditEntityLabel(entity: string) {
+  return BROKER_AUDIT_ENTITY_LABELS[String(entity || "").toLowerCase()] || readable(entity);
+}
+
 function stageIndex(operation: BrokerOperation, catalog: BrokerCatalog | null) {
   const stages = catalog?.operationStages[operation.data.operationType] || [];
   const index = stages.indexOf(String(operation.data.stage || "").toUpperCase());
@@ -330,9 +360,11 @@ export function BrokerOperationsPageContent() {
   const [accessTeam, setAccessTeam] = useState<BrokerAccessTeamMember[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<BrokerAssignableUser[]>([]);
   const [holdingConfig, setHoldingConfig] = useState<BrokerHoldingConfig | null>(null);
+  const [governance, setGovernance] = useState<BrokerGovernanceSummary | null>(null);
+  const [alertResolutionNotes, setAlertResolutionNotes] = useState<Record<string, string>>({});
   const [operationEventNotes, setOperationEventNotes] = useState<Record<string, string>>({});
   const [operationEventTypes, setOperationEventTypes] = useState<Record<string, string>>({});
-  const writeAction = ["access", "configuration"].includes(tab) ? "CONFIGURE" : ["training", "agents"].includes(tab) ? "APPROVE" : tab === "commissions" ? "VIEW" : "EDIT";
+  const writeAction = ["access", "configuration", "governance"].includes(tab) ? "CONFIGURE" : ["training", "agents"].includes(tab) ? "APPROVE" : tab === "commissions" ? "VIEW" : "EDIT";
   const canWriteTab = canBroker(access, brokerTabArea(tab), writeAction);
 
   const load = useCallback(async () => {
@@ -371,7 +403,7 @@ export function BrokerOperationsPageContent() {
       setTab(requestedArea as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "access") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
       setTab(requestedTab);
     }
   }, [searchParams]);
@@ -405,13 +437,17 @@ export function BrokerOperationsPageContent() {
       getBrokerMonthlyAdministration(administrationPeriod).then(setMonthlyAdministration).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar la administración mensual."));
       return;
     }
+    if (tab === "governance") {
+      getBrokerGovernance().then(setGovernance).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el gobierno operativo."));
+      return;
+    }
     if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab, administrationPeriod, access]);
 
   useEffect(() => {
-    if (!catalog || tab === "financing" || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
+    if (!catalog || tab === "financing" || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "governance" || tab === "access") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -421,7 +457,7 @@ export function BrokerOperationsPageContent() {
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
   const recommendations = overview?.recommendations || [];
-  const currentArea = tab !== "financing" && tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "access" ? tab : null;
+  const currentArea = tab !== "financing" && tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "governance" && tab !== "access" ? tab : null;
   const canAssignCurrentArea = Boolean(currentArea && canBroker(access, currentArea, "ASSIGN"));
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
@@ -913,6 +949,28 @@ export function BrokerOperationsPageContent() {
     finally { setBusy(false); }
   }
 
+  async function refreshGovernance() {
+    const nextGovernance = await getBrokerGovernance();
+    setGovernance(nextGovernance);
+    await load();
+  }
+
+  async function resolveGovernanceAlert(alertId: string) {
+    const note = String(alertResolutionNotes[alertId] || "").trim();
+    if (note.length < 3) {
+      setNotice("Describe la resolución antes de cerrar la alerta. El motivo quedará en la bitácora.");
+      return;
+    }
+    setBusy(true); setNotice("");
+    try {
+      await resolveBrokerAlert(alertId, note);
+      setAlertResolutionNotes((current) => ({ ...current, [alertId]: "" }));
+      await refreshGovernance();
+      setNotice("Alerta resuelta y registrada en la bitácora. No se ejecutó ninguna acción externa.");
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo resolver la alerta."); }
+    finally { setBusy(false); }
+  }
+
   async function saveOperatingConfiguration(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -1062,7 +1120,7 @@ export function BrokerOperationsPageContent() {
       {([
         ["operations", "Operaciones"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
         ["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["guides", "Guías operativas"],
-        ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["compliance", "Cumplimiento"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
+        ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["governance", "Gobierno y alertas"], ["compliance", "Cumplimiento"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
       ]).filter(([key]) => canBrokerTab(access, key)).map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as Tab)}>{label}</button>)}
     </nav>
     {notice ? <p className="broker-os-notice" role="status">{notice}</p> : null}
@@ -1284,6 +1342,8 @@ export function BrokerOperationsPageContent() {
     </form> : <p className="broker-empty">Cargando parámetros comerciales...</p>}</section> : null}
 
     {tab === "access" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Roles, permisos y alcance</span><h2>Define qué puede hacer cada persona</h2><p>El rol de negocio determina las acciones; el alcance limita los registros visibles. Los cambios quedan auditados y no modifican el rol global de EVOLUM OS.</p></div>{holdingConfig?.canConfigure ? <form className="broker-policy-form broker-holding-form" onSubmit={saveHolding}><section><h3>Gobierno Holding</h3><p>Une empresas inmobiliarias solo cuando exista una relación comercial y personas autorizadas. Ninguna cuenta obtiene acceso entre empresas por defecto.</p><label>Nombre del holding<input name="holdingName" defaultValue={holdingConfig.holding?.name || ""} placeholder="Ej.: Grupo Broker Chile" required /></label><label>Código interno<input name="holdingCode" defaultValue={holdingConfig.holding?.code || ""} placeholder="grupo-broker-chile" required /></label></section><section><h3>Empresas incluidas</h3>{holdingConfig.availableTenants.map((tenant) => <label key={tenant.id} className="broker-check-option"><input type="checkbox" name="tenantSlugs" value={tenant.slug} defaultChecked={holdingConfig.holding?.tenants.some((item) => item.id === tenant.id) || false} />{tenant.name} <small>({tenant.slug})</small></label>)}</section><section><h3>Usuarios autorizados</h3>{accessTeam.map((user) => <label key={user.id} className="broker-check-option"><input type="checkbox" name="holdingUserIds" value={user.id} defaultChecked={holdingConfig.holding?.accesses.some((item) => item.userId === user.id) || false} />{user.name} <small>{user.email}</small></label>)}<p className="broker-human-note">Después de guardarlo, asigna el alcance “Holding” solo a las personas que realmente deben consultar varias empresas.</p><button className="primary-btn" disabled={busy || !canWriteTab}>Guardar gobierno Holding</button></section></form> : access?.holding ? <p className="broker-human-note">Holding activo: <b>{access.holding.name}</b>. Tu cuenta puede consultar {access.holding.tenantCount} empresas autorizadas.</p> : null}<div className="broker-access-grid">{accessTeam.map((user) => <form key={user.id} className="broker-access-card" onSubmit={(event) => saveAccessProfile(user, event)}><div><b>{user.name}</b><span>{user.email} · {user.jobTitle || user.role}</span></div><label>Rol de negocio<select name="businessRole" defaultValue={user.profile.businessRole}>{BROKER_BUSINESS_ROLE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Alcance<select name="accessScope" defaultValue={user.profile.accessScope}>{BROKER_SCOPE_OPTIONS.filter(([value]) => value !== "HOLDING" || access?.technicalRole === "SUPER_ADMIN").map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Equipo<input name="teamKey" defaultValue={user.profile.teamKey || ""} placeholder="Ej.: ventas-norte" /></label><label>Sucursal<input name="branchKey" defaultValue={user.profile.branchKey || ""} placeholder="Ej.: santiago" /></label><button type="submit" className="secondary-btn" disabled={busy || !canWriteTab}>Guardar acceso</button></form>)}</div></section> : null}
+
+    {tab === "governance" ? <section className="broker-governance-panel"><div className="broker-list-heading"><span>Gobierno operativo</span><h2>Alertas, trazabilidad y control administrativo</h2><p>Consulta alertas internas y las acciones registradas por el equipo. Cerrar una alerta exige un motivo y no ejecuta publicaciones, firmas, pagos ni comunicaciones externas.</p></div>{governance ? <><section className="broker-reporting broker-governance-kpis"><article><span>Alertas abiertas</span><b>{governance.summary.openAlerts}</b><small>Por revisar o resolver</small></article><article><span>Prioridad alta</span><b>{governance.summary.highPriorityAlerts}</b><small>Requieren atención preferente</small></article><article><span>Resueltas (30 días)</span><b>{governance.summary.resolvedLast30Days}</b><small>Con motivo registrado</small></article><article><span>Actividad (30 días)</span><b>{governance.summary.activityLast30Days}</b><small>{governance.summary.totalAuditedEvents} evento(s) visibles</small></article></section><div className="broker-governance-grid"><section className="broker-governance-alerts"><header><div><span>Alertas internas</span><h3>Decisiones pendientes</h3></div><button type="button" className="secondary-btn" disabled={busy} onClick={() => refreshGovernance().catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo actualizar el gobierno operativo."))}>Actualizar</button></header>{governance.alerts.length ? governance.alerts.map((alert) => <article key={alert.id} className={`broker-governance-alert ${alert.status === "RESOLVED" ? "resolved" : alert.priority.toLowerCase()}`}><div className="broker-governance-alert-heading"><div><b>{alert.title}</b><span>{alert.priority === "HIGH" ? "Prioridad alta" : alert.priority === "LOW" ? "Informativa" : "Prioridad media"} · {alert.status === "RESOLVED" ? "Resuelta" : "Abierta"}</span></div><time>{alert.updatedAt ? new Date(alert.updatedAt).toLocaleString("es-CL") : "Sin fecha"}</time></div><p>{alert.detail}</p><small>Área: {readable(alert.area)}{alert.requiresHumanApproval ? " · Requiere validación humana" : ""}</small>{alert.status === "RESOLVED" ? <div className="broker-governance-resolution"><b>Resolución</b><p>{alert.resolutionNote || "Sin observación registrada."}</p><small>{alert.resolvedBy || "Usuario autorizado"}{alert.resolvedAt ? ` · ${new Date(alert.resolvedAt).toLocaleString("es-CL")}` : ""}</small></div> : <div className="broker-governance-actions"><textarea value={alertResolutionNotes[alert.id] || ""} onChange={(event) => setAlertResolutionNotes((current) => ({ ...current, [alert.id]: event.target.value }))} rows={2} placeholder="Describe qué se revisó y cómo se resolvió" disabled={busy || !canWriteTab} /><div><button type="button" className="secondary-btn" onClick={() => Object.prototype.hasOwnProperty.call(AREA_CONFIG, alert.area) && setTab(alert.area as BrokerRecordArea)}>Ir al área</button><button type="button" className="primary-btn" disabled={busy || !canWriteTab} onClick={() => resolveGovernanceAlert(alert.id)}>Resolver con trazabilidad</button></div></div>}</article>) : <p className="broker-empty">No hay alertas internas para este alcance.</p>}</section><section className="broker-governance-activity"><header><span>Bitácora reciente</span><h3>Actividad verificable</h3><p>Los metadatos se muestran filtrados para no exponer secretos técnicos.</p></header>{governance.recentActivity.length ? <div>{governance.recentActivity.map((activity) => <article key={activity.id}><div><b>{brokerAuditActionLabel(activity.action)}</b><span>{brokerAuditEntityLabel(activity.entity)}{activity.entityId ? ` · ${activity.entityId.slice(-8)}` : ""}</span></div><p>{activity.actor?.name || "Proceso del sistema"} · {activity.createdAt ? new Date(activity.createdAt).toLocaleString("es-CL") : "Sin fecha"}</p>{activity.metadata && Object.keys(activity.metadata).length ? <small>{Object.entries(activity.metadata).slice(0, 3).map(([key, value]) => `${readable(key)}: ${typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : "registrado"}`).join(" · ")}</small> : null}</article>)}</div> : <p className="broker-empty">Aún no hay actividad registrada para mostrar.</p>}</section></div><p className="broker-human-note">La bitácora es de consulta administrativa. Los cambios externos deben seguir los controles, evidencias y aprobaciones del proceso correspondiente.</p></> : <p className="broker-empty">Cargando gobierno operativo...</p>}</section> : null}
 
     {tab === "compliance" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Preparación legal y externa</span><h2>Qué está listo y qué requiere validación</h2><p>Este panel organiza evidencia y dependencias. No sustituye asesoría legal, tributaria ni la habilitación formal de un proveedor.</p></div>{legalReadiness ? <><section className="broker-reporting"><article><span>Consentimientos otorgados</span><b>{legalReadiness.summary.GRANTED}</b><small>Con evidencia registrada</small></article><article><span>Pendientes</span><b>{legalReadiness.summary.PENDING}</b><small>Antes de proponer uso externo</small></article><article><span>Revocados o vencidos</span><b>{legalReadiness.summary.REVOKED + legalReadiness.summary.EXPIRED}</b><small>Requieren bloqueo o renovación</small></article><article><span>Proveedores externos</span><b>{legalReadiness.providers.length}</b><small>Todos desactivados hasta su validación</small></article></section><div className="broker-compliance-grid"><section><h3>Proveedores y dependencias</h3>{legalReadiness.providers.map((item) => <article key={item.key}><b>{item.label}</b><span>{item.category} · {item.status === "HUMAN_REVIEW" ? "Revisión humana" : "Pendiente de proveedor"}</span><p>{item.description}</p></article>)}</section><section><h3>Consentimientos registrados</h3>{legalReadiness.consents.length ? legalReadiness.consents.map((item) => <article key={item.id}><b>{item.title}</b><span>{readable(item.status)}</span><p>{recordSummary(item, catalog?.recordDefinitions[item.recordType])}</p></article>) : <p className="broker-empty">Aún no hay consentimientos registrados. Puedes crearlos desde “Expediente y documentos”.</p>}</section></div><p className="broker-human-note">Para registrar una autorización utiliza el área “Expediente y documentos”. El sistema exige titular, finalidad, fecha y referencia de evidencia; una autorización registrada no activa por sí misma ningún envío, firma, publicación, acceso bancario ni integración.</p></> : <p className="broker-empty">Cargando estado de cumplimiento...</p>}</section> : null}
 
