@@ -10,7 +10,7 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "node scripts/run-tests.mjs",
-    "test:broker": "node --test test/broker-access.test.js test/broker-capture.test.js test/broker-conversion.test.js test/broker-maintenance-project.test.js test/broker-monthly-administration.test.js test/broker-operation-contract.test.js test/broker-permissions-scope.test.js test/broker-post-sale.test.js test/broker-prospect.test.js test/broker-qa-environment.test.js test/broker-realty-scope.test.js test/broker-relational-data.test.js test/broker-rental.test.js test/broker-sale.test.js test/broker-workflows.test.js",
+    "test:broker": "node --test test/broker-accountability.test.js test/broker-access.test.js test/broker-capture.test.js test/broker-conversion.test.js test/broker-maintenance-project.test.js test/broker-monthly-administration.test.js test/broker-operation-contract.test.js test/broker-permissions-scope.test.js test/broker-post-sale.test.js test/broker-prospect.test.js test/broker-qa-environment.test.js test/broker-realty-scope.test.js test/broker-relational-data.test.js test/broker-rental.test.js test/broker-sale.test.js test/broker-workflows.test.js",
     "qa:broker:generate": "node scripts/broker-qa.mjs generate",
     "qa:broker:migrate": "node scripts/broker-qa.mjs migrate",
     "qa:broker:status": "node scripts/broker-qa.mjs status",

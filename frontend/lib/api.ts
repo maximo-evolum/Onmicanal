@@ -1879,6 +1879,12 @@ export function getBrokerAccessTeam(): Promise<{ users: BrokerAccessTeamMember[]
   return request<{ users: BrokerAccessTeamMember[] }>("/broker/access/team");
 }
 
+export type BrokerAssignableUser = Pick<BrokerAccessTeamMember, "id" | "name" | "email" | "role" | "jobTitle">;
+
+export function getBrokerAssignableUsers(area: BrokerRecordArea): Promise<{ users: BrokerAssignableUser[] }> {
+  return request<{ users: BrokerAssignableUser[] }>(`/broker/assignees/${encodeURIComponent(area)}`);
+}
+
 export function updateBrokerAccessProfile(userId: string, input: { businessRole: string; accessScope: string; teamKey?: string; branchKey?: string }): Promise<{ profile: BrokerAccessTeamMember["profile"] }> {
   return request(`/broker/access/users/${encodeURIComponent(userId)}`, { method: "PUT", body: JSON.stringify(input) });
 }
@@ -2239,7 +2245,7 @@ export function createBrokerRecord(input: {
   return request<IndustryRecord>("/broker/records", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateBrokerRecord(id: string, input: { title?: string; status?: string; data?: Record<string, unknown> }): Promise<IndustryRecord> {
+export function updateBrokerRecord(id: string, input: { title?: string; status?: string; assignedToId?: string | null; data?: Record<string, unknown> }): Promise<IndustryRecord> {
   return request<IndustryRecord>(`/broker/records/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 

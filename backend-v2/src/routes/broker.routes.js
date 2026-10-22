@@ -40,6 +40,7 @@ import {
 } from "../services/broker-workflows.service.js";
 import { brokerRelationalCoverage, normalizeLegacyBrokerProperty } from "../services/broker-relational-data.service.js";
 import { BROKER_CAPTURE_OPTIONS, captureReadiness, normalizeBrokerCapture, validateBrokerCapture } from "../services/broker-capture.service.js";
+import { requiresBrokerAccountableOwner, resolveBrokerAccountableAssignee } from "../services/broker-accountability.service.js";
 import { BROKER_SALE_OPTIONS, brokerSaleReadiness, normalizeBrokerSaleCase } from "../services/broker-sale.service.js";
 import { BROKER_RENTAL_OPTIONS, brokerRentalReadiness, normalizeBrokerRentalCase } from "../services/broker-rental.service.js";
 import { BROKER_MAINTENANCE_OPTIONS, brokerMaintenanceReadiness, brokerProjectReadiness, normalizeBrokerMaintenance, normalizeBrokerMaintenanceQuote, normalizeBrokerProject } from "../services/broker-maintenance-project.service.js";
@@ -1801,6 +1802,25 @@ brokerRouter.post("/broker/operations/:id/timeline", requireRole(ROLE_GROUPS.STA
   }
 });
 
+// Lista acotada de responsables para formularios operativos. Nunca expone
+// usuarios fuera del tenant ni fuera del alcance efectivo del solicitante.
+brokerRouter.get("/broker/assignees/:area", async (req, res) => {
+  try {
+    const area = text(req.params.area);
+    if (!isBrokerRecordArea(area)) return res.status(404).json({ error: "Área operativa no encontrada." });
+    if (!allowBrokerAreaAction(req, res, area, "ASSIGN")) return;
+    const users = await prisma.workspaceUser.findMany({
+      where: { tenantId: req.tenantId, isActive: true },
+      select: { id: true, name: true, email: true, role: true, jobTitle: true },
+      orderBy: { name: "asc" },
+    });
+    res.json({ users: users.filter((user) => brokerAssigneeAllowed(req.brokerAccess, user.id)) });
+  } catch (error) {
+    console.error("List broker assignees error:", error);
+    res.status(500).json({ error: "No se pudieron obtener los responsables disponibles." });
+  }
+});
+
 brokerRouter.get("/broker/records/:area", async (req, res) => {
   try {
     const area = String(req.params.area || "");
@@ -1828,7 +1848,13 @@ brokerRouter.post("/broker/records", requireRole(ROLE_GROUPS.STAFF), async (req,
     const area = BROKER_RECORD_RESOURCES[recordType] || BROKER_RECORD_DEFINITIONS[recordType]?.area;
     if (!area || !allowBrokerAreaAction(req, res, area, "CREATE")) return;
     const requestedAssignment = text(req.body?.assignedToId);
-    const assignedToId = requestedAssignment || (Array.isArray(req.brokerAccess?.scopeUserIds) ? req.user?.id : null);
+    const requiresAccountableOwner = requiresBrokerAccountableOwner(recordType);
+    const assignedToId = resolveBrokerAccountableAssignee({
+      recordType,
+      requestedAssigneeId: requestedAssignment,
+      actorId: req.user?.id,
+      restrictToActor: Array.isArray(req.brokerAccess?.scopeUserIds),
+    }) || null;
     if (requestedAssignment && requestedAssignment !== req.user?.id && !canBrokerAction(req.brokerAccess, area, "ASSIGN")) return res.status(403).json({ error: "No puedes asignar este registro a otro usuario." });
     const recordData = { ...dataOf({ data: req.body?.data }) };
     const propertyId = text(recordData.propertyId || req.body?.propertyId);
@@ -1858,7 +1884,7 @@ brokerRouter.post("/broker/records", requireRole(ROLE_GROUPS.STAFF), async (req,
       },
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
     });
-    await recordAuditLog(req, "BROKER_RECORD_CREATED", recordType, record.id, { propertyId: propertyId || null, status: record.status });
+    await recordAuditLog(req, "BROKER_RECORD_CREATED", recordType, record.id, { propertyId: propertyId || null, status: record.status, assignedToId: record.assignedToId || null });
     res.status(201).json(record);
   } catch (error) {
     if (error?.message?.includes("propiedad relacionada") || error?.message?.includes("usuario asignado")) return res.status(400).json({ error: error.message });
@@ -1873,7 +1899,13 @@ brokerRouter.patch("/broker/records/:id", requireRole(ROLE_GROUPS.STAFF), async 
     if (!existing) return res.status(404).json({ error: "Registro operativo no encontrado." });
     const area = BROKER_RECORD_RESOURCES[existing.recordType] || BROKER_RECORD_DEFINITIONS[existing.recordType]?.area;
     if (!area || !allowBrokerAreaAction(req, res, area, "EDIT")) return;
-    if (req.body?.assignedToId !== undefined && text(req.body.assignedToId) !== req.user?.id && !canBrokerAction(req.brokerAccess, area, "ASSIGN")) return res.status(403).json({ error: "No puedes reasignar este registro." });
+    const hasAssignmentUpdate = req.body?.assignedToId !== undefined;
+    const requiresAccountableOwner = requiresBrokerAccountableOwner(existing.recordType);
+    const requestedAssignment = hasAssignmentUpdate
+      ? text(req.body.assignedToId)
+      : resolveBrokerAccountableAssignee({ recordType: existing.recordType, existingAssigneeId: existing.assignedToId, actorId: req.user?.id });
+    if (hasAssignmentUpdate && requestedAssignment !== text(existing.assignedToId) && !canBrokerAction(req.brokerAccess, area, "ASSIGN")) return res.status(403).json({ error: "No puedes reasignar este registro." });
+    if (requiresAccountableOwner && !requestedAssignment) return res.status(422).json({ error: "Este control operativo requiere un responsable asignado." });
     const nextData = req.body?.data === undefined
       ? dataOf(existing)
       : { ...dataOf(existing), ...dataOf({ data: req.body.data }) };
@@ -1894,12 +1926,17 @@ brokerRouter.patch("/broker/records/:id", requireRole(ROLE_GROUPS.STAFF), async 
     const validation = validateBrokerRecord({ recordType: existing.recordType, data: nextData, status: nextStatus });
     if (!validation.ok) return res.status(422).json({ error: validation.error });
     await assertRelatedProperty(req, propertyId);
-    if (req.body?.assignedToId !== undefined) await assertAssignedUser(req, text(req.body.assignedToId));
+    if (hasAssignmentUpdate || requiresAccountableOwner) await assertAssignedUser(req, requestedAssignment);
     const record = await prisma.industryRecord.update({
       where: { id: existing.id },
-      data: { title: req.body?.title === undefined ? existing.title : text(req.body.title, existing.title), status: validation.status, ...(req.body?.assignedToId === undefined ? {} : { assignedToId: text(req.body.assignedToId) || null }), data: nextData }
+      data: {
+        title: req.body?.title === undefined ? existing.title : text(req.body.title, existing.title),
+        status: validation.status,
+        ...(hasAssignmentUpdate || requiresAccountableOwner ? { assignedToId: requestedAssignment || null } : {}),
+        data: nextData
+      }
     });
-    await recordAuditLog(req, "BROKER_RECORD_UPDATED", record.recordType, record.id, { status: record.status });
+    await recordAuditLog(req, "BROKER_RECORD_UPDATED", record.recordType, record.id, { status: record.status, assignedToId: record.assignedToId || null });
     res.json(record);
   } catch (error) {
     if (error?.message?.includes("propiedad relacionada") || error?.message?.includes("usuario asignado")) return res.status(400).json({ error: error.message });
