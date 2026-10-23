@@ -17898,3 +17898,50 @@ html.dark .finance-bank-statement-state.is-protected,
 :root[data-theme="dark"] .broker-governance-alert { border-color:rgba(198,181,255,.2); background:#211b3c; }:root[data-theme="dark"] .broker-governance-alert.high { background:#352333; }:root[data-theme="dark"] .broker-governance-alert.resolved,:root[data-theme="dark"] .broker-governance-resolution { background:#183841; }:root[data-theme="dark"] .broker-governance-actions textarea { border-color:rgba(198,181,255,.25); color:#f5f1ff; background:#211b3c; }:root[data-theme="dark"] .broker-governance-activity article { border-color:rgba(198,181,255,.16); }:root[data-theme="dark"] .broker-governance-activity article small { color:#70eee0; }
 @media (max-width:980px) { .broker-governance-grid { grid-template-columns:1fr; }.broker-governance-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:560px) { .broker-governance-alerts,.broker-governance-activity { padding:16px; border-radius:15px; }.broker-governance-kpis { grid-template-columns:1fr 1fr; }.broker-governance-alerts>header,.broker-governance-alert-heading { display:grid; }.broker-governance-actions>div { justify-content:stretch; }.broker-governance-actions button { width:100%; } }
+
+/* Cierre visual de Broker OS: el resumen de acceso debe conservar contraste real
+   bajo cualquiera de los dos atributos de tema usados por la aplicación. */
+:root[data-design-system="dark"] .realty-product-workspace .broker-access-summary,
+:root[data-theme="dark"] .realty-product-workspace .broker-access-summary {
+  background: linear-gradient(135deg, #221b3a 0%, #16132a 100%);
+  border-color: rgba(154, 122, 255, .38);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .22);
+  color: #f7f3ff;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace .broker-access-summary :is(b, strong, h1, h2, h3, p, span, small),
+:root[data-theme="dark"] .realty-product-workspace .broker-access-summary :is(b, strong, h1, h2, h3, p, span, small) {
+  color: #f7f3ff;
+}
+
+:root[data-design-system="dark"] .realty-product-workspace .broker-access-summary :is(.eyebrow, small),
+:root[data-theme="dark"] .realty-product-workspace .broker-access-summary :is(.eyebrow, small) {
+  color: #bcb4da;
+}
+
+/* En teléfonos Broker OS no reserva una columna para la burbuja EV cerrada.
+   Así el contenido ocupa el ancho disponible y la burbuja no recorta formularios ni tarjetas. */
+@media (max-width:700px) {
+  .vertical-shell.realty-product-workspace,
+  .vertical-shell.realty-product-workspace.nav-collapsed {
+    display: block;
+    min-height: 100dvh;
+  }
+
+  .vertical-shell.realty-product-workspace > .vertical-main,
+  .vertical-shell.realty-product-workspace.nav-collapsed > .vertical-main,
+  .vertical-shell.realty-product-workspace > main.realty-page.realty-workspace,
+  .vertical-shell.realty-product-workspace.nav-collapsed > main.realty-page.realty-workspace {
+    box-sizing: border-box;
+    grid-column: auto !important;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    padding: 76px 12px 32px !important;
+  }
+
+  .vertical-shell.realty-product-workspace .evolum-menu-bubble {
+    top: 14px !important;
+    left: 12px !important;
+  }
+}
