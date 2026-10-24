@@ -3,6 +3,7 @@ import { buildEventQuote } from "./quote.service.js";
 import { registerSalesSignal } from "./sales-engine.service.js";
 
 import { env } from "../lib/env.js";
+import { credentialRotationActive } from "../lib/security-rotation.js";
 import { prisma } from "../lib/db.js";
 import { fetchJsonWithRetry } from "./stability.service.js";
 import { buildProductContext, searchProducts } from "./product.service.js";
@@ -261,7 +262,7 @@ ${businessKnowledgeContext}`.trim();
     }));
   }
 
-  if (!env.openAiApiKey) {
+  if (!env.openAiApiKey || credentialRotationActive()) {
     const salesFallback = salesBrainFallbackReply({ message: userMessage, industry: eventMode ? "parrilladas" : industry });
     if (objectionReply) return postProcessReply(objectionReply);
     if (salesFallback) return postProcessReply(salesFallback);

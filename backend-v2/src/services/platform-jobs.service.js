@@ -10,6 +10,7 @@ import { publishObservabilityAlerts } from "./observability-alerts.service.js";
 import { syncAllActiveNuboxTenants } from "./finance-sync.service.js";
 import { nuboxScheduledOutcome } from "./finance-external-imports.service.js";
 import { verifyPendingConnections } from "../routes/connections.routes.js";
+import { credentialRotationActive } from "../lib/security-rotation.js";
 
 function boundedNumber(value, fallback, minimum, maximum) {
   const number = Number(value);
@@ -85,9 +86,12 @@ export async function runPlatformJobs({ now = new Date() } = {}) {
   const connectionVerificationIntervalMs = jobIntervalMs(process.env.CONNECTION_VERIFICATION_INTERVAL_MS, 900_000, 900_000);
   const connectionVerificationEnabled = String(process.env.CONNECTION_VERIFICATION_ENABLED || "true").toLowerCase() !== "false";
   const financeSyncEnabled = String(process.env.FINANCE_NUBOX_SYNC_ENABLED || "true").toLowerCase() !== "false";
+  const rotationActive = credentialRotationActive();
   const [retention, workflows, observability, connectionVerification, financeSync] = await Promise.all([
     executeRecordedJob({ jobKey: "metadata-retention", intervalMs: retentionIntervalMs, now, task: () => runMetadataRetentionSweep({ now }) }),
-    executeRecordedJob({ jobKey: "scheduled-workflows", intervalMs: workflowIntervalMs, now, task: () => runScheduledWorkflows({ now }) }),
+    rotationActive
+      ? Promise.resolve({ status: "SKIPPED", jobKey: "scheduled-workflows", reason: "credential_rotation_active" })
+      : executeRecordedJob({ jobKey: "scheduled-workflows", intervalMs: workflowIntervalMs, now, task: () => runScheduledWorkflows({ now }) }),
     executeRecordedJob({
       jobKey: "observability-monitor",
       intervalMs: observabilityIntervalMs,
@@ -104,7 +108,7 @@ export async function runPlatformJobs({ now = new Date() } = {}) {
         return { ok: snapshot.ok, alerts: snapshot.alerts.map((alert) => alert.code), delivery };
       }
     }),
-    connectionVerificationEnabled
+    connectionVerificationEnabled && !rotationActive
       ? executeRecordedJob({
         jobKey: "connection-verification",
         intervalMs: connectionVerificationIntervalMs,
@@ -112,7 +116,7 @@ export async function runPlatformJobs({ now = new Date() } = {}) {
         task: () => verifyPendingConnections({ limit: Math.max(1, Math.min(500, Number(process.env.CONNECTION_VERIFICATION_LIMIT) || 100)) })
       })
       : Promise.resolve({ status: "SKIPPED", jobKey: "connection-verification", reason: "disabled" }),
-    financeSyncEnabled
+    financeSyncEnabled && !rotationActive
       ? executeRecordedJob({
         jobKey: "finance-nubox-sync",
         outcome: nuboxScheduledOutcome,

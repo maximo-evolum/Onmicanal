@@ -77,6 +77,13 @@ export const env = {
 
   jwtSecret: firstEnv("JWT_SECRET", "jwtSecret"),
 
+  // No reutilizar DATABASE_URL como secreto de OAuth. La compatibilidad con
+  // instalaciones existentes se conserva mediante JWT_SECRET hasta que se
+  // configure este valor dedicado y se active su exigencia estricta.
+  connectionsStateSecret: firstEnv("CONNECTIONS_STATE_SECRET"),
+  requireConnectionsStateSecret: firstEnv("REQUIRE_CONNECTIONS_STATE_SECRET") === "true",
+  credentialRotationMode: firstEnv("CREDENTIAL_ROTATION_MODE") === "true",
+
   sessionCookieName: firstEnv("SESSION_COOKIE_NAME", "sessionCookieName") || "evolum_session",
   sessionCookieSameSite: firstEnv("SESSION_COOKIE_SAME_SITE", "sessionCookieSameSite") || "lax",
   sessionCookieDomain: firstEnv("SESSION_COOKIE_DOMAIN", "sessionCookieDomain"),
@@ -165,6 +172,10 @@ if (env.nodeEnv === "production") {
 
   if (!env.frontendOrigin || env.frontendOrigin === "*") {
     throw new Error("FRONTEND_ORIGIN debe apuntar al dominio real en producción.");
+  }
+
+  if (env.requireConnectionsStateSecret && (!env.connectionsStateSecret || String(env.connectionsStateSecret).length < 32)) {
+    throw new Error("CONNECTIONS_STATE_SECRET es obligatoria y debe tener al menos 32 caracteres cuando REQUIRE_CONNECTIONS_STATE_SECRET=true.");
   }
 
   // El fallback demo sirve para desarrollo local. Solo advertimos si alguien

@@ -1,10 +1,12 @@
 /** Archivo: Implementa reglas de negocio y procesos del dominio whatsapp. */
 import { env } from "../lib/env.js";
+import { assertExternalOperationAllowed } from "../lib/security-rotation.js";
 import { resolveOutboundChannelConfig } from "./tenant-channel-config.service.js";
 import { traceError, traceStep } from "../lib/trace.js";
 import { fetchJsonWithRetry } from "./stability.service.js";
 
 export async function sendWhatsAppText({ to, message, phoneNumberId, accessToken, tenant = null, tenantId = null, trace = null }) {
+  assertExternalOperationAllowed("El envío de WhatsApp");
   const resolved = await resolveOutboundChannelConfig({ tenant, tenantId, channel: "whatsapp" });
   const effectivePhoneNumberId = phoneNumberId || resolved.phoneNumberId;
   const token = accessToken || resolved.accessToken || env.whatsappToken;
@@ -64,6 +66,7 @@ export async function sendWhatsAppText({ to, message, phoneNumberId, accessToken
 }
 
 export async function sendWhatsAppImage({ to, imageUrl, caption = "", phoneNumberId, accessToken, tenant = null, tenantId = null, trace = null }) {
+  assertExternalOperationAllowed("El envío de imágenes por WhatsApp");
   const resolved = await resolveOutboundChannelConfig({ tenant, tenantId, channel: "whatsapp" });
   const effectivePhoneNumberId = phoneNumberId || resolved.phoneNumberId;
   const token = accessToken || resolved.accessToken || env.whatsappToken;
@@ -136,6 +139,7 @@ export async function sendWhatsAppTemplate({
   tenantId = null,
   trace = null
 }) {
+  assertExternalOperationAllowed("El envío de plantillas por WhatsApp");
   const resolved = await resolveOutboundChannelConfig({ tenant, tenantId, channel: "whatsapp" });
   const effectivePhoneNumberId = phoneNumberId || resolved.phoneNumberId;
   const token = accessToken || resolved.accessToken || env.whatsappToken;
@@ -207,6 +211,7 @@ export async function sendWhatsAppTemplate({
 
 
 export async function sendWhatsAppInteractive({ to, payload, phoneNumberId, accessToken, tenant = null, tenantId = null, trace = null }) {
+  assertExternalOperationAllowed("El envío interactivo por WhatsApp");
   const resolved = await resolveOutboundChannelConfig({ tenant, tenantId, channel: "whatsapp" });
   const effectivePhoneNumberId = phoneNumberId || resolved.phoneNumberId;
   const token = accessToken || resolved.accessToken || env.whatsappToken;

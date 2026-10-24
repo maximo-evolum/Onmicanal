@@ -233,6 +233,7 @@ export default function ConnectionsPage() {
   const oauthTimeoutRef = useRef<number | null>(null);
   const [notice, setNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const selected = providerByKey(data, selectedKey);
+  const credentialRotationActive = Boolean(data?.credentialRotation?.active);
   const [form, setForm] = useState({
     label: "",
     phoneNumberId: "",
@@ -328,7 +329,7 @@ export default function ConnectionsPage() {
   }
 
   async function runTest(provider: ConnectionProvider) {
-    if (connectionActivity) return;
+    if (connectionActivity || credentialRotationActive) return;
     try {
       setConnectionActivity({ key: provider.key, stage: "Probando conexión...", progress: 24 });
       setNotice(null);
@@ -357,7 +358,7 @@ export default function ConnectionsPage() {
   }
 
   async function syncNubox(provider: ConnectionProvider) {
-    if (connectionActivity) return;
+    if (connectionActivity || credentialRotationActive) return;
     try {
       setConnectionActivity({ key: provider.key, stage: "Consultando documentos de Nubox...", progress: 32 });
       setNotice(null);
@@ -423,7 +424,7 @@ export default function ConnectionsPage() {
   }
 
   async function openOAuth(provider: ConnectionProvider) {
-    if (connectionActivity) return;
+    if (connectionActivity || credentialRotationActive) return;
     try {
       setConnectionActivity({ key: provider.key, stage: "Preparando vinculación segura...", progress: 26 });
       setNotice(null);
@@ -524,6 +525,8 @@ export default function ConnectionsPage() {
                   <small>Necesitan revision</small>
                 </article>
               </section>
+
+              {credentialRotationActive ? <div className="connection-notice warning" role="alert"><strong>Rotación de credenciales en curso.</strong><span>{data?.credentialRotation?.message || "Las llamadas a proveedores externos están pausadas hasta completar el reemplazo seguro de credenciales."}</span></div> : null}
 
               {data?.reconciliation ? (
                 <>
@@ -707,7 +710,7 @@ export default function ConnectionsPage() {
                                 <p>{selected.oauthReady === false
                                   ? "Este proveedor está siendo habilitado por EVOLUM. Cuando esté disponible, solo tendrás que iniciar sesión y autorizar la cuenta externa."
                                   : `Se abrirá la pantalla oficial de ${selected.label}. El cliente puede iniciar sesión con una cuenta diferente a su usuario EVOLUM.`}</p>
-                                <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={selected.oauthReady === false || Boolean(connectionActivity)}>
+                                <button className="primary" type="button" onClick={() => openOAuth(selected)} disabled={selected.oauthReady === false || credentialRotationActive || Boolean(connectionActivity)}>
                                   {selected.oauthReady === false
                                     ? "Proveedor en activación"
                                     : selected.status === "CONNECTED"
@@ -731,7 +734,7 @@ export default function ConnectionsPage() {
                           </details>
 
                           <div className="connection-actions">
-                            <button type="button" onClick={() => runTest(selected)} disabled={Boolean(connectionActivity)}>Probar conexión</button>
+                            <button type="button" onClick={() => runTest(selected)} disabled={credentialRotationActive || Boolean(connectionActivity)}>Probar conexión</button>
                             {selected.status === "CONNECTED" ? <button className="danger" type="button" onClick={() => disconnect(selected)} disabled={Boolean(connectionActivity)}>Desvincular cuenta</button> : null}
                           </div>
                         </>
@@ -755,8 +758,8 @@ export default function ConnectionsPage() {
 
                           <div className="connection-actions">
                             <button className="primary" type="submit" disabled={saving || Boolean(connectionActivity)}>{saving ? "Guardando..." : "Guardar conexión"}</button>
-                            <button type="button" onClick={() => runTest(selected)} disabled={Boolean(connectionActivity)}>Probar</button>
-                            {selected.key === "finance_nubox" ? <button type="button" onClick={() => syncNubox(selected)} disabled={Boolean(connectionActivity)}>Sincronizar documentos</button> : null}
+                            <button type="button" onClick={() => runTest(selected)} disabled={credentialRotationActive || Boolean(connectionActivity)}>Probar</button>
+                            {selected.key === "finance_nubox" ? <button type="button" onClick={() => syncNubox(selected)} disabled={credentialRotationActive || Boolean(connectionActivity)}>Sincronizar documentos</button> : null}
                             <button className="danger" type="button" onClick={() => disconnect(selected)} disabled={Boolean(connectionActivity)}>Desconectar</button>
                           </div>
                         </>

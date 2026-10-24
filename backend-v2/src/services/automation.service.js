@@ -3,6 +3,7 @@ import { prisma } from "../lib/db.js";
 import { sendChannelMessage } from "./routing.service.js";
 import { persistOutboundMessage } from "./message.service.js";
 import { generateSalesReply } from "./ai.service.js";
+import { credentialRotationActive } from "../lib/security-rotation.js";
 
 function addHours(date, hours) { return new Date(date.getTime() + hours * 3600000); }
 function addDays(date, days) { return new Date(date.getTime() + days * 86400000); }
@@ -83,6 +84,7 @@ ${history}
 }
 
 export async function runAutomationCycle() {
+  if (credentialRotationActive()) return { processed: 0, skipped: "credential_rotation_active" };
   const now = new Date();
   const leads = await prisma.lead.findMany({
     where: {

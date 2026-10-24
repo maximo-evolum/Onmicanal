@@ -9,6 +9,7 @@ import { MODULES } from "../lib/modules.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { decryptSecret, encryptSecret, hasSecret } from "../lib/credential-crypto.js";
+import { assertExternalOperationAllowed, credentialRotationActive } from "../lib/security-rotation.js";
 import { syncNuboxForTenant } from "../services/finance-sync.service.js";
 import { requestNubox } from "../services/nubox-http.service.js";
 import { createTenantNotification } from "../lib/notifications.js";
@@ -448,6 +449,7 @@ function nuboxSalesFromPayload(payload) {
 }
 
 async function testNuboxConnection(config) {
+  assertExternalOperationAllowed("La prueba de Nubox");
   const period = new Date().toISOString().slice(0, 7);
   const result = await nuboxRequest(config, `/v1/sales?period=${encodeURIComponent(period)}&page=1&size=1`);
   const documents = nuboxSalesFromPayload(result.payload);
@@ -693,7 +695,7 @@ function reconcileConnectionConfigs(configs) {
 }
 
 function oauthStateSecret() {
-  return String(process.env.CONNECTIONS_STATE_SECRET || env.jwtSecret || process.env.DATABASE_URL || "evolum-local-state-secret");
+  return String(env.connectionsStateSecret || env.jwtSecret || "evolum-local-state-secret");
 }
 
 function signOAuthState(body) {
@@ -1067,6 +1069,7 @@ async function refreshOAuthAccessToken(provider, config) {
 }
 
 async function testOAuthConnection(provider, config) {
+  assertExternalOperationAllowed("La prueba OAuth");
   const refreshed = await refreshOAuthAccessToken(provider, config);
   const accessToken = decryptSecret(refreshed.accessToken);
   if (!accessToken) throw new Error("No hay access token OAuth para validar");
@@ -1193,6 +1196,7 @@ async function verifyStoredConnection(provider, config) {
 // Trabajo de Railway: una autorización que tomó horas/días queda lista sin
 // exigir que la persona vuelva a abrir el Centro de Conexiones.
 export async function verifyPendingConnections({ limit = 100 } = {}) {
+  if (credentialRotationActive()) return { skipped: "credential_rotation_active", checked: 0, results: [] };
   const configs = await prisma.tenantChannelConfig.findMany({
     where: { isActive: true },
     orderBy: { updatedAt: "asc" },
@@ -1397,6 +1401,12 @@ connectionsRouter.get("/connections", async (req, res, next) => {
     res.json({
       tenantId: req.tenantId,
       generatedAt: new Date().toISOString(),
+      credentialRotation: {
+        active: credentialRotationActive(),
+        message: credentialRotationActive()
+          ? "La rotación de credenciales está en curso. Puedes guardar o reemplazar datos, pero las pruebas, autorizaciones y sincronizaciones externas permanecen pausadas."
+          : null,
+      },
       summary: {
         total: providers.length,
         connected,
@@ -1526,6 +1536,7 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
 
 connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGERS), async (req, res, next) => {
   try {
+    assertExternalOperationAllowed("La prueba de conexiones");
     const key = String(req.params.key || "").trim().toLowerCase();
     const provider = PROVIDER_BY_KEY.get(key);
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });
@@ -1606,6 +1617,7 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
 
 connectionsRouter.post("/connections/finance_nubox/sync", requireRole(ROLE_GROUPS.MANAGERS), async (req, res, next) => {
   try {
+    assertExternalOperationAllowed("La sincronización de Nubox");
     const requestedPeriod = cleanText(req.body?.period, new Date().toISOString().slice(0, 7));
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(requestedPeriod)) {
       return res.status(400).json({ error: "El periodo debe tener formato AAAA-MM." });
@@ -1651,6 +1663,7 @@ connectionsRouter.post("/connections/:key/disconnect", requireRole(ROLE_GROUPS.M
 
 connectionsRouter.post("/connections/:key/oauth-url", requireRole(ROLE_GROUPS.MANAGERS), async (req, res, next) => {
   try {
+    assertExternalOperationAllowed("La autorización con proveedores");
     const key = String(req.params.key || "").trim().toLowerCase();
     const provider = PROVIDER_BY_KEY.get(key);
     if (!provider) return res.status(404).json({ error: "Proveedor no soportado" });

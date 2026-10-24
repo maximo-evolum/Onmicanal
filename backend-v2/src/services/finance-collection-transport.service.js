@@ -1,6 +1,7 @@
 /** Archivo: Implementa reglas de negocio y procesos del dominio finance collection transport. */
 import { decryptSecret, encryptSecret } from "../lib/credential-crypto.js";
 import { FinanceOperationError } from "./finance-integrity.service.js";
+import { assertExternalOperationAllowed } from "../lib/security-rotation.js";
 
 const fail = (message) => { throw new FinanceOperationError(409, message); };
 const email = (s) => /^[^\s<>@,;\r\n]+@[^\s<>@,;\r\n]+\.[^\s<>@,;\r\n]+$/.test(s);
@@ -26,6 +27,7 @@ async function readProvider(fetcher, url, options = {}) {
 
 // Solo prevalidación. No envía mensajes aquí ni usa tokens globales o del tenant predeterminado.
 export async function prepareCollectionTransport(db, { tenantId, channel, templateName, language = "es" }, fetcher = fetch) {
+  assertExternalOperationAllowed("La preparación de envíos de cobranza");
   if (!["gmail", "whatsapp"].includes(channel)) fail("Este canal todavía no admite envíos efectivos de cobranza.");
   let config = await db.tenantChannelConfig.findFirst({ where: { tenantId, channel: { in: channel === "whatsapp" ? ["whatsapp", "meta_whatsapp"] : [channel] } }, orderBy: [{ updatedAt: "desc" }, { id: "asc" }] });
   if (!config?.isActive || !config?.accessToken) fail("Conecta y activa este canal para esta empresa antes de enviar.");
@@ -61,6 +63,7 @@ export async function prepareCollectionTransport(db, { tenantId, channel, templa
 }
 
 export async function dispatchCollectionMessage(transport, message, fetcher = fetch) {
+  assertExternalOperationAllowed("El envío de cobranza");
   let url, payload;
   if (transport.channel === "gmail") {
     const mime = [`From: ${transport.sender}`, `To: ${message.recipient}`, `Subject: =?UTF-8?B?${Buffer.from(message.subject).toString("base64")}?=`, `Message-ID: <${message.id}@evolum.invalid>`, "MIME-Version: 1.0", 'Content-Type: text/plain; charset="UTF-8"', "Content-Transfer-Encoding: base64", "", Buffer.from(message.body).toString("base64").match(/.{1,76}/g).join("\r\n")].join("\r\n");

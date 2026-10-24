@@ -7,6 +7,7 @@ import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { env } from "../lib/env.js";
 import { platformJobStatus } from "../services/platform-jobs.service.js";
 import { documentStorageStatus } from "../services/document-storage.service.js";
+import { securityRotationPosture } from "../lib/security-rotation.js";
 
 export const operationsRouter = Router();
 operationsRouter.get("/operations/health", requireRole(ROLE_GROUPS.MANAGERS), async (_req, res) => {
@@ -44,11 +45,12 @@ operationsRouter.get("/operations/security-posture", requireRole(ROLE_GROUPS.MAN
     prisma.tenantAuditLog.count({ where: { tenantId: req.tenantId } }).catch(() => 0),
     prisma.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "backup_config", title: "tenant_backup_policy" }, select: { updatedAt: true, data: true } }).catch(() => null)
   ]);
+  const rotation = securityRotationPosture();
   const controls = [
     { key: "transport", status: env.nodeEnv === "production" ? "active" : "review", label: "HTTPS y HSTS en producción" },
     { key: "session", status: "active", label: "Sesiones HTTP-only y validación de origen" },
     { key: "rate_limit", status: "active", label: "Límite de solicitudes y protección de acceso" },
-    { key: "credential_encryption", status: process.env.CONNECTIONS_ENCRYPTION_KEY ? "active" : "review", label: "Cifrado de credenciales de integraciones" },
+    ...rotation.controls,
     { key: "audit", status: auditEvents ? "active" : "review", label: "Trazabilidad de acciones administrativas", evidenceCount: auditEvents },
     { key: "backup", status: backupPolicy?.data?.encryptedAtRest ? "active" : "review", label: "Política de respaldo cifrado", configuredAt: backupPolicy?.updatedAt || null }
   ];
@@ -65,6 +67,7 @@ operationsRouter.get("/operations/security-posture", requireRole(ROLE_GROUPS.MAN
     generatedAt: new Date().toISOString(),
     score: Math.round((controls.filter((control) => control.status === "active").length / controls.length) * 100),
     controls,
-    nextSteps: controls.filter((control) => control.status !== "active").map((control) => control.key)
+    nextSteps: controls.filter((control) => control.status !== "active").map((control) => control.key),
+    credentialRotation: { active: rotation.rotationMode, externalOperationsAllowed: rotation.externalOperationsAllowed }
   });
 });

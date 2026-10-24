@@ -9,6 +9,7 @@ import { withDistributedLock } from "../lib/redis.js";
 import { runFinancePostIngestionAnalysis } from "./finance-automation.service.js";
 import { collectNuboxSales, importNuboxDocuments, externalDocumentDate } from "./finance-external-imports.service.js";
 import { FinanceOperationError } from "./finance-integrity.service.js";
+import { assertExternalOperationAllowed } from "../lib/security-rotation.js";
 
 const NUBOX_CHANNEL = "finance_nubox";
 
@@ -72,24 +73,28 @@ async function nuboxConfigForTenant(tenantId) {
 // Estas lecturas se exponen por rutas que primero comprueban que el
 // documento pertenece al tenant. Ninguna respuesta incluye secretos técnicos.
 export async function getNuboxSale({ tenantId, documentId }) {
+  assertExternalOperationAllowed("La consulta de documentos de Nubox");
   const config = await nuboxConfigForTenant(tenantId);
   const id = validNuboxDocumentId(documentId);
   return (await nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}`)).payload;
 }
 
 export async function getNuboxSaleDetails({ tenantId, documentId }) {
+  assertExternalOperationAllowed("La consulta de detalles de Nubox");
   const config = await nuboxConfigForTenant(tenantId);
   const id = validNuboxDocumentId(documentId);
   return (await nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}/details`)).payload;
 }
 
 export async function getNuboxSaleReferences({ tenantId, documentId }) {
+  assertExternalOperationAllowed("La consulta de referencias de Nubox");
   const config = await nuboxConfigForTenant(tenantId);
   const id = validNuboxDocumentId(documentId);
   return (await nuboxRequest(config, `/v1/sales/${encodeURIComponent(id)}/references`)).payload;
 }
 
 export async function downloadNuboxSaleFile({ tenantId, documentId, format }) {
+  assertExternalOperationAllowed("La descarga de archivos de Nubox");
   const normalizedFormat = String(format || "").toLowerCase();
   if (!new Set(["pdf", "xml"]).has(normalizedFormat)) throw new Error("El formato solicitado no es válido.");
   const config = await nuboxConfigForTenant(tenantId);
@@ -101,6 +106,7 @@ export async function downloadNuboxSaleFile({ tenantId, documentId, format }) {
 // Esta operación permanece explícita y protegida: jamás se invoca desde la
 // sincronización ni desde los agentes automáticos.
 export async function issueNuboxSales({ tenantId, documents, idempotenceId }) {
+  assertExternalOperationAllowed("La emisión de documentos en Nubox");
   if (!Array.isArray(documents) || !documents.length || documents.length > 20) {
     throw new Error("Debes enviar entre 1 y 20 documentos para emitir.");
   }
@@ -169,6 +175,7 @@ async function updateStatus(config, patch) {
 }
 
 export async function syncNuboxForTenant({ tenantId, period = currentPeriod(), limit = 100, source = "manual", maxAttempts = 3 } = {}) {
+  assertExternalOperationAllowed("La sincronización de Nubox");
   if (!tenantId) throw new Error("tenantId es requerido para sincronizar Nubox.");
   if (!validPeriod(period)) throw new Error("El período debe tener formato AAAA-MM.");
   const config = await prisma.tenantChannelConfig.findFirst({ where: { tenantId, channel: NUBOX_CHANNEL, isActive: true }, orderBy: { updatedAt: "desc" } });

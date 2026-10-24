@@ -38,6 +38,8 @@
     "seed:broker-demo": "node scripts/seed-realty-demo-properties.mjs",
     "verify:broker-demo": "node scripts/seed-realty-demo-properties.mjs --verify",
     "configure:broker-demo-holding": "node scripts/configure-broker-demo-holding.mjs",
+    "provision:broker-qa": "node scripts/provision-broker-qa-accounts.mjs",
+    "security:rewrap-connections": "node scripts/rewrap-connection-credentials.mjs",
     "migrate:broker-relational": "node scripts/migrate-broker-relational-core.mjs",
     "prisma:deploy": "prisma migrate deploy",
     "deploy:check": "prisma migrate status",

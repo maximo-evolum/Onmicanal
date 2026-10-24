@@ -1,9 +1,11 @@
 /** Archivo: Implementa reglas de negocio y procesos del dominio instagram. */
 import { env } from "../lib/env.js";
+import { assertExternalOperationAllowed } from "../lib/security-rotation.js";
 import { resolveOutboundChannelConfig } from "./tenant-channel-config.service.js";
 import { traceError, traceStep } from "../lib/trace.js";
 
 export async function sendInstagramText({ to, message, instagramBusinessAccountId, accessToken, tenant = null, tenantId = null, trace = null }) {
+  assertExternalOperationAllowed("El envío de Instagram");
   const resolved = await resolveOutboundChannelConfig({ tenant, tenantId, channel: "instagram" });
   const effectiveBusinessId = instagramBusinessAccountId || resolved.instagramBusinessAccountId;
   const token = accessToken || resolved.accessToken || env.metaAccessToken;

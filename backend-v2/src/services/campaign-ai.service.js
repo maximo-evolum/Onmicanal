@@ -1,6 +1,7 @@
 /** Archivo: Implementa reglas de negocio y procesos del dominio campaign ai. */
 import { ensurePublicCampaignImage } from "./campaign-assets.service.js";
 import { sendWhatsAppImage, sendWhatsAppText } from "./whatsapp.service.js";
+import { assertExternalOperationAllowed, credentialRotationActive } from "../lib/security-rotation.js";
 
 const OPENAI_URL = "https://api.openai.com/v1";
 
@@ -235,7 +236,7 @@ Plataformas: ${platforms.join(", ")}
 Cantidad de variantes: ${variantCount}
 `;
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.OPENAI_API_KEY || credentialRotationActive()) {
     const fallback = fallbackVariants(input, variantCount);
     return {
       variants: fallback.variants.map((variant, index) => normalizeVariant(variant, input, index))
@@ -281,7 +282,7 @@ Cantidad de variantes: ${variantCount}
 }
 
 async function generateImage(prompt, visualTitle = "", options = {}) {
-  if (!process.env.OPENAI_API_KEY || options.skipRealImage) {
+  if (!process.env.OPENAI_API_KEY || options.skipRealImage || credentialRotationActive()) {
     const encoded = encodeURIComponent(visualTitle || "Campaña IA");
     return `https://placehold.co/1080x1350/21183a/ede9fe/png?text=${encoded}`;
   }
@@ -486,6 +487,7 @@ async function publishInstagramPhoto({ igUserId, accessToken, imageUrl, caption 
 }
 
 export async function publishCampaignToPlatforms({ tenant, channelConfigs = [], campaign, platforms = [], selectedVariant = {}, whatsappRecipients = [] }) {
+  assertExternalOperationAllowed("La publicación de campañas");
   const selectedPlatforms = normalizePlatforms(platforms);
   const caption = buildCampaignCaption(selectedVariant, campaign);
   const imageUrl = await ensurePublicCampaignImage(selectedVariant.imageUrl || selectedVariant.image || null, {

@@ -3158,6 +3158,7 @@ export type ConnectionGroup = {
 export type ConnectionCenterResponse = {
   tenantId: string;
   generatedAt: string;
+  credentialRotation?: { active: boolean; message?: string | null };
   summary: {
     total: number;
     connected: number;

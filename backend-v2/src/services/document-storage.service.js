@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { assertExternalOperationAllowed } from "../lib/security-rotation.js";
 
 function safeSegment(value) {
   return String(value || "document")
@@ -127,6 +128,7 @@ export async function storeDocumentFile({ tenantId, filePath, fileName, mimeType
   const driver = documentStorageDriver();
   const storageKey = createDocumentStorageKey(tenantId, fileName);
   if (driver === "local") return { driver, storageKey };
+  assertExternalOperationAllowed("La carga a almacenamiento externo");
   const content = await fs.promises.readFile(filePath);
   const response = await fetch(azureBlobUrl(storageKey), {
     method: "PUT",
@@ -148,6 +150,7 @@ export async function openDocumentFile({ tenantId, localRoot, metadata }) {
     if (!filePath.startsWith(`${tenantDirectory}${path.sep}`) || !fs.existsSync(filePath)) return null;
     return { stream: fs.createReadStream(filePath), size: fs.statSync(filePath).size };
   }
+  assertExternalOperationAllowed("La lectura desde almacenamiento externo");
   const response = await fetch(azureBlobUrl(storageKey));
   if (response.status === 404) return null;
   await requireAzureResponse(response, "leer");
@@ -165,6 +168,7 @@ export async function removeDocumentFile({ tenantId, localRoot, metadata }) {
     if (filePath.startsWith(`${tenantDirectory}${path.sep}`)) await fs.promises.unlink(filePath).catch(() => undefined);
     return;
   }
+  assertExternalOperationAllowed("La eliminación desde almacenamiento externo");
   const response = await fetch(azureBlobUrl(storageKey), { method: "DELETE" });
   if (response.status !== 404) await requireAzureResponse(response, "eliminar");
 }

@@ -1,6 +1,7 @@
 /** Archivo: Implementa reglas de negocio y procesos del dominio autonomous sales followup. */
 
 import { prisma } from "../lib/db.js";
+import { credentialRotationActive } from "../lib/security-rotation.js";
 
 function minutesSince(date) {
   if (!date) return 0;
@@ -47,6 +48,7 @@ Podemos mantenerla como está o ajustarla si quieres cambiar cantidad de persona
 }
 
 export async function runAutonomousSalesFollowUps({ tenantId = null, dryRun = false, limit = 50 } = {}) {
+  if (!dryRun && credentialRotationActive()) return { processed: 0, skipped: "credential_rotation_active", actions: [] };
   const where = tenantId ? { tenantId } : {};
   const conversations = await prisma.conversation.findMany({
     where,

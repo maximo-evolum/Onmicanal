@@ -1,5 +1,6 @@
 /** Archivo: Proporciona infraestructura y utilidades compartidas para push notifications. */
 import { prisma } from "./db.js";
+import { assertExternalOperationAllowed } from "./security-rotation.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const MAX_BATCH_SIZE = 100;
@@ -15,6 +16,7 @@ function wantsNotification(preferences, type) {
 
 export async function sendTenantPushNotification({ tenantId, assignedToId = null, title, body = "", type = "general", data = {} } = {}) {
   if (!tenantId || !title) return { attempted: 0, delivered: 0 };
+  assertExternalOperationAllowed("El envío de notificaciones push");
 
   const devices = await prisma.mobilePushDevice.findMany({
     where: { tenantId, isActive: true, ...(assignedToId ? { userId: assignedToId } : {}) },

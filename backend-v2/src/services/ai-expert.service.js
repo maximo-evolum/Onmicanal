@@ -1,5 +1,6 @@
 /** Archivo: Implementa reglas de negocio y procesos del dominio ai expert. */
 import { env } from "../lib/env.js";
+import { credentialRotationActive } from "../lib/security-rotation.js";
 import { buildProductContext, searchProducts } from "./product.service.js";
 
 
@@ -46,8 +47,6 @@ function fallbackAnalysis(message, products = []) {
 }
 
 export async function generateExpertAnalysis({ tenantId, conversationId, message }) {
-  const products = tenantId ? await searchProducts({ tenantId, query: message, take: 3 }) : [];
-
   if (!message || !String(message).trim()) {
     return {
       summary: "Sin mensaje",
@@ -57,6 +56,12 @@ export async function generateExpertAnalysis({ tenantId, conversationId, message
       reason: "Mensaje vacío"
     };
   }
+
+  // Durante la rotación se conserva una respuesta local y no se consulta ningún
+  // proveedor externo ni se expone el estado de las credenciales.
+  if (credentialRotationActive()) return fallbackAnalysis(message, []);
+
+  const products = tenantId ? await searchProducts({ tenantId, query: message, take: 3 }) : [];
 
   if (!env.openAiApiKey) return fallbackAnalysis(message, products);
 
