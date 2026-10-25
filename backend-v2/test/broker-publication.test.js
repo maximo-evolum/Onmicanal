@@ -1,7 +1,7 @@
 /** Archivo: Verifica las reglas de borrador, aprobación y proveedor de publicaciones Broker OS. */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { brokerPublicationReadiness, createBrokerPublicationData, transitionBrokerPublication } from "../src/services/broker-publication.service.js";
+import { brokerPublicationAnalytics, brokerPublicationExport, brokerPublicationReadiness, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, transitionBrokerPublication } from "../src/services/broker-publication.service.js";
 
 const property = {
   id: "property-1",
@@ -49,4 +49,25 @@ test("la transición obliga revisión humana antes de proveedor", () => {
   const provider = transitionBrokerPublication(approved, "PREPARE_PROVIDER", { actor: "Dirección" });
   assert.equal(provider.publicationStatus, "PROVIDER_PENDING");
   assert.equal(provider.lifecycle.at(-1).action, "PROVEEDOR_PENDIENTE");
+});
+
+test("el proveedor no acepta secretos y el rendimiento no permite cantidades negativas", () => {
+  const provider = normalizeBrokerPublicationProvider("PORTAL_INMOBILIARIO", { providerStatus: "CONTRACTED", accountReference: "Cuenta demostración", notes: "Integración pendiente" });
+  const metrics = normalizeBrokerPublicationMetrics({ reportDate: "2026-10-24", views: 120, contacts: -3, favorites: 7, publishedUrl: "https://portal.ejemplo/publicacion" });
+  assert.equal(provider.externalPublishingEnabled, false);
+  assert.equal(provider.credentialStorage, "CENTRO_DE_CONEXIONES_CIFRADO");
+  assert.equal(metrics.contacts, 0);
+});
+
+test("la analítica y el contrato de salida no declaran una publicación externa", () => {
+  const readiness = brokerPublicationReadiness({ property, mandate: { status: "SIGNED" } });
+  const data = createBrokerPublicationData({ property, channel: "YAPO", readiness, actor: "María Corredora" });
+  data.metrics = normalizeBrokerPublicationMetrics({ reportDate: "2026-10-24", views: 80, contacts: 4, favorites: 2 });
+  const record = { id: "publication-1", title: "Publicación", data, status: "DRAFT" };
+  const analytics = brokerPublicationAnalytics([record]);
+  const exported = brokerPublicationExport({ publication: record, property });
+  assert.equal(analytics.contacts, 4);
+  assert.equal(analytics.contactRatePct, 5);
+  assert.equal(exported.externalDelivery, false);
+  assert.match(exported.message, /No acredita/);
 });

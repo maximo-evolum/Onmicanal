@@ -2309,9 +2309,49 @@ export type BrokerPublication = {
     copy: { title: string; body: string; price: number | null; currency: string; operation: string; propertyType: string; address: string; comuna: string; region: string; images: string[] };
     readiness: BrokerPublicationReadiness;
     approval: { status: string; requestedAt: string | null; requestedBy: string | null; approvedAt: string | null; approvedBy: string | null; note: string };
+    metrics?: BrokerPublicationMetrics;
     lifecycle: Array<{ at: string; action: string; by: string; note: string }>;
     version: number;
   };
+};
+
+export type BrokerPublicationMetrics = {
+  reportDate: string;
+  views: number;
+  contacts: number;
+  favorites: number;
+  publishedUrl: string;
+  source: "REPORTE_MANUAL_O_PROVEEDOR" | string;
+  updatedAt: string;
+};
+
+export type BrokerPublicationProvider = {
+  id: string | null;
+  channel: string;
+  channelLabel: string;
+  providerStatus: string;
+  configured: boolean;
+  externalPublishingEnabled: false;
+  updatedAt: string | null;
+};
+
+export type BrokerPublicationAnalytics = {
+  total: number;
+  published: number;
+  approved: number;
+  pendingProvider: number;
+  pendingReview: number;
+  views: number;
+  contacts: number;
+  favorites: number;
+  contactRatePct: number | null;
+  byChannel: Array<{ channel: string; label: string; total: number; published: number; views: number; contacts: number; contactRatePct: number | null }>;
+};
+
+export type BrokerPublicationProvidersResponse = {
+  providers: BrokerPublicationProvider[];
+  providerStatuses: string[];
+  credentialPolicy: string;
 };
 
 export type BrokerPublicationOptions = {
@@ -2341,6 +2381,32 @@ export function updateBrokerPublication(id: string, input: { channel?: string; t
 
 export function actBrokerPublication(id: string, input: { action: "REQUEST_REVIEW" | "APPROVE" | "PREPARE_PROVIDER" | "PAUSE" | "ARCHIVE"; note?: string }): Promise<BrokerPublication & { notice?: string }> {
   return request<BrokerPublication & { notice?: string }>(`/broker/publications/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function getBrokerPublicationAnalytics(): Promise<BrokerPublicationAnalytics> {
+  return request<BrokerPublicationAnalytics>("/broker/publications/analytics");
+}
+
+export function getBrokerPublicationProviders(): Promise<BrokerPublicationProvidersResponse> {
+  return request<BrokerPublicationProvidersResponse>("/broker/publication-providers");
+}
+
+export function updateBrokerPublicationProvider(channel: string, input: { providerStatus: string }): Promise<BrokerPublicationProvider> {
+  return request<BrokerPublicationProvider>(`/broker/publication-providers/${encodeURIComponent(channel)}`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export function recordBrokerPublicationMetrics(id: string, input: Partial<BrokerPublicationMetrics>): Promise<BrokerPublication> {
+  return request<BrokerPublication>(`/broker/publications/${encodeURIComponent(id)}/metrics`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export function getBrokerPublicationExport(id: string): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>(`/broker/publications/${encodeURIComponent(id)}/export`);
 }
 
 export function createBrokerRecord(input: {

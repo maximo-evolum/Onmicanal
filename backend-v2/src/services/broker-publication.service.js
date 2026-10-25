@@ -27,6 +27,19 @@ export const BROKER_PUBLICATION_STATUSES = Object.freeze([
   "REJECTED",
 ]);
 
+export const BROKER_PUBLICATION_PROVIDER_STATUSES = Object.freeze([
+  // Catálogo propio: no es una integración ni permite publicar hacia terceros.
+  "INTERNAL",
+  "PENDING_PROVIDER",
+  "CONTACTED",
+  "CONTRACTED",
+  "TECHNICAL_REVIEW",
+  "READY_FOR_TEST",
+  "ACTIVE",
+  "PAUSED",
+  "UNAVAILABLE",
+]);
+
 function text(value, fallback = "") {
   const result = String(value ?? "").trim();
   return result || fallback;
@@ -227,5 +240,134 @@ export function publicBrokerPublication(record) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     data,
+  };
+}
+
+/**
+ * Configuración de negocio sin secretos. Las credenciales reales no se
+ * persisten aquí: cuando exista una integración aprobada deben quedar en el
+ * Centro de Conexiones cifradas, no en un registro operativo ni en el cliente.
+ */
+export function normalizeBrokerPublicationProvider(channel, input = {}, previous = {}) {
+  const definition = channelDefinition(channel);
+  if (!definition) throw new Error("El proveedor indicado no pertenece a los canales de publicación disponibles.");
+  const requested = text(input.providerStatus || previous.providerStatus || definition.providerState).toUpperCase();
+  const providerStatus = BROKER_PUBLICATION_PROVIDER_STATUSES.includes(requested) ? requested : definition.providerState;
+  return {
+    channel: definition.key,
+    channelLabel: definition.label,
+    providerStatus,
+    contractReference: text(input.contractReference ?? previous.contractReference).slice(0, 300),
+    accountReference: text(input.accountReference ?? previous.accountReference).slice(0, 300),
+    technicalContact: text(input.technicalContact ?? previous.technicalContact).slice(0, 300),
+    notes: text(input.notes ?? previous.notes).slice(0, 3000),
+    credentialStorage: "CENTRO_DE_CONEXIONES_CIFRADO",
+    externalPublishingEnabled: false,
+  };
+}
+
+export function publicBrokerPublicationProvider(record, channel) {
+  const data = propertyData(record);
+  const normalized = normalizeBrokerPublicationProvider(channel || data.channel, data);
+  return {
+    id: record?.id || null,
+    ...normalized,
+    updatedAt: record?.updatedAt || null,
+  };
+}
+
+export function normalizeBrokerPublicationMetrics(input = {}, previous = {}) {
+  const safeInteger = (value, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : fallback;
+  };
+  const reportDate = text(input.reportDate || previous.reportDate, new Date().toISOString().slice(0, 10));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) throw new Error("Indica una fecha válida para el reporte de rendimiento.");
+  return {
+    reportDate,
+    views: safeInteger(input.views, safeInteger(previous.views)),
+    contacts: safeInteger(input.contacts, safeInteger(previous.contacts)),
+    favorites: safeInteger(input.favorites, safeInteger(previous.favorites)),
+    publishedUrl: text(input.publishedUrl ?? previous.publishedUrl).slice(0, 1500),
+    source: "REPORTE_MANUAL_O_PROVEEDOR",
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function brokerPublicationAnalytics(records = []) {
+  const rows = records.map((record) => propertyData(record));
+  const total = rows.length;
+  const published = rows.filter((item) => text(item.publicationStatus).toUpperCase() === "PUBLISHED").length;
+  const approved = rows.filter((item) => text(item.publicationStatus).toUpperCase() === "APPROVED").length;
+  const pendingProvider = rows.filter((item) => text(item.publicationStatus).toUpperCase() === "PROVIDER_PENDING").length;
+  const pendingReview = rows.filter((item) => text(item.publicationStatus).toUpperCase() === "PENDING_REVIEW").length;
+  const metrics = rows.map((item) => item.metrics && typeof item.metrics === "object" ? item.metrics : {});
+  const views = metrics.reduce((sum, item) => sum + Number(item.views || 0), 0);
+  const contacts = metrics.reduce((sum, item) => sum + Number(item.contacts || 0), 0);
+  const favorites = metrics.reduce((sum, item) => sum + Number(item.favorites || 0), 0);
+  const byChannel = BROKER_PUBLICATION_CHANNELS.map((channel) => {
+    const channelRows = rows.filter((item) => text(item.channel).toUpperCase() === channel.key);
+    const channelMetrics = channelRows.map((item) => item.metrics && typeof item.metrics === "object" ? item.metrics : {});
+    const channelViews = channelMetrics.reduce((sum, item) => sum + Number(item.views || 0), 0);
+    const channelContacts = channelMetrics.reduce((sum, item) => sum + Number(item.contacts || 0), 0);
+    return {
+      channel: channel.key,
+      label: channel.label,
+      total: channelRows.length,
+      published: channelRows.filter((item) => text(item.publicationStatus).toUpperCase() === "PUBLISHED").length,
+      views: channelViews,
+      contacts: channelContacts,
+      contactRatePct: channelViews > 0 ? Number(((channelContacts / channelViews) * 100).toFixed(2)) : null,
+    };
+  }).filter((item) => item.total > 0);
+  return {
+    total,
+    published,
+    approved,
+    pendingProvider,
+    pendingReview,
+    views,
+    contacts,
+    favorites,
+    contactRatePct: views > 0 ? Number(((contacts / views) * 100).toFixed(2)) : null,
+    byChannel,
+  };
+}
+
+/** Genera un contrato de salida auditable, sin ejecutar ninguna publicación. */
+export function brokerPublicationExport({ publication, property, provider = null }) {
+  const data = propertyData(publication);
+  const source = propertyData(property);
+  return {
+    schema: "EVOLUM_BROKER_PUBLICATION_V2",
+    generatedAt: new Date().toISOString(),
+    externalDelivery: false,
+    message: "Este archivo es una previsualización técnica. No acredita ni ejecuta una publicación en un portal externo.",
+    provider: provider ? publicBrokerPublicationProvider(provider, data.channel) : normalizeBrokerPublicationProvider(data.channel),
+    publication: {
+      id: publication.id,
+      status: data.publicationStatus,
+      channel: data.channel,
+      title: data.copy?.title || publication.title,
+      description: data.copy?.body || "",
+      price: data.copy?.price ?? null,
+      currency: data.copy?.currency || text(source.currency, "CLP").toUpperCase(),
+      images: array(data.copy?.images),
+      readiness: data.readiness || null,
+    },
+    property: {
+      id: property.id,
+      title: property.title,
+      type: text(source.propertyType),
+      operation: text(source.operation || source.intendedService),
+      address: text(source.address),
+      comuna: text(source.comuna || source.commune),
+      region: text(source.region),
+      bedrooms: number(source.bedrooms),
+      bathrooms: number(source.bathrooms),
+      usableSquareMeters: number(source.usableSquareMeters ?? source.builtM2 ?? source.meters),
+      totalSquareMeters: number(source.totalSquareMeters ?? source.landM2),
+      parking: number(source.parking),
+    },
   };
 }

@@ -7,12 +7,19 @@ import {
   actBrokerPublication,
   createBrokerPublication,
   getBrokerAccess,
+  getBrokerPublicationAnalytics,
+  getBrokerPublicationExport,
   getBrokerPublicationOptions,
+  getBrokerPublicationProviders,
   getBrokerPublications,
+  recordBrokerPublicationMetrics,
+  updateBrokerPublicationProvider,
   updateBrokerPublication,
   type BrokerAccessProfile,
   type BrokerPublication,
+  type BrokerPublicationAnalytics,
   type BrokerPublicationOptions,
+  type BrokerPublicationProvidersResponse,
 } from "@/lib/api";
 import styles from "./broker-publications.module.css";
 
@@ -44,9 +51,34 @@ function readableStatus(value: string) {
   } as Record<string, string>)[value] || value;
 }
 
+function readableProviderStatus(value: string) {
+  return ({
+    INTERNAL: "Interno",
+    PENDING_PROVIDER: "Pendiente de proveedor",
+    CONTACTED: "Contacto iniciado",
+    CONTRACTED: "Contrato vigente",
+    TECHNICAL_REVIEW: "Revisión técnica",
+    READY_FOR_TEST: "Listo para pruebas",
+    ACTIVE: "Activo",
+    PAUSED: "Pausado",
+    UNAVAILABLE: "No disponible",
+  } as Record<string, string>)[value] || value;
+}
+
+function integer(value: string | number | null | undefined) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? String(Math.round(parsed)) : "0";
+}
+
 const emptyOptions: BrokerPublicationOptions = {
   channels: [], statuses: [], properties: [], externalPublicationEnabled: false, externalPublicationNotice: ""
 };
+
+const emptyAnalytics: BrokerPublicationAnalytics = {
+  total: 0, published: 0, approved: 0, pendingProvider: 0, pendingReview: 0, views: 0, contacts: 0, favorites: 0, contactRatePct: null, byChannel: []
+};
+
+const emptyProviders: BrokerPublicationProvidersResponse = { providers: [], providerStatuses: [], credentialPolicy: "" };
 
 /**
  * Separa el trabajo editorial interno de las integraciones reales: una
@@ -56,6 +88,8 @@ export function BrokerPublicationsPageContent() {
   const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
   const [options, setOptions] = useState<BrokerPublicationOptions>(emptyOptions);
   const [items, setItems] = useState<BrokerPublication[]>([]);
+  const [analytics, setAnalytics] = useState<BrokerPublicationAnalytics>(emptyAnalytics);
+  const [providers, setProviders] = useState<BrokerPublicationProvidersResponse>(emptyProviders);
   const [selected, setSelected] = useState<BrokerPublication | null>(null);
   const [propertyId, setPropertyId] = useState("");
   const [channel, setChannel] = useState("");
@@ -63,6 +97,7 @@ export function BrokerPublicationsPageContent() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [note, setNote] = useState("");
+  const [metrics, setMetrics] = useState({ reportDate: new Date().toISOString().slice(0, 10), views: "0", contacts: "0", favorites: "0", publishedUrl: "" });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -70,18 +105,23 @@ export function BrokerPublicationsPageContent() {
   const canCreate = canBroker(access, "projects", "CREATE");
   const canEdit = canBroker(access, "projects", "EDIT");
   const canApprove = canBroker(access, "projects", "APPROVE");
+  const canConfigureProviders = canBroker(access, "configuration", "CONFIGURE");
 
   const currentProperty = useMemo(() => options.properties.find((item) => item.id === propertyId) || null, [options.properties, propertyId]);
 
   async function reload(nextFilter = filter) {
-    const [nextAccess, nextOptions, publications] = await Promise.all([
+    const [nextAccess, nextOptions, publications, nextAnalytics, nextProviders] = await Promise.all([
       getBrokerAccess(),
       getBrokerPublicationOptions(),
       getBrokerPublications(nextFilter),
+      getBrokerPublicationAnalytics(),
+      getBrokerPublicationProviders(),
     ]);
     setAccess(nextAccess);
     setOptions(nextOptions);
     setItems(publications.items);
+    setAnalytics(nextAnalytics);
+    setProviders(nextProviders);
     setSelected((current) => publications.items.find((item) => item.id === current?.id) || null);
     if (!propertyId && nextOptions.properties.length) setPropertyId(nextOptions.properties[0].id);
     if (!channel && nextOptions.channels.length) setChannel(nextOptions.channels[0].key);
@@ -130,11 +170,60 @@ export function BrokerPublicationsPageContent() {
     } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
   }
 
+  async function saveMetrics() {
+    if (!selected) return;
+    try {
+      setBusy(true);
+      const updated = await recordBrokerPublicationMetrics(selected.id, {
+        reportDate: metrics.reportDate,
+        views: Number(metrics.views),
+        contacts: Number(metrics.contacts),
+        favorites: Number(metrics.favorites),
+        publishedUrl: metrics.publishedUrl,
+      });
+      setSelected(updated);
+      setNotice("Rendimiento registrado en la bitácora. Estos datos no ejecutan ni acreditan una publicación externa.");
+      await reload();
+    } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
+  }
+
+  async function changeProviderStatus(providerChannel: string, providerStatus: string) {
+    try {
+      setBusy(true);
+      await updateBrokerPublicationProvider(providerChannel, { providerStatus });
+      setNotice("Estado comercial del proveedor actualizado. Las credenciales y la publicación externa siguen bloqueadas.");
+      await reload();
+    } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
+  }
+
+  async function exportTechnicalPayload() {
+    if (!selected) return;
+    try {
+      setBusy(true);
+      const payload = await getBrokerPublicationExport(selected.id);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `broker-publication-${selected.id}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setNotice("Se descargó la previsualización técnica. El archivo no se envió a ningún portal.");
+    } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
+  }
+
   function selectPublication(item: BrokerPublication) {
     setSelected(item);
     setTitle(item.data.copy.title || "");
     setBody(item.data.copy.body || "");
     setNote("");
+    setMetrics({
+      reportDate: item.data.metrics?.reportDate || new Date().toISOString().slice(0, 10),
+      views: integer(item.data.metrics?.views),
+      contacts: integer(item.data.metrics?.contacts),
+      favorites: integer(item.data.metrics?.favorites),
+      publishedUrl: item.data.metrics?.publishedUrl || "",
+    });
   }
 
   return (
@@ -152,6 +241,28 @@ export function BrokerPublicationsPageContent() {
       <section className={styles.providerNotice}>
         <strong>Integraciones externas</strong>
         <p>{options.externalPublicationNotice || "Cargando estado de proveedores…"}</p>
+      </section>
+
+      <section className={styles.analytics} aria-label="Resumen de desempeño de publicaciones">
+        <article><span>Publicaciones</span><b>{analytics.total}</b><small>{analytics.published} marcadas como publicadas</small></article>
+        <article><span>Revisión interna</span><b>{analytics.pendingReview}</b><small>{analytics.approved} aprobadas</small></article>
+        <article><span>Proveedor pendiente</span><b>{analytics.pendingProvider}</b><small>sin entrega externa automática</small></article>
+        <article><span>Rendimiento informado</span><b>{analytics.contacts}</b><small>{analytics.views} vistas · {analytics.contactRatePct === null ? "sin tasa aún" : `${analytics.contactRatePct}% contactos`}</small></article>
+      </section>
+
+      <section className={styles.providers}>
+        <div className={styles.providersHeading}><div><span>Proveedores y conectores</span><h2>Estado por portal</h2></div><p>{providers.credentialPolicy || "Cargando política de credenciales…"}</p></div>
+        <div className={styles.providerGrid}>
+          {providers.providers.map((provider) => <article key={provider.channel} className={styles.providerCard}>
+            <div><strong>{provider.channelLabel}</strong><span className={`${styles.status} ${styles[`provider${provider.providerStatus}`] || ""}`}>{readableProviderStatus(provider.providerStatus)}</span></div>
+            <p>{provider.configured ? `Actualizado ${date(provider.updatedAt)}` : "Aún no se ha configurado su estado comercial."}</p>
+            {canConfigureProviders ? <label>Estado comercial
+              <select value={provider.providerStatus} disabled={busy} onChange={(event) => changeProviderStatus(provider.channel, event.target.value)}>
+                {providers.providerStatuses.map((status) => <option key={status} value={status}>{readableProviderStatus(status)}</option>)}
+              </select>
+            </label> : null}
+          </article>)}
+        </div>
       </section>
 
       <section className={styles.grid}>
@@ -231,6 +342,20 @@ export function BrokerPublicationsPageContent() {
             {selected.data.publicationStatus === "DRAFT" && !selected.data.readiness?.readyForReview ? <p className={styles.warning}>Completa los antecedentes indicados antes de solicitar aprobación.</p> : null}
           </aside>
         </div>
+        <section className={styles.performance}>
+          <div><span>04 · Medir y exportar</span><h3>Rendimiento por canal</h3><p>Registra datos manuales o recibidos del portal. La URL es una referencia informativa y no valida una publicación.</p></div>
+          <div className={styles.metricsForm}>
+            <label>Fecha de reporte<input type="date" value={metrics.reportDate} disabled={!canEdit || busy} onChange={(event) => setMetrics((current) => ({ ...current, reportDate: event.target.value }))} /></label>
+            <label>Vistas<input inputMode="numeric" value={metrics.views} disabled={!canEdit || busy} onChange={(event) => setMetrics((current) => ({ ...current, views: event.target.value }))} /></label>
+            <label>Contactos<input inputMode="numeric" value={metrics.contacts} disabled={!canEdit || busy} onChange={(event) => setMetrics((current) => ({ ...current, contacts: event.target.value }))} /></label>
+            <label>Favoritos<input inputMode="numeric" value={metrics.favorites} disabled={!canEdit || busy} onChange={(event) => setMetrics((current) => ({ ...current, favorites: event.target.value }))} /></label>
+            <label className={styles.metricUrl}>URL publicada o comprobante<input type="url" value={metrics.publishedUrl} disabled={!canEdit || busy} onChange={(event) => setMetrics((current) => ({ ...current, publishedUrl: event.target.value }))} placeholder="https://…" /></label>
+            <div className={styles.metricActions}>
+              <button type="button" className="secondary-btn" disabled={!canEdit || busy} onClick={saveMetrics}>Guardar rendimiento</button>
+              <button type="button" className={styles.exportButton} disabled={busy} onClick={exportTechnicalPayload}>Descargar JSON técnico</button>
+            </div>
+          </div>
+        </section>
         <section className={styles.timeline}><h3>Bitácora de la publicación</h3>{selected.data.lifecycle?.slice().reverse().map((event, index) => <article key={`${event.at}-${index}`}><time>{date(event.at)}</time><div><b>{event.action.replaceAll("_", " ")}</b><span>{event.by}</span>{event.note ? <p>{event.note}</p> : null}</div></article>)}</section>
       </section> : null}
     </section>
