@@ -156,7 +156,7 @@ export const BROKER_RECORD_DEFINITIONS = Object.freeze({
   remodeling_project: { label: "Proyecto de remodelación", area: "projects", required: ["propertyId", "projectType", "budget"], statuses: ["PLANNED", "APPROVED", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "CANCELLED"] },
   project_budget: { label: "Presupuesto de proyecto", area: "projects", required: ["propertyId", "amount"], statuses: ["DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED"] },
   project_milestone: { label: "Hito de proyecto", area: "projects", required: ["propertyId", "milestoneDate", "description"], statuses: ["PENDING", "IN_PROGRESS", "COMPLETED", "BLOCKED"] },
-  marketing_publication: { label: "Publicación inmobiliaria", area: "projects", required: ["propertyId", "channel", "publicationStatus"], statuses: ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "PAUSED", "ARCHIVED"] },
+  marketing_publication: { label: "Publicación inmobiliaria", area: "projects", required: ["propertyId", "channel", "publicationStatus"], statuses: ["DRAFT", "PENDING_REVIEW", "APPROVED", "PROVIDER_PENDING", "PUBLISHED", "PAUSED", "ARCHIVED", "REJECTED"] },
   property_inspection: { label: "Inspección", area: "post_sale", required: ["propertyId", "inspectionDate", "checklist"], statuses: ["SCHEDULED", "IN_PROGRESS", "COMPLETED", "REQUIRES_ACTION"] },
   property_handover: { label: "Entrega o recepción", area: "post_sale", required: ["propertyId", "handoverDate", "recipientName"], statuses: ["SCHEDULED", "PENDING_SIGNATURE", "COMPLETED", "OBSERVED"] },
   post_sale_case: { label: "Caso de postventa", area: "post_sale", required: ["propertyId", "description"], statuses: ["OPEN", "IN_PROGRESS", "WAITING_PROVIDER", "RESOLVED", "CLOSED"] },

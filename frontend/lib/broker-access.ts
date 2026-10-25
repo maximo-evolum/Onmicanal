@@ -21,6 +21,7 @@ export function canBrokerLink(access: BrokerAccessProfile | null, href: string) 
   const query = new URLSearchParams(href.split("?")[1] || "");
   const view = query.get("view") || "overview";
   if (view === "brokers") return canBroker(access, "access", "CONFIGURE") || canBroker(access, "commercial", "ASSIGN");
+  if (view === "publications") return canBroker(access, "projects", "VIEW");
   if (view === "broker_os") return canBrokerTab(access, query.get("area") || query.get("tab") || "operations");
   const area = ({ overview: "overview", brokers: "access", training: "ai" } as Record<string, string>)[view] || "commercial";
   return canBroker(access, area, view === "brokers" ? "CONFIGURE" : "VIEW");

@@ -50,6 +50,7 @@ import { BROKER_RECORD_RESOURCES } from "../services/broker-record-access.servic
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 import { BROKER_JOURNEY_CATALOG, BROKER_JOURNEY_VERSION, brokerOperationPayload, captureJourney, projectBrokerOperations, validateBrokerOperationReferences, persistBrokerOperationStage, updateBrokerOperationSnapshot } from "../services/broker-operation-contract.service.js";
 import { buildBrokerGovernanceSummary, normalizeBrokerAlertResolution } from "../services/broker-governance.service.js";
+import { BROKER_PUBLICATION_CHANNELS, BROKER_PUBLICATION_STATUSES, brokerPublicationReadiness, brokerPublicationCopy, createBrokerPublicationData, publicBrokerPublication, transitionBrokerPublication } from "../services/broker-publication.service.js";
 
 export const brokerRouter = Router();
 
@@ -452,6 +453,180 @@ async function persistBrokerCapture(req, { property, rawInput, created = false }
   await recordAuditLog(req, created ? "BROKER_CAPTURE_CREATED" : "BROKER_CAPTURE_UPDATED", "broker_property_capture", saved.capture.id, { propertyId: saved.property.id, status: saved.capture.status, readiness: captureValidation.readiness.score });
   return capturePayload(saved.property, saved.capture);
 }
+
+// Centro de publicación multicanal V2. Estas rutas preparan y controlan la
+// ficha comercial dentro de Broker OS. Nunca llaman APIs de portales externos
+// ni cambian una publicación real sin un conector homologado.
+async function publicationContext(req, propertyId) {
+  const property = await assertRelatedProperty(req, propertyId);
+  if (property.tenantId !== req.tenantId) throw Object.assign(new Error("No puedes modificar publicaciones de otra empresa del holding."), { status: 403 });
+  const strictProperty = await prisma.brokerProperty.findUnique({ where: { legacyRecordId: property.id }, include: { capture: true } });
+  const mandate = await prisma.industryRecord.findFirst({
+    where: {
+      tenantId: req.tenantId,
+      recordType: "property_mandate",
+      status: "SIGNED",
+      data: { path: ["propertyId"], equals: property.id }
+    },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, status: true, data: true, updatedAt: true }
+  });
+  const capture = strictProperty?.capture || null;
+  return { property, capture, mandate, readiness: brokerPublicationReadiness({ property, capture, mandate }) };
+}
+
+async function publicationRecord(req, id) {
+  const record = await prisma.industryRecord.findFirst({
+    where: brokerWhere(req, { id: String(id), recordType: "marketing_publication" }),
+  });
+  if (!record) throw Object.assign(new Error("Publicación no encontrada dentro de tu alcance autorizado."), { status: 404 });
+  return record;
+}
+
+function publicationActor(req) {
+  return text(req.user?.name || req.user?.email, "Usuario autorizado");
+}
+
+function publicationTitle(property, channelLabel) {
+  return `Publicación · ${channelLabel} · ${text(property?.title, "Propiedad")}`.slice(0, 240);
+}
+
+// brokerRecordWhere restringe lectura por responsable, pero las mutaciones
+// requieren esta verificación adicional para que un corredor con alcance
+// ASSIGNED, TEAM o BRANCH no pueda adivinar un identificador y editar una
+// publicación de otra cartera.
+function assertPublicationMutationScope(req, record) {
+  const allowedAssignees = req.brokerAccess?.scopeUserIds;
+  if (allowedAssignees === null) return;
+  if (Array.isArray(allowedAssignees) && allowedAssignees.includes(String(record?.assignedToId || ""))) return;
+  throw Object.assign(new Error("La publicación está fuera de tu alcance operativo autorizado."), { status: 403 });
+}
+
+brokerRouter.get("/broker/publications/options", requireBrokerAction("projects", "VIEW"), async (req, res) => {
+  try {
+    const properties = await prisma.industryRecord.findMany({
+      where: brokerWhere(req, { recordType: "property", status: { not: "ARCHIVED" } }),
+      select: { id: true, title: true, data: true, assignedToId: true, updatedAt: true },
+      orderBy: { updatedAt: "desc" },
+      take: 500,
+    });
+    res.json({
+      channels: BROKER_PUBLICATION_CHANNELS,
+      statuses: BROKER_PUBLICATION_STATUSES,
+      properties: properties.map((property) => ({
+        id: property.id,
+        title: property.title,
+        assignedToId: property.assignedToId,
+        price: numberOrNull(dataOf(property).price ?? dataOf(property).suggestedPrice),
+        currency: text(dataOf(property).currency, "CLP").toUpperCase(),
+        comuna: text(dataOf(property).comuna || dataOf(property).commune),
+      })),
+      externalPublicationEnabled: false,
+      externalPublicationNotice: "No hay portales externos habilitados. Broker OS conserva borradores y aprobaciones hasta contar con contrato, API y credenciales autorizadas por cada proveedor.",
+    });
+  } catch (error) {
+    console.error("Broker publication options error:", error);
+    res.status(500).json({ error: "No se pudieron cargar las opciones de publicación." });
+  }
+});
+
+brokerRouter.get("/broker/publications", requireBrokerAction("projects", "VIEW"), async (req, res) => {
+  try {
+    const records = await prisma.industryRecord.findMany({
+      where: brokerWhere(req, { recordType: "marketing_publication" }),
+      orderBy: { updatedAt: "desc" },
+      take: 500,
+    });
+    const propertyId = text(req.query?.propertyId);
+    const channel = text(req.query?.channel).toUpperCase();
+    const status = text(req.query?.status).toUpperCase();
+    const items = records
+      .filter((record) => !propertyId || text(dataOf(record).propertyId) === propertyId)
+      .filter((record) => !channel || text(dataOf(record).channel).toUpperCase() === channel)
+      .filter((record) => !status || text(dataOf(record).publicationStatus || record.status).toUpperCase() === status)
+      .map(publicBrokerPublication);
+    res.json({ items, total: items.length, externalPublicationEnabled: false });
+  } catch (error) {
+    console.error("List broker publications error:", error);
+    res.status(500).json({ error: "No se pudieron cargar las publicaciones." });
+  }
+});
+
+brokerRouter.post("/broker/publications", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("projects", "CREATE"), async (req, res) => {
+  try {
+    const propertyId = text(req.body?.propertyId);
+    const channel = text(req.body?.channel).toUpperCase();
+    if (!propertyId || !channel) return res.status(422).json({ error: "Selecciona una propiedad y un canal para crear el borrador." });
+    const context = await publicationContext(req, propertyId);
+    assertPublicationMutationScope(req, context.property);
+    const data = createBrokerPublicationData({ property: context.property, channel, input: req.body || {}, readiness: context.readiness, actor: publicationActor(req) });
+    const record = await prisma.industryRecord.create({
+      data: {
+        tenantId: req.tenantId,
+        recordType: "marketing_publication",
+        title: publicationTitle(context.property, data.channelLabel),
+        status: "DRAFT",
+        assignedToId: context.property.assignedToId || req.user.id,
+        data,
+      }
+    });
+    await recordAuditLog(req, "BROKER_PUBLICATION_DRAFT_CREATED", "marketing_publication", record.id, { propertyId, channel: data.channel, readiness: data.readiness.score, externalPublication: false });
+    res.status(201).json(publicBrokerPublication(record));
+  } catch (error) {
+    const status = error?.status || 422;
+    res.status(status).json({ error: error?.message || "No se pudo crear el borrador de publicación." });
+  }
+});
+
+brokerRouter.patch("/broker/publications/:id", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("projects", "EDIT"), async (req, res) => {
+  try {
+    const record = await publicationRecord(req, req.params.id);
+    assertPublicationMutationScope(req, record);
+    const previous = dataOf(record);
+    if (!["DRAFT", "REJECTED"].includes(text(previous.publicationStatus, "DRAFT").toUpperCase())) return res.status(409).json({ error: "Solo se pueden editar borradores o publicaciones rechazadas. Crea una nueva versión para modificar una publicación ya revisada." });
+    const context = await publicationContext(req, text(previous.propertyId));
+    const channel = text(req.body?.channel || previous.channel).toUpperCase();
+    const copy = brokerPublicationCopy({ property: context.property, channel, input: { title: req.body?.title, body: req.body?.body } });
+    const definition = BROKER_PUBLICATION_CHANNELS.find((item) => item.key === channel);
+    if (!definition) return res.status(422).json({ error: "Selecciona un canal de publicación disponible." });
+    const now = new Date().toISOString();
+    const data = {
+      ...previous,
+      channel,
+      channelLabel: definition.label,
+      publicationStatus: "DRAFT",
+      copy,
+      readiness: context.readiness,
+      approval: { ...(previous.approval || {}), status: "DRAFT", requestedAt: null, requestedBy: null, approvedAt: null, approvedBy: null, note: "" },
+      lifecycle: [...(Array.isArray(previous.lifecycle) ? previous.lifecycle : []), { at: now, action: "BORRADOR_EDITADO", by: publicationActor(req), note: "Se actualizó el contenido y se reinició la revisión." }],
+      version: Number(previous.version || 1) + 1,
+    };
+    const updated = await prisma.industryRecord.update({ where: { id: record.id }, data: { title: publicationTitle(context.property, definition.label), status: "DRAFT", data } });
+    await recordAuditLog(req, "BROKER_PUBLICATION_DRAFT_UPDATED", "marketing_publication", record.id, { propertyId: context.property.id, channel, readiness: context.readiness.score });
+    res.json(publicBrokerPublication(updated));
+  } catch (error) {
+    res.status(error?.status || 422).json({ error: error?.message || "No se pudo actualizar el borrador." });
+  }
+});
+
+brokerRouter.post("/broker/publications/:id/actions", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const action = text(req.body?.action).toUpperCase();
+    const required = action === "APPROVE" ? "APPROVE" : "EDIT";
+    if (!canBrokerAction(req.brokerAccess, "projects", required)) return res.status(403).json({ error: "No tienes permiso para ejecutar esta acción de publicación.", action: required });
+    const record = await publicationRecord(req, req.params.id);
+    assertPublicationMutationScope(req, record);
+    const previous = dataOf(record);
+    const context = await publicationContext(req, text(previous.propertyId));
+    const refreshed = { ...previous, readiness: context.readiness };
+    const data = transitionBrokerPublication(refreshed, action, { actor: publicationActor(req), note: text(req.body?.note) });
+    const updated = await prisma.industryRecord.update({ where: { id: record.id }, data: { status: data.publicationStatus, data } });
+    await recordAuditLog(req, `BROKER_PUBLICATION_${action}`, "marketing_publication", record.id, { propertyId: context.property.id, channel: data.channel, status: data.publicationStatus, externalPublication: false });
+    res.json({ ...publicBrokerPublication(updated), notice: action === "PREPARE_PROVIDER" ? "La publicación quedó preparada para un proveedor, pero no se envió a ningún portal porque no hay un conector autorizado activo." : undefined });
+  } catch (error) {
+    res.status(error?.status || 422).json({ error: error?.message || "No se pudo actualizar el estado de la publicación." });
+  }
+});
 
 async function ensureBrokerSaleBuyer(db, { tenantId, buyerId, buyerName }) {
   const requestedId = text(buyerId);
@@ -1904,6 +2079,7 @@ brokerRouter.post("/broker/records", requireRole(ROLE_GROUPS.STAFF), async (req,
     const recordType = text(req.body?.recordType).toLowerCase();
     const title = text(req.body?.title);
     if (!BROKER_RECORD_TYPES.includes(recordType)) return res.status(400).json({ error: "Tipo de registro Broker no válido." });
+    if (recordType === "marketing_publication") return res.status(409).json({ error: "Utiliza Publicador multicanal. Las publicaciones requieren validación de ficha, revisión humana y trazabilidad por proveedor." });
     if (!title) return res.status(400).json({ error: "El nombre del registro es requerido." });
     const area = BROKER_RECORD_RESOURCES[recordType] || BROKER_RECORD_DEFINITIONS[recordType]?.area;
     if (!area || !allowBrokerAreaAction(req, res, area, "CREATE")) return;
@@ -1957,6 +2133,7 @@ brokerRouter.patch("/broker/records/:id", requireRole(ROLE_GROUPS.STAFF), async 
   try {
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: { in: BROKER_RECORD_TYPES } }) });
     if (!existing) return res.status(404).json({ error: "Registro operativo no encontrado." });
+    if (existing.recordType === "marketing_publication") return res.status(409).json({ error: "Utiliza Publicador multicanal para editar o cambiar el estado de una publicación." });
     const area = BROKER_RECORD_RESOURCES[existing.recordType] || BROKER_RECORD_DEFINITIONS[existing.recordType]?.area;
     if (!area || !allowBrokerAreaAction(req, res, area, "EDIT")) return;
     const hasAssignmentUpdate = req.body?.assignedToId !== undefined;

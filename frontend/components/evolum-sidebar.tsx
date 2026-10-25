@@ -62,6 +62,7 @@ const baseItems: SidebarItem[] = [
   ["Corredores y asignaciones", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],
   ["Visitas y seguimiento", "/realty?view=activity", "Visitas, alertas y próximos pasos", "RA", "realty_activity"],
   ["Cartera del corredor", "/realty?view=portal", "Propiedades asignadas y publicación", "RO", "broker_portal"],
+  ["Publicador multicanal", "/realty?view=publications", "Borradores, aprobación y trazabilidad por portal", "PU", "broker_portal"],
   ["Compradores y matching", "/realty?view=buyers", "Perfiles compradores y compatibilidades", "RL", "realty_clients"],
   ["Equipo y formación", "/realty?view=training", "Formación y progreso comercial", "RT", "brokers"],
   // Pacientes y exámenes son rutas de compatibilidad para datos antiguos.
@@ -125,7 +126,7 @@ const financeGatewayModules: ModuleAccessKey[] = [
 const moduleSymbols: Record<string, string> = {
   IN: "⌂", CH: "◌", AG: "◷", PI: "↗", CA: "✦", PA: "▣", CX: "⌁",
   CG: "⚙", FW: "⇄", MD: "▤", PM: "◫", DA: "▥", AI: "✧", GI: "◈",
-  RE: "⌂", RC: "⇧", RP: "⌂", RB: "♙", RA: "◴", RO: "◈", RL: "◌", RT: "✦",
+  RE: "⌂", RC: "⇧", RP: "⌂", RB: "♙", RA: "◴", RO: "◈", PU: "◫", RL: "◌", RT: "✦",
   DV: "▱", TU: "◷", DE: "▦", BL: "⚗"
 };
 
@@ -186,7 +187,7 @@ function brokerNavigationSection(item: SidebarItem) {
   const [, href] = item;
   if (href === "/realty" || href.includes("view=properties") || href.includes("view=operations") || href.includes("view=buyers")) return "Cartera";
   if (href.includes("view=broker_os") || href.includes("view=activity")) return "Operación";
-  if (href.includes("view=portal")) return "Comercial";
+  if (href.includes("view=portal") || href.includes("view=publications")) return "Comercial";
   if (href.includes("view=brokers") || href.includes("view=training")) return "Equipo";
   return "Broker OS";
 }
@@ -201,6 +202,7 @@ function brokerNavigationOrder(item: SidebarItem) {
     "/realty?view=broker_os",
     "/realty?view=activity",
     "/realty?view=portal",
+    "/realty?view=publications",
     "/realty?view=brokers",
     "/realty?view=training"
   ];
