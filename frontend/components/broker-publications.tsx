@@ -10,6 +10,7 @@ import {
   getBrokerPublicationAnalytics,
   getBrokerPublicationExport,
   getBrokerPublicationOptions,
+  getBrokerPublicationPreflight,
   getBrokerPublicationProviderConfig,
   getBrokerPublicationProviders,
   getBrokerPublications,
@@ -20,6 +21,7 @@ import {
   type BrokerPublication,
   type BrokerPublicationAnalytics,
   type BrokerPublicationOptions,
+  type BrokerPublicationPreflight,
   type BrokerPublicationProviderConfig,
   type BrokerPublicationProvidersResponse,
 } from "@/lib/api";
@@ -75,6 +77,10 @@ function readableDeliveryMode(value: string | undefined) {
   } as Record<string, string>)[value || ""] || "Sin envío externo";
 }
 
+function readablePreflightStatus(value: string) {
+  return value === "READY_FOR_PROVIDER_TEST" ? "Lista para prueba controlada" : "Requiere completar antecedentes";
+}
+
 function integer(value: string | number | null | undefined) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? String(Math.round(parsed)) : "0";
@@ -102,6 +108,7 @@ export function BrokerPublicationsPageContent() {
   const [providers, setProviders] = useState<BrokerPublicationProvidersResponse>(emptyProviders);
   const [providerConfig, setProviderConfig] = useState<BrokerPublicationProviderConfig | null>(null);
   const [selected, setSelected] = useState<BrokerPublication | null>(null);
+  const [preflight, setPreflight] = useState<BrokerPublicationPreflight | null>(null);
   const [propertyId, setPropertyId] = useState("");
   const [channel, setChannel] = useState("");
   const [filter, setFilter] = useState({ status: "", channel: "" });
@@ -152,6 +159,7 @@ export function BrokerPublicationsPageContent() {
       setBusy(true);
       const created = await createBrokerPublication({ propertyId, channel, title, body });
       setSelected(created);
+      setPreflight(null);
       setTitle("");
       setBody("");
       setNotice(`Borrador creado para ${created.data.channelLabel}. No se publicó información en ningún portal.`);
@@ -165,6 +173,7 @@ export function BrokerPublicationsPageContent() {
       setBusy(true);
       const updated = await updateBrokerPublication(selected.id, { title, body });
       setSelected(updated);
+      setPreflight(null);
       setNotice("Borrador actualizado. Debe volver a solicitar revisión antes de avanzar.");
       await reload();
     } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
@@ -176,6 +185,7 @@ export function BrokerPublicationsPageContent() {
       setBusy(true);
       const updated = await actBrokerPublication(selected.id, { action, note, ...delivery });
       setSelected(updated);
+      setPreflight(null);
       setNotice(updated.notice || `Estado actualizado: ${readableStatus(updated.data.publicationStatus)}.`);
       setNote("");
       if (["CONFIRM_EXTERNAL_PUBLICATION", "REPORT_PROVIDER_FAILURE"].includes(action)) setDelivery({ externalReference: "", publishedUrl: "", error: "" });
@@ -243,8 +253,21 @@ export function BrokerPublicationsPageContent() {
     } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
   }
 
+  async function loadPreflight() {
+    if (!selected) return;
+    try {
+      setBusy(true);
+      const result = await getBrokerPublicationPreflight(selected.id);
+      setPreflight(result);
+      setNotice(result.readyForProviderTest
+        ? "La ficha está lista para una prueba controlada. Esta acción no envió información al portal."
+        : "La validación detectó antecedentes pendientes antes de una prueba con el portal.");
+    } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
+  }
+
   function selectPublication(item: BrokerPublication) {
     setSelected(item);
+    setPreflight(null);
     setTitle(item.data.copy.title || "");
     setBody(item.data.copy.body || "");
     setNote("");
@@ -372,6 +395,14 @@ export function BrokerPublicationsPageContent() {
             <div className={styles.readiness}><b>{selected.data.readiness?.score ?? 0}%</b><span>completitud de ficha</span></div>
             {selected.data.readiness?.missing?.length ? <ul>{selected.data.readiness.missing.map((item) => <li key={item}>{item}</li>)}</ul> : <p className={styles.ready}>La ficha cumple los controles internos para revisión.</p>}
             <dl><div><dt>Revisión</dt><dd>{readableStatus(selected.data.approval?.status || "DRAFT")}</dd></div><div><dt>Proveedor</dt><dd>{selected.data.provider?.state === "PENDING_PROVIDER" ? "Conector pendiente" : "Interno"}</dd></div><div><dt>Entrega externa</dt><dd>{readableDeliveryMode(selected.data.provider?.deliveryMode)}</dd></div><div><dt>Última edición</dt><dd>{date(selected.updatedAt)}</dd></div></dl>
+            <button type="button" className="secondary-btn" disabled={busy} onClick={loadPreflight}>Validar preparación por portal</button>
+            {preflight ? <section className={styles.preflight} aria-live="polite">
+              <div><strong>Validación · {preflight.channelLabel}</strong><span className={`${styles.preflightStatus} ${preflight.readyForProviderTest ? styles.preflightReady : ""}`}>{readablePreflightStatus(preflight.status)}</span></div>
+              <p>{preflight.message}</p>
+              <ul>{preflight.checks.map((check) => <li key={check.key} className={check.ready ? styles.checkReady : styles.checkPending}><b>{check.ready ? "✓" : "!"}</b><span><strong>{check.label}</strong><small>{check.detail}</small></span></li>)}</ul>
+              <p className={styles.connectionState}><b>{preflight.connection.label}:</b> {preflight.connection.message || preflight.connection.state}{preflight.connection.lastTestedAt ? ` · ${date(preflight.connection.lastTestedAt)}` : ""}</p>
+              <p className={styles.nextStep}>{preflight.nextStep}</p>
+            </section> : null}
             <label>Nota de control<textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} disabled={busy} placeholder="Motivo de aprobación, pausa o revisión" /></label>
             <div className={styles.actions}>
               {["DRAFT", "REJECTED"].includes(selected.data.publicationStatus) ? <button type="button" className="primary-btn" disabled={!canEdit || busy || !selected.data.readiness?.readyForReview} onClick={() => transition("REQUEST_REVIEW")}>Solicitar revisión</button> : null}

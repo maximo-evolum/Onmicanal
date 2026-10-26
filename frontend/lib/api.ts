@@ -2343,6 +2343,20 @@ export type BrokerPublicationProviderConfig = BrokerPublicationProvider & {
   credentialStorage: "CENTRO_DE_CONEXIONES_CIFRADO" | string;
 };
 
+/** Resultado seguro de la revisión previa por portal; no expone credenciales. */
+export type BrokerPublicationPreflight = {
+  channel: string;
+  channelLabel: string;
+  status: "READY_FOR_PROVIDER_TEST" | "NEEDS_ATTENTION" | string;
+  readyForProviderTest: boolean;
+  externalDelivery: false;
+  checks: Array<{ key: string; label: string; ready: boolean; detail: string }>;
+  missing: string[];
+  connection: { state: string; label: string; lastTestedAt: string | null; message: string };
+  message: string;
+  nextStep: string;
+};
+
 export type BrokerPublicationAnalytics = {
   total: number;
   published: number;
@@ -2431,6 +2445,10 @@ export function recordBrokerPublicationMetrics(id: string, input: Partial<Broker
 
 export function getBrokerPublicationExport(id: string): Promise<Record<string, unknown>> {
   return request<Record<string, unknown>>(`/broker/publications/${encodeURIComponent(id)}/export`);
+}
+
+export function getBrokerPublicationPreflight(id: string): Promise<BrokerPublicationPreflight> {
+  return request<BrokerPublicationPreflight>(`/broker/publications/${encodeURIComponent(id)}/preflight`);
 }
 
 export function createBrokerRecord(input: {

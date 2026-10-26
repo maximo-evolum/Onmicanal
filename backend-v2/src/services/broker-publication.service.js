@@ -41,6 +41,17 @@ export const BROKER_PUBLICATION_PROVIDER_STATUSES = Object.freeze([
   "UNAVAILABLE",
 ]);
 
+/**
+ * Relaciona un canal comercial con la conexión cifrada que lo autoriza.
+ * No entrega credenciales ni habilita envíos: solo permite revisar si el
+ * tenant ya completó la conexión requerida para una prueba guiada.
+ */
+export function brokerPublicationConnectionKey(channel) {
+  const key = text(channel).toUpperCase();
+  if (key === "MERCADOLIBRE_INMUEBLES") return "broker_mercadolibre_real_estate";
+  return null;
+}
+
 function text(value, fallback = "") {
   const result = String(value ?? "").trim();
   return result || fallback;
@@ -109,6 +120,101 @@ export function brokerPublicationReadiness({ property, capture = null, mandate =
     // Ningún borrador equivale a una publicación externa. Incluso una ficha
     // completa queda pendiente del proveedor hasta integrar el canal real.
     readyForExternalDelivery: false,
+  };
+}
+
+/**
+ * Reúne la preparación interna, comercial y técnica de un borrador antes de
+ * intentar una prueba con un proveedor. Este contrato es deliberadamente de
+ * solo lectura: listo para probar no significa autorizado para publicar.
+ */
+export function brokerPublicationProviderPreflight({ publication, property, provider = null, connection = null }) {
+  const data = propertyData(publication);
+  const copy = data.copy && typeof data.copy === "object" && !Array.isArray(data.copy) ? data.copy : {};
+  const readiness = data.readiness && typeof data.readiness === "object" && !Array.isArray(data.readiness)
+    ? data.readiness
+    : brokerPublicationReadiness({ property });
+  const channel = channelDefinition(data.channel) || channelDefinition(copy.channel);
+  const channelKey = channel?.key || text(data.channel).toUpperCase();
+  const publicationStatus = text(data.publicationStatus || publication?.status, "DRAFT").toUpperCase();
+  const providerData = propertyData(provider);
+  const providerStatus = text(providerData.providerStatus, channel?.providerState || "PENDING_PROVIDER").toUpperCase();
+  const connectionKey = brokerPublicationConnectionKey(channelKey);
+  const connectionState = text(connection?.state, connectionKey ? "NOT_CONFIGURED" : channelKey === "EVOLUM_CATALOGO" ? "NOT_REQUIRED" : "NOT_AVAILABLE").toUpperCase();
+  const requiresCommercialSetup = channelKey !== "EVOLUM_CATALOGO";
+  const providerReady = !requiresCommercialSetup || ["CONTRACTED", "TECHNICAL_REVIEW", "READY_FOR_TEST", "ACTIVE"].includes(providerStatus);
+  const connectionReady = channelKey === "EVOLUM_CATALOGO" || connectionState === "CONNECTED";
+  const checks = [
+    {
+      key: "internalApproval",
+      label: "Aprobación interna de la publicación",
+      ready: ["APPROVED", "PROVIDER_PENDING", "PUBLISHED"].includes(publicationStatus),
+      detail: ["APPROVED", "PROVIDER_PENDING", "PUBLISHED"].includes(publicationStatus)
+        ? "La ficha fue revisada dentro de Broker OS."
+        : "Solicita y registra la aprobación interna antes de preparar un portal.",
+    },
+    {
+      key: "propertyReadiness",
+      label: "Ficha, imágenes y mandato vigentes",
+      ready: Boolean(readiness.readyForReview),
+      detail: readiness.readyForReview
+        ? "La ficha superó los controles internos de publicación."
+        : `Faltan: ${(Array.isArray(readiness.missing) ? readiness.missing : []).join(", ") || "antecedentes de la propiedad"}.`,
+    },
+    {
+      key: "commercialCopy",
+      label: "Título y descripción comercial",
+      ready: Boolean(text(copy.title) && text(copy.body)),
+      detail: text(copy.title) && text(copy.body)
+        ? "El contenido comercial está disponible para validación."
+        : "Completa el título y la descripción antes de una prueba.",
+    },
+    {
+      key: "providerSetup",
+      label: "Preparación comercial del portal",
+      ready: providerReady,
+      detail: providerReady
+        ? (channelKey === "EVOLUM_CATALOGO" ? "Canal interno de EVOLUM." : `Estado comercial: ${providerStatus.replaceAll("_", " ")}.`)
+        : "Registra el acuerdo y cambia el estado del proveedor a Contrato vigente, Revisión técnica, Listo para pruebas o Activo.",
+    },
+    {
+      key: "connection",
+      label: connectionKey ? "Conexión autorizada del portal" : channelKey === "EVOLUM_CATALOGO" ? "Conexión externa" : "Conector autorizado del portal",
+      ready: connectionReady,
+      detail: connectionReady
+        ? (channelKey === "EVOLUM_CATALOGO" ? "No requiere un tercero." : "La conexión fue verificada sin exponer credenciales.")
+        : connection?.message || (connectionKey ? "Completa y prueba la conexión desde Centro de Conexiones." : "Este canal todavía no cuenta con un conector autorizado en Broker OS."),
+    },
+  ];
+  const missing = checks.filter((item) => !item.ready).map((item) => item.label);
+  const readyForProviderTest = missing.length === 0;
+  const nextStep = readyForProviderTest
+    ? "La publicación está preparada para una prueba controlada del proveedor. Esta validación no envía ni publica datos por sí sola."
+    : !checks[0].ready
+      ? "Completa la revisión y aprobación interna antes de preparar el portal."
+      : !checks[1].ready || !checks[2].ready
+        ? "Completa los antecedentes indicados de la propiedad y del contenido comercial."
+        : !checks[3].ready
+          ? "Registra la preparación comercial del portal desde este módulo antes de solicitar una prueba técnica."
+          : connectionKey
+            ? "Completa o vuelve a probar la conexión en Centro de Conexiones; las credenciales permanecen cifradas y ocultas."
+            : "Este portal aún requiere una integración autorizada antes de cualquier prueba de entrega.";
+  return {
+    channel: channelKey,
+    channelLabel: channel?.label || text(data.channelLabel, "Canal de publicación"),
+    status: readyForProviderTest ? "READY_FOR_PROVIDER_TEST" : "NEEDS_ATTENTION",
+    readyForProviderTest,
+    externalDelivery: false,
+    checks,
+    missing,
+    connection: {
+      state: connectionState,
+      label: text(connection?.label, connectionKey ? "Centro de Conexiones" : "No disponible"),
+      lastTestedAt: connection?.lastTestedAt || null,
+      message: text(connection?.message),
+    },
+    message: "La validación revisa datos internos y estado técnico. No envía fichas, imágenes ni contactos a un portal externo.",
+    nextStep,
   };
 }
 

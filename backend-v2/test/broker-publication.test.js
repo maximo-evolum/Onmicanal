@@ -1,7 +1,7 @@
 /** Archivo: Verifica las reglas de borrador, aprobación y proveedor de publicaciones Broker OS. */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { brokerPublicationAnalytics, brokerPublicationExport, brokerPublicationReadiness, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, transitionBrokerPublication } from "../src/services/broker-publication.service.js";
+import { brokerPublicationAnalytics, brokerPublicationConnectionKey, brokerPublicationExport, brokerPublicationProviderPreflight, brokerPublicationReadiness, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, transitionBrokerPublication } from "../src/services/broker-publication.service.js";
 
 const property = {
   id: "property-1",
@@ -47,6 +47,43 @@ test("Mercado Libre Inmuebles queda disponible como borrador, no como publicaci�
   assert.equal(data.publicationStatus, "DRAFT");
   assert.equal(data.provider.integrationEnabled, false);
   assert.equal(data.provider.state, "PENDING_PROVIDER");
+});
+
+test("la prevalidación de Mercado Libre cruza revisión, proveedor y OAuth sin habilitar un envío", () => {
+  const readiness = brokerPublicationReadiness({ property, mandate: { status: "SIGNED" } });
+  const draft = createBrokerPublicationData({ property, channel: "MERCADOLIBRE_INMUEBLES", readiness, actor: "María Corredora" });
+  const approved = transitionBrokerPublication(
+    transitionBrokerPublication(draft, "REQUEST_REVIEW", { actor: "María Corredora" }),
+    "APPROVE",
+    { actor: "Dirección" }
+  );
+  const prepared = transitionBrokerPublication(approved, "PREPARE_PROVIDER", { actor: "Dirección" });
+  const result = brokerPublicationProviderPreflight({
+    publication: { id: "publication-ml", status: "PROVIDER_PENDING", data: prepared },
+    property,
+    provider: { data: { providerStatus: "READY_FOR_TEST" } },
+    connection: { state: "CONNECTED", label: "Mercado Libre Inmuebles", message: "La última verificación técnica fue satisfactoria." },
+  });
+  assert.equal(brokerPublicationConnectionKey("MERCADOLIBRE_INMUEBLES"), "broker_mercadolibre_real_estate");
+  assert.equal(result.readyForProviderTest, true);
+  assert.equal(result.externalDelivery, false);
+  assert.equal(result.connection.state, "CONNECTED");
+  assert.equal(result.checks.every((check) => check.ready), true);
+});
+
+test("la prevalidación bloquea una prueba cuando falta proveedor o conexión", () => {
+  const readiness = brokerPublicationReadiness({ property, mandate: { status: "SIGNED" } });
+  const data = createBrokerPublicationData({ property, channel: "MERCADOLIBRE_INMUEBLES", readiness, actor: "María Corredora" });
+  const result = brokerPublicationProviderPreflight({
+    publication: { id: "publication-blocked", status: "DRAFT", data },
+    property,
+    connection: { state: "NOT_CONFIGURED", label: "Mercado Libre Inmuebles", message: "Aún no se ha iniciado la conexión OAuth de Mercado Libre." },
+  });
+  assert.equal(result.readyForProviderTest, false);
+  assert.equal(result.externalDelivery, false);
+  assert.ok(result.missing.includes("Aprobación interna de la publicación"));
+  assert.ok(result.missing.includes("Preparación comercial del portal"));
+  assert.ok(result.missing.includes("Conexión autorizada del portal"));
 });
 
 test("la transición obliga revisión humana antes de proveedor", () => {

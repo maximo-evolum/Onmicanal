@@ -3,6 +3,7 @@ import { Router } from "express";
 import { createBrokerProspectsRouter } from "./broker-prospects.routes.js";
 import { convertBrokerProspect } from "../services/broker-prospect-conversion.service.js";
 import { prisma } from "../lib/db.js";
+import { hasSecret } from "../lib/credential-crypto.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { recordAuditLog } from "../lib/audit.js";
 import {
@@ -50,7 +51,7 @@ import { BROKER_RECORD_RESOURCES } from "../services/broker-record-access.servic
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 import { BROKER_JOURNEY_CATALOG, BROKER_JOURNEY_VERSION, brokerOperationPayload, captureJourney, projectBrokerOperations, validateBrokerOperationReferences, persistBrokerOperationStage, updateBrokerOperationSnapshot } from "../services/broker-operation-contract.service.js";
 import { buildBrokerGovernanceSummary, normalizeBrokerAlertResolution } from "../services/broker-governance.service.js";
-import { BROKER_PUBLICATION_CHANNELS, BROKER_PUBLICATION_PROVIDER_STATUSES, BROKER_PUBLICATION_STATUSES, brokerPublicationAnalytics, brokerPublicationExport, brokerPublicationReadiness, brokerPublicationCopy, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, publicBrokerPublication, publicBrokerPublicationProvider, transitionBrokerPublication } from "../services/broker-publication.service.js";
+import { BROKER_PUBLICATION_CHANNELS, BROKER_PUBLICATION_PROVIDER_STATUSES, BROKER_PUBLICATION_STATUSES, brokerPublicationAnalytics, brokerPublicationConnectionKey, brokerPublicationExport, brokerPublicationProviderPreflight, brokerPublicationReadiness, brokerPublicationCopy, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, publicBrokerPublication, publicBrokerPublicationProvider, transitionBrokerPublication } from "../services/broker-publication.service.js";
 
 export const brokerRouter = Router();
 
@@ -502,6 +503,74 @@ async function publicationProviderRecord(tenantId, channel) {
   });
 }
 
+function connectionMetadata(config) {
+  return config?.metadata && typeof config.metadata === "object" && !Array.isArray(config.metadata) ? config.metadata : {};
+}
+
+// Resume solo información segura de la conexión: nunca devuelve token, ID de
+// cuenta externo ni configuración OAuth. El publicador la usa para saber si
+// un portal está listo para una prueba manual controlada.
+async function publicationConnectionSummary(tenantId, channel) {
+  const providerKey = brokerPublicationConnectionKey(channel);
+  if (!providerKey) {
+    if (text(channel).toUpperCase() === "EVOLUM_CATALOGO") return {
+      state: "NOT_REQUIRED",
+      label: "Catálogo EVOLUM",
+      lastTestedAt: null,
+      message: "El catálogo interno no requiere conexión con un tercero.",
+    };
+    return {
+      state: "NOT_AVAILABLE",
+      label: "Centro de Conexiones",
+      lastTestedAt: null,
+      message: "Este portal aún no cuenta con un conector autorizado en Broker OS.",
+    };
+  }
+  const config = await prisma.tenantChannelConfig.findUnique({
+    where: { tenantId_channel: { tenantId, channel: providerKey } },
+    select: { isActive: true, accessToken: true, externalAccountId: true, metadata: true, updatedAt: true },
+  });
+  if (!config) return {
+    state: "NOT_CONFIGURED",
+    label: "Mercado Libre Inmuebles",
+    lastTestedAt: null,
+    message: "Aún no se ha iniciado la conexión OAuth de Mercado Libre.",
+  };
+  const metadata = connectionMetadata(config);
+  const lastTestStatus = text(metadata.lastTestStatus).toUpperCase();
+  const lastTestedAt = text(metadata.lastTestedAt) || config.updatedAt?.toISOString?.() || null;
+  if (!config.isActive) return {
+    state: "DISCONNECTED",
+    label: "Mercado Libre Inmuebles",
+    lastTestedAt,
+    message: "La conexión está desactivada en Centro de Conexiones.",
+  };
+  if (!hasSecret(config.accessToken) || !text(config.externalAccountId)) return {
+    state: "INCOMPLETE",
+    label: "Mercado Libre Inmuebles",
+    lastTestedAt,
+    message: "La autorización OAuth no se completó o ya no contiene una cuenta externa válida.",
+  };
+  if (lastTestStatus === "OK") return {
+    state: "CONNECTED",
+    label: "Mercado Libre Inmuebles",
+    lastTestedAt,
+    message: "La última verificación técnica fue satisfactoria.",
+  };
+  if (lastTestStatus === "ERROR") return {
+    state: "ERROR",
+    label: "Mercado Libre Inmuebles",
+    lastTestedAt,
+    message: "La última verificación técnica falló. Revísala desde Centro de Conexiones.",
+  };
+  return {
+    state: "PENDING_VERIFICATION",
+    label: "Mercado Libre Inmuebles",
+    lastTestedAt,
+    message: "La autorización existe, pero aún requiere una verificación satisfactoria.",
+  };
+}
+
 // brokerRecordWhere restringe lectura por responsable, pero las mutaciones
 // requieren esta verificación adicional para que un corredor con alcance
 // ASSIGNED, TEAM o BRANCH no pueda adivinar un identificador y editar una
@@ -756,6 +825,26 @@ brokerRouter.post("/broker/publications/:id/metrics", requireRole(ROLE_GROUPS.ST
     res.json(publicBrokerPublication(updated));
   } catch (error) {
     res.status(error?.status || 422).json({ error: error?.message || "No se pudo registrar el rendimiento de la publicación." });
+  }
+});
+
+// Validación previa por portal: cruza el borrador aprobado con su ficha,
+// mandato, preparación comercial y estado seguro de la conexión. No llama a
+// proveedores externos ni transforma este resultado en una publicación.
+brokerRouter.get("/broker/publications/:id/preflight", requireBrokerAction("projects", "VIEW"), async (req, res) => {
+  try {
+    const publication = await publicationRecord(req, req.params.id);
+    const publicationData = dataOf(publication);
+    const context = await publicationContext(req, text(publicationData.propertyId));
+    const channel = text(publicationData.channel).toUpperCase();
+    const [provider, connection] = await Promise.all([
+      publicationProviderRecord(req.tenantId, channel),
+      publicationConnectionSummary(req.tenantId, channel),
+    ]);
+    const freshPublication = { ...publication, data: { ...publicationData, readiness: context.readiness } };
+    res.json(brokerPublicationProviderPreflight({ publication: freshPublication, property: context.property, provider, connection }));
+  } catch (error) {
+    res.status(error?.status || 422).json({ error: error?.message || "No se pudo validar la preparación para el portal." });
   }
 });
 
