@@ -2305,7 +2305,7 @@ export type BrokerPublication = {
     channel: string;
     channelLabel: string;
     publicationStatus: string;
-    provider: { state: string; integrationEnabled: boolean; externalPublicationId: string | null; lastAttemptAt: string | null; lastError: string | null };
+    provider: { state: string; integrationEnabled: boolean; externalPublicationId: string | null; publishedUrl?: string; deliveryMode?: "NOT_SENT" | "MANUAL_CONFIRMED" | "MANUAL_ERROR_REPORTED" | string; lastAttemptAt: string | null; lastError: string | null };
     copy: { title: string; body: string; price: number | null; currency: string; operation: string; propertyType: string; address: string; comuna: string; region: string; images: string[] };
     readiness: BrokerPublicationReadiness;
     approval: { status: string; requestedAt: string | null; requestedBy: string | null; approvedAt: string | null; approvedBy: string | null; note: string };
@@ -2379,7 +2379,13 @@ export function updateBrokerPublication(id: string, input: { channel?: string; t
   return request<BrokerPublication>(`/broker/publications/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
-export function actBrokerPublication(id: string, input: { action: "REQUEST_REVIEW" | "APPROVE" | "PREPARE_PROVIDER" | "PAUSE" | "ARCHIVE"; note?: string }): Promise<BrokerPublication & { notice?: string }> {
+export function actBrokerPublication(id: string, input: {
+  action: "REQUEST_REVIEW" | "APPROVE" | "REJECT" | "PREPARE_PROVIDER" | "CONFIRM_EXTERNAL_PUBLICATION" | "REPORT_PROVIDER_FAILURE" | "PAUSE" | "ARCHIVE";
+  note?: string;
+  externalReference?: string;
+  publishedUrl?: string;
+  error?: string;
+}): Promise<BrokerPublication & { notice?: string }> {
   return request<BrokerPublication & { notice?: string }>(`/broker/publications/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify(input) });
 }
 

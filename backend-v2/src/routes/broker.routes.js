@@ -686,17 +686,40 @@ brokerRouter.patch("/broker/publications/:id", requireRole(ROLE_GROUPS.STAFF), r
 brokerRouter.post("/broker/publications/:id/actions", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
     const action = text(req.body?.action).toUpperCase();
-    const required = action === "APPROVE" ? "APPROVE" : "EDIT";
+    const required = ["APPROVE", "REJECT"].includes(action) ? "APPROVE" : "EDIT";
     if (!canBrokerAction(req.brokerAccess, "projects", required)) return res.status(403).json({ error: "No tienes permiso para ejecutar esta acción de publicación.", action: required });
     const record = await publicationRecord(req, req.params.id);
     assertPublicationMutationScope(req, record);
     const previous = dataOf(record);
     const context = await publicationContext(req, text(previous.propertyId));
     const refreshed = { ...previous, readiness: context.readiness };
-    const data = transitionBrokerPublication(refreshed, action, { actor: publicationActor(req), note: text(req.body?.note) });
+    const data = transitionBrokerPublication(refreshed, action, {
+      actor: publicationActor(req),
+      note: text(req.body?.note),
+      delivery: {
+        externalReference: text(req.body?.externalReference),
+        publishedUrl: text(req.body?.publishedUrl),
+        error: text(req.body?.error),
+      }
+    });
     const updated = await prisma.industryRecord.update({ where: { id: record.id }, data: { status: data.publicationStatus, data } });
-    await recordAuditLog(req, `BROKER_PUBLICATION_${action}`, "marketing_publication", record.id, { propertyId: context.property.id, channel: data.channel, status: data.publicationStatus, externalPublication: false });
-    res.json({ ...publicBrokerPublication(updated), notice: action === "PREPARE_PROVIDER" ? "La publicación quedó preparada para un proveedor, pero no se envió a ningún portal porque no hay un conector autorizado activo." : undefined });
+    await recordAuditLog(req, `BROKER_PUBLICATION_${action}`, "marketing_publication", record.id, {
+      propertyId: context.property.id,
+      channel: data.channel,
+      status: data.publicationStatus,
+      deliveryMode: data.provider?.deliveryMode || "NOT_SENT",
+      // Nunca se registra una URL ni referencia externa completa en la bitácora
+      // de auditoría, pues puede contener identificadores de terceros.
+      externalPublication: action === "CONFIRM_EXTERNAL_PUBLICATION",
+    });
+    const notice = action === "PREPARE_PROVIDER"
+      ? "La publicación quedó preparada para un proveedor, pero no se envió a ningún portal porque no hay un conector autorizado activo."
+      : action === "CONFIRM_EXTERNAL_PUBLICATION"
+        ? "Se registró una publicación externa manual con la evidencia indicada. Broker OS no realizó el envío al portal."
+        : action === "REPORT_PROVIDER_FAILURE"
+          ? "La incidencia del proveedor quedó registrada para seguimiento; no se ejecutó un nuevo envío."
+          : undefined;
+    res.json({ ...publicBrokerPublication(updated), notice });
   } catch (error) {
     res.status(error?.status || 422).json({ error: error?.message || "No se pudo actualizar el estado de la publicación." });
   }

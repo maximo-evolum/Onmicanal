@@ -160,6 +160,8 @@ export function createBrokerPublicationData({ property, channel, input = {}, rea
       state: definition.providerState,
       integrationEnabled: false,
       externalPublicationId: null,
+      publishedUrl: "",
+      deliveryMode: "NOT_SENT",
       lastAttemptAt: null,
       lastError: definition.providerState === "PENDING_PROVIDER" ? "Este canal aún no tiene un conector autorizado configurado." : null,
     },
@@ -178,10 +180,20 @@ export function createBrokerPublicationData({ property, channel, input = {}, rea
   };
 }
 
-export function transitionBrokerPublication(data, action, { actor, note = "" } = {}) {
+export function transitionBrokerPublication(data, action, { actor, note = "", delivery = {} } = {}) {
   const current = data && typeof data === "object" && !Array.isArray(data) ? data : {};
   const publicationStatus = text(current.publicationStatus, "DRAFT").toUpperCase();
   const approval = { status: "DRAFT", requestedAt: null, requestedBy: null, approvedAt: null, approvedBy: null, note: "", ...(current.approval || {}) };
+  const provider = {
+    state: "PENDING_PROVIDER",
+    integrationEnabled: false,
+    externalPublicationId: null,
+    publishedUrl: "",
+    deliveryMode: "NOT_SENT",
+    lastAttemptAt: null,
+    lastError: null,
+    ...(current.provider || {}),
+  };
   const lifecycle = Array.isArray(current.lifecycle) ? current.lifecycle : [];
   const readiness = current.readiness || { readyForReview: false, missing: [] };
   const now = new Date().toISOString();
@@ -206,10 +218,39 @@ export function transitionBrokerPublication(data, action, { actor, note = "" } =
     approval.approvedBy = actor || "Usuario autorizado";
     approval.note = text(note);
     event = "APROBADA";
+  } else if (normalizedAction === "REJECT") {
+    if (publicationStatus !== "PENDING_REVIEW") throw new Error("Solo una publicación pendiente de revisión puede rechazarse.");
+    if (!text(note)) throw new Error("Indica el motivo del rechazo para que el corredor pueda corregir la ficha.");
+    nextStatus = "REJECTED";
+    approval.status = "REJECTED";
+    approval.note = text(note);
+    event = "RECHAZADA";
   } else if (normalizedAction === "PREPARE_PROVIDER") {
     if (publicationStatus !== "APPROVED") throw new Error("La publicación debe estar aprobada antes de prepararla para un proveedor.");
     nextStatus = "PROVIDER_PENDING";
     event = "PROVEEDOR_PENDIENTE";
+  } else if (normalizedAction === "CONFIRM_EXTERNAL_PUBLICATION") {
+    if (!["APPROVED", "PROVIDER_PENDING"].includes(publicationStatus)) throw new Error("La publicación debe estar aprobada antes de registrar una salida externa manual.");
+    const externalReference = text(delivery.externalReference || provider.externalPublicationId);
+    const publishedUrl = text(delivery.publishedUrl || provider.publishedUrl);
+    if (!externalReference && !publishedUrl) throw new Error("Registra la URL publicada o el comprobante entregado por el portal antes de confirmar la publicación.");
+    if (publishedUrl && !/^https:\/\//i.test(publishedUrl)) throw new Error("La URL publicada debe comenzar con https://.");
+    nextStatus = "PUBLISHED";
+    provider.externalPublicationId = externalReference || null;
+    provider.publishedUrl = publishedUrl;
+    provider.deliveryMode = "MANUAL_CONFIRMED";
+    provider.lastAttemptAt = now;
+    provider.lastError = null;
+    event = "PUBLICACION_EXTERNA_CONFIRMADA_MANUALMENTE";
+  } else if (normalizedAction === "REPORT_PROVIDER_FAILURE") {
+    if (!["APPROVED", "PROVIDER_PENDING"].includes(publicationStatus)) throw new Error("Solo una publicación aprobada o pendiente de proveedor puede registrar una incidencia externa.");
+    const reason = text(delivery.error || note);
+    if (!reason) throw new Error("Describe el error o rechazo informado por el proveedor.");
+    nextStatus = "PROVIDER_PENDING";
+    provider.deliveryMode = "MANUAL_ERROR_REPORTED";
+    provider.lastAttemptAt = now;
+    provider.lastError = reason;
+    event = "INCIDENCIA_DE_PROVEEDOR_REGISTRADA";
   } else if (normalizedAction === "PAUSE") {
     if (!["APPROVED", "PROVIDER_PENDING", "PUBLISHED"].includes(publicationStatus)) throw new Error("Solo una publicación aprobada o publicada puede pausarse.");
     nextStatus = "PAUSED";
@@ -225,7 +266,8 @@ export function transitionBrokerPublication(data, action, { actor, note = "" } =
     ...current,
     publicationStatus: nextStatus,
     approval,
-    lifecycle: [...lifecycle, { at: now, action: event, by: actor || "Usuario autorizado", note: text(note) }],
+    provider,
+    lifecycle: [...lifecycle, { at: now, action: event, by: actor || "Usuario autorizado", note: text(note || delivery.error || delivery.externalReference || delivery.publishedUrl) }],
     version: Number(current.version || 1) + 1,
   };
 }

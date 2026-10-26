@@ -65,6 +65,14 @@ function readableProviderStatus(value: string) {
   } as Record<string, string>)[value] || value;
 }
 
+function readableDeliveryMode(value: string | undefined) {
+  return ({
+    NOT_SENT: "Sin envío externo",
+    MANUAL_CONFIRMED: "Confirmación manual",
+    MANUAL_ERROR_REPORTED: "Incidencia registrada",
+  } as Record<string, string>)[value || ""] || "Sin envío externo";
+}
+
 function integer(value: string | number | null | undefined) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? String(Math.round(parsed)) : "0";
@@ -97,6 +105,7 @@ export function BrokerPublicationsPageContent() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [note, setNote] = useState("");
+  const [delivery, setDelivery] = useState({ externalReference: "", publishedUrl: "", error: "" });
   const [metrics, setMetrics] = useState({ reportDate: new Date().toISOString().slice(0, 10), views: "0", contacts: "0", favorites: "0", publishedUrl: "" });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -158,14 +167,15 @@ export function BrokerPublicationsPageContent() {
     } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
   }
 
-  async function transition(action: "REQUEST_REVIEW" | "APPROVE" | "PREPARE_PROVIDER" | "PAUSE" | "ARCHIVE") {
+  async function transition(action: "REQUEST_REVIEW" | "APPROVE" | "REJECT" | "PREPARE_PROVIDER" | "CONFIRM_EXTERNAL_PUBLICATION" | "REPORT_PROVIDER_FAILURE" | "PAUSE" | "ARCHIVE") {
     if (!selected) return;
     try {
       setBusy(true);
-      const updated = await actBrokerPublication(selected.id, { action, note });
+      const updated = await actBrokerPublication(selected.id, { action, note, ...delivery });
       setSelected(updated);
       setNotice(updated.notice || `Estado actualizado: ${readableStatus(updated.data.publicationStatus)}.`);
       setNote("");
+      if (["CONFIRM_EXTERNAL_PUBLICATION", "REPORT_PROVIDER_FAILURE"].includes(action)) setDelivery({ externalReference: "", publishedUrl: "", error: "" });
       await reload();
     } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
   }
@@ -217,6 +227,11 @@ export function BrokerPublicationsPageContent() {
     setTitle(item.data.copy.title || "");
     setBody(item.data.copy.body || "");
     setNote("");
+    setDelivery({
+      externalReference: item.data.provider?.externalPublicationId || "",
+      publishedUrl: item.data.provider?.publishedUrl || "",
+      error: item.data.provider?.lastError || "",
+    });
     setMetrics({
       reportDate: item.data.metrics?.reportDate || new Date().toISOString().slice(0, 10),
       views: integer(item.data.metrics?.views),
@@ -330,15 +345,26 @@ export function BrokerPublicationsPageContent() {
             <h3>Control de publicación</h3>
             <div className={styles.readiness}><b>{selected.data.readiness?.score ?? 0}%</b><span>completitud de ficha</span></div>
             {selected.data.readiness?.missing?.length ? <ul>{selected.data.readiness.missing.map((item) => <li key={item}>{item}</li>)}</ul> : <p className={styles.ready}>La ficha cumple los controles internos para revisión.</p>}
-            <dl><div><dt>Revisión</dt><dd>{readableStatus(selected.data.approval?.status || "DRAFT")}</dd></div><div><dt>Proveedor</dt><dd>{selected.data.provider?.state === "PENDING_PROVIDER" ? "Conector pendiente" : "Interno"}</dd></div><div><dt>Última edición</dt><dd>{date(selected.updatedAt)}</dd></div></dl>
+            <dl><div><dt>Revisión</dt><dd>{readableStatus(selected.data.approval?.status || "DRAFT")}</dd></div><div><dt>Proveedor</dt><dd>{selected.data.provider?.state === "PENDING_PROVIDER" ? "Conector pendiente" : "Interno"}</dd></div><div><dt>Entrega externa</dt><dd>{readableDeliveryMode(selected.data.provider?.deliveryMode)}</dd></div><div><dt>Última edición</dt><dd>{date(selected.updatedAt)}</dd></div></dl>
             <label>Nota de control<textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} disabled={busy} placeholder="Motivo de aprobación, pausa o revisión" /></label>
             <div className={styles.actions}>
               {["DRAFT", "REJECTED"].includes(selected.data.publicationStatus) ? <button type="button" className="primary-btn" disabled={!canEdit || busy || !selected.data.readiness?.readyForReview} onClick={() => transition("REQUEST_REVIEW")}>Solicitar revisión</button> : null}
               {selected.data.publicationStatus === "PENDING_REVIEW" ? <button type="button" className="primary-btn" disabled={!canApprove || busy} onClick={() => transition("APPROVE")}>Aprobar internamente</button> : null}
+              {selected.data.publicationStatus === "PENDING_REVIEW" ? <button type="button" className="secondary-btn" disabled={!canApprove || busy || !note.trim()} onClick={() => transition("REJECT")}>Rechazar con motivo</button> : null}
               {selected.data.publicationStatus === "APPROVED" ? <button type="button" className="secondary-btn" disabled={!canEdit || busy} onClick={() => transition("PREPARE_PROVIDER")}>Preparar para proveedor</button> : null}
               {["APPROVED", "PROVIDER_PENDING", "PUBLISHED"].includes(selected.data.publicationStatus) ? <button type="button" className="secondary-btn" disabled={!canEdit || busy} onClick={() => transition("PAUSE")}>Pausar</button> : null}
               {selected.data.publicationStatus !== "ARCHIVED" ? <button type="button" className={styles.archive} disabled={!canEdit || busy} onClick={() => transition("ARCHIVE")}>Archivar</button> : null}
             </div>
+            {["APPROVED", "PROVIDER_PENDING"].includes(selected.data.publicationStatus) ? <section className={styles.deliveryPanel}>
+              <strong>Resultado en portal externo</strong>
+              <p>Úsalo solamente si una persona publicó fuera de EVOLUM y puede dejar evidencia. Esta acción no envía información al portal.</p>
+              <label>Comprobante o ID de publicación<input value={delivery.externalReference} disabled={!canEdit || busy} onChange={(event) => setDelivery((current) => ({ ...current, externalReference: event.target.value }))} maxLength={300} placeholder="Ej.: ID o comprobante entregado por el portal" /></label>
+              <label>URL publicada<input type="url" value={delivery.publishedUrl} disabled={!canEdit || busy} onChange={(event) => setDelivery((current) => ({ ...current, publishedUrl: event.target.value }))} placeholder="https://…" /></label>
+              <button type="button" className="secondary-btn" disabled={!canEdit || busy || (!delivery.externalReference.trim() && !delivery.publishedUrl.trim())} onClick={() => transition("CONFIRM_EXTERNAL_PUBLICATION")}>Confirmar publicación manual</button>
+              <label>Incidencia del proveedor<textarea value={delivery.error} disabled={!canEdit || busy} onChange={(event) => setDelivery((current) => ({ ...current, error: event.target.value }))} rows={2} placeholder="Ej.: portal rechazó las imágenes por formato" /></label>
+              <button type="button" className={styles.reportIssue} disabled={!canEdit || busy || !delivery.error.trim()} onClick={() => transition("REPORT_PROVIDER_FAILURE")}>Registrar incidencia</button>
+            </section> : null}
+            {selected.data.publicationStatus === "PUBLISHED" && selected.data.provider?.publishedUrl ? <a className={styles.publishedLink} href={selected.data.provider.publishedUrl} target="_blank" rel="noreferrer">Abrir evidencia publicada</a> : null}
             {selected.data.publicationStatus === "DRAFT" && !selected.data.readiness?.readyForReview ? <p className={styles.warning}>Completa los antecedentes indicados antes de solicitar aprobación.</p> : null}
           </aside>
         </div>

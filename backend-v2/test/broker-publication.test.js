@@ -71,3 +71,35 @@ test("la analítica y el contrato de salida no declaran una publicación externa
   assert.equal(exported.externalDelivery, false);
   assert.match(exported.message, /No acredita/);
 });
+
+test("solo una evidencia humana permite registrar una publicación externa manual", () => {
+  const readiness = brokerPublicationReadiness({ property, mandate: { status: "SIGNED" } });
+  const draft = createBrokerPublicationData({ property, channel: "PORTAL_INMOBILIARIO", readiness, actor: "María Corredora" });
+  const approved = transitionBrokerPublication(
+    transitionBrokerPublication(draft, "REQUEST_REVIEW", { actor: "María Corredora" }),
+    "APPROVE",
+    { actor: "Dirección" }
+  );
+  assert.throws(() => transitionBrokerPublication(approved, "CONFIRM_EXTERNAL_PUBLICATION", { actor: "María Corredora" }), /URL publicada o el comprobante/);
+  const published = transitionBrokerPublication(approved, "CONFIRM_EXTERNAL_PUBLICATION", {
+    actor: "María Corredora",
+    delivery: { externalReference: "PI-2026-001", publishedUrl: "https://portal.ejemplo/PI-2026-001" }
+  });
+  assert.equal(published.publicationStatus, "PUBLISHED");
+  assert.equal(published.provider.deliveryMode, "MANUAL_CONFIRMED");
+  assert.equal(published.provider.integrationEnabled, false);
+});
+
+test("el rechazo editorial y una incidencia de proveedor exigen una explicación", () => {
+  const readiness = brokerPublicationReadiness({ property, mandate: { status: "SIGNED" } });
+  const draft = createBrokerPublicationData({ property, channel: "YAPO", readiness, actor: "María Corredora" });
+  const pending = transitionBrokerPublication(draft, "REQUEST_REVIEW", { actor: "María Corredora" });
+  assert.throws(() => transitionBrokerPublication(pending, "REJECT", { actor: "Dirección" }), /motivo del rechazo/);
+  const rejected = transitionBrokerPublication(pending, "REJECT", { actor: "Dirección", note: "Falta validar superficie útil." });
+  assert.equal(rejected.publicationStatus, "REJECTED");
+  const approved = transitionBrokerPublication(pending, "APPROVE", { actor: "Dirección" });
+  assert.throws(() => transitionBrokerPublication(approved, "REPORT_PROVIDER_FAILURE", { actor: "María Corredora" }), /Describe el error/);
+  const pendingProvider = transitionBrokerPublication(approved, "REPORT_PROVIDER_FAILURE", { actor: "María Corredora", delivery: { error: "El portal rechazó el formato de la imagen." } });
+  assert.equal(pendingProvider.publicationStatus, "PROVIDER_PENDING");
+  assert.equal(pendingProvider.provider.deliveryMode, "MANUAL_ERROR_REPORTED");
+});
