@@ -1,7 +1,7 @@
 /** Archivo: Verifica las reglas de borrador, aprobación y proveedor de publicaciones Broker OS. */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { brokerPublicationAnalytics, brokerPublicationConnectionKey, brokerPublicationExport, brokerPublicationProviderPreflight, brokerPublicationReadiness, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, transitionBrokerPublication } from "../src/services/broker-publication.service.js";
+import { brokerPublicationAnalytics, brokerPublicationConnectionKey, brokerPublicationExport, brokerPublicationProviderPreflight, brokerPublicationReadiness, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, publicBrokerPublication, transitionBrokerPublication } from "../src/services/broker-publication.service.js";
 
 const property = {
   id: "property-1",
@@ -84,6 +84,24 @@ test("la prevalidación bloquea una prueba cuando falta proveedor o conexión", 
   assert.ok(result.missing.includes("Aprobación interna de la publicación"));
   assert.ok(result.missing.includes("Preparación comercial del portal"));
   assert.ok(result.missing.includes("Conexión autorizada del portal"));
+});
+
+test("una publicación histórica incompleta no derriba el contrato que consume la web", () => {
+  const legacy = publicBrokerPublication({
+    id: "legacy-publication",
+    title: "Aviso histórico de propiedad",
+    status: "ACTIVE",
+    assignedToId: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.000Z",
+    data: { propertyId: "property-legacy", price: 2500, currency: "UF", photoUrls: ["https://cdn.example/historica.jpg"] },
+  });
+  assert.equal(legacy.data.copy.title, "Aviso histórico de propiedad");
+  assert.equal(legacy.data.copy.currency, "UF");
+  assert.equal(legacy.data.copy.images.length, 1);
+  assert.equal(legacy.data.provider.integrationEnabled, false);
+  assert.equal(legacy.data.readiness.readyForExternalDelivery, false);
+  assert.equal(Array.isArray(legacy.data.lifecycle), true);
 });
 
 test("la transición obliga revisión humana antes de proveedor", () => {

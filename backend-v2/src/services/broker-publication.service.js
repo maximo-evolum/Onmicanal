@@ -379,8 +379,83 @@ export function transitionBrokerPublication(data, action, { actor, note = "", de
   };
 }
 
-export function publicBrokerPublication(record) {
+// Los registros antiguos de marketing_publication pueden existir antes de que
+// Broker OS V2 incorporara copy, readiness o lifecycle. La API conserva sus
+// datos originales, pero entrega un contrato completo y de solo lectura para
+// que una ficha histórica nunca derribe el centro de publicación.
+function publicBrokerPublicationData(record) {
   const data = propertyData(record);
+  const rawCopy = data.copy && typeof data.copy === "object" && !Array.isArray(data.copy) ? data.copy : {};
+  const rawReadiness = data.readiness && typeof data.readiness === "object" && !Array.isArray(data.readiness) ? data.readiness : {};
+  const rawProvider = data.provider && typeof data.provider === "object" && !Array.isArray(data.provider) ? data.provider : {};
+  const rawApproval = data.approval && typeof data.approval === "object" && !Array.isArray(data.approval) ? data.approval : {};
+  const matchedChannel = channelDefinition(data.channel);
+  const channel = matchedChannel?.key || "EVOLUM_CATALOGO";
+  const channelLabel = text(data.channelLabel, matchedChannel?.label || "Catálogo EVOLUM");
+  const requestedStatus = text(data.publicationStatus || record?.status, "DRAFT").toUpperCase();
+  const publicationStatus = BROKER_PUBLICATION_STATUSES.includes(requestedStatus) ? requestedStatus : "DRAFT";
+  const images = Array.isArray(rawCopy.images) ? rawCopy.images.filter((item) => text(item)) : imageUrls(data);
+  const lifecycle = Array.isArray(data.lifecycle)
+    ? data.lifecycle.filter((item) => item && typeof item === "object").map((item) => ({
+      at: text(item.at), action: text(item.action, "REGISTRO_HISTORICO"), by: text(item.by, "Sistema"), note: text(item.note),
+    }))
+    : [];
+  const missing = Array.isArray(rawReadiness.missing) ? rawReadiness.missing.filter((item) => text(item)) : [];
+  const total = Number.isFinite(Number(rawReadiness.total)) && Number(rawReadiness.total) >= 0 ? Number(rawReadiness.total) : 0;
+  const completed = Number.isFinite(Number(rawReadiness.completed)) && Number(rawReadiness.completed) >= 0 ? Number(rawReadiness.completed) : 0;
+  const score = Number.isFinite(Number(rawReadiness.score)) && Number(rawReadiness.score) >= 0 ? Math.min(100, Math.round(Number(rawReadiness.score))) : 0;
+  return {
+    ...data,
+    propertyId: text(data.propertyId),
+    channel,
+    channelLabel,
+    publicationStatus,
+    provider: {
+      state: text(rawProvider.state, matchedChannel?.providerState || "PENDING_PROVIDER"),
+      integrationEnabled: false,
+      externalPublicationId: rawProvider.externalPublicationId ? text(rawProvider.externalPublicationId) : null,
+      publishedUrl: text(rawProvider.publishedUrl),
+      deliveryMode: text(rawProvider.deliveryMode, "NOT_SENT"),
+      lastAttemptAt: rawProvider.lastAttemptAt || null,
+      lastError: rawProvider.lastError ? text(rawProvider.lastError) : null,
+    },
+    copy: {
+      title: text(rawCopy.title, text(record?.title, "Borrador sin título")),
+      body: text(rawCopy.body),
+      price: number(rawCopy.price ?? data.price ?? data.suggestedPrice),
+      currency: text(rawCopy.currency ?? data.currency, "CLP").toUpperCase(),
+      operation: text(rawCopy.operation ?? data.operation),
+      propertyType: text(rawCopy.propertyType ?? data.propertyType),
+      address: text(rawCopy.address ?? data.address),
+      comuna: text(rawCopy.comuna ?? data.comuna ?? data.commune),
+      region: text(rawCopy.region ?? data.region),
+      images,
+    },
+    readiness: {
+      checks: Array.isArray(rawReadiness.checks) ? rawReadiness.checks.filter((item) => item && typeof item === "object") : [],
+      missing,
+      completed: Math.min(completed, total || completed),
+      total,
+      score,
+      readyForReview: Boolean(rawReadiness.readyForReview),
+      readyForExternalDelivery: false,
+    },
+    approval: {
+      status: text(rawApproval.status, "DRAFT"),
+      requestedAt: rawApproval.requestedAt || null,
+      requestedBy: rawApproval.requestedBy || null,
+      approvedAt: rawApproval.approvedAt || null,
+      approvedBy: rawApproval.approvedBy || null,
+      note: text(rawApproval.note),
+    },
+    ...(data.metrics && typeof data.metrics === "object" && !Array.isArray(data.metrics) ? { metrics: data.metrics } : {}),
+    lifecycle,
+    version: Number.isFinite(Number(data.version)) && Number(data.version) > 0 ? Number(data.version) : 1,
+  };
+}
+
+export function publicBrokerPublication(record) {
+  const data = publicBrokerPublicationData(record);
   return {
     id: record.id,
     title: record.title,
