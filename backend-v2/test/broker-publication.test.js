@@ -52,10 +52,12 @@ test("la transición obliga revisión humana antes de proveedor", () => {
 });
 
 test("el proveedor no acepta secretos y el rendimiento no permite cantidades negativas", () => {
-  const provider = normalizeBrokerPublicationProvider("PORTAL_INMOBILIARIO", { providerStatus: "CONTRACTED", accountReference: "Cuenta demostración", notes: "Integración pendiente" });
+  const provider = normalizeBrokerPublicationProvider("PORTAL_INMOBILIARIO", { providerStatus: "CONTRACTED", accountReference: "Cuenta demostración", technicalContact: "integraciones@portal.ejemplo", notes: "Integración pendiente", apiKey: "secreto-que-no-debe-guardarse" });
   const metrics = normalizeBrokerPublicationMetrics({ reportDate: "2026-10-24", views: 120, contacts: -3, favorites: 7, publishedUrl: "https://portal.ejemplo/publicacion" });
   assert.equal(provider.externalPublishingEnabled, false);
   assert.equal(provider.credentialStorage, "CENTRO_DE_CONEXIONES_CIFRADO");
+  assert.equal("apiKey" in provider, false);
+  assert.equal(provider.technicalContact, "integraciones@portal.ejemplo");
   assert.equal(metrics.contacts, 0);
 });
 

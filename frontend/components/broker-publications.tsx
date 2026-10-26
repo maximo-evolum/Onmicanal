@@ -10,6 +10,7 @@ import {
   getBrokerPublicationAnalytics,
   getBrokerPublicationExport,
   getBrokerPublicationOptions,
+  getBrokerPublicationProviderConfig,
   getBrokerPublicationProviders,
   getBrokerPublications,
   recordBrokerPublicationMetrics,
@@ -19,6 +20,7 @@ import {
   type BrokerPublication,
   type BrokerPublicationAnalytics,
   type BrokerPublicationOptions,
+  type BrokerPublicationProviderConfig,
   type BrokerPublicationProvidersResponse,
 } from "@/lib/api";
 import styles from "./broker-publications.module.css";
@@ -98,6 +100,7 @@ export function BrokerPublicationsPageContent() {
   const [items, setItems] = useState<BrokerPublication[]>([]);
   const [analytics, setAnalytics] = useState<BrokerPublicationAnalytics>(emptyAnalytics);
   const [providers, setProviders] = useState<BrokerPublicationProvidersResponse>(emptyProviders);
+  const [providerConfig, setProviderConfig] = useState<BrokerPublicationProviderConfig | null>(null);
   const [selected, setSelected] = useState<BrokerPublication | null>(null);
   const [propertyId, setPropertyId] = useState("");
   const [channel, setChannel] = useState("");
@@ -197,11 +200,29 @@ export function BrokerPublicationsPageContent() {
     } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
   }
 
-  async function changeProviderStatus(providerChannel: string, providerStatus: string) {
+  async function openProviderConfig(providerChannel: string) {
     try {
       setBusy(true);
-      await updateBrokerPublicationProvider(providerChannel, { providerStatus });
-      setNotice("Estado comercial del proveedor actualizado. Las credenciales y la publicación externa siguen bloqueadas.");
+      const config = await getBrokerPublicationProviderConfig(providerChannel);
+      setProviderConfig(config);
+      setNotice(`Configuración interna abierta para ${config.channelLabel}. No ingreses contraseñas, tokens ni API keys aquí.`);
+    } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
+  }
+
+  async function saveProviderConfig(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!providerConfig) return;
+    try {
+      setBusy(true);
+      const saved = await updateBrokerPublicationProvider(providerConfig.channel, {
+        providerStatus: providerConfig.providerStatus,
+        contractReference: providerConfig.contractReference,
+        accountReference: providerConfig.accountReference,
+        technicalContact: providerConfig.technicalContact,
+        notes: providerConfig.notes,
+      });
+      setProviderConfig(saved);
+      setNotice("Preparación del proveedor guardada. Las credenciales se administrarán cifradas en Centro de Conexiones cuando exista autorización formal.");
       await reload();
     } catch (error) { setNotice(messageOf(error)); } finally { setBusy(false); }
   }
@@ -271,13 +292,18 @@ export function BrokerPublicationsPageContent() {
           {providers.providers.map((provider) => <article key={provider.channel} className={styles.providerCard}>
             <div><strong>{provider.channelLabel}</strong><span className={`${styles.status} ${styles[`provider${provider.providerStatus}`] || ""}`}>{readableProviderStatus(provider.providerStatus)}</span></div>
             <p>{provider.configured ? `Actualizado ${date(provider.updatedAt)}` : "Aún no se ha configurado su estado comercial."}</p>
-            {canConfigureProviders ? <label>Estado comercial
-              <select value={provider.providerStatus} disabled={busy} onChange={(event) => changeProviderStatus(provider.channel, event.target.value)}>
-                {providers.providerStatuses.map((status) => <option key={status} value={status}>{readableProviderStatus(status)}</option>)}
-              </select>
-            </label> : null}
+            {canConfigureProviders ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => openProviderConfig(provider.channel)}>Preparar proveedor</button> : null}
           </article>)}
         </div>
+        {providerConfig && canConfigureProviders ? <form className={styles.providerConfig} onSubmit={saveProviderConfig}>
+          <div className={styles.providerConfigHeading}><div><span>Preparación segura</span><h3>{providerConfig.channelLabel}</h3><p>Registra solo antecedentes comerciales y operativos. Las contraseñas, tokens y API keys no deben quedar en este formulario.</p></div><button type="button" className={styles.archive} disabled={busy} onClick={() => setProviderConfig(null)}>Cerrar</button></div>
+          <label>Estado del proveedor<select value={providerConfig.providerStatus} disabled={busy} onChange={(event) => setProviderConfig((current) => current ? { ...current, providerStatus: event.target.value } : current)}>{providers.providerStatuses.map((status) => <option key={status} value={status}>{readableProviderStatus(status)}</option>)}</select></label>
+          <label>Referencia de contrato o acuerdo<input value={providerConfig.contractReference} disabled={busy} maxLength={300} onChange={(event) => setProviderConfig((current) => current ? { ...current, contractReference: event.target.value } : current)} placeholder="Ej.: contrato, ticket comercial o folio" /></label>
+          <label>Referencia de cuenta del proveedor<input value={providerConfig.accountReference} disabled={busy} maxLength={300} onChange={(event) => setProviderConfig((current) => current ? { ...current, accountReference: event.target.value } : current)} placeholder="Identificador no secreto de la cuenta" /></label>
+          <label>Contacto técnico<input type="email" value={providerConfig.technicalContact} disabled={busy} maxLength={300} onChange={(event) => setProviderConfig((current) => current ? { ...current, technicalContact: event.target.value } : current)} placeholder="integraciones@proveedor.cl" /></label>
+          <label className={styles.providerNotes}>Notas operativas<textarea value={providerConfig.notes} disabled={busy} maxLength={3000} rows={3} onChange={(event) => setProviderConfig((current) => current ? { ...current, notes: event.target.value } : current)} placeholder="Requisitos, responsable y próximos pasos; no incluir secretos." /></label>
+          <div className={styles.providerConfigActions}><span>Almacenamiento de credenciales: {providerConfig.credentialStorage.replaceAll("_", " ")}</span><button className="primary-btn" disabled={busy}>{busy ? "Guardando…" : "Guardar preparación"}</button></div>
+        </form> : null}
       </section>
 
       <section className={styles.grid}>

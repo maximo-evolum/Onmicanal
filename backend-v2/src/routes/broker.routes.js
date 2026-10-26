@@ -610,6 +610,20 @@ brokerRouter.get("/broker/publication-providers", requireBrokerAction("projects"
   }
 });
 
+// La ficha de preparación comercial solo puede verla quien administra la
+// configuración. El listado general nunca expone referencias de contrato,
+// cuenta o contacto técnico a perfiles operativos.
+brokerRouter.get("/broker/publication-providers/:channel/config", requireRole("OWNER", "ADMIN"), requireBrokerAction("configuration", "CONFIGURE"), async (req, res) => {
+  try {
+    const definition = publicationProviderDefinition(req.params.channel);
+    if (!definition) return res.status(422).json({ error: "Proveedor de publicación no válido." });
+    const record = await publicationProviderRecord(req.tenantId, definition.key);
+    res.json({ ...publicBrokerPublicationProvider(record, definition.key), configured: Boolean(record) });
+  } catch (error) {
+    res.status(error?.status || 422).json({ error: error?.message || "No se pudo abrir la configuración del proveedor." });
+  }
+});
+
 brokerRouter.put("/broker/publication-providers/:channel", requireRole("OWNER", "ADMIN"), requireBrokerAction("configuration", "CONFIGURE"), async (req, res) => {
   try {
     const definition = publicationProviderDefinition(req.params.channel);
@@ -620,7 +634,7 @@ brokerRouter.put("/broker/publication-providers/:channel", requireRole("OWNER", 
       ? await prisma.industryRecord.update({ where: { id: previous.id }, data: { title: `Proveedor de publicación · ${definition.label}`, status: data.providerStatus, data } })
       : await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "broker_publication_provider", title: `Proveedor de publicación · ${definition.label}`, status: data.providerStatus, assignedToId: req.user.id, data } });
     await recordAuditLog(req, "BROKER_PUBLICATION_PROVIDER_CONFIGURED", "broker_publication_provider", record.id, { channel: definition.key, providerStatus: data.providerStatus, externalPublishingEnabled: false });
-    res.json(publicBrokerPublicationProvider(record, definition.key));
+    res.json({ ...publicBrokerPublicationProvider(record, definition.key), configured: true });
   } catch (error) {
     res.status(error?.status || 422).json({ error: error?.message || "No se pudo guardar el estado del proveedor." });
   }

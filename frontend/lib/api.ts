@@ -2335,6 +2335,14 @@ export type BrokerPublicationProvider = {
   updatedAt: string | null;
 };
 
+export type BrokerPublicationProviderConfig = BrokerPublicationProvider & {
+  contractReference: string;
+  accountReference: string;
+  technicalContact: string;
+  notes: string;
+  credentialStorage: "CENTRO_DE_CONEXIONES_CIFRADO" | string;
+};
+
 export type BrokerPublicationAnalytics = {
   total: number;
   published: number;
@@ -2397,8 +2405,18 @@ export function getBrokerPublicationProviders(): Promise<BrokerPublicationProvid
   return request<BrokerPublicationProvidersResponse>("/broker/publication-providers");
 }
 
-export function updateBrokerPublicationProvider(channel: string, input: { providerStatus: string }): Promise<BrokerPublicationProvider> {
-  return request<BrokerPublicationProvider>(`/broker/publication-providers/${encodeURIComponent(channel)}`, {
+export function getBrokerPublicationProviderConfig(channel: string): Promise<BrokerPublicationProviderConfig> {
+  return request<BrokerPublicationProviderConfig>(`/broker/publication-providers/${encodeURIComponent(channel)}/config`);
+}
+
+export function updateBrokerPublicationProvider(channel: string, input: {
+  providerStatus: string;
+  contractReference?: string;
+  accountReference?: string;
+  technicalContact?: string;
+  notes?: string;
+}): Promise<BrokerPublicationProviderConfig> {
+  return request<BrokerPublicationProviderConfig>(`/broker/publication-providers/${encodeURIComponent(channel)}`, {
     method: "PUT",
     body: JSON.stringify(input)
   });
