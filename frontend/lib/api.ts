@@ -3344,6 +3344,7 @@ export type ConnectionCenterResponse = {
     oauthMicrosoft: string;
     oauthMeta?: string;
     oauthMercadoPago?: string;
+    oauthMercadoLibre?: string;
     metaWebhook: string;
     [key: string]: string | undefined;
   };

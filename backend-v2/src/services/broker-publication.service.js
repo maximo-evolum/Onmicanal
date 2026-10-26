@@ -9,6 +9,7 @@
 
 export const BROKER_PUBLICATION_CHANNELS = Object.freeze([
   { key: "EVOLUM_CATALOGO", label: "Catálogo EVOLUM", providerState: "INTERNAL" },
+  { key: "MERCADOLIBRE_INMUEBLES", label: "Mercado Libre Inmuebles", providerState: "PENDING_PROVIDER" },
   { key: "PORTAL_INMOBILIARIO", label: "Portal Inmobiliario", providerState: "PENDING_PROVIDER" },
   { key: "TOCTOC", label: "TocToc", providerState: "PENDING_PROVIDER" },
   { key: "YAPO", label: "Yapo", providerState: "PENDING_PROVIDER" },

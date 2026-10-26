@@ -175,6 +175,23 @@ const PROVIDERS = [
     scopes: ["offline_access", "read", "write"]
   },
   {
+    // Mercado Libre se administra como una conexión propia de Broker OS. No
+    // comparte tokens con Mercado Pago aunque ambos pertenezcan al ecosistema
+    // Mercado Libre; cada cuenta externa queda aislada por tenant.
+    key: "broker_mercadolibre_real_estate",
+    label: "Mercado Libre Inmuebles",
+    group: "Broker OS",
+    groupKey: "broker",
+    icon: "ML",
+    type: "oauth",
+    oauthProvider: "mercadolibre",
+    module: MODULES.BROKER_PORTAL,
+    description: "Vincula la cuenta comercial autorizada para preparar publicaciones inmobiliarias y validar su acceso. Las publicaciones externas siguen requiriendo revisión y activación explícita.",
+    oauthRequiredEnv: ["MERCADOLIBRE_CLIENT_ID", "MERCADOLIBRE_CLIENT_SECRET", "PUBLIC_BASE_URL"],
+    requiredFields: ["accessToken", "externalAccountId"],
+    scopes: []
+  },
+  {
     key: "bank_links",
     label: "Enlaces bancarios",
     group: "Pagos y cobros",
@@ -761,6 +778,15 @@ function buildOAuthUrl(req, provider) {
     return url.toString();
   }
 
+  if (provider.oauthProvider === "mercadolibre") {
+    const url = new URL("https://auth.mercadolibre.cl/authorization");
+    url.searchParams.set("client_id", process.env.MERCADOLIBRE_CLIENT_ID || "");
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("redirect_uri", `${baseUrl}/api/connections/oauth/mercadolibre/callback`);
+    url.searchParams.set("state", state);
+    return url.toString();
+  }
+
   return null;
 }
 
@@ -844,6 +870,10 @@ async function exchangeOAuthCode(req, provider, code) {
     tokenUrl = "https://api.mercadopago.com/oauth/token";
     body.set("client_id", process.env.MERCADOPAGO_CLIENT_ID || "");
     body.set("client_secret", process.env.MERCADOPAGO_CLIENT_SECRET || "");
+  } else if (provider.oauthProvider === "mercadolibre") {
+    tokenUrl = "https://api.mercadolibre.com/oauth/token";
+    body.set("client_id", process.env.MERCADOLIBRE_CLIENT_ID || "");
+    body.set("client_secret", process.env.MERCADOLIBRE_CLIENT_SECRET || "");
   } else {
     throw new Error("Proveedor OAuth no soportado");
   }
@@ -947,6 +977,25 @@ async function discoverOAuthAccount(provider, accessToken) {
     };
   }
 
+  if (provider.oauthProvider === "mercadolibre") {
+    const account = await providerRequest("https://api.mercadolibre.com/users/me", accessToken);
+    const identifier = cleanText(account.id);
+    return {
+      label: cleanText(account.nickname || account.email || provider.label),
+      externalAccountId: identifier ? `mercadolibre:${identifier}` : null,
+      discovery: {
+        account: {
+          id: identifier,
+          nickname: cleanText(account.nickname),
+          email: cleanText(account.email),
+          siteId: cleanText(account.site_id),
+          countryId: cleanText(account.country_id),
+          userType: cleanText(account.user_type)
+        }
+      }
+    };
+  }
+
   if (provider.oauthProvider === "meta") {
     const pages = await providerRequest(
       "https://graph.facebook.com/v23.0/me/accounts?fields=id,name,instagram_business_account{id,username},whatsapp_business_account{id,name,phone_numbers{id,display_phone_number,verified_name}}&limit=100",
@@ -1040,6 +1089,10 @@ async function refreshOAuthAccessToken(provider, config) {
     tokenUrl = "https://api.mercadopago.com/oauth/token";
     body.set("client_id", process.env.MERCADOPAGO_CLIENT_ID || "");
     body.set("client_secret", process.env.MERCADOPAGO_CLIENT_SECRET || "");
+  } else if (provider.oauthProvider === "mercadolibre") {
+    tokenUrl = "https://api.mercadolibre.com/oauth/token";
+    body.set("client_id", process.env.MERCADOLIBRE_CLIENT_ID || "");
+    body.set("client_secret", process.env.MERCADOLIBRE_CLIENT_SECRET || "");
   }
   if (!tokenUrl) return config;
 
@@ -1387,6 +1440,7 @@ connectionsPublicRouter.get("/connections/oauth/google/callback", oauthCallbackH
 connectionsPublicRouter.get("/connections/oauth/microsoft/callback", oauthCallbackHandler("microsoft"));
 connectionsPublicRouter.get("/connections/oauth/meta/callback", oauthCallbackHandler("meta"));
 connectionsPublicRouter.get("/connections/oauth/mercadopago/callback", oauthCallbackHandler("mercadopago"));
+connectionsPublicRouter.get("/connections/oauth/mercadolibre/callback", oauthCallbackHandler("mercadolibre"));
 
 connectionsRouter.get("/connections", async (req, res, next) => {
   try {
@@ -1420,6 +1474,7 @@ connectionsRouter.get("/connections", async (req, res, next) => {
         oauthMicrosoft: `${publicBaseUrl(req)}/api/connections/oauth/microsoft/callback`,
         oauthMeta: `${publicBaseUrl(req)}/api/connections/oauth/meta/callback`,
         oauthMercadoPago: `${publicBaseUrl(req)}/api/connections/oauth/mercadopago/callback`,
+        oauthMercadoLibre: `${publicBaseUrl(req)}/api/connections/oauth/mercadolibre/callback`,
         metaWebhook: `${publicBaseUrl(req)}/meta/webhook`
       },
       groups: groupProviders(providers)

@@ -99,6 +99,9 @@ function providerNextStep(provider: ConnectionProvider) {
 
 function providerCapabilities(provider: ConnectionProvider) {
   const haystack = `${provider.key} ${provider.label} ${provider.groupKey} ${provider.module}`.toLowerCase();
+  if (haystack.includes("mercadolibre") || haystack.includes("mercado libre")) {
+    return ["Cuenta inmobiliaria", "OAuth por empresa", "Borradores aprobados"];
+  }
   if (haystack.includes("nubox")) {
     return ["Facturas y DTE", "PDF y XML", "Cuentas por cobrar"];
   }
@@ -669,6 +672,21 @@ export default function ConnectionsPage() {
                             <li>En producción, EVOLUM debe publicar y verificar su aplicación y su dominio propio.</li>
                           </ol>
                           <a href="https://developers.google.com/identity/protocols/oauth2/production-readiness/brand-verification?hl=es-419" target="_blank" rel="noreferrer">Abrir guía oficial de Google</a>
+                        </section>
+                      ) : null}
+
+                      {selected.key === "broker_mercadolibre_real_estate" && selected.oauthProvider === "mercadolibre" ? (
+                        <section className="connection-google-oauth-help" aria-label="Ayuda para vincular Mercado Libre Inmuebles">
+                          <span>Autorización de Mercado Libre</span>
+                          <strong>Antes de vincular una cuenta</strong>
+                          <p>EVOLUM requiere una aplicación registrada, una URL de retorno HTTPS y una cuenta de prueba o comercial habilitada para Inmuebles. Esta conexión valida la cuenta; no publica avisos por sí sola.</p>
+                          <ol>
+                            <li>Registra la URL de retorno que aparece en la configuración técnica de EVOLUM.</li>
+                            <li>Autoriza una cuenta de prueba antes de usar una cuenta comercial.</li>
+                            <li>Configura la ficha, fotos, mandato y aprobación interna antes de solicitar publicación externa.</li>
+                          </ol>
+                          <small className="connection-oauth-callback">URL de retorno: <code>{data?.callbacks.oauthMercadoLibre || "Define PUBLIC_BASE_URL para generar la URL."}</code></small>
+                          <a href="https://developers.mercadolibre.cl/es_cl/pasos-rapidos-para-publicar-un-inmueble-de-prueba" target="_blank" rel="noreferrer">Abrir guía oficial de Mercado Libre</a>
                         </section>
                       ) : null}
 

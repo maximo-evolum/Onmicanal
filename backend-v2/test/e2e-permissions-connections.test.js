@@ -119,3 +119,47 @@ test("E2E conexiones: OAuth sin habilitar no revela variables técnicas al clien
   assert.match(response.body.error, /EVOLUM/i);
   assert.doesNotMatch(JSON.stringify(response.body), /GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET/i);
 });
+
+test("E2E conexiones: Mercado Libre exige configuración de plataforma y genera OAuth seguro", async () => {
+  const original = Object.fromEntries(["MERCADOLIBRE_CLIENT_ID", "MERCADOLIBRE_CLIENT_SECRET", "PUBLIC_BASE_URL"].map((key) => [key, process.env[key]]));
+  const restore = () => {
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  };
+  const { connectionsRouter } = await import("../src/routes/connections.routes.js");
+  const app = express();
+  app.use(express.json());
+  app.use(requestContext);
+  app.use(testIdentity);
+  app.use("/api", connectionsRouter);
+
+  try {
+    delete process.env.MERCADOLIBRE_CLIENT_ID;
+    delete process.env.MERCADOLIBRE_CLIENT_SECRET;
+    const unavailable = await request(app, {
+      method: "POST",
+      path: "/api/connections/broker_mercadolibre_real_estate/oauth-url",
+      headers: { "x-test-role": "ADMIN" }
+    });
+    assert.equal(unavailable.status, 503);
+    assert.doesNotMatch(JSON.stringify(unavailable.body), /MERCADOLIBRE_CLIENT_ID|MERCADOLIBRE_CLIENT_SECRET/i);
+
+    process.env.MERCADOLIBRE_CLIENT_ID = "meli-client-test";
+    process.env.MERCADOLIBRE_CLIENT_SECRET = "meli-secret-test";
+    const available = await request(app, {
+      method: "POST",
+      path: "/api/connections/broker_mercadolibre_real_estate/oauth-url",
+      headers: { "x-test-role": "ADMIN" }
+    });
+    assert.equal(available.status, 200);
+    const url = new URL(available.body.url);
+    assert.equal(url.origin, "https://auth.mercadolibre.cl");
+    assert.equal(url.pathname, "/authorization");
+    assert.equal(url.searchParams.get("client_id"), "meli-client-test");
+    assert.match(String(url.searchParams.get("redirect_uri")), /^https:\/\/.+\/api\/connections\/oauth\/mercadolibre\/callback$/);
+    assert.ok(url.searchParams.get("state"));
+  } finally {
+    restore();
+  }
+});

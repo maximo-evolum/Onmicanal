@@ -40,6 +40,15 @@ test("un borrador no publica en un portal ni habilita un proveedor", () => {
   assert.match(data.copy.body, /Providencia/);
 });
 
+test("Mercado Libre Inmuebles queda disponible como borrador, no como publicación automática", () => {
+  const readiness = brokerPublicationReadiness({ property, mandate: { status: "SIGNED" } });
+  const data = createBrokerPublicationData({ property, channel: "MERCADOLIBRE_INMUEBLES", readiness, actor: "María Corredora" });
+  assert.equal(data.channelLabel, "Mercado Libre Inmuebles");
+  assert.equal(data.publicationStatus, "DRAFT");
+  assert.equal(data.provider.integrationEnabled, false);
+  assert.equal(data.provider.state, "PENDING_PROVIDER");
+});
+
 test("la transición obliga revisión humana antes de proveedor", () => {
   const readiness = brokerPublicationReadiness({ property, mandate: { status: "SIGNED" } });
   const draft = createBrokerPublicationData({ property, channel: "YAPO", readiness, actor: "María Corredora" });

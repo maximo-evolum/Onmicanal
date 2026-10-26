@@ -13064,6 +13064,8 @@ textarea:focus {
 .connection-google-oauth-help p { margin-top: 6px; }
 .connection-google-oauth-help ol { margin: 10px 0 12px 20px; padding: 0; }
 .connection-google-oauth-help a { font-weight: 800; }
+.connection-oauth-callback { display: block; margin: 0 0 12px; color: var(--text-muted); line-height: 1.45; }
+.connection-oauth-callback code { display: inline-block; max-width: 100%; overflow-wrap: anywhere; color: var(--text-strong); font-size: .78rem; }
 
 .connection-form-grid {
   display: grid;
