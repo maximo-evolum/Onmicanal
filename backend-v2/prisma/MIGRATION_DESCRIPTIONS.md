@@ -1,6 +1,11 @@
-# Archivo: Índice de migraciones Prisma que no se pueden editar
+# Índice técnico de migraciones Prisma
 
-Las migraciones históricas de Prisma son ejecutables versionados. No reciben un comentario en línea porque Prisma guarda y comprueba su checksum después de aplicarlas; cambiarlas puede impedir `prisma migrate deploy`. Este índice entrega la descripción breve que normalmente estaría en el encabezado.
+Este archivo está dirigido a programadores que mantienen la base de datos de
+EVOLUM OS. Las migraciones históricas de Prisma son ejecutables versionados.
+No reciben comentarios dentro de su SQL porque Prisma guarda y comprueba su
+checksum después de aplicarlas; modificarlas puede impedir
+`prisma migrate deploy`. Este índice entrega la descripción funcional y técnica
+que normalmente estaría en el encabezado de cada migración.
 
 | Migración | Descripción breve |
 | --- | --- |
@@ -42,4 +47,9 @@ Las migraciones históricas de Prisma son ejecutables versionados. No reciben un
 
 ## Regla de mantenimiento
 
-Una migración ya aplicada no se modifica. Para un cambio de datos o esquema se crea una migración nueva y se agrega una fila a este índice.
+Una migración ya aplicada no se modifica. Para un cambio de datos o esquema:
+
+1. Crea una migración nueva con Prisma.
+2. Revísala en un entorno local o de pruebas.
+3. Ejecuta `prisma migrate deploy` únicamente en el entorno que corresponda.
+4. Agrega una fila a este índice explicando su objetivo.

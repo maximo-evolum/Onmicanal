@@ -1755,6 +1755,7 @@ export type BrokerOverview = {
   agents: BrokerAgent[];
   recommendations: BrokerRecommendation[];
   reporting: BrokerReporting;
+  readModel?: BrokerOperationalReadModel;
   aiTraining: {
     scenarios: BrokerAiScenario[];
     evaluations: BrokerAiEvaluation[];
@@ -1826,6 +1827,22 @@ export type BrokerRecommendation = {
   propertyId?: string;
   operationId?: string;
   requiresApproval: boolean;
+  source?: string;
+  entityType?: string;
+  entityId?: string;
+  impact?: string;
+  responsibleUserId?: string;
+  dueAt?: string | null;
+};
+
+/** Lectura única para que los paneles no recalculen métricas con criterios distintos. */
+export type BrokerOperationalReadModel = {
+  version: string;
+  generatedAt: string;
+  kpis: BrokerOverview["kpis"];
+  reporting: BrokerReporting;
+  priorities: BrokerRecommendation[];
+  pipeline: { total: number; active: number; terminal: number; byStage: Record<string, number> };
 };
 
 export type BrokerPropertyExpedient = {
@@ -1835,6 +1852,7 @@ export type BrokerPropertyExpedient = {
   completion: { missing: string[]; complete: boolean };
   health: { score: number; status: string; completed: string[]; missing: string[] };
   timeline: Array<{ at: string; title: string; type: string; note: string; recordType: string; status: string }>;
+  operationalReadModel?: BrokerOperationalReadModel;
   journey?: { property: { title: string; comuna: string; precio: unknown; estado: string }; people: { propietarios: string[]; interesados: string[] }; control: Record<string, number> };
 };
 

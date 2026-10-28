@@ -20,6 +20,7 @@
 .handoff a { display: inline-block; margin: .5rem 0; color: inherit; text-decoration: underline; }
 .handoff summary { cursor: pointer; padding: .5rem 0; }
 .handoff li { margin: .7rem 0; }
+.readModel { margin: .85rem 0; padding: .7rem .85rem; border-left: 3px solid #079d9c; border-radius: 0 10px 10px 0; background: rgba(7, 157, 156, .08); font-size: .88rem; }
 :global(.broker-operation-card):has(.handoff) { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; align-items: start !important; }
 :global(.broker-operation-card):has(.handoff) > .summary { width: 100%; box-sizing: border-box; }
 :global(.broker-operation-card):has(.handoff) > :global(.broker-operation-actions) { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: .6rem; }

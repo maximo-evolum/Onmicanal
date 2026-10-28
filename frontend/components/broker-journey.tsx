@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getBrokerCatalog, getBrokerOperations, type BrokerOperation, type BrokerJourneyCatalog } from "@/lib/api";
+import { getBrokerCatalog, getBrokerOverview, type BrokerOperation, type BrokerJourneyCatalog, type BrokerOperationalReadModel } from "@/lib/api";
 import styles from "./broker-journey.module.css";
 
 export function BrokerJourneySummary({ operation, catalog, tracker = false }: { operation: BrokerOperation; catalog?: BrokerJourneyCatalog; tracker?: boolean }) {
@@ -43,29 +43,31 @@ export function BrokerConversionSummary({ operation }: { operation: BrokerOperat
 export function BrokerCanonicalPipeline() {
   const [operations, setOperations] = useState<BrokerOperation[]>([]);
   const [catalog, setCatalog] = useState<BrokerJourneyCatalog>();
+  const [readModel, setReadModel] = useState<BrokerOperationalReadModel>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     let active = true;
     setLoading(true); setError("");
-    Promise.all([getBrokerOperations(), getBrokerCatalog()]).then(([items, c]) => {
+    Promise.all([getBrokerOverview(), getBrokerCatalog()]).then(([overview, c]) => {
       if (!active) return;
       if (!c.journey) throw new Error("El backend todavía no expone el catálogo compartido de etapas.");
-      setOperations(items); setCatalog(c.journey);
+      setOperations(overview.operations); setReadModel(overview.readModel); setCatalog(c.journey);
     }).catch(e => { if (active) setError(e instanceof Error ? e.message : "No se pudo cargar el embudo."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [revision]);
-  return <BrokerPipelineView operations={operations} catalog={catalog} loading={loading} error={error} onRefresh={() => setRevision(v => v + 1)} />;
+  return <BrokerPipelineView operations={operations} catalog={catalog} readModel={readModel} loading={loading} error={error} onRefresh={() => setRevision(v => v + 1)} />;
 }
 
-export function BrokerPipelineView({ operations, catalog, loading = false, error = "", onRefresh }: { operations: BrokerOperation[]; catalog?: BrokerJourneyCatalog; loading?: boolean; error?: string; onRefresh: () => void }) {
+export function BrokerPipelineView({ operations, catalog, readModel, loading = false, error = "", onRefresh }: { operations: BrokerOperation[]; catalog?: BrokerJourneyCatalog; readModel?: BrokerOperationalReadModel; loading?: boolean; error?: string; onRefresh: () => void }) {
   const card = (operation: BrokerOperation) => <article className={styles.card} key={operation.id}><h3>{operation.title}</h3><p>{operation.journey?.commercial?.label || operation.journey?.outcome || "Por revisar"}</p><small>{operation.data.operationType === "SALE" ? "Venta" : operation.data.operationType === "RENTAL" ? "Arriendo" : "Administración"}</small><Link href={`/realty?view=broker_os&tab=operations&operationId=${encodeURIComponent(operation.id)}`}>Abrir negocio y expediente</Link></article>;
   return <section className={styles.panel} aria-label="Pipeline de operaciones Broker OS">
     <header><div><h2>Pipeline de Broker OS</h2><p>Vista de solo lectura de los negocios. Las etapas se modifican en su expediente, no en la propiedad.</p></div><button type="button" disabled={loading} onClick={onRefresh}>Actualizar</button></header>
     {loading ? <p role="status">Cargando operaciones…</p> : error ? <p role="alert">{error}</p> : <>
       <p>{operations.length} operaciones cargadas{operations.length >= 200 ? " (límite de esta consulta: 200; puede haber más registros)" : ""}. Los prospectos CRM anteriores a una operación se mantienen en el tablero superior.</p>
+      {readModel ? <p className={styles.readModel}>Lectura operativa compartida: {readModel.pipeline.active} activa(s), {readModel.pipeline.terminal} terminal(es) y {readModel.priorities.length} prioridad(es) en cola.</p> : null}
       <div className={styles.board}>{catalog?.pipeline.map(stage => <section className={styles.column} key={stage.key}><h3>{stage.label} · {operations.filter(o => o.journey?.pipeline?.key === stage.key).length}</h3>{operations.filter(o => o.journey?.pipeline?.key === stage.key).map(card)}</section>)}</div>
       {operations.some(o => !o.journey?.pipeline) ? <section><h3>Fuera del embudo comercial o pendientes de revisión</h3><div className={styles.other}>{operations.filter(o => !o.journey?.pipeline).map(card)}</div></section> : null}
     </>}

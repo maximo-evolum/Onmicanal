@@ -4,6 +4,7 @@ import { canBroker, canBrokerTab, brokerTabArea } from "@/lib/broker-access";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BrokerJourneySummary } from "./broker-journey";
+import { BrokerOperationalSummary } from "./broker-operational-summary";
 import { useSearchParams } from "next/navigation";
 import {
   advanceBrokerOperation,
@@ -456,7 +457,8 @@ export function BrokerOperationsPageContent() {
     properties: 0, activeOperations: 0, scheduledVisits: 0, openAlerts: 0,
     activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0
   }, [overview]);
-  const recommendations = overview?.recommendations || [];
+  const readModel = overview?.readModel;
+  const recommendations = readModel?.priorities || overview?.recommendations || [];
   const currentArea = tab !== "financing" && tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "governance" && tab !== "access" ? tab : null;
   const canAssignCurrentArea = Boolean(currentArea && canBroker(access, currentArea, "ASSIGN"));
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
@@ -476,7 +478,9 @@ export function BrokerOperationsPageContent() {
     return canBroker(access, "administration", action);
   };
   const selectedScenario = scenarios.find((scenario) => scenario.key === selectedScenarioKey) || scenarios[0];
-  const reporting = overview?.reporting;
+  const reporting = readModel?.reporting || overview?.reporting;
+  const selectedPropertyPriorities = expedient?.operationalReadModel?.priorities
+    || (selectedPropertyId ? recommendations.filter((recommendation) => recommendation.propertyId === selectedPropertyId).slice(0, 4) : []);
   const postSaleEntity = postSaleWorkspace?.entity;
   const postSaleText = (key: string) => {
     const value = postSaleEntity?.[key];
@@ -1128,15 +1132,16 @@ export function BrokerOperationsPageContent() {
     {!canBrokerTab(access, tab) ? <p role="status">{access ? "Esta área no está habilitada para tu perfil. Selecciona una de las áreas disponibles." : "Consultando tus permisos…"}</p> : <>
 
     {tab === "operations" ? <>
+      <BrokerOperationalSummary model={readModel} showPriorities={false} />
       <section className="broker-recommendations" aria-label="Prioridades operativas">
-        <div className="broker-list-heading"><span>Prioridades operativas</span><h2>Qué revisar a continuación</h2><p>Son sugerencias internas basadas en la cartera. EVOLUM no cambia estados, publica ni contacta personas por su cuenta.</p></div>
+        <div className="broker-list-heading"><span>Centro operacional</span><h2>Qué revisar a continuación</h2><p>Son sugerencias internas de la misma lectura que alimenta el resumen, el pipeline y el expediente. EVOLUM no cambia estados, publica ni contacta personas por su cuenta.</p></div>
         <div className="broker-list-heading"><button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={executeAutomationScan}>Revisar cartera y crear alertas internas</button><p>La revisión detecta pendientes y crea alertas internas; no publica, envía mensajes ni modifica operaciones.</p></div>
         {recommendations.length ? <div className="broker-recommendation-grid">{recommendations.map((recommendation) => <article key={recommendation.id} className={`broker-recommendation ${recommendation.priority.toLowerCase()}`}><b>{recommendation.priority === "HIGH" ? "Prioridad alta" : recommendation.priority === "MEDIUM" ? "Prioridad media" : "Informativa"}</b><h3>{recommendation.title}</h3><p>{recommendation.detail}</p><button type="button" className="secondary-btn" onClick={() => setTab(recommendation.area)}>{recommendation.requiresApproval ? "Revisar y confirmar" : "Completar ficha"}</button></article>)}</div> : <p className="broker-empty">La cartera no tiene prioridades pendientes por ahora.</p>}
       </section>
       <section className="broker-expedient-panel" aria-label="Expediente por propiedad">
         <div className="broker-list-heading"><span>Expediente digital</span><h2>Revisa una propiedad completa</h2><p>Consulta documentos, contratos, mantenciones, postventa y antecedentes sin cambiar de pantalla.</p></div>
         <div className="broker-expedient-controls"><select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select><button type="button" className="primary-btn" disabled={busy || !selectedPropertyId} onClick={openExpedient}>Abrir expediente</button></div>
-        {expedient ? <><div className="broker-expedient-summary"><div><b>{expedient.property.title}</b><p>{expedient.completion.complete ? "Ficha completa para operación y publicación." : `Falta completar: ${expedient.completion.missing.join(", ")}.`}</p><p><strong>Salud del expediente: {expedient.health.score}% · {readable(expedient.health.status)}</strong></p></div><div className="broker-expedient-counts">{Object.entries(expedient.grouped).filter(([, items]) => items?.length).map(([area, items]) => <span key={area}><b>{items?.length}</b>{AREA_CONFIG[area as BrokerRecordArea]?.label || readable(area)}</span>)}</div></div>{expedient.journey ? <div className="broker-expedient-timeline"><b>Journey de la propiedad</b><p>Propietarios: {expedient.journey.people.propietarios.join(", ") || "Sin registrar"} · Interesados: {expedient.journey.people.interesados.join(", ") || "Sin registrar"}</p><p>{Object.entries(expedient.journey.control).map(([key, value]) => `${readable(key)}: ${value}`).join(" · ")}</p></div> : null}<div className="broker-expedient-timeline"><b>Últimos movimientos</b>{expedient.timeline.slice(0, 5).map((item, index) => <p key={`${item.at}-${index}`}><span>{item.at ? new Date(item.at).toLocaleDateString("es-CL") : "Sin fecha"}</span>{item.title} · {readable(item.status)}{item.note ? ` — ${item.note}` : ""}</p>)}</div></> : null}
+        {expedient ? <><div className="broker-expedient-summary"><div><b>{expedient.property.title}</b><p>{expedient.completion.complete ? "Ficha completa para operación y publicación." : `Falta completar: ${expedient.completion.missing.join(", ")}.`}</p><p><strong>Salud del expediente: {expedient.health.score}% · {readable(expedient.health.status)}</strong></p></div><div className="broker-expedient-counts">{Object.entries(expedient.grouped).filter(([, items]) => items?.length).map(([area, items]) => <span key={area}><b>{items?.length}</b>{AREA_CONFIG[area as BrokerRecordArea]?.label || readable(area)}</span>)}</div></div>{selectedPropertyPriorities.length ? <div className="broker-expedient-timeline"><b>Prioridades de esta propiedad</b>{selectedPropertyPriorities.map((priority) => <p key={priority.id}><span>{priority.priority === "HIGH" ? "Alta" : priority.priority === "MEDIUM" ? "Media" : "Informativa"}</span>{priority.title} · {priority.detail}</p>)}</div> : null}{expedient.journey ? <div className="broker-expedient-timeline"><b>Journey de la propiedad</b><p>Propietarios: {expedient.journey.people.propietarios.join(", ") || "Sin registrar"} · Interesados: {expedient.journey.people.interesados.join(", ") || "Sin registrar"}</p><p>{Object.entries(expedient.journey.control).map(([key, value]) => `${readable(key)}: ${value}`).join(" · ")}</p></div> : null}<div className="broker-expedient-timeline"><b>Últimos movimientos</b>{expedient.timeline.slice(0, 5).map((item, index) => <p key={`${item.at}-${index}`}><span>{item.at ? new Date(item.at).toLocaleDateString("es-CL") : "Sin fecha"}</span>{item.title} · {readable(item.status)}{item.note ? ` — ${item.note}` : ""}</p>)}</div></> : null}
       </section>
       {reporting ? <section className="broker-reporting" aria-label="Indicadores y aprendizaje de Broker OS">
         <article><span>Valor de cartera</span><b>{new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(reporting.portfolioValue)}</b><small>Inventario de propiedades</small></article>

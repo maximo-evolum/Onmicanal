@@ -2,6 +2,7 @@
 "use client";
 import { canBroker } from "@/lib/broker-access";
 import { BrokerProspects } from "@/components/broker-prospects";
+import { BrokerOperationalSummary } from "@/components/broker-operational-summary";
 
 import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
@@ -21,7 +22,9 @@ import {
   getIndustryRecords,
   getRealtyBuyers,
   getBrokerAccess,
+  getBrokerOverview,
   type BrokerAccessProfile,
+  type BrokerOverview,
   getMyModules,
   getIndustryUsers,
   updateIndustryRecord,
@@ -543,6 +546,17 @@ export function RealtyDashboardPageContent() {
   const { data, error, loading, reload } = useRealtyWorkspace();
   const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
   const [message, setMessage] = useState("");
+  const [brokerOverview, setBrokerOverview] = useState<BrokerOverview | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getBrokerOverview()
+      .then((result) => { if (active) setBrokerOverview(result); })
+      // La portada conserva la cartera básica para un perfil que no tenga
+      // acceso al resumen avanzado; no se muestran datos de otra área.
+      .catch(() => { if (active) setBrokerOverview(null); });
+    return () => { active = false; };
+  }, []);
 
   const activeProperties = data.properties
     .filter((item) => item.status !== "ARCHIVED")
@@ -551,6 +565,7 @@ export function RealtyDashboardPageContent() {
     .filter((item) => item.status !== "DONE")
     .slice(0, 4);
   const unassigned = data.properties.filter((item) => !text(asData(item).assignedBrokerId || item.assignedToId));
+  const readModel = brokerOverview?.readModel;
 
   return (
     <>
@@ -573,12 +588,14 @@ export function RealtyDashboardPageContent() {
           </div>
         </article>
         <aside className="realty-ws-kpis">
-          <article><span>Propiedades activas</span><strong>{data.properties.filter((item) => item.status !== "ARCHIVED").length}</strong><small>{unassigned.length} sin asignar</small></article>
-          <article><span>Valor de cartera</span><strong>{money(data.properties.reduce((sum, item) => sum + numberValue(asData(item).price), 0))}</strong><small>inventario cargado</small></article>
-          <article><span>Visitas esta semana</span><strong>{upcomingVisits.length}</strong><small>requieren seguimiento</small></article>
-          <article><span>Oportunidades IA</span><strong>{unassigned.length + data.alerts.length}</strong><small>alertas y asignaciones</small></article>
+          <article><span>Propiedades activas</span><strong>{readModel?.kpis.properties ?? data.properties.filter((item) => item.status !== "ARCHIVED").length}</strong><small>{unassigned.length} sin asignar</small></article>
+          <article><span>Valor de cartera</span><strong>{readModel ? money(readModel.reporting.portfolioValue) : money(data.properties.reduce((sum, item) => sum + numberValue(asData(item).price), 0))}</strong><small>inventario cargado</small></article>
+          <article><span>Visitas esta semana</span><strong>{readModel?.kpis.scheduledVisits ?? upcomingVisits.length}</strong><small>requieren seguimiento</small></article>
+          <article><span>Oportunidades IA</span><strong>{readModel?.priorities.length ?? unassigned.length + data.alerts.length}</strong><small>alertas y asignaciones</small></article>
         </aside>
       </section>
+
+      <BrokerOperationalSummary model={readModel} />
 
       <section className="realty-ws-card">
           <div className="realty-ws-card-head"><div><span>Propiedades activas</span><h2>Portafolio en movimiento</h2><p>Vista visual para reconocer rápidamente cada propiedad y entrar a su ficha.</p></div><Link className="realty-card-link-button" href="/realty?view=properties">Ver cartera completa</Link></div>

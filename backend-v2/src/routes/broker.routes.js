@@ -10,7 +10,6 @@ import {
   BROKER_RECORD_AREAS,
   BROKER_RECORD_TYPES,
   BROKER_RECORD_DEFINITIONS,
-  BROKER_OPERATION_TYPES,
   BROKER_AGENT_CATALOG,
   BROKER_AGENT_SCENARIOS,
   BROKER_AUTOMATION_RULES,
@@ -22,7 +21,6 @@ import {
   FINANCING_STAGES,
   RENTAL_STAGES,
   SALE_STAGES,
-  TERMINAL_STAGES,
   brokerAgentScenario,
   brokerStageChecklist,
   brokerFinancingChecklist,
@@ -39,6 +37,7 @@ import {
   validateBrokerFinancingTransition,
   validateBrokerRecord
 } from "../services/broker-workflows.service.js";
+import { brokerPropertyMissingData, buildBrokerOperationalPriorities, buildBrokerOperationalReadModel } from "../services/broker-operational-read-model.service.js";
 import { brokerRelationalCoverage, normalizeLegacyBrokerProperty } from "../services/broker-relational-data.service.js";
 import { BROKER_CAPTURE_OPTIONS, captureReadiness, normalizeBrokerCapture, validateBrokerCapture } from "../services/broker-capture.service.js";
 import { requiresBrokerAccountableOwner, resolveBrokerAccountableAssignee } from "../services/broker-accountability.service.js";
@@ -176,112 +175,6 @@ function evaluationPayload(record) {
     reviewedAt: text(data.reviewedAt),
     reviewedBy: text(data.reviewedBy)
   };
-}
-
-function brokerReporting({ properties, operations, evaluations, brokerRecords = [] }) {
-  const portfolioValue = properties.reduce((sum, property) => sum + Number(dataOf(property).price || 0), 0);
-  const projectedFromOperations = operations.reduce((sum, operation) => {
-    const data = dataOf(operation);
-    return sum + Number(data.estimatedCommission || data.monthlyManagementFee || 0);
-  }, 0);
-  const projectedFromPolicies = brokerRecords
-    .filter((record) => record.recordType === "commission_policy" && ["ACTIVE", "DRAFT"].includes(String(record.status).toUpperCase()))
-    .reduce((sum, record) => {
-      const preview = calculateBrokerCommission(dataOf(record));
-      return sum + (preview.ok ? preview.totalCommission : 0);
-    }, 0);
-  const byOperationType = Object.values(BROKER_OPERATION_TYPES).map((type) => ({
-    type,
-    count: operations.filter((operation) => (normalizeBrokerOperationType(dataOf(operation).operationType) || "SALE") === type).length
-  }));
-  const propertyHealth = properties.map((property) => propertyHealthSnapshot(property, brokerRecords.filter((record) => String(dataOf(record).propertyId || "") === property.id)));
-  const completeProperties = propertyHealth.filter((item) => item.score >= 85).length;
-  const confirmedEvaluations = evaluations.filter((item) => text(dataOf(item).decision) === "CONFIRMED").length;
-  return {
-    portfolioValue,
-    projectedCommission: projectedFromPolicies || projectedFromOperations,
-    propertyCompleteness: properties.length ? Math.round((completeProperties / properties.length) * 100) : 0,
-    portfolioHealth: properties.length ? Math.round(propertyHealth.reduce((sum, item) => sum + item.score, 0) / properties.length) : 0,
-    propertiesReady: completeProperties,
-    byOperationType,
-    aiEvaluations: {
-      total: evaluations.length,
-      confirmed: confirmedEvaluations,
-      needsAdjustment: evaluations.filter((item) => text(dataOf(item).decision) === "ADJUSTMENT_NEEDED").length,
-      pending: evaluations.filter((item) => text(dataOf(item).decision, "PENDING_REVIEW") === "PENDING_REVIEW").length
-    }
-  };
-}
-
-function missingPropertyData(property) {
-  const data = dataOf(property);
-  const missing = [];
-  if (!text(data.price)) missing.push("precio");
-  if (!text(data.address)) missing.push("dirección");
-  if (!text(data.commune)) missing.push("comuna");
-  if (!text(data.photoUrl) && !(Array.isArray(data.gallery) && data.gallery.length)) missing.push("foto principal");
-  return missing;
-}
-
-function brokerRecommendations({ properties, operations, maintenance, postSale, financing, brokerRecords = [] }) {
-  const recommendations = [];
-  for (const property of properties) {
-    const missing = missingPropertyData(property);
-    if (missing.length) {
-      recommendations.push({
-        id: `property-${property.id}-completion`,
-        priority: missing.includes("foto principal") ? "MEDIUM" : "HIGH",
-        area: "commercial",
-        title: `Completar ficha: ${property.title}`,
-        detail: `Faltan ${missing.join(", ")}. La publicación y el matching serán más precisos con esa información.`,
-        propertyId: property.id,
-        requiresApproval: false
-      });
-    }
-  }
-  for (const operation of operations) {
-    const normalized = operationPayload(operation);
-    const stages = stagesForBrokerOperation(normalized.data.operationType);
-    const currentIndex = stages.indexOf(normalized.data.stage);
-    const next = stages[currentIndex + 1];
-    if (next) {
-      recommendations.push({
-        id: `operation-${operation.id}-${next}`,
-        priority: "MEDIUM",
-        area: "commercial",
-        title: `Siguiente paso: ${operation.title}`,
-        detail: `La operación está en ${normalized.data.stage}. Puedes avanzar a ${next} cuando el equipo confirme el hito.`,
-        operationId: operation.id,
-        requiresApproval: true
-      });
-    }
-  }
-  if (maintenance > 0) recommendations.push({ id: "maintenance-open", priority: "HIGH", area: "maintenance", title: "Mantenciones pendientes", detail: `${maintenance} caso(s) requiere(n) revisión, proveedor o confirmación de cierre.`, requiresApproval: true });
-  if (postSale > 0) recommendations.push({ id: "post-sale-open", priority: "HIGH", area: "post_sale", title: "Casos de postventa abiertos", detail: `${postSale} caso(s) mantiene(n) una decisión o seguimiento pendiente.`, requiresApproval: true });
-  if (financing > 0) recommendations.push({ id: "financing-open", priority: "MEDIUM", area: "financing", title: "Financiamientos en seguimiento", detail: `${financing} solicitud(es) requiere(n) antecedentes o una revisión humana.`, requiresApproval: true });
-  const today = new Date();
-  const soon = new Date(today);
-  soon.setDate(soon.getDate() + 30);
-  for (const record of brokerRecords) {
-    const data = dataOf(record);
-    const dueDate = text(data.dueDate || data.warrantyUntil || data.endDate || data.expiresAt);
-    const date = dueDate ? new Date(dueDate) : null;
-    if (!date || Number.isNaN(date.getTime())) continue;
-    if (["PAID", "CLOSED", "RESOLVED", "ENDED", "REPLACED"].includes(String(record.status).toUpperCase())) continue;
-    const isOverdue = date < today;
-    const isRelevantSoon = date <= soon;
-    if (!isOverdue && !isRelevantSoon) continue;
-    recommendations.push({
-      id: `due-${record.id}`,
-      priority: isOverdue ? "HIGH" : "MEDIUM",
-      area: BROKER_RECORD_DEFINITIONS[record.recordType]?.area || "documents",
-      title: `${isOverdue ? "Vencido" : "Próximo a vencer"}: ${record.title}`,
-      detail: `${BROKER_RECORD_DEFINITIONS[record.recordType]?.label || record.recordType} con fecha ${date.toLocaleDateString("es-CL")}. Revisa y confirma la acción antes de comunicar o ejecutar cambios externos.`,
-      propertyId: text(data.propertyId) || undefined,
-      requiresApproval: true
-    });
-  }
-  return recommendations.slice(0, 12);
 }
 
 async function assertRelatedProperty(req, propertyId) {
@@ -1269,23 +1162,30 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
       prisma.industryRecord.findMany({ where: overviewWhere({ recordType: { in: BROKER_RECORD_TYPES } }), orderBy: { updatedAt: "desc" }, take: 500 })
     ]);
     const normalizedOperations = await projectBrokerOperations(prisma, operations);
-    const kpis = {
-      properties: propertyCount,
-      activeOperations: normalizedOperations.filter((item) => !TERMINAL_STAGES.has(String(item.data.stage))).length,
-      scheduledVisits: visits,
-      openAlerts: alerts,
-      activeRentals: rentals,
-      openMaintenance: maintenance,
-      openPostSale: postSale,
-      activeFinancing: financing
-    };
+    const visibleProperties = canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : [];
+    const readModel = buildBrokerOperationalReadModel({
+      properties: visibleProperties,
+      operations: normalizedOperations,
+      evaluations,
+      brokerRecords,
+      counts: {
+        properties: propertyCount,
+        scheduledVisits: visits,
+        openAlerts: alerts,
+        activeRentals: rentals,
+        openMaintenance: maintenance,
+        openPostSale: postSale,
+        activeFinancing: financing
+      }
+    });
     res.json({
-      kpis,
+      kpis: readModel.kpis,
       properties: canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : properties.map(({ id, title, tenantId, recordType, status, assignedToId, createdAt, updatedAt }) => ({ id, title, tenantId, recordType, status, assignedToId, createdAt, updatedAt, data: {} })),
       operations: normalizedOperations,
-      recommendations: brokerRecommendations({ properties: canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : [], operations, maintenance, postSale, financing, brokerRecords }),
+      recommendations: readModel.priorities,
       agents: BROKER_AGENT_CATALOG.map(brokerAgentPayload),
-      reporting: brokerReporting({ properties: canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : [], operations, evaluations, brokerRecords }),
+      reporting: readModel.reporting,
+      readModel,
       aiTraining: {
         scenarios: BROKER_AGENT_SCENARIOS,
         evaluations: evaluations.map(evaluationPayload),
@@ -1645,7 +1545,7 @@ brokerRouter.post("/broker/automation-scan", requireRole(ROLE_GROUPS.STAFF), req
       prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: { in: BROKER_RECORD_TYPES } }), take: 1000 }),
       prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "realty_alert", status: { not: "RESOLVED" } }), take: 500 })
     ]);
-    const recommendations = brokerRecommendations({ properties, operations, maintenance, postSale, financing, brokerRecords });
+    const recommendations = buildBrokerOperationalPriorities({ properties, operations, maintenance, postSale, financing, brokerRecords });
     const fingerprints = new Set(existingAlerts.map((item) => text(dataOf(item).automationKey)));
     const created = [];
     for (const recommendation of recommendations) {
@@ -2462,14 +2362,29 @@ brokerRouter.get("/broker/properties/:propertyId/expedient", requireBrokerAction
         alertasAbiertas: related.filter((item) => item.recordType === "realty_alert" && item.status !== "RESOLVED").length
       }
     };
+    const operationalReadModel = buildBrokerOperationalReadModel({
+      properties: [property],
+      operations: related.filter((record) => record.recordType === "broker_operation"),
+      brokerRecords: related.filter((record) => BROKER_RECORD_TYPES.includes(record.recordType)),
+      counts: {
+        properties: 1,
+        scheduledVisits: related.filter((record) => record.recordType === "visit" && ["SCHEDULED", "PENDING", "ACTIVE"].includes(String(record.status).toUpperCase())).length,
+        openAlerts: related.filter((record) => record.recordType === "realty_alert" && String(record.status).toUpperCase() !== "RESOLVED").length,
+        activeRentals: related.filter((record) => record.recordType === "rental_contract" && ["ACTIVE", "PENDING_RENEWAL"].includes(String(record.status).toUpperCase())).length,
+        openMaintenance: related.filter((record) => record.recordType === "maintenance_ticket" && !["CLOSED", "CANCELLED", "COMPLETED"].includes(String(record.status).toUpperCase())).length,
+        openPostSale: related.filter((record) => record.recordType === "post_sale_case" && !["CLOSED", "RESOLVED"].includes(String(record.status).toUpperCase())).length,
+        activeFinancing: related.filter((record) => record.recordType === "operation_financing" && !["CIERRE", "RECHAZADO", "CANCELADO"].includes(String(record.status).toUpperCase())).length
+      }
+    });
     res.json({
       property,
       records: related,
       grouped,
-      completion: { missing: missingPropertyData(property), complete: missingPropertyData(property).length === 0 },
+      completion: { missing: brokerPropertyMissingData(property), complete: brokerPropertyMissingData(property).length === 0 },
       health,
       timeline,
-      journey
+      journey,
+      operationalReadModel
     });
   } catch (error) {
     if (error?.message?.includes("propiedad relacionada")) return res.status(404).json({ error: "Propiedad no encontrada." });
