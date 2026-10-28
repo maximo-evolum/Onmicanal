@@ -17951,7 +17951,14 @@ html.dark .finance-bank-statement-state.is-protected,
   }
 
   .vertical-shell.realty-product-workspace .evolum-menu-bubble {
-    top: 14px !important;
-    left: 12px !important;
+    top: auto !important;
+    right: 14px !important;
+    bottom: 18px !important;
+    left: auto !important;
+  }
+
+  .vertical-shell.realty-product-workspace > .vertical-main,
+  .vertical-shell.realty-product-workspace.nav-collapsed > .vertical-main {
+    padding-bottom: 104px !important;
   }
 }
