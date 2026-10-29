@@ -61,7 +61,7 @@ function leadFields(lead) {
 function leadOperation(lead) {
   const fields = leadFields(lead);
   const value = normalized(lead?.interest || fields.operation || fields.interestType || "");
-  if (value.includes("arriend") || value.includes("alquil")) return "RENT";
+  if (value.includes("arriend") || value.includes("arrend") || value.includes("alquil")) return "RENT";
   return value.includes("compr") || value.includes("venta") || value.includes("invert") ? "SALE" : null;
 }
 
@@ -128,22 +128,46 @@ export function scoreRealtyLeadMatch(lead, property) {
   const parking = leadNumber(lead, "parking");
   let score = 10;
   const reasons = [];
+  const cautions = [];
+  const warnings = [];
+  const available = propertyIsAvailable(property);
+  const operationCompatible = operation ? propertyOperation(property) === operation : null;
 
   if (budget > 0 && price > 0) {
     const difference = (price - budget) / budget;
     if (difference <= 0 && difference >= -0.15) { score += 42; reasons.push("precio dentro del presupuesto"); }
     else if (Math.abs(difference) <= 0.1) { score += 36; reasons.push("precio muy cercano al presupuesto"); }
     else if (Math.abs(difference) <= 0.25) { score += 20; reasons.push("precio cercano al presupuesto"); }
+    else if (difference > 0.25) cautions.push("el precio supera el presupuesto declarado en más de 25%");
+    else cautions.push("el precio está muy por debajo del presupuesto; conviene confirmar expectativas");
+  } else {
+    cautions.push("faltan presupuesto o precio para evaluar el monto");
   }
   if (commune && interest.includes(commune)) { score += 22; reasons.push(`interés por ${propertyCommune(property)}`); }
+  else if (text(lead?.commune)) cautions.push(`la comuna preferida (${text(lead.commune)}) no coincide con ${propertyCommune(property) || "la propiedad"}`);
   if (type && interest.includes(type)) { score += 16; reasons.push(`tipo ${type}`); }
+  else if (text(lead?.propertyType)) cautions.push(`el tipo buscado (${text(lead.propertyType)}) no coincide con la propiedad`);
   if (bedrooms && propertyNumber(property, "bedrooms") >= bedrooms) { score += 8; reasons.push(`${bedrooms}+ dormitorios`); }
   if (bathrooms && propertyNumber(property, "bathrooms") >= bathrooms) { score += 4; reasons.push(`${bathrooms}+ baños`); }
   if (parking && propertyNumber(property, "parking") >= parking) { score += 4; reasons.push("estacionamiento incluido"); }
-  if (propertyIsAvailable(property)) { score += 8; reasons.push("propiedad disponible"); }
-  if (operation && propertyOperation(property) === operation) { score += 12; reasons.push(operation === "RENT" ? "arriendo compatible" : "compra compatible"); }
+  if (available) { score += 8; reasons.push("propiedad disponible"); }
+  else warnings.push("La propiedad no está disponible para gestionar una visita.");
+  if (operationCompatible === true) { score += 12; reasons.push(operation === "RENT" ? "arriendo compatible" : "compra compatible"); }
+  if (operationCompatible === false) warnings.push(`Operación incompatible: el comprador busca ${operation === "RENT" ? "arriendo" : "compra"} y la propiedad está disponible para ${propertyOperation(property) === "RENT" ? "arriendo" : "venta"}.`);
+  if (operationCompatible === null) cautions.push("el comprador no ha definido si busca compra o arriendo");
 
-  return { score: Math.min(100, score), reasons };
+  return {
+    score: Math.min(100, score),
+    reasons,
+    cautions,
+    warnings,
+    compatibility: {
+      operationCompatible,
+      propertyAvailable: available,
+      status: !available ? "NOT_AVAILABLE" : operationCompatible === false ? "OPERATION_INCOMPATIBLE" : score >= 65 ? "RECOMMENDED" : "REVIEW",
+      canRequestVisit: available && operationCompatible !== false
+    }
+  };
 }
 
 export function realtyLeadScope(tenantId, access, extra = {}) {
@@ -152,15 +176,70 @@ export function realtyLeadScope(tenantId, access, extra = {}) {
   return { AND: [scope, extra] };
 }
 
+function dateOf(value) {
+  const raw = text(value);
+  if (!raw) return null;
+  const parsed = new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T12:00:00.000Z` : raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function propertyDraft(property) {
+  return ["DRAFT", "LEAD", "CAPTACION", "PROSPECTO"].includes(propertyStage(property));
+}
+
+/** Alertas derivadas: se recalculan desde la cartera y no generan registros falsos. */
+export function buildBrokerInventoryAlerts({ properties = [], mandates = [], now = new Date() } = {}) {
+  const alerts = [];
+  const mandateByProperty = new Map();
+  for (const mandate of mandates) {
+    const propertyId = text(dataOf(mandate).propertyId);
+    if (!propertyId) continue;
+    const current = mandateByProperty.get(propertyId) || [];
+    current.push(mandate);
+    mandateByProperty.set(propertyId, current);
+  }
+  const staleBefore = new Date(now);
+  staleBefore.setDate(staleBefore.getDate() - 7);
+  for (const property of properties) {
+    const data = dataOf(property);
+    const assigned = text(data.assignedBrokerId || property.assignedToId);
+    const complete = completion(property);
+    const propertyMandates = mandateByProperty.get(property.id) || [];
+    const expiredMandate = propertyMandates.find((mandate) => {
+      const endDate = dateOf(dataOf(mandate).endDate);
+      return endDate && endDate < now && String(mandate.status).toUpperCase() !== "CANCELLED";
+    });
+    if (propertyDraft(property) && new Date(property.updatedAt) < staleBefore) alerts.push({
+      id: `draft-${property.id}`, code: "DRAFT_STALE", priority: "MEDIUM", propertyId: property.id, title: property.title,
+      message: "Borrador o captación sin actualización durante más de 7 días.", action: "Revisar captación"
+    });
+    if (complete < 100) alerts.push({
+      id: `incomplete-${property.id}`, code: "INCOMPLETE_PROFILE", priority: complete < 50 ? "HIGH" : "MEDIUM", propertyId: property.id, title: property.title,
+      message: `Ficha incompleta (${complete}%). Completa precio, comuna, medios, superficie, responsable y propietario cuando corresponda.`, action: "Completar ficha"
+    });
+    if (!assigned) alerts.push({
+      id: `unassigned-${property.id}`, code: "UNASSIGNED_PROPERTY", priority: "HIGH", propertyId: property.id, title: property.title,
+      message: "La propiedad no tiene un corredor responsable asignado.", action: "Asignar responsable"
+    });
+    if (expiredMandate) alerts.push({
+      id: `expired-mandate-${expiredMandate.id}`, code: "EXPIRED_MANDATE", priority: "HIGH", propertyId: property.id, title: property.title,
+      message: "El mandato asociado está vencido y requiere revisión antes de continuar la gestión comercial.", action: "Revisar mandato"
+    });
+  }
+  const priorityOrder = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+  return alerts.sort((left, right) => (priorityOrder[left.priority] ?? 9) - (priorityOrder[right.priority] ?? 9) || left.title.localeCompare(right.title, "es-CL"));
+}
+
 export async function getRealtyIntelligence({ tenantId, access, sampleLimit = 12, db = prisma }) {
   const scoped = extra => brokerRecordWhere({ tenantId, brokerAccess: access, method: "POST" }, extra);
-  const [properties, visits, owners, brokers, leads, campaigns] = await Promise.all([
+  const [properties, visits, owners, brokers, leads, campaigns, mandates] = await Promise.all([
     db.industryRecord.findMany({ where: scoped({ recordType: "property", status: { not: "ARCHIVED" } }), include: { assignedTo: { select: { id: true, name: true } } }, orderBy: { updatedAt: "desc" }, take: 2000 }),
     db.industryRecord.findMany({ where: scoped({ recordType: "visit" }), orderBy: { updatedAt: "desc" }, take: 1000 }),
     db.industryRecord.findMany({ where: scoped({ recordType: "owner" }), take: 1000 }),
     db.workspaceUser.findMany({ where: { tenantId, isActive: true, ...(access?.scopeUserIds === null ? {} : { id: { in: access?.scopeUserIds || [] } }), role: { in: ["SELLER", "AGENT", "ADMIN", "OWNER"] } }, select: { id: true, name: true, role: true } }),
     db.lead.findMany({ where: realtyLeadScope(tenantId, access, { status: { notIn: ["WON", "LOST"] } }), orderBy: { closeProbability: "desc" }, take: 500 }),
-    access?.scopeUserIds === null && canBrokerAction(access, "projects", "VIEW") ? db.campaign.findMany({ where: { tenantId }, orderBy: { updatedAt: "desc" }, take: 200 }) : []
+    access?.scopeUserIds === null && canBrokerAction(access, "projects", "VIEW") ? db.campaign.findMany({ where: { tenantId }, orderBy: { updatedAt: "desc" }, take: 200 }) : [],
+    db.industryRecord.findMany({ where: scoped({ recordType: "property_mandate" }), select: { id: true, status: true, data: true }, orderBy: { updatedAt: "desc" }, take: 2000 })
   ]);
 
   const prices = properties.map(propertyPrice).filter(Boolean);
@@ -170,6 +249,7 @@ export async function getRealtyIntelligence({ tenantId, access, sampleLimit = 12
   const photosMissing = properties.filter((property) => !text(dataOf(property).photoUrl) && !(Array.isArray(dataOf(property).gallery) && dataOf(property).gallery.length));
   const stale = properties.filter((property) => Date.now() - new Date(property.updatedAt).getTime() > 14 * 24 * 60 * 60 * 1000);
   const unassigned = properties.filter((property) => !text(dataOf(property).assignedBrokerId || property.assignedToId));
+  const inventoryAlerts = buildBrokerInventoryAlerts({ properties, mandates });
   const brokerPerformance = brokers.map((broker) => {
     const portfolio = properties.filter((property) => text(dataOf(property).assignedBrokerId || property.assignedToId) === broker.id);
     const value = portfolio.reduce((total, property) => total + propertyPrice(property), 0);
@@ -185,12 +265,13 @@ export async function getRealtyIntelligence({ tenantId, access, sampleLimit = 12
   if (unassigned.length) recommendations.push({ priority: "high", code: "ASSIGN_PROPERTIES", message: `${unassigned.length} propiedades no tienen corredor asignado.` });
   if (photosMissing.length) recommendations.push({ priority: "high", code: "PROPERTY_MEDIA", message: `${photosMissing.length} propiedades no tienen foto principal ni galería.` });
   if (stale.length) recommendations.push({ priority: "medium", code: "STALE_INVENTORY", message: `${stale.length} propiedades llevan más de 14 días sin actualización.` });
+  if (inventoryAlerts.some((alert) => alert.code === "EXPIRED_MANDATE")) recommendations.push({ priority: "high", code: "EXPIRED_MANDATE", message: `${inventoryAlerts.filter((alert) => alert.code === "EXPIRED_MANDATE").length} mandato(s) vencido(s) requieren revisión.` });
   if (leads.filter((lead) => Number(lead.closeProbability || 0) >= 70).length) recommendations.push({ priority: "medium", code: "HOT_LEAD_MATCHING", message: "Hay compradores de alta intención para cruzar con el inventario disponible." });
   if (!recommendations.length) recommendations.push({ priority: "low", code: "OPERATING_NORMALLY", message: "Inventario y cartera sin alertas operativas críticas." });
 
   return {
     generatedAt: new Date().toISOString(),
-    inventory: { total: properties.length, portfolioValue, averagePrice: prices.length ? Math.round(portfolioValue / prices.length) : 0, averageCompleteness: completed.length ? Math.round(completed.reduce((total, value) => total + value, 0) / completed.length) : 0, assigned, unassigned: unassigned.length, missingMedia: photosMissing.length, stale: stale.length, byOperation: aggregate(properties, (property) => propertyOperation(property) === "RENT" ? "Arriendo" : "Venta"), byStage: aggregate(properties, propertyStage), topCommunes: aggregate(properties, propertyCommune).slice(0, 8) },
+    inventory: { total: properties.length, portfolioValue, averagePrice: prices.length ? Math.round(portfolioValue / prices.length) : 0, averageCompleteness: completed.length ? Math.round(completed.reduce((total, value) => total + value, 0) / completed.length) : 0, assigned, unassigned: unassigned.length, missingMedia: photosMissing.length, stale: stale.length, alerts: inventoryAlerts, byOperation: aggregate(properties, (property) => propertyOperation(property) === "RENT" ? "Arriendo" : "Venta"), byStage: aggregate(properties, propertyStage), topCommunes: aggregate(properties, propertyCommune).slice(0, 8) },
     visits: { total: visits.length, pending: visits.filter((visit) => !["DONE", "CANCELED"].includes(String(visit.status).toUpperCase())).length },
     owners: owners.length,
     brokers: brokerPerformance.slice(0, sampleLimit),
@@ -208,7 +289,7 @@ export async function getRealtyLeadMatches({ tenantId, access, leadId, limit = 8
   if (!lead) return null;
   return {
     lead: { id: lead.id, name: lead.name, status: lead.status, budget: lead.budget, commune: lead.commune, propertyType: lead.propertyType, interest: lead.interest, closeProbability: lead.closeProbability },
-    matches: properties.filter(propertyIsAvailable).map((property) => ({ property: propertyMatchPayload(property), ...scoreRealtyLeadMatch(lead, property) })).filter((match) => match.score >= 30).sort((a, b) => b.score - a.score || a.property.price - b.property.price).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20)))
+    matches: properties.filter(propertyIsAvailable).map((property) => ({ property: propertyMatchPayload(property), ...scoreRealtyLeadMatch(lead, property) })).filter((match) => match.score >= 30 || match.compatibility.operationCompatible === false).sort((a, b) => Number(b.compatibility.operationCompatible !== false) - Number(a.compatibility.operationCompatible !== false) || b.score - a.score || a.property.price - b.property.price).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20)))
   };
 }
 
@@ -220,7 +301,7 @@ export async function getRealtyPropertyMatches({ tenantId, access, propertyId, l
   if (!property) return null;
   return {
     property: propertyMatchPayload(property),
-    matches: leads.map((lead) => ({ buyer: { id: lead.id, name: lead.name || lead.phone || "Comprador sin nombre", phone: lead.phone, budget: lead.budget, commune: lead.commune, propertyType: lead.propertyType, interest: lead.interest, closeProbability: lead.closeProbability, conversationId: lead.conversationId }, ...scoreRealtyLeadMatch(lead, property) })).filter((match) => match.score >= 30).sort((a, b) => b.score - a.score || Number(b.buyer.closeProbability || 0) - Number(a.buyer.closeProbability || 0)).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20)))
+    matches: leads.map((lead) => ({ buyer: { id: lead.id, name: lead.name || lead.phone || "Comprador sin nombre", phone: lead.phone, budget: lead.budget, commune: lead.commune, propertyType: lead.propertyType, interest: lead.interest, closeProbability: lead.closeProbability, conversationId: lead.conversationId }, ...scoreRealtyLeadMatch(lead, property) })).filter((match) => match.score >= 30 || match.compatibility.operationCompatible === false).sort((a, b) => Number(b.compatibility.operationCompatible !== false) - Number(a.compatibility.operationCompatible !== false) || b.score - a.score || Number(b.buyer.closeProbability || 0) - Number(a.buyer.closeProbability || 0)).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20)))
   };
 }
 

@@ -794,6 +794,7 @@ export type RealtyIntelligence = {
     unassigned: number;
     missingMedia: number;
     stale: number;
+    alerts: Array<{ id: string; code: string; priority: "HIGH" | "MEDIUM" | "LOW"; propertyId: string; title: string; message: string; action: string }>;
     byOperation: Array<{ label: string; count: number }>;
     byStage: Array<{ label: string; count: number }>;
     topCommunes: Array<{ label: string; count: number }>;
@@ -1535,18 +1536,61 @@ export async function getRealtyIntelligence(): Promise<RealtyIntelligence> {
   return request<RealtyIntelligence>("/realty/intelligence");
 }
 
-export async function getRealtyLeadMatches(leadId: string): Promise<{ lead: { id: string; name?: string | null; status: string; budget?: number | null; closeProbability?: number | null }; matches: Array<{ score: number; reasons: string[]; property: { id: string; title: string; status: string; price: number; commune: string; operation: string; assignedToId?: string | null } }> }> {
+export type RealtyMatchCompatibility = {
+  operationCompatible: boolean | null;
+  propertyAvailable: boolean;
+  status: "RECOMMENDED" | "REVIEW" | "OPERATION_INCOMPATIBLE" | "NOT_AVAILABLE";
+  canRequestVisit: boolean;
+};
+
+export type RealtyLeadMatch = {
+  score: number;
+  reasons: string[];
+  cautions: string[];
+  warnings: string[];
+  compatibility: RealtyMatchCompatibility;
+  property: { id: string; title: string; status: string; price: number; commune: string; operation: string; assignedToId?: string | null };
+};
+
+export type BrokerMatchAction = {
+  id: string;
+  leadId: string;
+  propertyId: string;
+  action: "PREPARE_PROFILE" | "REQUEST_VISIT" | "DISCARD_MATCH" | string;
+  status: string;
+  label: string;
+  reason: string | null;
+  score: number;
+  createdAt: string;
+  updatedAt: string;
+  createdByUserId: string | null;
+  externalContactExecuted: false;
+  visitConfirmed: false;
+};
+
+export async function getRealtyLeadMatches(leadId: string): Promise<{ lead: { id: string; name?: string | null; status: string; budget?: number | null; closeProbability?: number | null }; matches: RealtyLeadMatch[] }> {
   return request(`/realty/leads/${encodeURIComponent(leadId)}/matches`);
 }
 
 export type RealtyBuyerMatch = {
   score: number;
   reasons: string[];
+  cautions: string[];
+  warnings: string[];
+  compatibility: RealtyMatchCompatibility;
   buyer: { id: string; name: string; phone?: string | null; budget?: number | null; commune?: string | null; propertyType?: string | null; interest?: string | null; closeProbability?: number | null; conversationId: string };
 };
 
 export async function getRealtyPropertyMatches(propertyId: string): Promise<{ property: { id: string; title: string; price: number; commune: string }; matches: RealtyBuyerMatch[] }> {
   return request(`/realty/properties/${encodeURIComponent(propertyId)}/buyers`);
+}
+
+export function getBrokerMatchActions(leadId: string): Promise<{ actions: BrokerMatchAction[] }> {
+  return request(`/realty/leads/${encodeURIComponent(leadId)}/match-actions`);
+}
+
+export function createBrokerMatchAction(input: { leadId: string; propertyId: string; action: "PREPARE_PROFILE" | "REQUEST_VISIT" | "DISCARD_MATCH"; reason?: string }): Promise<{ action: BrokerMatchAction; notice: string }> {
+  return request("/realty/matches/actions", { method: "POST", body: JSON.stringify(input) });
 }
 
 export async function createRealtyBuyer(input: { name: string; phone?: string; email?: string; budget?: number; commune?: string; propertyType?: string; interest?: string }): Promise<{ buyer: Lead }> {

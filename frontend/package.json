@@ -7,7 +7,7 @@
   },
   "scripts": {
     "test:usability": "node --test test/finance-usability.test.cjs",
-    "test:broker": "node --test test/broker-access.test.cjs test/broker-journey.test.cjs test/broker-operational-summary.test.cjs test/broker-owners-workspace.test.cjs test/broker-web-api.fixture.cjs",
+    "test:broker": "node --test test/broker-access.test.cjs test/broker-journey.test.cjs test/broker-matching-workspace.test.cjs test/broker-operational-summary.test.cjs test/broker-owners-workspace.test.cjs test/broker-web-api.fixture.cjs",
     "test:broker:e2e": "node scripts/run-broker-e2e.mjs",
     "dev": "next dev -H 0.0.0.0 -p 3001",
     "build": "next build",

@@ -4,9 +4,29 @@ import { loadBrokerAccessContext, requireBrokerAction } from "../services/broker
 import { randomUUID } from "node:crypto";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { prisma } from "../lib/db.js";
-import { realtyLeadScope, getRealtyIntelligence, getRealtyLeadMatches, getRealtyPropertyMatches } from "../services/realty-intelligence.service.js";
+import { recordAuditLog } from "../lib/audit.js";
+import { brokerRecordWhere } from "../services/broker-access.service.js";
+import { realtyLeadScope, getRealtyIntelligence, getRealtyLeadMatches, getRealtyPropertyMatches, scoreRealtyLeadMatch } from "../services/realty-intelligence.service.js";
+import { brokerMatchActionPayload, buildBrokerMatchActionData, validateBrokerMatchAction } from "../services/broker-match-actions.service.js";
 
 export const realtyIntelligenceRouter = Router();
+
+function dataOf(record) {
+  return record?.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data : {};
+}
+
+async function resolveMatchContext(req, { leadId, propertyId }) {
+  const [lead, property] = await Promise.all([
+    prisma.lead.findFirst({ where: realtyLeadScope(req.tenantId, req.brokerAccess, { id: String(leadId) }) }),
+    prisma.industryRecord.findFirst({ where: brokerRecordWhere({ tenantId: req.tenantId, brokerAccess: req.brokerAccess, method: "POST" }, { id: String(propertyId), recordType: "property", status: { not: "ARCHIVED" } }) })
+  ]);
+  if (!lead || !property) {
+    const error = new Error("El comprador o la propiedad no pertenecen a tu alcance autorizado.");
+    error.status = 404;
+    throw error;
+  }
+  return { lead, property, match: scoreRealtyLeadMatch(lead, property) };
+}
 realtyIntelligenceRouter.use(async (req, res, next) => {
   if (!/^\/realty\//i.test(req.path)) return next();
   try {
@@ -32,6 +52,65 @@ realtyIntelligenceRouter.get("/realty/leads/:leadId/matches", requireRole(ROLE_G
   } catch (error) {
     console.error("Realty lead matching error:", error);
     return res.status(500).json({ error: "No se pudieron encontrar propiedades compatibles" });
+  }
+});
+
+// Historial interno de acciones sobre las coincidencias de un comprador. No
+// consulta acciones de otro lead aunque el usuario conozca un identificador.
+realtyIntelligenceRouter.get("/realty/leads/:leadId/match-actions", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const lead = await prisma.lead.findFirst({ where: realtyLeadScope(req.tenantId, req.brokerAccess, { id: req.params.leadId }), select: { id: true } });
+    if (!lead) return res.status(404).json({ error: "Comprador no encontrado dentro de tu alcance." });
+    const records = await prisma.industryRecord.findMany({
+      where: brokerRecordWhere(req, { recordType: "broker_match_action" }),
+      orderBy: { createdAt: "desc" },
+      take: 500
+    });
+    return res.json({ actions: records.filter((record) => String(dataOf(record).leadId || "") === lead.id).map(brokerMatchActionPayload) });
+  } catch (error) {
+    console.error("Broker match actions list error:", error);
+    return res.status(500).json({ error: "No se pudo cargar el historial de matching." });
+  }
+});
+
+// Registra una intención o decisión interna. La solicitud de visita queda
+// pendiente de confirmación humana: no agenda ni contacta a nadie.
+realtyIntelligenceRouter.post("/realty/matches/actions", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const leadId = String(req.body?.leadId || "").trim();
+    const propertyId = String(req.body?.propertyId || "").trim();
+    const { lead, property, match } = await resolveMatchContext(req, { leadId, propertyId });
+    const validation = validateBrokerMatchAction(req.body, match);
+    if (!validation.ok) return res.status(422).json({ error: validation.error });
+    const data = buildBrokerMatchActionData({ leadId: lead.id, propertyId: property.id, validation, match, userId: req.user.id });
+    const record = await prisma.industryRecord.create({
+      data: {
+        tenantId: req.tenantId,
+        assignedToId: req.user.id,
+        recordType: "broker_match_action",
+        title: `${validation.label} · ${lead.name || "Comprador"} · ${property.title}`.slice(0, 240),
+        status: validation.status,
+        data
+      }
+    });
+    await recordAuditLog(req, "BROKER_MATCH_ACTION_RECORDED", "broker_match_action", record.id, {
+      leadId: lead.id,
+      propertyId: property.id,
+      action: validation.action,
+      score: data.score,
+      externalContactExecuted: false,
+      visitConfirmed: false
+    });
+    return res.status(201).json({
+      action: brokerMatchActionPayload(record),
+      notice: validation.action === "REQUEST_VISIT"
+        ? "La solicitud quedó registrada para revisión interna. No se agendó una visita ni se contactó al comprador."
+        : "La acción de matching quedó registrada internamente; no se envió ningún mensaje externo."
+    });
+  } catch (error) {
+    if (error?.status === 404) return res.status(404).json({ error: error.message });
+    console.error("Broker match action error:", error);
+    return res.status(500).json({ error: "No se pudo registrar la acción de matching." });
   }
 });
 

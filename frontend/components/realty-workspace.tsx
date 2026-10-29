@@ -3,6 +3,7 @@
 import { canBroker } from "@/lib/broker-access";
 import { BrokerProspects } from "@/components/broker-prospects";
 import { BrokerOperationalSummary } from "@/components/broker-operational-summary";
+import matchingStyles from "@/components/broker-matching-workspace.module.css";
 
 import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
@@ -13,6 +14,8 @@ import {
   createIndustryBrokerUser,
   createRealtyPropertyCampaignDraft,
   createRealtyBuyer,
+  createBrokerMatchAction,
+  getBrokerMatchActions,
   getRealtyLeadMatches,
   getRealtyPropertyMatches,
   getBrokerPropertyCapture,
@@ -31,8 +34,11 @@ import {
   saveBrokerPropertyCapture,
   type BrokerCapture,
   type BrokerCapturePayload,
+  type BrokerMatchAction,
   type IndustryRecord,
   type IndustryUser,
+  type RealtyBuyerMatch,
+  type RealtyLeadMatch,
   type RealtyIntelligence
 } from "@/lib/api";
 import { getStoredSession, useAgentSession } from "@/lib/auth";
@@ -740,7 +746,7 @@ export function PropertyPortalCards({
 }
 
 function PropertyBuyerMatches({ propertyId }: { propertyId: string }) {
-  const [matches, setMatches] = useState<Array<{ score: number; reasons: string[]; buyer: { id: string; name: string; commune?: string | null; propertyType?: string | null; conversationId: string } }>>([]);
+  const [matches, setMatches] = useState<RealtyBuyerMatch[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -760,6 +766,8 @@ function PropertyBuyerMatches({ propertyId }: { propertyId: string }) {
       <strong>{match.buyer.name}</strong><b>{match.score}% compatible</b>
       <span>{match.buyer.commune || "Comuna por confirmar"} · {match.buyer.propertyType || "Tipo por confirmar"}</span>
       <small>{match.reasons.slice(0, 3).join(" · ") || "Compatibilidad general"}</small>
+      {match.cautions.length ? <small>{match.cautions.slice(0, 2).join(" · ")}</small> : null}
+      {match.warnings.length ? <small className={matchingStyles.blocked}>{match.warnings.slice(0, 2).join(" · ")}</small> : null}
       <Link className="property-buyer-match-action" href={`/inbox?conversation=${encodeURIComponent(match.buyer.conversationId)}`}>Ver conversación</Link>
     </article>)}</div>
   </section>;
@@ -788,11 +796,15 @@ export function RealtyBuyersPageContent() {
   const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
   const [buyers, setBuyers] = useState<Lead[]>([]);
   const [selectedBuyerId, setSelectedBuyerId] = useState<string | null>(null);
-  const [matches, setMatches] = useState<Array<{ score: number; reasons: string[]; property: { id: string; title: string; status: string; price: number; commune: string; operation: string } }>>([]);
+  const [matches, setMatches] = useState<RealtyLeadMatch[]>([]);
+  const [actions, setActions] = useState<BrokerMatchAction[]>([]);
   const [form, setForm] = useState<RealtyBuyerForm>(emptyRealtyBuyerForm);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [busyAction, setBusyAction] = useState("");
+  const [discardTarget, setDiscardTarget] = useState<RealtyLeadMatch | null>(null);
+  const [discardReason, setDiscardReason] = useState("");
 
   async function loadBuyers(preselected?: string) {
     try {
@@ -811,9 +823,9 @@ export function RealtyBuyersPageContent() {
 
   useEffect(() => { loadBuyers(); }, []);
   useEffect(() => {
-    if (!selectedBuyerId) { setMatches([]); return; }
-    getRealtyLeadMatches(selectedBuyerId)
-      .then((result) => setMatches(result.matches || []))
+    if (!selectedBuyerId) { setMatches([]); setActions([]); return; }
+    Promise.all([getRealtyLeadMatches(selectedBuyerId), getBrokerMatchActions(selectedBuyerId)])
+      .then(([result, history]) => { setMatches(result.matches || []); setActions(history.actions || []); })
       .catch((error) => setMessage(error instanceof Error ? error.message : "No se pudo calcular el matching."));
   }, [selectedBuyerId]);
 
@@ -833,9 +845,29 @@ export function RealtyBuyersPageContent() {
     } finally { setSaving(false); }
   }
 
+  async function runMatchAction(match: RealtyLeadMatch, action: "PREPARE_PROFILE" | "REQUEST_VISIT" | "DISCARD_MATCH", reason = "") {
+    if (!selectedBuyerId || !canBroker(access, "commercial", "CREATE")) {
+      setMessage("Tu perfil no permite registrar acciones de matching.");
+      return;
+    }
+    const key = `${match.property.id}:${action}`;
+    try {
+      setBusyAction(key);
+      const result = await createBrokerMatchAction({ leadId: selectedBuyerId, propertyId: match.property.id, action, reason });
+      setMessage(result.notice);
+      setDiscardTarget(null);
+      setDiscardReason("");
+      const history = await getBrokerMatchActions(selectedBuyerId);
+      setActions(history.actions || []);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se pudo registrar la acción de matching.");
+    } finally { setBusyAction(""); }
+  }
+
   const selected = buyers.find((buyer) => buyer.id === selectedBuyerId);
+  const canAct = canBroker(access, "commercial", "CREATE");
   return <>
-    <RealtyHeader eyebrow="Clientes compradores" title="Matching comercial inmobiliario" description="Registra presupuesto, comuna y tipo de propiedad para recomendar alternativas compatibles." />
+    <RealtyHeader eyebrow="Clientes compradores" title="Matching comercial inmobiliario" description="Compara necesidades con inventario disponible, explica coincidencias y registra decisiones internas sin enviar mensajes ni confirmar visitas." />
     {message ? <div className="module-toast">{message}</div> : null}
     <section className="realty-buyer-workspace">
       <form className="realty-buyer-form" onSubmit={saveBuyer}>
@@ -850,7 +882,7 @@ export function RealtyBuyersPageContent() {
         <div className="vertical-card-head"><div><span>Compradores activos</span><h2>Clientes y preferencias</h2></div></div>
         <div className="realty-buyer-layout">
           <div className="realty-buyer-list">{loading ? <p>Cargando compradores...</p> : null}{!loading && !buyers.length ? <p>Aún no hay compradores registrados.</p> : null}{buyers.map((buyer) => <button type="button" key={buyer.id} className={`realty-buyer-item ${buyer.id === selectedBuyerId ? "is-selected" : ""}`} onClick={() => setSelectedBuyerId(buyer.id)}><strong>{buyer.name || "Comprador sin nombre"}</strong><span>{buyerMoney(buyer.budget)} · {buyer.commune || "Comuna por definir"}</span><small>{buyer.propertyType || "Tipo por definir"} · {buyer.interest || "Compra"}</small></button>)}</div>
-          <div className="realty-match-panel">{!selected ? <p>Selecciona un comprador para ver propiedades compatibles.</p> : <><div className="realty-match-heading"><div><span>Para {selected.name || "este comprador"}</span><h3>Propiedades recomendadas</h3></div><strong>{buyerMoney(selected.budget)}</strong></div>{!matches.length ? <p>Aún no hay una propiedad disponible que calce con los datos registrados.</p> : <div className="realty-property-match-list">{matches.map((match) => <article className="realty-property-match" key={match.property.id}><div><strong>{propertyTitle(match.property.title)}</strong><span>{buyerMoney(match.property.price)} · {match.property.commune || "Comuna por definir"}</span><small>{match.reasons.join(" · ")}</small></div><b>{match.score}% compatible</b></article>)}</div>}</>}</div>
+          <div className="realty-match-panel">{!selected ? <p>Selecciona un comprador para ver propiedades compatibles.</p> : <><div className="realty-match-heading"><div><span>Para {selected.name || "este comprador"}</span><h3>Propiedades recomendadas</h3></div><strong>{buyerMoney(selected.budget)}</strong></div>{!matches.length ? <p>Aún no hay una propiedad disponible que calce con los datos registrados.</p> : <div className="realty-property-match-list">{matches.map((match) => <article className="realty-property-match" key={match.property.id}><div><strong>{propertyTitle(match.property.title)}</strong><span>{buyerMoney(match.property.price)} · {match.property.commune || "Comuna por definir"}</span><small>{match.reasons.join(" · ") || "Compatibilidad general por revisar"}</small>{match.cautions.length ? <small>{match.cautions.join(" · ")}</small> : null}{match.warnings.length ? <small className={matchingStyles.blocked}>{match.warnings.join(" · ")}</small> : null}<div className={matchingStyles.meta}><span className={matchingStyles.tag}>{match.compatibility.status === "RECOMMENDED" ? "Recomendada" : match.compatibility.status === "OPERATION_INCOMPATIBLE" ? "Operación incompatible" : "Requiere revisión"}</span><Link href={`/realty?view=properties&propertyId=${encodeURIComponent(match.property.id)}`}>Abrir propiedad</Link></div><div className={matchingStyles.actions}><button type="button" disabled={!canAct || Boolean(busyAction)} onClick={() => void runMatchAction(match, "PREPARE_PROFILE")}>{busyAction === `${match.property.id}:PREPARE_PROFILE` ? "Preparando…" : "Preparar ficha"}</button><button type="button" disabled={!canAct || !match.compatibility.canRequestVisit || Boolean(busyAction)} onClick={() => void runMatchAction(match, "REQUEST_VISIT")}>{busyAction === `${match.property.id}:REQUEST_VISIT` ? "Registrando…" : "Solicitar visita"}</button><button type="button" className={matchingStyles.discard} disabled={!canAct || Boolean(busyAction)} onClick={() => { setDiscardTarget(match); setDiscardReason(""); }}>Descartar coincidencia</button></div>{discardTarget?.property.id === match.property.id ? <form className={matchingStyles.discardPanel} onSubmit={(event) => { event.preventDefault(); void runMatchAction(match, "DISCARD_MATCH", discardReason); }}><b>Motivo de descarte</b><textarea value={discardReason} required minLength={5} maxLength={1200} onChange={(event) => setDiscardReason(event.target.value)} placeholder="Ej.: el comprador confirmó que busca arriendo y esta propiedad es para venta." /><div className={matchingStyles.actions}><button type="submit" disabled={Boolean(busyAction) || discardReason.trim().length < 5}>Confirmar descarte interno</button><button type="button" onClick={() => setDiscardTarget(null)}>Cancelar</button></div></form> : null}</div><b>{match.score}% compatible</b></article>)}</div>}<section className={matchingStyles.history}><h4>Historial de decisiones internas</h4>{!actions.length ? <p>Aún no hay acciones registradas para este comprador.</p> : actions.slice(0, 8).map((action) => <article key={action.id}><b>{action.label}</b><div><p>{action.reason || "Sin observación adicional."}</p><small>{new Date(action.createdAt).toLocaleDateString("es-CL")} · No se ejecutó contacto externo ni visita confirmada.</small></div></article>)}</section></>}</div>
         </div>
       </section>
     </section>
@@ -1278,9 +1310,23 @@ export function RealtyLoadsPageContent() {
 export function RealtyPropertiesPageContent() {
   const { data, error, reload } = useRealtyWorkspace();
   const [selectedProperty, setSelectedProperty] = useState<IndustryRecord | null>(null);
+  const [intelligence, setIntelligence] = useState<RealtyIntelligence | null>(null);
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"ALL" | "VENTA" | "ARRIENDO" | "UNASSIGNED" | "VISITED" | "STALE">("ALL");
+
+  async function refreshInventory() {
+    await reload();
+    try {
+      setIntelligence(await getRealtyIntelligence());
+    } catch {
+      // Las alertas son apoyo operativo. La cartera continúa disponible si
+      // el resumen no pudo recalcularse temporalmente.
+      setIntelligence(null);
+    }
+  }
+
+  useEffect(() => { void refreshInventory(); }, []);
 
   const visibleProperties = data.properties.filter((property) => {
     const propertyData = asData(property);
@@ -1308,7 +1354,7 @@ export function RealtyPropertiesPageContent() {
         assignmentMode: brokerId ? "manual" : "sin_corredor"
       }
     });
-    await reload();
+    await refreshInventory();
   }
 
   async function createPropertyCampaign(property: IndustryRecord) {
@@ -1330,7 +1376,7 @@ export function RealtyPropertiesPageContent() {
       });
       setSelectedProperty(updated);
       setMessage("Imagen eliminada de la propiedad.");
-      await reload();
+      await refreshInventory();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo eliminar la imagen.");
     }
@@ -1346,6 +1392,12 @@ export function RealtyPropertiesPageContent() {
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
       {message ? <div className="module-toast">{message}</div> : null}
+      {intelligence?.inventory.alerts.length ? <section className={`realty-ws-card ${matchingStyles.inventoryAlerts}`}>
+        <header><div><span>Alertas de inventario</span><h2>Prioridades para revisar</h2><p>Se calculan desde las fichas y mandatos actuales; no generan tareas ni mensajes automáticos.</p></div><strong>{intelligence.inventory.alerts.length} pendiente(s)</strong></header>
+        <div className={matchingStyles.inventoryAlertList}>{intelligence.inventory.alerts.slice(0, 12).map((alert) => <article className={`${matchingStyles.inventoryAlert} ${alert.priority === "HIGH" ? matchingStyles.high : ""}`} key={alert.id}>
+          <b>{alert.action}</b><span>{propertyTitle(alert.title)}</span><small>{alert.message}</small><Link href={`/realty?view=properties&propertyId=${encodeURIComponent(alert.propertyId)}`}>Ver inventario</Link>
+        </article>)}</div>
+      </section> : null}
       <section className="realty-ws-card realty-inventory-panel">
           <div className="realty-ws-card-head"><div><span>Inventario operativo</span><h2>Propiedades activas</h2><p>Revisa inventario, responsable, etapa comercial y ficha detallada.</p></div><Link className="secondary-btn realty-secondary-action" href="/realty?view=operations">Importar CSV</Link></div>
         <div className="realty-inventory-filters">

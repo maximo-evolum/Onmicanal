@@ -1,0 +1,39 @@
+/** Archivo: Define la presentación de decisiones y alertas del matching Broker. */
+.meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.tag, .warning, .blocked { padding: 4px 7px; border-radius: 999px; font-size: 10px; font-weight: 800; }
+.tag { background: #e8f6f4; color: #166e6b; }
+.warning { background: #fff1df; color: #8c531d; }
+.blocked { background: #fff0ef; color: #a34339; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.actions button { min-height: 32px; padding: 6px 9px; border: 1px solid #bcded9; border-radius: 9px; background: #fff; color: #176d6a; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.actions button:hover:not(:disabled) { border-color: #139d99; background: #edfbf9; }
+.actions button:disabled { cursor: not-allowed; opacity: .55; }
+.discard { border-color: #efc4c0 !important; color: #a6453c !important; }
+.discardPanel { display: grid; gap: 8px; margin-top: 11px; padding: 12px; border: 1px solid #efd7b7; border-radius: 11px; background: #fff9ef; }
+.discardPanel textarea { box-sizing: border-box; width: 100%; min-height: 64px; padding: 9px; border: 1px solid #dbc8ad; border-radius: 8px; background: #fff; color: #2f4349; font: inherit; font-size: 12px; }
+.history { display: grid; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid #e4ecea; }
+.history h4 { margin: 0; color: #273e47; font-size: 13px; }
+.history article { display: grid; grid-template-columns: auto 1fr; gap: 8px; padding: 9px; border: 1px solid #dce9e6; border-radius: 10px; background: #fbfefd; }
+.history article b { color: #186f6d; font-size: 11px; }
+.history article p, .history article small { margin: 2px 0 0; color: #657981; font-size: 11px; line-height: 1.35; }
+.inventoryAlerts { display: grid; gap: 8px; margin: 0 0 16px; }
+.inventoryAlerts header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.inventoryAlerts h2, .inventoryAlerts p { margin: 0; }
+.inventoryAlerts h2 { font-size: 18px; }
+.inventoryAlerts p { color: #687c84; font-size: 12px; }
+.inventoryAlertList { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px; }
+.inventoryAlert { display: grid; gap: 5px; padding: 12px; border: 1px solid #e4ded3; border-left: 4px solid #dda229; border-radius: 12px; background: #fffdf7; }
+.inventoryAlert.high { border-left-color: #d45c48; }
+.inventoryAlert b { color: #2a414a; font-size: 12px; }
+.inventoryAlert span, .inventoryAlert small { color: #667981; font-size: 11px; line-height: 1.35; }
+.inventoryAlert a { color: #087f83; font-size: 11px; font-weight: 800; text-decoration: none; }
+
+:global(:root[data-theme="dark"]) .tag, :global(:root[data-design-system="dark"]) .tag { background: #143a3a; color: #9cf0e7; }
+:global(:root[data-theme="dark"]) .actions button, :global(:root[data-design-system="dark"]) .actions button { border-color: #466685; background: #211d3d; color: #9cf0e7; }
+:global(:root[data-theme="dark"]) .discardPanel, :global(:root[data-design-system="dark"]) .discardPanel, :global(:root[data-theme="dark"]) .inventoryAlert, :global(:root[data-design-system="dark"]) .inventoryAlert { background: #211c39; border-color: #68547b; }
+:global(:root[data-theme="dark"]) .discardPanel textarea, :global(:root[data-design-system="dark"]) .discardPanel textarea { border-color: #68547b; background: #17132b; color: #f3eeff; }
+:global(:root[data-theme="dark"]) .history h4, :global(:root[data-design-system="dark"]) .history h4, :global(:root[data-theme="dark"]) .history article b, :global(:root[data-design-system="dark"]) .history article b, :global(:root[data-theme="dark"]) .inventoryAlerts h2, :global(:root[data-design-system="dark"]) .inventoryAlerts h2, :global(:root[data-theme="dark"]) .inventoryAlert b, :global(:root[data-design-system="dark"]) .inventoryAlert b { color: #fff; }
+:global(:root[data-theme="dark"]) .history article, :global(:root[data-design-system="dark"]) .history article { background: #211c39; border-color: #68547b; }
+:global(:root[data-theme="dark"]) .history article p, :global(:root[data-design-system="dark"]) .history article p, :global(:root[data-theme="dark"]) .history article small, :global(:root[data-design-system="dark"]) .history article small, :global(:root[data-theme="dark"]) .inventoryAlerts p, :global(:root[data-design-system="dark"]) .inventoryAlerts p, :global(:root[data-theme="dark"]) .inventoryAlert span, :global(:root[data-design-system="dark"]) .inventoryAlert span, :global(:root[data-theme="dark"]) .inventoryAlert small, :global(:root[data-design-system="dark"]) .inventoryAlert small { color: #cbc3df; }
+
+@media (max-width: 700px) { .actions { display: grid; grid-template-columns: 1fr; } .actions button { width: 100%; } .inventoryAlerts header { display: grid; } }
