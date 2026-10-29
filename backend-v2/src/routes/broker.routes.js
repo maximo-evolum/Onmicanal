@@ -38,6 +38,7 @@ import {
   validateBrokerRecord
 } from "../services/broker-workflows.service.js";
 import { brokerPropertyMissingData, buildBrokerOperationalPriorities, buildBrokerOperationalReadModel } from "../services/broker-operational-read-model.service.js";
+import { buildBrokerOwnerWorkspace, filterBrokerOwnerWorkspaces } from "../services/broker-owner-workspace.service.js";
 import { brokerRelationalCoverage, normalizeLegacyBrokerProperty } from "../services/broker-relational-data.service.js";
 import { BROKER_CAPTURE_OPTIONS, captureReadiness, normalizeBrokerCapture, validateBrokerCapture } from "../services/broker-capture.service.js";
 import { requiresBrokerAccountableOwner, resolveBrokerAccountableAssignee } from "../services/broker-accountability.service.js";
@@ -185,6 +186,65 @@ async function assertRelatedProperty(req, propertyId) {
   });
   if (!property) throw new Error("La propiedad relacionada no pertenece a esta cuenta.");
   return property;
+}
+
+// El propietario no se consulta directamente por nombre. Primero se resuelve
+// la cartera inmobiliaria ya autorizada y desde ella se obtienen los IDs
+// relacionales de propietario. Así una coincidencia de nombre nunca amplía el
+// alcance de un corredor, equipo o holding.
+async function brokerOwnerWorkspaceSources(req) {
+  const propertyRecords = await prisma.industryRecord.findMany({
+    where: brokerWhere(req, { recordType: "property" }),
+    select: { id: true, tenantId: true, title: true, status: true, data: true, assignedToId: true, updatedAt: true },
+    orderBy: { updatedAt: "desc" },
+    take: 1500
+  });
+  const legacyPropertyIds = propertyRecords.map((property) => property.id);
+  if (!legacyPropertyIds.length) return { propertyRecords, strictProperties: [], owners: [], operations: [], records: [], contracts: [], managementActions: [] };
+  const tenantIds = req.brokerAccess?.scopeTenantIds?.length ? req.brokerAccess.scopeTenantIds : [req.tenantId];
+  const strictProperties = await prisma.brokerProperty.findMany({
+    where: { tenantId: { in: tenantIds }, legacyRecordId: { in: legacyPropertyIds } },
+    include: {
+      assignedBroker: { select: { id: true, name: true } },
+      capture: { select: { id: true, status: true } }
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 1500
+  });
+  const strictPropertyIds = strictProperties.map((property) => property.id);
+  const ownerIds = [...new Set(strictProperties.map((property) => property.ownerId).filter(Boolean))];
+  if (!ownerIds.length) return { propertyRecords, strictProperties, owners: [], operations: [], records: [], contracts: [], managementActions: [] };
+  const [owners, operations, records, contracts, managementActions] = await Promise.all([
+    prisma.brokerOwner.findMany({ where: { id: { in: ownerIds } }, orderBy: [{ name: "asc" }, { id: "asc" }] }),
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 1500 }),
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: { in: ["property_mandate", "rental_contract", "administration_profile", "administration_liquidation", "realty_alert"] } }), orderBy: { updatedAt: "desc" }, take: 2000 }),
+    strictPropertyIds.length ? prisma.brokerContract.findMany({ where: { tenantId: { in: tenantIds }, propertyId: { in: strictPropertyIds } }, orderBy: { updatedAt: "desc" }, take: 1500 }) : [],
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_owner_management" }), orderBy: { createdAt: "desc" }, take: 1500 })
+  ]);
+  return { propertyRecords, strictProperties, owners, operations, records, contracts, managementActions };
+}
+
+function ownerWorkspacesFromSources(sources) {
+  return sources.owners.map((owner) => buildBrokerOwnerWorkspace({
+    owner,
+    properties: sources.strictProperties.filter((property) => property.ownerId === owner.id),
+    legacyProperties: sources.propertyRecords,
+    operations: sources.operations,
+    records: sources.records,
+    contracts: sources.contracts,
+    managementActions: sources.managementActions.filter((action) => String(dataOf(action).brokerOwnerId || "") === owner.id)
+  }));
+}
+
+async function brokerOwnerWorkspaceForRequest(req, ownerId) {
+  const sources = await brokerOwnerWorkspaceSources(req);
+  const workspace = ownerWorkspacesFromSources(sources).find((item) => item.owner.id === String(ownerId));
+  if (!workspace) {
+    const error = new Error("Propietario no encontrado dentro de tu cartera autorizada.");
+    error.status = 404;
+    throw error;
+  }
+  return { workspace, sources };
 }
 
 async function assertAssignedUser(req, assignedToId) {
@@ -1195,6 +1255,120 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
   } catch (error) {
     console.error("Broker overview error:", error);
     res.status(500).json({ error: "No se pudo preparar el resumen operativo del Broker." });
+  }
+});
+
+// Workspace relacional de propietarios. Sus listados se forman exclusivamente
+// desde propiedades visibles dentro del alcance del usuario; no existe una
+// búsqueda global por nombre, correo o RUT que pueda exponer otra cartera.
+brokerRouter.get("/broker/owners", requireBrokerAction("commercial", "VIEW"), async (req, res) => {
+  try {
+    const sources = await brokerOwnerWorkspaceSources(req);
+    const workspaces = filterBrokerOwnerWorkspaces(ownerWorkspacesFromSources(sources), {
+      search: text(req.query?.search),
+      portfolio: text(req.query?.portfolio, "ALL")
+    });
+    res.json({
+      generatedAt: new Date().toISOString(),
+      filters: {
+        search: text(req.query?.search),
+        portfolio: text(req.query?.portfolio, "ALL").toUpperCase()
+      },
+      owners: workspaces.map((workspace) => ({
+        owner: workspace.owner,
+        portfolio: {
+          active: workspace.portfolio.active,
+          administration: workspace.portfolio.administration,
+          historical: workspace.portfolio.historical,
+          managedValueByCurrency: workspace.portfolio.managedValueByCurrency
+        },
+        metrics: workspace.metrics,
+        opportunities: workspace.opportunities.slice(0, 3),
+        expirations: workspace.expirations.slice(0, 3),
+        lastManagementAt: workspace.management[0]?.createdAt || null
+      }))
+    });
+  } catch (error) {
+    console.error("Broker owners list error:", error);
+    res.status(500).json({ error: "No se pudo preparar la cartera de propietarios." });
+  }
+});
+
+brokerRouter.get("/broker/owners/:ownerId", requireBrokerAction("commercial", "VIEW"), async (req, res) => {
+  try {
+    const { workspace } = await brokerOwnerWorkspaceForRequest(req, req.params.ownerId);
+    res.json(workspace);
+  } catch (error) {
+    if (error?.status === 404) return res.status(404).json({ error: error.message });
+    console.error("Broker owner workspace error:", error);
+    res.status(500).json({ error: "No se pudo preparar la ficha del propietario." });
+  }
+});
+
+// Registra una gestión interna y auditable. No contacta al propietario ni
+// dispara correos, WhatsApp u otra integración externa.
+brokerRouter.post("/broker/owners/:ownerId/management-actions", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "EDIT"), async (req, res) => {
+  try {
+    const { workspace, sources } = await brokerOwnerWorkspaceForRequest(req, req.params.ownerId);
+    const owner = sources.owners.find((item) => item.id === workspace.owner.id);
+    // Un permiso holding puede ampliar lectura, nunca la escritura de una
+    // gestión al tenant de otra empresa vinculada.
+    if (!owner || owner.tenantId !== req.tenantId) return res.status(403).json({ error: "No puedes registrar gestiones en la cartera de otra empresa." });
+    const type = text(req.body?.type, "SEGUIMIENTO").toUpperCase();
+    const allowedTypes = new Set(["SEGUIMIENTO", "SOLICITUD_DOCUMENTO", "RENOVACION", "TASACION", "REVISION_CARTERA", "OTRO"]);
+    const note = text(req.body?.note);
+    const propertyId = text(req.body?.propertyId) || null;
+    const suggestedChannel = text(req.body?.suggestedChannel || workspace.owner.contactSuggestion.key).toUpperCase();
+    const nextActionAt = text(req.body?.nextActionAt) || null;
+    if (!allowedTypes.has(type)) return res.status(422).json({ error: "El tipo de gestión no es válido." });
+    if (!note || note.length > 2000) return res.status(422).json({ error: "Describe la gestión interna en un máximo de 2.000 caracteres." });
+    if (propertyId && !workspace.portfolio.properties.some((property) => property.legacyRecordId === propertyId)) return res.status(404).json({ error: "La propiedad indicada no pertenece a este propietario dentro de tu cartera autorizada." });
+    if (nextActionAt && Number.isNaN(new Date(nextActionAt).getTime())) return res.status(422).json({ error: "La fecha de próxima acción no es válida." });
+    const title = `Gestión propietario · ${workspace.owner.name}`.slice(0, 240);
+    const action = await prisma.industryRecord.create({
+      data: {
+        tenantId: req.tenantId,
+        assignedToId: req.user.id,
+        recordType: "broker_owner_management",
+        title,
+        status: "RECORDED",
+        data: {
+          brokerOwnerId: workspace.owner.id,
+          propertyId,
+          type,
+          note,
+          suggestedChannel,
+          nextActionAt,
+          createdByUserId: req.user.id,
+          externalContactExecuted: false
+        }
+      }
+    });
+    await recordAuditLog(req, "BROKER_OWNER_MANAGEMENT_RECORDED", "broker_owner_management", action.id, {
+      brokerOwnerId: workspace.owner.id,
+      propertyId,
+      type,
+      suggestedChannel,
+      externalContactExecuted: false
+    });
+    res.status(201).json({
+      action: {
+        id: action.id,
+        type,
+        title: action.title,
+        note,
+        suggestedChannel,
+        nextActionAt,
+        propertyId,
+        createdAt: action.createdAt,
+        responsibleUserId: action.assignedToId
+      },
+      notice: "La gestión quedó registrada internamente. No se envió ningún mensaje externo."
+    });
+  } catch (error) {
+    if (error?.status === 404) return res.status(404).json({ error: error.message });
+    console.error("Broker owner management error:", error);
+    res.status(500).json({ error: "No se pudo registrar la gestión del propietario." });
   }
 });
 

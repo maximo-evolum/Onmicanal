@@ -59,6 +59,7 @@ const baseItems: SidebarItem[] = [
   ["Operaciones Broker", "/realty?view=broker_os", "Ventas, arriendos, expedientes y postventa", "BO", "properties"],
   ["Captación e importación", "/realty?view=operations", "Carga manual e importación de propiedades", "RC", "realty_loads"],
   ["Propiedades", "/realty?view=properties", "Inventario, fichas y publicación", "RP", "properties"],
+  ["Propietarios", "/realty?view=owners", "Cartera patrimonial, vencimientos y seguimiento interno", "PO", "properties"],
   ["Corredores y asignaciones", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],
   ["Visitas y seguimiento", "/realty?view=activity", "Visitas, alertas y próximos pasos", "RA", "realty_activity"],
   ["Cartera del corredor", "/realty?view=portal", "Propiedades asignadas y publicación", "RO", "broker_portal"],
@@ -185,7 +186,7 @@ function currentVerticalLabel(industry?: string | null, product?: ReturnType<typ
 
 function brokerNavigationSection(item: SidebarItem) {
   const [, href] = item;
-  if (href === "/realty" || href.includes("view=properties") || href.includes("view=operations") || href.includes("view=buyers")) return "Cartera";
+  if (href === "/realty" || href.includes("view=properties") || href.includes("view=operations") || href.includes("view=buyers") || href.includes("view=owners")) return "Cartera";
   if (href.includes("view=broker_os") || href.includes("view=activity")) return "Operación";
   if (href.includes("view=portal") || href.includes("view=publications")) return "Comercial";
   if (href.includes("view=brokers") || href.includes("view=training")) return "Equipo";
@@ -198,6 +199,7 @@ function brokerNavigationOrder(item: SidebarItem) {
     "/realty",
     "/realty?view=properties",
     "/realty?view=operations",
+    "/realty?view=owners",
     "/realty?view=buyers",
     "/realty?view=broker_os",
     "/realty?view=activity",

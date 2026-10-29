@@ -1845,6 +1845,67 @@ export type BrokerOperationalReadModel = {
   pipeline: { total: number; active: number; terminal: number; byStage: Record<string, number> };
 };
 
+export type BrokerOwnerPortfolioFilter = "ALL" | "ACTIVE" | "ADMINISTRATION" | "HISTORICAL" | "ATTENTION";
+
+export type BrokerOwnerProperty = {
+  id: string;
+  legacyRecordId: string | null;
+  title: string;
+  address: string;
+  comuna: string;
+  propertyType: string;
+  operationalStatus: string;
+  isHistorical: boolean;
+  isAdministration: boolean;
+  assignedBrokerId: string | null;
+  assignedBrokerName: string | null;
+  askingPrice: number;
+  currency: string;
+  updatedAt: string | null;
+  related: {
+    captureAvailable: boolean;
+    operations: number;
+    contracts: number;
+    administration: number;
+  };
+};
+
+export type BrokerOwnerWorkspace = {
+  version: string;
+  generatedAt: string;
+  owner: {
+    id: string;
+    name: string;
+    rut: string | null;
+    legalType: string;
+    phone: string | null;
+    email: string | null;
+    contactAddress: string | null;
+    isActive: boolean;
+    identityStatus: "IDENTIDAD_ESTRICTA" | "IDENTIDAD_SIN_RUT";
+    contactSuggestion: { key: string; label: string; available: boolean };
+  };
+  portfolio: {
+    properties: BrokerOwnerProperty[];
+    active: BrokerOwnerProperty[];
+    administration: BrokerOwnerProperty[];
+    historical: BrokerOwnerProperty[];
+    managedValueByCurrency: Array<{ currency: string; value: number }>;
+    activeOperations: Array<{ id: string; title: string; propertyId: string | null; stage: string; operationType: string; updatedAt: string | null }>;
+    openAlerts: Array<{ id: string; title: string; status: string; propertyId: string | null; updatedAt: string | null }>;
+  };
+  metrics: { activeProperties: number; administrationProperties: number; historicalProperties: number; activeOperations: number; expiringItems: number; overdueItems: number; openAlerts: number; managementActions: number };
+  expirations: Array<{ id: string; source: string; label: string; dueAt: string; overdue: boolean; propertyId: string | null; detail: string }>;
+  opportunities: Array<{ key: string; priority: "HIGH" | "MEDIUM" | "LOW"; title: string; detail: string; action: string; requiresApproval: boolean }>;
+  management: Array<{ id: string; type: string; title: string; note: string; suggestedChannel: string; nextActionAt: string | null; propertyId: string | null; createdAt: string | null; updatedAt: string | null; responsibleUserId: string | null }>;
+  notices: string[];
+};
+
+export type BrokerOwnerListItem = Pick<BrokerOwnerWorkspace, "owner" | "metrics" | "opportunities" | "expirations"> & {
+  portfolio: Pick<BrokerOwnerWorkspace["portfolio"], "active" | "administration" | "historical" | "managedValueByCurrency">;
+  lastManagementAt: string | null;
+};
+
 export type BrokerPropertyExpedient = {
   property: Pick<IndustryRecord, "id" | "title">;
   records: IndustryRecord[];
@@ -1930,6 +1991,21 @@ export function saveBrokerHoldingConfig(input: { code: string; name: string; ten
 
 export function getBrokerOverview(): Promise<BrokerOverview> {
   return request<BrokerOverview>("/broker/overview");
+}
+
+export function getBrokerOwners(query: { search?: string; portfolio?: BrokerOwnerPortfolioFilter } = {}): Promise<{ generatedAt: string; filters: { search: string; portfolio: BrokerOwnerPortfolioFilter }; owners: BrokerOwnerListItem[] }> {
+  const params = new URLSearchParams();
+  if (query.search) params.set("search", query.search);
+  if (query.portfolio && query.portfolio !== "ALL") params.set("portfolio", query.portfolio);
+  return request(`/broker/owners${params.size ? `?${params.toString()}` : ""}`);
+}
+
+export function getBrokerOwnerWorkspace(ownerId: string): Promise<BrokerOwnerWorkspace> {
+  return request<BrokerOwnerWorkspace>(`/broker/owners/${encodeURIComponent(ownerId)}`);
+}
+
+export function recordBrokerOwnerManagement(ownerId: string, input: { type: string; note: string; propertyId?: string | null; suggestedChannel?: string; nextActionAt?: string | null }): Promise<{ action: BrokerOwnerWorkspace["management"][number]; notice: string }> {
+  return request(`/broker/owners/${encodeURIComponent(ownerId)}/management-actions`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function getBrokerCatalog(): Promise<BrokerCatalog> {

@@ -15,6 +15,7 @@ import {
   RealtyShell
 } from "@/components/realty-workspace";
 import { BrokerOperationsPageContent } from "@/components/broker-operations-workspace";
+import { BrokerOwnersPageContent } from "@/components/broker-owners-workspace";
 import { BrokerPublicationsPageContent } from "@/components/broker-publications";
 import { getMe } from "@/lib/api";
 import { getStoredSession, useAgentSession } from "@/lib/auth";
@@ -34,6 +35,7 @@ const views = {
   summary: { label: "Resumen Broker", module: null, content: RealtyDashboardPageContent },
   operations: { label: "Captación e importación", module: "realty_loads", content: RealtyLoadsPageContent },
   properties: { label: "Propiedades", module: "properties", content: RealtyPropertiesPageContent },
+  owners: { label: "Propietarios y cartera", module: "properties", content: BrokerOwnersPageContent },
   brokers: { label: "Corredores y asignaciones", module: "brokers", content: BrokersPageContent },
   activity: { label: "Visitas y seguimiento", module: "realty_activity", content: RealtyActivityPageContent },
   portal: { label: "Cartera del corredor", module: "broker_portal", content: BrokerPortalPageContent },
