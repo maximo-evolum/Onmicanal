@@ -5,6 +5,7 @@ import { canBroker, canBrokerTab, brokerTabArea } from "@/lib/broker-access";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BrokerJourneySummary } from "./broker-journey";
 import { BrokerOperationalSummary } from "./broker-operational-summary";
+import { BrokerDocumentIndexPanel } from "./broker-document-index";
 import { useSearchParams } from "next/navigation";
 import {
   advanceBrokerOperation,
@@ -21,6 +22,7 @@ import {
   confirmBrokerPostSaleCheckpoint,
   confirmBrokerRentalCheckpoint,
   getBrokerCatalog,
+  getBrokerDocumentIndex,
   getBrokerAccess,
   getBrokerAccessTeam,
   getBrokerAssignableUsers,
@@ -59,6 +61,8 @@ import {
   updateBrokerAccessProfile,
   updateBrokerMonthlyLiquidationStatus,
   type BrokerCatalog,
+  type BrokerDocumentIndex,
+  type BrokerDocumentIndexFilters,
   type BrokerAiScenario,
   type BrokerOperation,
   type BrokerOperationType,
@@ -334,8 +338,12 @@ export function BrokerOperationsPageContent() {
   const propertyFilter = searchParams.get("propertyId");
   const visibleOperations = propertyFilter ? operations.filter(operation => operation.data.propertyId === propertyFilter) : operations;
   const requestedOperationId = searchParams.get("operationId");
+  const requestedRecordId = searchParams.get("recordId");
   const requestedOperationType = operations.find(item => item.id === requestedOperationId)?.data.operationType;
   const [records, setRecords] = useState<IndustryRecord[]>([]);
+  const [documentIndex, setDocumentIndex] = useState<BrokerDocumentIndex | null>(null);
+  const [documentIndexLoading, setDocumentIndexLoading] = useState(false);
+  const [documentFilters, setDocumentFilters] = useState<BrokerDocumentIndexFilters>({ propertyId: "", person: "", type: "ALL", status: "ALL", expiry: "ALL" });
   const [financingRecords, setFinancingRecords] = useState<IndustryRecord[]>([]);
   const [financingExpenses, setFinancingExpenses] = useState<IndustryRecord[]>([]);
   const [financingNotes, setFinancingNotes] = useState<Record<string, string>>({});
@@ -449,9 +457,23 @@ export function BrokerOperationsPageContent() {
       return;
     }
     if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
+    if (tab === "documents") {
+      let active = true;
+      setRecords([]);
+      setDocumentIndexLoading(true);
+      Promise.all([getBrokerRecords("documents"), getBrokerDocumentIndex(documentFilters)])
+        .then(([nextRecords, nextIndex]) => {
+          if (!active) return;
+          setRecords(nextRecords);
+          setDocumentIndex(nextIndex);
+        })
+        .catch((error) => { if (active) setNotice(error instanceof Error ? error.message : "No se pudo cargar el registro documental."); })
+        .finally(() => { if (active) setDocumentIndexLoading(false); });
+      return () => { active = false; };
+    }
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
-  }, [tab, administrationPeriod, access]);
+  }, [tab, administrationPeriod, access, documentFilters]);
 
   useEffect(() => {
     if (!catalog || tab === "financing" || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "governance" || tab === "access") return;
@@ -466,6 +488,11 @@ export function BrokerOperationsPageContent() {
   const readModel = overview?.readModel;
   const recommendations = readModel?.priorities || overview?.recommendations || [];
   const currentArea = tab !== "financing" && tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "governance" && tab !== "access" ? tab : null;
+  useEffect(() => {
+    if (!requestedRecordId || !currentArea || !records.some((record) => record.id === requestedRecordId)) return;
+    const frame = window.requestAnimationFrame(() => document.getElementById(`broker-record-${requestedRecordId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [requestedRecordId, currentArea, records]);
   const canAssignCurrentArea = Boolean(currentArea && canBroker(access, currentArea, "ASSIGN"));
   const currentDefinition = recordType ? catalog?.recordDefinitions[recordType] : undefined;
   const currentTypes = currentArea && catalog ? catalog.areas[currentArea] || [] : [];
@@ -546,6 +573,7 @@ export function BrokerOperationsPageContent() {
       await createBrokerRecord({ recordType, title, status: currentDefinition.statuses[0], data, assignedToId });
       event.currentTarget.reset();
       setRecords(await getBrokerRecords(currentArea));
+      if (currentArea === "documents") setDocumentIndex(await getBrokerDocumentIndex(documentFilters));
       setNotice("Registro guardado en el expediente de la propiedad.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo guardar el registro.");
@@ -863,6 +891,7 @@ export function BrokerOperationsPageContent() {
     try {
       await updateBrokerRecord(record.id, { status });
       setRecords(await getBrokerRecords(currentArea));
+      if (currentArea === "documents") setDocumentIndex(await getBrokerDocumentIndex(documentFilters));
       setNotice("Estado del registro actualizado.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo actualizar el estado.");
@@ -1286,7 +1315,9 @@ export function BrokerOperationsPageContent() {
       </section>
     </section> : null}
 
-    {currentArea ? <section className="broker-os-grid broker-area-grid">
+    {currentArea ? <>
+      {currentArea === "documents" ? <BrokerDocumentIndexPanel index={documentIndex} filters={documentFilters} loading={documentIndexLoading} onFiltersChange={setDocumentFilters} /> : null}
+      <section className="broker-os-grid broker-area-grid">
       <form className="broker-os-form" onSubmit={createRecord}>
         <span>Expediente operativo</span><h2>{AREA_CONFIG[currentArea].label}</h2><p>{AREA_CONFIG[currentArea].description}</p>
         <label>Tipo de registro<select value={recordType} onChange={(event) => setRecordType(event.target.value)}>{currentTypes.map((type) => <option key={type} value={type}>{catalog?.recordDefinitions[type]?.label || readable(type)}</option>)}</select></label>
@@ -1305,10 +1336,11 @@ export function BrokerOperationsPageContent() {
         {records.length === 0 ? <p className="broker-empty">Aun no hay registros en esta area. Crea el primero desde el panel superior.</p> : records.map((record) => {
           const definition = catalog?.recordDefinitions[record.recordType];
           const requiresOwner = CONTROLLED_BROKER_RECORD_TYPES.has(record.recordType);
-          return <article key={record.id} className="broker-record-card"><div><span>{definition?.label || readable(record.recordType)}</span><h3>{record.title}</h3><p>{recordSummary(record, definition)}</p>{requiresOwner ? <small className="broker-record-owner">Responsable operativo: <b>{recordOwnerLabel(record)}</b></small> : null}</div><div className="broker-record-state"><b>{readable(record.status)}</b>{requiresOwner && canAssignCurrentArea ? <label className="broker-record-assignee">Responsable<select aria-label={`Cambiar responsable de ${record.title}`} value={record.assignedToId || ""} disabled={busy || !assignableUsers.length} onChange={(event) => setRecordAssignee(record, event.target.value)}><option value="" disabled>Selecciona responsable</option>{assignableUsers.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}</select></label> : null}{definition?.statuses?.length && !requiresOwner ? <select aria-label={`Cambiar estado de ${record.title}`} value={record.status} disabled={busy || !canWriteTab} onChange={(event) => setRecordStatus(record, event.target.value)}>{definition.statuses.map((status) => <option key={status} value={status}>{readable(status)}</option>)}</select> : null}{record.recordType === "maintenance_ticket" ? <button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={() => openMaintenanceWorkspace(record)}>Control operativo</button> : null}{record.recordType === "remodeling_project" ? <button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={() => openProjectWorkspace(record)}>Control operativo</button> : null}{["property_inspection", "property_handover", "post_sale_case", "warranty_case"].includes(record.recordType) ? <button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={() => openPostSaleWorkspace(record)}>Control operativo</button> : null}</div></article>;
+          return <article id={`broker-record-${record.id}`} key={record.id} className={`broker-record-card ${record.id === requestedRecordId ? "broker-record-highlight" : ""}`}><div><span>{definition?.label || readable(record.recordType)}</span><h3>{record.title}</h3><p>{recordSummary(record, definition)}</p>{requiresOwner ? <small className="broker-record-owner">Responsable operativo: <b>{recordOwnerLabel(record)}</b></small> : null}</div><div className="broker-record-state"><b>{readable(record.status)}</b>{requiresOwner && canAssignCurrentArea ? <label className="broker-record-assignee">Responsable<select aria-label={`Cambiar responsable de ${record.title}`} value={record.assignedToId || ""} disabled={busy || !assignableUsers.length} onChange={(event) => setRecordAssignee(record, event.target.value)}><option value="" disabled>Selecciona responsable</option>{assignableUsers.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}</select></label> : null}{definition?.statuses?.length && !requiresOwner ? <select aria-label={`Cambiar estado de ${record.title}`} value={record.status} disabled={busy || !canWriteTab} onChange={(event) => setRecordStatus(record, event.target.value)}>{definition.statuses.map((status) => <option key={status} value={status}>{readable(status)}</option>)}</select> : null}{record.recordType === "maintenance_ticket" ? <button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={() => openMaintenanceWorkspace(record)}>Control operativo</button> : null}{record.recordType === "remodeling_project" ? <button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={() => openProjectWorkspace(record)}>Control operativo</button> : null}{["property_inspection", "property_handover", "post_sale_case", "warranty_case"].includes(record.recordType) ? <button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={() => openPostSaleWorkspace(record)}>Control operativo</button> : null}</div></article>;
         })}
       </section>
-    </section> : null}
+      </section>
+    </> : null}
 
     {maintenanceWorkspace ? <section className="broker-sale-case-panel broker-maintenance-case-panel" aria-label="Control operativo de mantención">
       <header><div><span>Mantenciones y proveedores</span><h2>{maintenanceWorkspace.record.title}</h2><p>Etapa actual: <b>{readable(maintenanceWorkspace.maintenance.workflowStage)}</b></p></div><button type="button" className="secondary-btn" onClick={() => setMaintenanceWorkspace(null)}>Cerrar control</button></header>

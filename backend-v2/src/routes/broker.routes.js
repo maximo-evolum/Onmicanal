@@ -52,6 +52,7 @@ import { administrationActionForLiquidationStage, buildMonthlyAdministration, no
 import { BROKER_JOURNEY_CATALOG, BROKER_JOURNEY_VERSION, brokerOperationPayload, captureJourney, projectBrokerOperations, validateBrokerOperationReferences, persistBrokerOperationStage, updateBrokerOperationSnapshot } from "../services/broker-operation-contract.service.js";
 import { buildBrokerGovernanceSummary, normalizeBrokerAlertResolution } from "../services/broker-governance.service.js";
 import { BROKER_PUBLICATION_CHANNELS, BROKER_PUBLICATION_PROVIDER_STATUSES, BROKER_PUBLICATION_STATUSES, brokerPublicationAnalytics, brokerPublicationConnectionKey, brokerPublicationExport, brokerPublicationProviderPreflight, brokerPublicationReadiness, brokerPublicationCopy, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, publicBrokerPublication, publicBrokerPublicationProvider, transitionBrokerPublication } from "../services/broker-publication.service.js";
+import { BROKER_DOCUMENT_SOURCE_TYPES, brokerDocumentSourceArea, buildBrokerDocumentIndex } from "../services/broker-document-index.service.js";
 
 export const brokerRouter = Router();
 
@@ -1540,6 +1541,43 @@ brokerRouter.get("/broker/legal-readiness", requireBrokerAction("documents", "VI
   } catch (error) {
     console.error("Broker legal readiness error:", error);
     res.status(500).json({ error: "No se pudo obtener el estado de cumplimiento y proveedores." });
+  }
+});
+
+// Registro documental derivado: reúne antecedentes existentes sin generar
+// una segunda copia ni permitir cambios de estado desde esta consulta.
+brokerRouter.get("/broker/documents/index", requireBrokerAction("documents", "VIEW"), async (req, res) => {
+  try {
+    const allowedTypes = BROKER_DOCUMENT_SOURCE_TYPES.filter((recordType) => {
+      const area = brokerDocumentSourceArea(recordType);
+      return area && canBrokerAction(req.brokerAccess, area, "VIEW");
+    });
+    const filters = {
+      propertyId: text(req.query.propertyId).slice(0, 120),
+      person: text(req.query.person).slice(0, 160),
+      type: text(req.query.type, "ALL").slice(0, 120),
+      status: text(req.query.status, "ALL").slice(0, 80),
+      expiry: text(req.query.expiry, "ALL").slice(0, 40)
+    };
+    const [properties, records] = await Promise.all([
+      prisma.industryRecord.findMany({
+        where: brokerWhere(req, { recordType: "property" }),
+        select: { id: true, title: true },
+        take: 1500
+      }),
+      allowedTypes.length
+        ? prisma.industryRecord.findMany({
+            where: brokerWhere(req, { recordType: { in: allowedTypes } }),
+            select: { id: true, title: true, recordType: true, status: true, data: true, updatedAt: true },
+            orderBy: { updatedAt: "desc" },
+            take: 3000
+          })
+        : Promise.resolve([])
+    ]);
+    res.json(buildBrokerDocumentIndex({ properties, records, filters }));
+  } catch (error) {
+    console.error("Broker document index error:", error);
+    res.status(500).json({ error: "No se pudo construir el registro documental." });
   }
 });
 

@@ -17951,6 +17951,86 @@ html.dark .finance-bank-statement-state.is-protected,
   color: #bcb4da;
 }
 
+/* Registro documental consolidado de Broker OS: lectura derivada de los
+   expedientes de origen. Sus colores se definen aquí para evitar heredar una
+   superficie clara al activar el modo oscuro. */
+.broker-document-index { display:grid; gap:18px; margin:0 0 20px; padding:22px; border:1px solid #d5e7e4; border-radius:20px; background:linear-gradient(145deg,#f7fffd 0%,#fff 58%,#f7fbff 100%); box-shadow:0 12px 30px rgba(30,69,75,.07); }
+.broker-document-index-header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.broker-document-index-header>div { display:grid; gap:5px; }
+.broker-document-index-header span { color:#008d91; font-size:10px; font-weight:900; letter-spacing:.14em; text-transform:uppercase; }
+.broker-document-index-header h2 { margin:0; color:#1f2b37; font-size:clamp(20px,2vw,28px); line-height:1.12; }
+.broker-document-index-header p { max-width:740px; margin:0; color:#607380; font-size:13px; line-height:1.55; }
+.broker-document-index-header>small { flex:0 0 auto; padding:8px 10px; border-radius:999px; background:#eaf7f5; color:#357271; font-size:11px; font-weight:800; white-space:nowrap; }
+.broker-document-index-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.broker-document-index-summary article { display:grid; gap:3px; min-width:0; padding:14px; border:1px solid #d7e9e5; border-radius:14px; background:#fff; }
+.broker-document-index-summary article b { color:#007f83; font-size:25px; line-height:1; }
+.broker-document-index-summary article span { color:#59707d; font-size:11px; font-weight:800; line-height:1.35; text-transform:uppercase; }
+.broker-document-index-filters { display:grid; grid-template-columns:1.15fr 1.5fr repeat(3,minmax(130px,1fr)); gap:10px; align-items:end; padding:14px; border:1px solid #dcebe8; border-radius:15px; background:rgba(255,255,255,.76); }
+.broker-document-index-filters label { display:grid; min-width:0; gap:5px; color:#526572; font-size:11px; font-weight:900; }
+.broker-document-index-filters :is(input,select) { width:100%; min-height:40px; box-sizing:border-box; padding:9px 10px; border:1px solid #cbdedb; border-radius:10px; background:#fff; color:#263541; font:inherit; font-size:13px; font-weight:600; }
+.broker-document-index-filters>div { display:flex; flex-wrap:wrap; gap:8px; }
+.broker-document-index-filters button { min-height:40px; white-space:nowrap; }
+.broker-document-index-notice { margin:0; padding:11px 13px; border-left:3px solid #169c9b; border-radius:0 10px 10px 0; background:#eaf9f7; color:#25656a; font-size:12px; line-height:1.5; }
+.broker-document-index-list { display:grid; gap:11px; }
+.broker-document-index-item { display:grid; gap:12px; padding:16px; border:1px solid #d9e7e5; border-left:4px solid #35a9a4; border-radius:15px; background:#fff; }
+.broker-document-index-item.overdue { border-left-color:#d85a63; background:#fffafa; }
+.broker-document-index-item.expiring_60 { border-left-color:#d89526; background:#fffdf7; }
+.broker-document-index-item.missing { box-shadow:inset 0 0 0 1px rgba(216,149,38,.12); }
+.broker-document-index-item>header { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; }
+.broker-document-index-item>header>div { display:grid; gap:3px; min-width:0; }
+.broker-document-index-item>header span { color:#168e91; font-size:10px; font-weight:900; letter-spacing:.12em; text-transform:uppercase; }
+.broker-document-index-item h3 { margin:0; color:#24333f; font-size:16px; line-height:1.25; }
+.broker-document-index-item header p { margin:0; color:#637887; font-size:12px; line-height:1.4; }
+.broker-document-index-item>header>b { flex:0 0 auto; padding:6px 8px; border-radius:999px; background:#e8f7f4; color:#137b7d; font-size:10px; letter-spacing:.07em; text-transform:uppercase; }
+.broker-document-index-meta { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
+.broker-document-index-meta span { min-width:0; padding:9px 10px; border-radius:10px; background:#f4f8f8; color:#5a6d7b; font-size:12px; line-height:1.4; }
+.broker-document-index-meta b { color:#314956; }
+.broker-document-index-details { display:grid; gap:4px; }
+.broker-document-index-details p { margin:0; color:#667a86; font-size:12px; line-height:1.5; }
+.broker-document-index-item footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:11px; border-top:1px solid #e4eeec; }
+.broker-document-index-item footer small { color:#718491; font-size:11px; font-weight:700; }
+.broker-document-index-item footer a { text-decoration:none; }
+.broker-record-highlight { position:relative; outline:3px solid rgba(25,158,154,.32); outline-offset:3px; scroll-margin-top:22px; }
+
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index { border-color:rgba(117,231,222,.22); background:linear-gradient(145deg,#17132b 0%,#211b3c 58%,#141126 100%); box-shadow:none; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index :is(h2,h3,strong,b),
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index :is(h2,h3,strong,b) { color:#fff; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index :is(p,small,label,span),
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index :is(p,small,label,span) { color:#d3cce7; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-header span,
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-item>header span,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-header span,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-item>header span { color:#75eee2; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-header>small,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-header>small { background:#183a42; color:#aaf9ef; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-summary article,
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-item,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-summary article,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-item { border-color:rgba(197,181,255,.22); background:#211b3c; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-item.overdue,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-item.overdue { background:#352333; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-item.expiring_60,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-item.expiring_60 { background:#332a1d; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-filters,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-filters { border-color:rgba(197,181,255,.18); background:rgba(11,8,27,.35); }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index :is(input,select),
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index :is(input,select) { border-color:rgba(197,181,255,.28); background:#17132a; color:#faf8ff; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-notice,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-notice { background:#173b40; color:#cbfff9; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-meta span,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-meta span { background:#17132a; color:#d3cce7; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-meta b,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-meta b { color:#fff; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-item>header>b,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-item>header>b { background:#183a42; color:#aaf9ef; }
+:root[data-design-system="dark"] .broker-os-workspace .broker-document-index-item footer,
+:root[data-theme="dark"] .broker-os-workspace .broker-document-index-item footer { border-color:rgba(197,181,255,.18); }
+
+@media (max-width:1100px) { .broker-document-index-filters { grid-template-columns:repeat(3,minmax(0,1fr)); }.broker-document-index-filters>div { grid-column:span 3; } }
+@media (max-width:760px) { .broker-document-index { padding:16px; border-radius:16px; }.broker-document-index-header { display:grid; gap:10px; }.broker-document-index-header>small { justify-self:start; }.broker-document-index-summary,.broker-document-index-meta { grid-template-columns:repeat(2,minmax(0,1fr)); }.broker-document-index-filters { grid-template-columns:1fr 1fr; }.broker-document-index-filters>div { grid-column:span 2; }.broker-document-index-item>header,.broker-document-index-item footer { display:grid; }.broker-document-index-item>header>b { justify-self:start; }.broker-document-index-item footer a { justify-self:start; } }
+@media (max-width:480px) { .broker-document-index-summary,.broker-document-index-meta,.broker-document-index-filters { grid-template-columns:1fr; }.broker-document-index-filters>div { grid-column:auto; display:grid; }.broker-document-index-filters button { width:100%; } }
+
 /* En teléfonos Broker OS no reserva una columna para la burbuja EV cerrada.
    Así el contenido ocupa el ancho disponible y la burbuja no recorta formularios ni tarjetas. */
 @media (max-width:700px) {

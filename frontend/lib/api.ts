@@ -1986,6 +1986,34 @@ export type BrokerPropertyExpedient = {
   journey?: { property: { title: string; comuna: string; precio: unknown; estado: string }; people: { propietarios: string[]; interesados: string[] }; control: Record<string, number> };
 };
 
+/** Índice de solo lectura: cada fila apunta al registro que conserva el estado real. */
+export type BrokerDocumentIndexFilters = { propertyId?: string; person?: string; type?: string; status?: string; expiry?: string };
+export type BrokerDocumentIndexItem = {
+  id: string;
+  sourceRecordId: string;
+  title: string;
+  category: string;
+  documentType: string;
+  documentStatus: string;
+  propertyId: string | null;
+  propertyTitle: string;
+  parties: string[];
+  evidence: { status: "MISSING" | "REGISTERED"; reference: string | null; note: string };
+  expiry: { expiresAt: string | null; state: "NO_EXPIRY" | "CURRENT" | "EXPIRING_60" | "OVERDUE"; daysUntil: number | null };
+  signature: { status: "NOT_APPLICABLE" | "REGISTERED_INTERNAL"; externalIntegration: false; note: string };
+  source: { recordType: string; sourceArea: BrokerRecordArea; label: string; href: string };
+  updatedAt: string | null;
+};
+export type BrokerDocumentIndex = {
+  version: string;
+  generatedAt: string;
+  filters: Required<BrokerDocumentIndexFilters>;
+  summary: { total: number; visible: number; expiringIn60Days: number; overdue: number; evidenceIncomplete: number; signaturesRegistered: number };
+  facets: { properties: Array<{ id: string; title: string }>; types: string[]; statuses: string[]; people: string[] };
+  notice: string;
+  items: BrokerDocumentIndexItem[];
+};
+
 export type BrokerCatalog = {
   journey?: BrokerJourneyCatalog;
   areas: Record<BrokerRecordArea, string[]>;
@@ -2446,6 +2474,13 @@ export function addBrokerOperationEvent(id: string, input: { note: string; type?
 
 export function getBrokerRecords(area: BrokerRecordArea): Promise<IndustryRecord[]> {
   return request<IndustryRecord[]>(`/broker/records/${encodeURIComponent(area)}`);
+}
+
+export function getBrokerDocumentIndex(filters: BrokerDocumentIndexFilters = {}): Promise<BrokerDocumentIndex> {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value);
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return request<BrokerDocumentIndex>(`/broker/documents/index${suffix}`);
 }
 
 /** Contrato del Centro de Publicación Multicanal de Broker OS. */
