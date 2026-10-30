@@ -163,3 +163,14 @@ test('una edición del expediente o nota obsoleta no revierte un avance de etapa
   await assert.rejects(db.$transaction(tx => updateBrokerOperationSnapshot(tx, original, { ...original.data, clientName: 'Persona de prueba' })), { status: 409 });
   assert.equal(db.state().record.data.stage, 'ESTUDIO_DE_TITULO');
 });
+
+test('reasignación controlada conserva el historial y usa el mismo bloqueo optimista', async () => {
+  const db = database();
+  const existing = operation();
+  const timeline = [...existing.data.timeline, { at: '2026-10-10T12:00:00.000Z', type: 'ASSIGNMENT_CHANGED', fromAssigneeId: 'u1', toAssigneeId: 'u2', reason: 'Redistribución de cartera' }];
+  await db.$transaction(tx => updateBrokerOperationSnapshot(tx, existing, { ...existing.data, timeline }, undefined, { assignedToId: 'u2' }));
+  assert.equal(db.state().record.assignedToId, 'u2');
+  assert.equal(db.state().record.data.timeline.at(-1).type, 'ASSIGNMENT_CHANGED');
+  await assert.rejects(db.$transaction(tx => updateBrokerOperationSnapshot(tx, existing, { ...existing.data, timeline }, undefined, { assignedToId: 'u3' })), { status: 409 });
+  assert.equal(db.state().record.assignedToId, 'u2');
+});

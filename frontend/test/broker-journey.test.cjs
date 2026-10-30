@@ -80,14 +80,15 @@ test('el acceso a Pipeline ya no usa ni modifica la etapa de la propiedad', () =
   assert.match(properties, /Ver negocios de esta propiedad/);
 });
 
-test('Pipeline usa ocho columnas, enlaza el mismo ID y no ofrece un selector de etapa', async () => {
+test('Pipeline usa ocho columnas, enlaza el mismo ID y no permite cambiar etapas desde la vista', async () => {
   const { brokerOperationPayload, BROKER_JOURNEY_CATALOG: catalog } = await contract;
   const operations = [brokerOperationPayload({ id: 'op-venta', title: 'Venta de prueba', data: { operationType: 'SALE', stage: 'PROMESA' } })];
   const html = renderToStaticMarkup(React.createElement(BrokerPipelineView, { operations, catalog, onRefresh() {} }));
   assert.equal((html.match(/class="column"/g) || []).length, 8);
   assert.match(html, /operationId=op-venta/);
   assert.match(html, /Negociación · 1/);
-  assert.doesNotMatch(html, /<select/);
+  assert.match(html, /Filtros del pipeline/);
+  assert.doesNotMatch(html, /Cambiar etapa|Actualizar etapa|Avanzar a/);
 });
 
 test('Pipeline separa carga y error sin presentar datos anteriores como actuales', () => {

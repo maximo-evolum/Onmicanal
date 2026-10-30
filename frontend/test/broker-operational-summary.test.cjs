@@ -24,11 +24,16 @@ const { BrokerOperationalSummary } = compiled.exports;
 
 test("el resumen Broker muestra métricas y prioridades del contrato único", () => {
   const model = {
-    version: "BROKER_OPERATIONAL_READ_MODEL_V1",
+    version: "BROKER_OPERATIONAL_READ_MODEL_V2",
     generatedAt: "2026-10-28T12:00:00.000Z",
     kpis: { properties: 2, activeOperations: 1, scheduledVisits: 0, openAlerts: 1, activeRentals: 0, openMaintenance: 0, openPostSale: 0, activeFinancing: 0 },
     reporting: { portfolioValue: 150000000, projectedCommission: 3000000, propertyCompleteness: 50, portfolioHealth: 70, propertiesReady: 1, byOperationType: [], aiEvaluations: { total: 0, confirmed: 0, needsAdjustment: 0, pending: 0 } },
-    pipeline: { total: 2, active: 1, terminal: 1, byStage: { "SALE:EVALUACION_COMERCIAL": 1 } },
+    scope: { level: "COMPANY", description: "Toda la empresa autorizada" },
+    onboarding: { isFirstUse: false, completed: 2, total: 4, checklist: [{ key: "captacion", label: "Registrar captación", done: true, href: "/realty?view=operations" }] },
+    operationalCenter: { risks: 1, deadlines: 2, documentsPending: 3, collectionsPending: 4, aiApprovalsPending: 5 },
+    activity: { updatedLast7Days: 2, updatedLast30Days: 4, lastUpdatedAt: "2026-10-28T12:00:00.000Z" },
+    team: [{ userId: "broker-1", name: "Camila Corredora", activeOperations: 2, attentionOperations: 1, riskOperations: 1, projectedCommission: 3000000 }],
+    pipeline: { total: 2, active: 1, terminal: 1, byStage: { "SALE:EVALUACION_COMERCIAL": 1 }, columns: [], bottlenecks: [], operations: [] },
     priorities: [{ id: "property-1-completion", priority: "HIGH", area: "commercial", title: "Completar ficha", detail: "Falta foto principal.", propertyId: "property-1", impact: "PUBLICACION_Y_MATCHING", requiresApproval: false }]
   };
   const html = renderToStaticMarkup(React.createElement(BrokerOperationalSummary, { model }));
@@ -37,4 +42,7 @@ test("el resumen Broker muestra métricas y prioridades del contrato único", ()
   assert.match(html, /Completar ficha/);
   assert.match(html, /propertyId=property-1/);
   assert.match(html, /no pago ejecutado/i);
+  assert.match(html, /Centro operacional/);
+  assert.match(html, /revisiones IA pendientes/);
+  assert.match(html, /Camila Corredora/);
 });

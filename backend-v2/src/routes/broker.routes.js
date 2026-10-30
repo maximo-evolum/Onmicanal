@@ -1208,7 +1208,8 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
   try {
     // El resumen no debe revelar importes ni expedientes de áreas restringidas.
     const overviewWhere = (extra) => ({ AND: [brokerWhere(req, extra), { recordType: { in: Object.keys(BROKER_RECORD_RESOURCES).filter(type => canBrokerAction(req.brokerAccess, BROKER_RECORD_RESOURCES[type], "VIEW")) } }] });
-    const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations, brokerRecords] = await Promise.all([
+    const allowedTeamIds = Array.isArray(req.brokerAccess?.scopeUserIds) ? req.brokerAccess.scopeUserIds : undefined;
+    const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations, brokerRecords, teamMembers] = await Promise.all([
       prisma.industryRecord.count({ where: overviewWhere({ recordType: "property" }) }),
       prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), orderBy: { updatedAt: "desc" }, take: 100 }),
       prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 50 }),
@@ -1219,7 +1220,12 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
       prisma.industryRecord.count({ where: overviewWhere({ recordType: "post_sale_case", status: { notIn: ["CLOSED", "RESOLVED"] } }) }),
       prisma.industryRecord.count({ where: overviewWhere({ recordType: "operation_financing", status: { in: ["REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED"] } }) }),
       prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 100 }),
-      prisma.industryRecord.findMany({ where: overviewWhere({ recordType: { in: BROKER_RECORD_TYPES } }), orderBy: { updatedAt: "desc" }, take: 500 })
+      prisma.industryRecord.findMany({ where: overviewWhere({ recordType: { in: BROKER_RECORD_TYPES } }), orderBy: { updatedAt: "desc" }, take: 500 }),
+      prisma.workspaceUser.findMany({
+        where: { tenantId: req.tenantId, isActive: true, ...(allowedTeamIds ? { id: { in: allowedTeamIds } } : {}) },
+        select: { id: true, name: true, email: true },
+        orderBy: { name: "asc" }
+      })
     ]);
     const normalizedOperations = await projectBrokerOperations(prisma, operations);
     const visibleProperties = canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : [];
@@ -1228,6 +1234,11 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
       operations: normalizedOperations,
       evaluations,
       brokerRecords,
+      teamMembers,
+      scope: {
+        level: req.brokerAccess?.accessScope || "ASSIGNED",
+        description: req.brokerAccess?.scopeDescription || "Solo se muestran registros dentro de tu alcance autorizado."
+      },
       counts: {
         properties: propertyCount,
         scheduledVisits: visits,
@@ -1856,6 +1867,22 @@ brokerRouter.get("/broker/operations", requireBrokerAction("operations", "VIEW")
   }
 });
 
+// La reasignación de negocios es una decisión de jefatura: lista solo personas
+// del mismo alcance efectivo y obliga a dejar motivo antes de persistirla.
+brokerRouter.get("/broker/operations/assignees", requireBrokerAction("operations", "REASSIGN"), async (req, res) => {
+  try {
+    const users = await prisma.workspaceUser.findMany({
+      where: { tenantId: req.tenantId, isActive: true },
+      select: { id: true, name: true, email: true, role: true, jobTitle: true },
+      orderBy: { name: "asc" }
+    });
+    res.json({ users: users.filter((user) => brokerAssigneeAllowed(req.brokerAccess, user.id)) });
+  } catch (error) {
+    console.error("List broker operation assignees error:", error);
+    res.status(500).json({ error: "No se pudieron obtener los responsables disponibles para la reasignación." });
+  }
+});
+
 brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "CREATE"), async (req, res) => {
   try {
     const title = text(req.body?.title);
@@ -2325,6 +2352,54 @@ brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF
   }
 });
 
+brokerRouter.post("/broker/operations/:id/reassignment", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "REASSIGN"), async (req, res) => {
+  try {
+    const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "broker_operation" }) });
+    if (!existing) return res.status(404).json({ error: "Operación no encontrada." });
+    const assignedToId = text(req.body?.assignedToId);
+    const reason = text(req.body?.reason);
+    if (!assignedToId) return res.status(422).json({ error: "Selecciona el nuevo responsable de la operación." });
+    if (reason.length < 5 || reason.length > 1200) return res.status(422).json({ error: "El motivo de reasignación debe tener entre 5 y 1200 caracteres." });
+    if (assignedToId === text(existing.assignedToId)) return res.status(422).json({ error: "La operación ya está asignada a esa persona." });
+    await assertAssignedUser(req, assignedToId);
+    const current = operationPayload(existing);
+    const event = {
+      at: new Date().toISOString(),
+      type: "ASSIGNMENT_CHANGED",
+      stage: current.data.stage,
+      fromAssigneeId: existing.assignedToId || null,
+      toAssigneeId: assignedToId,
+      reason,
+      by: req.user?.name || req.user?.email || "Jefatura autorizada"
+    };
+    const record = await prisma.$transaction(async (db) => {
+      await updateBrokerOperationSnapshot(
+        db,
+        existing,
+        { ...dataOf(existing), timeline: [...current.data.timeline, event] },
+        undefined,
+        { assignedToId }
+      );
+      return db.industryRecord.findFirst({
+        where: { id: existing.id, tenantId: existing.tenantId },
+        include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } }
+      });
+    });
+    await recordAuditLog(req, "BROKER_OPERATION_REASSIGNED", "broker_operation", record.id, {
+      previousAssigneeId: existing.assignedToId || null,
+      assignedToId,
+      reason,
+      stage: current.data.stage
+    });
+    res.json(operationPayload(record));
+  } catch (error) {
+    if (error?.message?.includes("usuario asignado") || error?.message?.includes("alcance autorizado")) return res.status(400).json({ error: error.message });
+    if (error.status === 409) return res.status(409).json({ error: error.message });
+    console.error("Reassign broker operation error:", error);
+    res.status(500).json({ error: "No se pudo reasignar la operación." });
+  }
+});
+
 brokerRouter.post("/broker/operations/:id/timeline", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
   try {
     const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: "broker_operation" }) });
@@ -2536,9 +2611,10 @@ brokerRouter.get("/broker/properties/:propertyId/expedient", requireBrokerAction
         alertasAbiertas: related.filter((item) => item.recordType === "realty_alert" && item.status !== "RESOLVED").length
       }
     };
+    const relatedOperations = await projectBrokerOperations(prisma, related.filter((record) => record.recordType === "broker_operation"));
     const operationalReadModel = buildBrokerOperationalReadModel({
       properties: [property],
-      operations: related.filter((record) => record.recordType === "broker_operation"),
+      operations: relatedOperations,
       brokerRecords: related.filter((record) => BROKER_RECORD_TYPES.includes(record.recordType)),
       counts: {
         properties: 1,

@@ -601,7 +601,7 @@ export function RealtyDashboardPageContent() {
         </aside>
       </section>
 
-      <BrokerOperationalSummary model={readModel} />
+      <BrokerOperationalSummary model={readModel} showWelcome />
 
       <section className="realty-ws-card">
           <div className="realty-ws-card-head"><div><span>Propiedades activas</span><h2>Portafolio en movimiento</h2><p>Vista visual para reconocer rápidamente cada propiedad y entrar a su ficha.</p></div><Link className="realty-card-link-button" href="/realty?view=properties">Ver cartera completa</Link></div>

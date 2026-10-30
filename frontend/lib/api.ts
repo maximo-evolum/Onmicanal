@@ -1862,10 +1862,12 @@ export type BrokerReporting = {
   aiEvaluations: { total: number; confirmed: number; needsAdjustment: number; pending: number };
 };
 
+export type BrokerOperationalArea = BrokerRecordArea | "operations" | "ai" | "overview";
+
 export type BrokerRecommendation = {
   id: string;
   priority: "HIGH" | "MEDIUM" | "LOW";
-  area: BrokerRecordArea;
+  area: BrokerOperationalArea;
   title: string;
   detail: string;
   propertyId?: string;
@@ -1886,7 +1888,30 @@ export type BrokerOperationalReadModel = {
   kpis: BrokerOverview["kpis"];
   reporting: BrokerReporting;
   priorities: BrokerRecommendation[];
-  pipeline: { total: number; active: number; terminal: number; byStage: Record<string, number> };
+  scope: { level: string; description: string };
+  onboarding: {
+    isFirstUse: boolean;
+    completed: number;
+    total: number;
+    checklist: Array<{ key: string; label: string; done: boolean; href: string }>;
+  };
+  operationalCenter: { risks: number; deadlines: number; documentsPending: number; collectionsPending: number; aiApprovalsPending: number };
+  activity: { updatedLast7Days: number; updatedLast30Days: number; lastUpdatedAt: string | null };
+  team: Array<{ userId: string; name: string; activeOperations: number; attentionOperations: number; riskOperations: number; projectedCommission: number }>;
+  pipeline: {
+    total: number;
+    active: number;
+    terminal: number;
+    byStage: Record<string, number>;
+    columns: Array<{ key: string; label: string; count: number; attention: number; risk: number; averageStageAgeDays: number }>;
+    bottlenecks: Array<{ key: string; label: string; count: number; attention: number; risk: number; averageStageAgeDays: number; kind: "RISK" | "ATTENTION" }>;
+    operations: Array<{
+      operationId: string; title: string; propertyId: string | null; operationType: BrokerOperationType; stage: string;
+      pipelineKey: string; pipelineLabel: string; assignedToId: string | null; amount: number; projectedCommission: number;
+      createdAt: string | null; updatedAt: string | null; stageStartedAt: string | null; ageDays: number; stageAgeDays: number;
+      health: "HEALTHY" | "ATTENTION" | "RISK" | "TERMINAL"; bottleneck: string | null; detail: string; terminal: boolean;
+    }>;
+  };
 };
 
 export type BrokerOwnerPortfolioFilter = "ALL" | "ACTIVE" | "ADMINISTRATION" | "HISTORICAL" | "ATTENTION";
@@ -2006,6 +2031,11 @@ export type BrokerAssignableUser = Pick<BrokerAccessTeamMember, "id" | "name" | 
 
 export function getBrokerAssignableUsers(area: BrokerRecordArea): Promise<{ users: BrokerAssignableUser[] }> {
   return request<{ users: BrokerAssignableUser[] }>(`/broker/assignees/${encodeURIComponent(area)}`);
+}
+
+/** Responsables visibles para una reasignación comercial autorizada. */
+export function getBrokerOperationAssignees(): Promise<{ users: BrokerAssignableUser[] }> {
+  return request<{ users: BrokerAssignableUser[] }>("/broker/operations/assignees");
 }
 
 export function updateBrokerAccessProfile(userId: string, input: { businessRole: string; accessScope: string; teamKey?: string; branchKey?: string }): Promise<{ profile: BrokerAccessTeamMember["profile"] }> {
@@ -2337,6 +2367,10 @@ export function createBrokerOperation(input: {
 
 export function advanceBrokerOperation(id: string, input: { stage: string; note?: string }): Promise<BrokerOperation> {
   return request<BrokerOperation>(`/broker/operations/${encodeURIComponent(id)}/stage`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function reassignBrokerOperation(id: string, input: { assignedToId: string; reason: string }): Promise<BrokerOperation> {
+  return request<BrokerOperation>(`/broker/operations/${encodeURIComponent(id)}/reassignment`, { method: "POST", body: JSON.stringify(input) });
 }
 
 export function getBrokerSaleWorkspace(operationId: string): Promise<BrokerSaleWorkspace> {

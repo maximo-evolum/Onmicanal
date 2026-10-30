@@ -13,8 +13,16 @@ test("Corredor solo recibe acciones operativas dentro de su alcance", () => {
   const access = normalizeBrokerAccessProfile({ businessRole: "CORREDOR", accessScope: "ASSIGNED" }, { role: "SELLER" });
   assert.equal(access.accessScope, "ASSIGNED");
   assert.equal(canBrokerAction(access, "operations", "EDIT"), true);
+  assert.equal(canBrokerAction(access, "operations", "REASSIGN"), false);
   assert.equal(canBrokerAction(access, "configuration", "CONFIGURE"), false);
   assert.equal(canBrokerAction(access, "financing", "APPROVE"), false);
+});
+
+test("Solo jefatura comercial puede reasignar una operación", () => {
+  const coordinator = normalizeBrokerAccessProfile({ businessRole: "COORDINADOR_COMERCIAL", accessScope: "TEAM" }, { role: "AGENT" });
+  const manager = normalizeBrokerAccessProfile({ businessRole: "GERENTE_COMERCIAL", accessScope: "COMPANY" }, { role: "AGENT" });
+  assert.equal(canBrokerAction(coordinator, "operations", "REASSIGN"), true);
+  assert.equal(canBrokerAction(manager, "operations", "REASSIGN"), true);
 });
 
 test("Finanzas puede aprobar su flujo, pero no configurar Broker OS", () => {

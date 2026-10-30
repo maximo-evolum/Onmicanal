@@ -62,14 +62,30 @@ export function BrokerCanonicalPipeline() {
 }
 
 export function BrokerPipelineView({ operations, catalog, readModel, loading = false, error = "", onRefresh }: { operations: BrokerOperation[]; catalog?: BrokerJourneyCatalog; readModel?: BrokerOperationalReadModel; loading?: boolean; error?: string; onRefresh: () => void }) {
-  const card = (operation: BrokerOperation) => <article className={styles.card} key={operation.id}><h3>{operation.title}</h3><p>{operation.journey?.commercial?.label || operation.journey?.outcome || "Por revisar"}</p><small>{operation.data.operationType === "SALE" ? "Venta" : operation.data.operationType === "RENTAL" ? "Arriendo" : "Administración"}</small><Link href={`/realty?view=broker_os&tab=operations&operationId=${encodeURIComponent(operation.id)}`}>Abrir negocio y expediente</Link></article>;
+  const [healthFilter, setHealthFilter] = useState<"ALL" | "HEALTHY" | "ATTENTION" | "RISK">("ALL");
+  const [typeFilter, setTypeFilter] = useState<"ALL" | "SALE" | "RENTAL" | "ADMINISTRATION">("ALL");
+  const insightsByOperation = new Map((readModel?.pipeline?.operations || []).map((item) => [item.operationId, item]));
+  const pipelineKeyFor = (operation: BrokerOperation) => insightsByOperation.get(operation.id)?.pipelineKey || operation.journey?.pipeline?.key || "";
+  const visibleOperations = operations.filter((operation) => {
+    const insight = insightsByOperation.get(operation.id);
+    if (typeFilter !== "ALL" && operation.data.operationType !== typeFilter) return false;
+    if (healthFilter !== "ALL" && insight?.health !== healthFilter) return false;
+    return true;
+  });
+  const healthLabel = (health?: string) => ({ HEALTHY: "En curso", ATTENTION: "Atención", RISK: "En riesgo", TERMINAL: "Terminal" }[health || ""] || "Sin evaluación");
+  const card = (operation: BrokerOperation) => {
+    const insight = insightsByOperation.get(operation.id);
+    return <article className={`${styles.card} ${insight?.health ? styles[`health${insight.health}`] : ""}`} key={operation.id}><h3>{operation.title}</h3><p>{operation.journey?.commercial?.label || operation.journey?.outcome || "Por revisar"}</p><small>{operation.data.operationType === "SALE" ? "Venta" : operation.data.operationType === "RENTAL" ? "Arriendo" : "Administración"}</small>{insight ? <div className={styles.insight}><b>{healthLabel(insight.health)}</b><span>{insight.stageAgeDays} día(s) en etapa · {insight.pipelineLabel}</span>{insight.bottleneck ? <small>{insight.detail}</small> : null}</div> : null}<Link href={`/realty?view=broker_os&tab=operations&operationId=${encodeURIComponent(operation.id)}`}>Abrir negocio y expediente</Link></article>;
+  };
   return <section className={styles.panel} aria-label="Pipeline de operaciones Broker OS">
     <header><div><h2>Pipeline de Broker OS</h2><p>Vista de solo lectura de los negocios. Las etapas se modifican en su expediente, no en la propiedad.</p></div><button type="button" disabled={loading} onClick={onRefresh}>Actualizar</button></header>
     {loading ? <p role="status">Cargando operaciones…</p> : error ? <p role="alert">{error}</p> : <>
       <p>{operations.length} operaciones cargadas{operations.length >= 200 ? " (límite de esta consulta: 200; puede haber más registros)" : ""}. Los prospectos CRM anteriores a una operación se mantienen en el tablero superior.</p>
-      {readModel ? <p className={styles.readModel}>Lectura operativa compartida: {readModel.pipeline.active} activa(s), {readModel.pipeline.terminal} terminal(es) y {readModel.priorities.length} prioridad(es) en cola.</p> : null}
-      <div className={styles.board}>{catalog?.pipeline.map(stage => <section className={styles.column} key={stage.key}><h3>{stage.label} · {operations.filter(o => o.journey?.pipeline?.key === stage.key).length}</h3>{operations.filter(o => o.journey?.pipeline?.key === stage.key).map(card)}</section>)}</div>
-      {operations.some(o => !o.journey?.pipeline) ? <section><h3>Fuera del embudo comercial o pendientes de revisión</h3><div className={styles.other}>{operations.filter(o => !o.journey?.pipeline).map(card)}</div></section> : null}
+      {readModel ? <p className={styles.readModel}>Lectura operativa compartida: {readModel.pipeline.active} activa(s), {readModel.pipeline.terminal} terminal(es) y {readModel.priorities.length} prioridad(es) en cola. {readModel.scope?.description || "Solo se muestran negocios dentro de tu alcance autorizado."}</p> : null}
+      <div className={styles.filters} aria-label="Filtros del pipeline"><label>Salud<select value={healthFilter} onChange={(event) => setHealthFilter(event.target.value as typeof healthFilter)}><option value="ALL">Todas</option><option value="HEALTHY">En curso</option><option value="ATTENTION">Atención</option><option value="RISK">En riesgo</option></select></label><label>Tipo de negocio<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as typeof typeFilter)}><option value="ALL">Todos</option><option value="SALE">Ventas</option><option value="RENTAL">Arriendos</option><option value="ADMINISTRATION">Administración</option></select></label><span>{visibleOperations.length} negocio(s) con los filtros actuales</span></div>
+      {readModel?.pipeline?.bottlenecks?.length ? <section className={styles.bottlenecks} aria-label="Cuellos de botella detectados"><b>Cuellos de botella</b>{readModel.pipeline.bottlenecks.map((item) => <span key={item.key}>{item.label}: {item.risk ? `${item.risk} en riesgo` : `${item.attention} con atención`} · {item.averageStageAgeDays} día(s) promedio</span>)}</section> : null}
+      <div className={styles.board}>{catalog?.pipeline.map(stage => { const stageOperations = visibleOperations.filter((operation) => pipelineKeyFor(operation) === stage.key); const metric = readModel?.pipeline?.columns?.find((item) => item.key === stage.key); return <section className={styles.column} key={stage.key}><h3>{stage.label} · {stageOperations.length}</h3>{metric ? <small className={styles.columnMetric}>{metric.risk ? `${metric.risk} en riesgo` : metric.attention ? `${metric.attention} con atención` : `${metric.averageStageAgeDays} día(s) promedio`}</small> : null}{stageOperations.map(card)}{stageOperations.length === 0 ? <p className={styles.empty}>Sin negocios para este filtro.</p> : null}</section>; })}</div>
+      {visibleOperations.some((operation) => !pipelineKeyFor(operation)) ? <section><h3>Fuera del embudo comercial o pendientes de revisión</h3><div className={styles.other}>{visibleOperations.filter((operation) => !pipelineKeyFor(operation)).map(card)}</div></section> : null}
     </>}
   </section>;
 }

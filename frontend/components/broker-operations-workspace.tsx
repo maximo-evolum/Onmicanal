@@ -24,6 +24,7 @@ import {
   getBrokerAccess,
   getBrokerAccessTeam,
   getBrokerAssignableUsers,
+  getBrokerOperationAssignees,
   getBrokerHoldingConfig,
   getBrokerFinancing,
   getBrokerGovernance,
@@ -43,6 +44,7 @@ import {
   previewBrokerCommission,
   prepareBrokerMonthlyLiquidation,
   runBrokerAutomationScan,
+  reassignBrokerOperation,
   resolveBrokerAlert,
   saveBrokerAiEvaluation,
   saveBrokerSaleWorkspace,
@@ -360,23 +362,26 @@ export function BrokerOperationsPageContent() {
   const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
   const [accessTeam, setAccessTeam] = useState<BrokerAccessTeamMember[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<BrokerAssignableUser[]>([]);
+  const [operationAssignees, setOperationAssignees] = useState<BrokerAssignableUser[]>([]);
   const [holdingConfig, setHoldingConfig] = useState<BrokerHoldingConfig | null>(null);
   const [governance, setGovernance] = useState<BrokerGovernanceSummary | null>(null);
   const [alertResolutionNotes, setAlertResolutionNotes] = useState<Record<string, string>>({});
   const [operationEventNotes, setOperationEventNotes] = useState<Record<string, string>>({});
   const [operationEventTypes, setOperationEventTypes] = useState<Record<string, string>>({});
+  const [operationReassignments, setOperationReassignments] = useState<Record<string, { assignedToId: string; reason: string }>>({});
   const writeAction = ["access", "configuration", "governance"].includes(tab) ? "CONFIGURE" : ["training", "agents"].includes(tab) ? "APPROVE" : tab === "commissions" ? "VIEW" : "EDIT";
   const canWriteTab = canBroker(access, brokerTabArea(tab), writeAction);
 
   const load = useCallback(async () => {
     const nextAccess = await getBrokerAccess();
     setAccess(nextAccess);
-    const [nextOverview, nextOperations, nextCatalog, nextConfiguration, nextLegalReadiness, nextAccessTeam, nextHolding] = await Promise.all([
+    const [nextOverview, nextOperations, nextCatalog, nextConfiguration, nextLegalReadiness, nextAccessTeam, nextHolding, nextOperationAssignees] = await Promise.all([
       getBrokerOverview(), canBroker(nextAccess, "operations") ? getBrokerOperations() : [], getBrokerCatalog(),
       canBroker(nextAccess, "configuration") ? getBrokerOperatingConfiguration() : null,
       canBroker(nextAccess, "documents") ? getBrokerLegalReadiness() : null,
       canBroker(nextAccess, "access", "CONFIGURE") ? getBrokerAccessTeam() : { users: [] },
-      nextAccess.technicalRole === "SUPER_ADMIN" ? getBrokerHoldingConfig() : null
+      nextAccess.technicalRole === "SUPER_ADMIN" ? getBrokerHoldingConfig() : null,
+      canBroker(nextAccess, "operations", "REASSIGN") ? getBrokerOperationAssignees() : { users: [] }
     ]);
     setOverview(nextOverview);
     setOperations(nextOperations);
@@ -387,6 +392,7 @@ export function BrokerOperationsPageContent() {
     setAccess(nextAccess);
     setAccessTeam(nextAccessTeam.users);
     setHoldingConfig(nextHolding);
+    setOperationAssignees(nextOperationAssignees.users);
     setTab(current => canBrokerTab(nextAccess, current) ? current : Object.keys(AREA_CONFIG).find(area => canBrokerTab(nextAccess, area)) as Tab || "guides");
   }, []);
 
@@ -576,6 +582,21 @@ export function BrokerOperationsPageContent() {
       setNotice("Evento registrado en el historial auditable de la operación.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo registrar el evento de la operación.");
+    } finally { setBusy(false); }
+  }
+
+  async function reassignOperation(operation: BrokerOperation) {
+    const draft = operationReassignments[operation.id] || { assignedToId: "", reason: "" };
+    if (!draft.assignedToId) return setNotice("Selecciona el nuevo responsable antes de reasignar la operación.");
+    if (draft.reason.trim().length < 5) return setNotice("Explica brevemente el motivo de la reasignación para dejar trazabilidad.");
+    setBusy(true); setNotice("");
+    try {
+      await reassignBrokerOperation(operation.id, { assignedToId: draft.assignedToId, reason: draft.reason.trim() });
+      await load();
+      setOperationReassignments((current) => ({ ...current, [operation.id]: { assignedToId: "", reason: "" } }));
+      setNotice("Operación reasignada y motivo registrado en el historial auditable.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo reasignar la operación.");
     } finally { setBusy(false); }
   }
 
@@ -1136,7 +1157,7 @@ export function BrokerOperationsPageContent() {
       <section className="broker-recommendations" aria-label="Prioridades operativas">
         <div className="broker-list-heading"><span>Centro operacional</span><h2>Qué revisar a continuación</h2><p>Son sugerencias internas de la misma lectura que alimenta el resumen, el pipeline y el expediente. EVOLUM no cambia estados, publica ni contacta personas por su cuenta.</p></div>
         <div className="broker-list-heading"><button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={executeAutomationScan}>Revisar cartera y crear alertas internas</button><p>La revisión detecta pendientes y crea alertas internas; no publica, envía mensajes ni modifica operaciones.</p></div>
-        {recommendations.length ? <div className="broker-recommendation-grid">{recommendations.map((recommendation) => <article key={recommendation.id} className={`broker-recommendation ${recommendation.priority.toLowerCase()}`}><b>{recommendation.priority === "HIGH" ? "Prioridad alta" : recommendation.priority === "MEDIUM" ? "Prioridad media" : "Informativa"}</b><h3>{recommendation.title}</h3><p>{recommendation.detail}</p><button type="button" className="secondary-btn" onClick={() => setTab(recommendation.area)}>{recommendation.requiresApproval ? "Revisar y confirmar" : "Completar ficha"}</button></article>)}</div> : <p className="broker-empty">La cartera no tiene prioridades pendientes por ahora.</p>}
+        {recommendations.length ? <div className="broker-recommendation-grid">{recommendations.map((recommendation) => <article key={recommendation.id} className={`broker-recommendation ${recommendation.priority.toLowerCase()}`}><b>{recommendation.priority === "HIGH" ? "Prioridad alta" : recommendation.priority === "MEDIUM" ? "Prioridad media" : "Informativa"}</b><h3>{recommendation.title}</h3><p>{recommendation.detail}</p><button type="button" className="secondary-btn" onClick={() => setTab(recommendation.area === "ai" ? "training" : recommendation.area === "overview" ? "operations" : recommendation.area as Tab)}>{recommendation.requiresApproval ? "Revisar y confirmar" : "Completar ficha"}</button></article>)}</div> : <p className="broker-empty">La cartera no tiene prioridades pendientes por ahora.</p>}
       </section>
       <section className="broker-expedient-panel" aria-label="Expediente por propiedad">
         <div className="broker-list-heading"><span>Expediente digital</span><h2>Revisa una propiedad completa</h2><p>Consulta documentos, contratos, mantenciones, postventa y antecedentes sin cambiar de pantalla.</p></div>
@@ -1166,10 +1187,13 @@ export function BrokerOperationsPageContent() {
           const stages = catalog?.operationStages[operation.data.operationType] || [];
           const index = stageIndex(operation, catalog);
           const next = index >= 0 && !operation.journey?.needsReview && !operation.journey?.outcome ? stages[index + 1] : undefined;
+          const canReassignOperation = canBroker(access, "operations", "REASSIGN");
+          const reassignment = operationReassignments[operation.id] || { assignedToId: "", reason: "" };
           return <article key={operation.id} className="broker-operation-card">
-            <div><span>{OPERATION_LABELS[operation.data.operationType] || "Tipo por revisar"}</span><h3>{operation.title}</h3><p>{readable(operation.data.stage)} · {String(operation.data.clientName || "Sin contraparte registrada")}</p><small>{index >= 0 ? `Posición ${index + 1} de ${stages.length}` : "Sin posición activa"}</small></div>
+            <div><span>{OPERATION_LABELS[operation.data.operationType] || "Tipo por revisar"}</span><h3>{operation.title}</h3><p>{readable(operation.data.stage)} · {String(operation.data.clientName || "Sin contraparte registrada")}</p><small>{index >= 0 ? `Posición ${index + 1} de ${stages.length}` : "Sin posición activa"}</small><small className="broker-operation-owner">Responsable: <b>{operation.assignedTo?.name || operation.assignedTo?.email || "Sin asignar"}</b></small></div>
             <BrokerJourneySummary operation={operation} />
             <div className="broker-operation-actions">{operation.data.operationType === "SALE" ? <button className="secondary-btn" type="button" disabled={busy || !canBroker(access,"operations","VIEW")} onClick={() => openSaleWorkspace(operation)}>Abrir expediente</button> : null}{operation.data.operationType === "RENTAL" ? <button className="secondary-btn" type="button" disabled={busy || !canBroker(access,"operations","VIEW")} onClick={() => openRentalWorkspace(operation)}>Abrir expediente</button> : null}<button className="primary-btn" type="button" disabled={busy || !canWriteTab || !next} onClick={() => nextStage(operation)}>{next ? `Avanzar a ${readable(next)}` : operation.journey?.needsReview ? "Requiere revisión" : "Sin avance disponible"}</button></div>
+            {canReassignOperation ? <details className="broker-operation-reassignment"><summary>Reasignar con trazabilidad</summary><div><label>Nuevo responsable<select value={reassignment.assignedToId} disabled={busy || !operationAssignees.length} onChange={(event) => setOperationReassignments((current) => ({ ...current, [operation.id]: { ...reassignment, assignedToId: event.target.value } }))}><option value="">Selecciona una persona autorizada</option>{operationAssignees.filter((user) => user.id !== operation.assignedToId).map((user) => <option key={user.id} value={user.id}>{user.name || user.email}{user.jobTitle ? ` · ${user.jobTitle}` : ""}</option>)}</select></label><label>Motivo<textarea value={reassignment.reason} disabled={busy} rows={2} placeholder="Ej.: redistribución por carga de cartera o cambio de zona." onChange={(event) => setOperationReassignments((current) => ({ ...current, [operation.id]: { ...reassignment, reason: event.target.value } }))} /></label><button type="button" className="secondary-btn" disabled={busy || !operationAssignees.length} onClick={() => reassignOperation(operation)}>Confirmar reasignación</button></div></details> : null}
             <form className="broker-operation-event-form" onSubmit={(event) => { event.preventDefault(); registerOperationEvent(operation); }}>
               <label>Tipo de registro<select value={operationEventTypes[operation.id] || "NOTA"} disabled={busy || !canWriteTab} onChange={(event) => setOperationEventTypes((current) => ({ ...current, [operation.id]: event.target.value }))}><option value="NOTA">Nota</option><option value="DECISION">Decisión</option><option value="EXCEPCION">Excepción</option><option value="CONTACTO">Contacto</option><option value="DOCUMENTO">Documento revisado</option></select></label>
               <label>Acción manual o antecedente<textarea value={operationEventNotes[operation.id] || ""} disabled={busy || !canWriteTab} onChange={(event) => setOperationEventNotes((current) => ({ ...current, [operation.id]: event.target.value }))} rows={2} placeholder="Ej.: cliente solicitó ampliar el plazo de la oferta; queda pendiente confirmación escrita." /></label>

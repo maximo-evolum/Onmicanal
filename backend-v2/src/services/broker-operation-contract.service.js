@@ -108,8 +108,11 @@ export async function validateBrokerOperationReferences(db, { tenantId, property
 
 // Actualización atómica de proyección con concurrencia optimista: no deja el caso de venta
 // en otra etapa ni sobrescribe una línea de tiempo más reciente después de una escritura paralela.
-export async function updateBrokerOperationSnapshot(tx, existing, data, status) {
-  const changed = await tx.industryRecord.updateMany({ where: { id: existing.id, tenantId: existing.tenantId, updatedAt: existing.updatedAt }, data: { ...(status ? { status } : {}), data } });
+export async function updateBrokerOperationSnapshot(tx, existing, data, status, changes = {}) {
+  const changed = await tx.industryRecord.updateMany({
+    where: { id: existing.id, tenantId: existing.tenantId, updatedAt: existing.updatedAt },
+    data: { ...(status ? { status } : {}), ...changes, data }
+  });
   if (changed.count !== 1) { const error = new Error('La operación cambió mientras la revisabas. Actualiza la vista e inténtalo de nuevo.'); error.status = 409; throw error; }
 }
 
