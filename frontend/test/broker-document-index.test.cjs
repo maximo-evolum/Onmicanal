@@ -23,6 +23,7 @@ test("La vista documental declara sus límites y permite volver al registro de o
   assert.match(indexComponent, /Abrir registro de origen/);
   assert.match(workspace, /BrokerDocumentIndexPanel/);
   assert.match(workspace, /getBrokerDocumentIndex/);
+  assert.match(workspace, /hasOwnProperty\.call\(AREA_CONFIG, requestedTab\)/);
   assert.match(workspace, /broker-record-\$\{requestedRecordId\}/);
   assert.match(workspace, /scrollIntoView/);
 });

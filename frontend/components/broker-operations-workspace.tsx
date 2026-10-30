@@ -418,6 +418,13 @@ export function BrokerOperationsPageContent() {
       setTab(requestedArea as BrokerRecordArea);
       return;
     }
+    // Los enlaces internos usan `tab` para conservar la vista y su contexto
+    // al volver desde el expediente. Debe aceptar todas las áreas operativas,
+    // incluido Documentos, y no caer silenciosamente en Operaciones.
+    if (requestedTab && Object.prototype.hasOwnProperty.call(AREA_CONFIG, requestedTab)) {
+      setTab(requestedTab as BrokerRecordArea);
+      return;
+    }
     if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
       setTab(requestedTab);
     }

@@ -169,7 +169,7 @@ function matches(item, filters) {
   const expiry = text(filters.expiry).toUpperCase();
   if (propertyId && item.propertyId !== propertyId) return false;
   if (person && ![item.title, item.propertyTitle, ...item.parties].join(" ").toLocaleLowerCase("es-CL").includes(person)) return false;
-  if (type && type !== "ALL" && ![item.documentType, item.category, item.source.recordType].join(" ").toLocaleLowerCase("es-CL").includes(type)) return false;
+  if (type && type !== "all" && ![item.documentType, item.category, item.source.recordType].join(" ").toLocaleLowerCase("es-CL").includes(type)) return false;
   if (status && status !== "ALL" && item.documentStatus !== status) return false;
   if (expiry && expiry !== "ALL" && item.expiry.state !== expiry) return false;
   return true;

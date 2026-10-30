@@ -27,6 +27,9 @@ test("El índice deriva documentos sin duplicar registros ni alterar sus estados
 });
 
 test("El índice filtra por propiedad, persona, tipo, estado y vencimiento", () => {
+  const unfiltered = buildBrokerDocumentIndex({ properties, records, now, filters: { type: "ALL", status: "ALL", expiry: "ALL" } });
+  assert.equal(unfiltered.summary.visible, 4);
+  assert.equal(unfiltered.items.length, 4);
   assert.equal(buildBrokerDocumentIndex({ properties, records, now, filters: { propertyId: "property-1" } }).items.length, 4);
   assert.equal(buildBrokerDocumentIndex({ properties, records, now, filters: { person: "carlos" } }).items.map((item) => item.sourceRecordId).join(), "rental-1");
   assert.equal(buildBrokerDocumentIndex({ properties, records, now, filters: { type: "certificado" } }).items.map((item) => item.sourceRecordId).join(), "legal-1");
