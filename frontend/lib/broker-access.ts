@@ -9,15 +9,22 @@ export function canBroker(access: BrokerAccessProfile | null, area: string, acti
 }
 
 export function brokerTabArea(tab: string) {
-  return ({ agents: "ai", training: "ai", administration_preview: "administration", financial_operations: "administration", guides: "overview", compliance: "documents", governance: "access" } as Record<string, string>)[tab] || tab;
+  return ({ agents: "ai", training: "ai", administration_preview: "administration", financial_operations: "administration", commercial_hub: "commercial", guides: "overview", compliance: "documents", governance: "access" } as Record<string, string>)[tab] || tab;
 }
 
 export function canBrokerFinance(access: BrokerAccessProfile | null, action = "VIEW") {
   return canBroker(access, "commissions", action) || canBroker(access, "administration", action);
 }
 
+/** Marketing usa Proyectos; agenda e Inbox usan Comercial. La pestaña puede
+ * mostrar la parte que el perfil tenga autorizada sin ampliar sus permisos. */
+export function canBrokerCommercialHub(access: BrokerAccessProfile | null, action = "VIEW") {
+  return canBroker(access, "commercial", action) || canBroker(access, "projects", action);
+}
+
 export function canBrokerTab(access: BrokerAccessProfile | null, tab: string) {
   if (tab === "financial_operations") return canBrokerFinance(access);
+  if (tab === "commercial_hub") return canBrokerCommercialHub(access);
   return canBroker(access, brokerTabArea(tab), ["access", "governance"].includes(tab) ? "CONFIGURE" : "VIEW");
 }
 

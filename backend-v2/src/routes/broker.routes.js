@@ -54,6 +54,7 @@ import { buildBrokerGovernanceSummary, normalizeBrokerAlertResolution } from "..
 import { BROKER_PUBLICATION_CHANNELS, BROKER_PUBLICATION_PROVIDER_STATUSES, BROKER_PUBLICATION_STATUSES, brokerPublicationAnalytics, brokerPublicationConnectionKey, brokerPublicationExport, brokerPublicationProviderPreflight, brokerPublicationReadiness, brokerPublicationCopy, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, publicBrokerPublication, publicBrokerPublicationProvider, transitionBrokerPublication } from "../services/broker-publication.service.js";
 import { BROKER_DOCUMENT_SOURCE_TYPES, brokerDocumentSourceArea, buildBrokerDocumentIndex } from "../services/broker-document-index.service.js";
 import { COLLECTION_SOURCE_TYPES, applyBrokerFinancialAction, buildBrokerFinancialOperations } from "../services/broker-financial-operations.service.js";
+import { BROKER_CHAT_TARGET_TYPES, applyBrokerAgendaAction, buildBrokerCommercialHub, createBrokerAgendaData, validateBrokerAgendaInput } from "../services/broker-commercial-hub.service.js";
 
 export const brokerRouter = Router();
 
@@ -225,6 +226,350 @@ async function assertRelatedProperty(req, propertyId) {
   if (!property) throw new Error("La propiedad relacionada no pertenece a esta cuenta.");
   return property;
 }
+
+// La lectura puede abarcar un holding autorizado; las acciones comerciales no.
+// Así una cuenta nunca crea visitas, prospectos o vínculos de Inbox dentro de
+// otra empresa solo por disponer de permiso de consulta multiempresa.
+async function assertMutableRelatedProperty(req, propertyId) {
+  const property = await assertRelatedProperty(req, propertyId);
+  if (property && property.tenantId !== req.tenantId) {
+    const error = new Error("No puedes modificar antecedentes de otra empresa desde este acceso.");
+    error.status = 403;
+    throw error;
+  }
+  return property;
+}
+
+function brokerTenantWhere(req) {
+  const tenantIds = Array.isArray(req.brokerAccess?.scopeTenantIds) && req.brokerAccess.scopeTenantIds.length
+    ? req.brokerAccess.scopeTenantIds
+    : [req.tenantId];
+  return tenantIds.length === 1 ? tenantIds[0] : { in: tenantIds };
+}
+
+function brokerConversationWhere(req) {
+  const where = { tenantId: brokerTenantWhere(req) };
+  if (Array.isArray(req.brokerAccess?.scopeUserIds)) where.assignedToId = { in: req.brokerAccess.scopeUserIds };
+  return where;
+}
+
+function canViewBrokerCommercialHub(req) {
+  return canBrokerAction(req.brokerAccess, "commercial", "VIEW") || canBrokerAction(req.brokerAccess, "projects", "VIEW");
+}
+
+function requireBrokerCommercialHubView(req, res, next) {
+  if (canViewBrokerCommercialHub(req)) return next();
+  return res.status(403).json({ error: "No tienes permiso para consultar Marketing, agenda y chats de Broker OS." });
+}
+
+function brokerMonth(value) {
+  const normalized = text(value);
+  return /^\d{4}-\d{2}$/.test(normalized) ? normalized : new Date().toISOString().slice(0, 7);
+}
+
+async function brokerCommercialHubSnapshot(req, month) {
+  const mayViewMarketing = canBrokerAction(req.brokerAccess, "projects", "VIEW");
+  const mayViewCommercial = canBrokerAction(req.brokerAccess, "commercial", "VIEW");
+  const [properties, campaigns, publications, agendaRecords, conversations, chatLinks] = await Promise.all([
+    prisma.industryRecord.findMany({
+      where: brokerWhere(req, { recordType: "property" }),
+      select: { id: true, title: true, tenantId: true, assignedToId: true, data: true },
+      orderBy: { updatedAt: "desc" },
+      take: 1500
+    }),
+    mayViewMarketing
+      ? prisma.campaign.findMany({ where: { tenantId: brokerTenantWhere(req) }, orderBy: { updatedAt: "desc" }, take: 500 })
+      : Promise.resolve([]),
+    mayViewMarketing
+      ? prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "marketing_publication" }), orderBy: { updatedAt: "desc" }, take: 1500 })
+      : Promise.resolve([]),
+    mayViewCommercial
+      ? prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "visit" }), orderBy: { updatedAt: "desc" }, take: 1500 })
+      : Promise.resolve([]),
+    mayViewCommercial
+      ? prisma.conversation.findMany({
+          where: brokerConversationWhere(req),
+          include: { contact: true, lead: true },
+          orderBy: { lastMessageAt: "desc" },
+          take: 300
+        })
+      : Promise.resolve([]),
+    mayViewCommercial
+      ? prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_chat_link", status: "ACTIVE" }), orderBy: { updatedAt: "desc" }, take: 500 })
+      : Promise.resolve([])
+  ]);
+  return buildBrokerCommercialHub({ properties, campaigns, publications, agendaRecords, conversations, chatLinks, month });
+}
+
+async function brokerConversationForAction(req, conversationId) {
+  const conversation = await prisma.conversation.findFirst({
+    where: { ...brokerConversationWhere(req), id: String(conversationId) },
+    include: { contact: true, lead: true }
+  });
+  if (!conversation) {
+    const error = new Error("La conversación no existe o no pertenece a tu alcance autorizado.");
+    error.status = 404;
+    throw error;
+  }
+  if (conversation.tenantId !== req.tenantId) {
+    const error = new Error("No puedes modificar conversaciones de otra empresa desde este acceso.");
+    error.status = 403;
+    throw error;
+  }
+  return conversation;
+}
+
+async function upsertBrokerChatLink(db, req, conversation, input = {}) {
+  const targetType = text(input.targetType).toUpperCase();
+  const targetId = text(input.targetId);
+  const propertyId = text(input.propertyId);
+  if (!BROKER_CHAT_TARGET_TYPES.includes(targetType) || !targetId) {
+    const error = new Error("Indica el tipo y el antecedente Broker que se vinculará a la conversación.");
+    error.status = 422;
+    throw error;
+  }
+  const property = propertyId ? await assertMutableRelatedProperty(req, propertyId) : null;
+  const previous = await db.industryRecord.findFirst({
+    where: { tenantId: req.tenantId, recordType: "broker_chat_link", data: { path: ["conversationId"], equals: conversation.id } },
+    orderBy: { updatedAt: "desc" }
+  });
+  const data = {
+    conversationId: conversation.id,
+    targetType,
+    targetId,
+    propertyId: property?.id || null,
+    propertyTitle: property?.title || "",
+    channel: text(conversation.contact?.channel).toUpperCase(),
+    origin: "INBOX",
+    linkedAt: new Date().toISOString(),
+    linkedBy: req.user.id,
+    version: Number(previous?.data?.version || 0) + 1,
+  };
+  const title = `Chat · ${text(conversation.contact?.name || conversation.contact?.externalId, "Contacto")} · ${targetType}`;
+  return previous
+    ? db.industryRecord.update({ where: { id: previous.id }, data: { title, assignedToId: conversation.assignedToId || req.user.id, status: "ACTIVE", data } })
+    : db.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "broker_chat_link", title, assignedToId: conversation.assignedToId || req.user.id, status: "ACTIVE", data } });
+}
+
+// Fase 6: lectura única de Marketing, Agenda e Inbox. Cada bloque mantiene
+// su fuente real y sus permisos; este endpoint no duplica campañas, chats ni
+// visitas y tampoco convierte un borrador en una acción externa.
+brokerRouter.get("/broker/commercial-hub", requireBrokerCommercialHubView, async (req, res) => {
+  try {
+    res.json(await brokerCommercialHubSnapshot(req, brokerMonth(req.query.month)));
+  } catch (error) {
+    console.error("Broker commercial hub error:", error);
+    res.status(error?.status || 500).json({ error: error?.message || "No se pudo cargar el centro comercial de Broker OS." });
+  }
+});
+
+// Predicciones asistidas: solo crean borradores internos con un origen
+// explícito. No publican campañas, no contactan prospectos y no hacen uso de
+// una API externa de pauta.
+brokerRouter.post("/broker/marketing/predictions", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
+  try {
+    const action = text(req.body?.action).toUpperCase();
+    const property = await assertMutableRelatedProperty(req, text(req.body?.propertyId));
+    if (!property) return res.status(422).json({ error: "Selecciona una propiedad para preparar el borrador." });
+    const investment = numberOrNull(req.body?.investment) || 0;
+    const expectedRevenue = numberOrNull(req.body?.expectedRevenue) || 0;
+    const expectedLeads = numberOrNull(req.body?.expectedLeads) || 0;
+    if (investment < 0 || expectedRevenue < 0 || expectedLeads < 0) return res.status(422).json({ error: "Los indicadores de campaña no pueden ser negativos." });
+
+    if (action === "CREATE_CAMPAIGN_DRAFT") {
+      if (!canBrokerAction(req.brokerAccess, "projects", "CREATE")) return res.status(403).json({ error: "Tu perfil no puede crear borradores de campaña." });
+      const name = text(req.body?.name, `Campaña IA · ${property.title}`).slice(0, 240);
+      const campaign = await prisma.campaign.create({
+        data: {
+          tenantId: req.tenantId,
+          name,
+          segment: "realty_property",
+          status: "DRAFT",
+          template: JSON.stringify({
+            product: property.title,
+            propertyId: property.id,
+            propertyTitle: property.title,
+            platforms: [],
+            brokerContext: {
+              propertyId: property.id,
+              propertyTitle: property.title,
+              source: "CAMPAIGN_IA_DRAFT",
+              predicted: true,
+              investment,
+              expectedLeads,
+              expectedRevenue,
+              preparedBy: req.user.id,
+              preparedAt: new Date().toISOString()
+            }
+          })
+        }
+      });
+      await recordAuditLog(req, "BROKER_MARKETING_CAMPAIGN_DRAFT_CREATED", "campaign", campaign.id, { propertyId: property.id, investment, expectedLeads, expectedRevenue, externalDelivery: false });
+      return res.status(201).json({ campaign, notice: "Borrador de campaña creado. Requiere revisión humana y no se publicó en ningún canal." });
+    }
+
+    if (action === "CREATE_PROSPECT_DRAFT") {
+      if (!canBrokerAction(req.brokerAccess, "commercial", "CREATE")) return res.status(403).json({ error: "Tu perfil no puede crear prospectos comerciales." });
+      const name = text(req.body?.name);
+      if (!name || name.length > 180) return res.status(422).json({ error: "Indica el nombre del prospecto para preparar su ficha." });
+      const record = await prisma.industryRecord.create({
+        data: {
+          tenantId: req.tenantId,
+          recordType: "lead",
+          title: name,
+          status: "DRAFT",
+          assignedToId: req.user.id,
+          data: {
+            name,
+            phone: text(req.body?.phone).slice(0, 80),
+            email: text(req.body?.email).slice(0, 180),
+            interestedPropertyId: property.id,
+            propertyTitle: property.title,
+            origin: "CAMPAIGN_IA",
+            campaignId: text(req.body?.campaignId) || null,
+            prediction: { preparedAt: new Date().toISOString(), preparedBy: req.user.id, requiresHumanReview: true },
+          }
+        }
+      });
+      await recordAuditLog(req, "BROKER_MARKETING_PROSPECT_DRAFT_CREATED", "lead", record.id, { propertyId: property.id, campaignId: text(req.body?.campaignId) || null, externalDelivery: false });
+      return res.status(201).json({ prospect: record, notice: "Prospecto preparado con origen Campaña IA. Requiere calificación humana antes de contactarlo." });
+    }
+
+    return res.status(422).json({ error: "Acción de marketing Broker no reconocida." });
+  } catch (error) {
+    res.status(error?.status || 422).json({ error: error?.message || "No se pudo preparar el borrador de marketing." });
+  }
+});
+
+brokerRouter.post("/broker/agenda", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "CREATE"), async (req, res) => {
+  try {
+    const input = validateBrokerAgendaInput(req.body || {});
+    const property = input.propertyId ? await assertMutableRelatedProperty(req, input.propertyId) : null;
+    const assignedToId = input.assignedToId || req.user.id;
+    await assertAssignedUser(req, assignedToId);
+    const data = createBrokerAgendaData({ ...input, propertyId: property?.id || null }, req.user);
+    if (property) data.propertyTitle = property.title;
+    const record = await prisma.industryRecord.create({
+      data: {
+        tenantId: req.tenantId,
+        recordType: "visit",
+        title: input.title,
+        status: "SCHEDULED",
+        assignedToId,
+        data,
+      }
+    });
+    await recordAuditLog(req, "BROKER_AGENDA_CREATED", "visit", record.id, { propertyId: property?.id || null, kind: input.kind, scheduledAt: input.scheduledAt, externalDelivery: false });
+    res.status(201).json({ record, notice: "Actividad creada. La confirmación y el recordatorio son internos hasta que una persona los gestione por su canal autorizado." });
+  } catch (error) {
+    res.status(error?.status || 422).json({ error: error?.message || "No se pudo crear la actividad Broker." });
+  }
+});
+
+brokerRouter.post("/broker/agenda/:id/actions", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "EDIT"), async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: String(req.params.id), recordType: "visit" }) });
+    if (!record) return res.status(404).json({ error: "La actividad no existe o no pertenece a tu alcance." });
+    if (record.tenantId !== req.tenantId) return res.status(403).json({ error: "No puedes modificar una actividad de otra empresa." });
+    const next = applyBrokerAgendaAction(record, req.body || {}, req.user);
+    const updated = await prisma.industryRecord.update({ where: { id: record.id }, data: { status: next.status, data: next.data } });
+    await recordAuditLog(req, next.auditAction, "visit", updated.id, { propertyId: text(next.data.propertyId) || null, externalDelivery: false });
+    res.json({ record: updated, notice: next.notice });
+  } catch (error) {
+    res.status(error?.status || 422).json({ error: error?.message || "No se pudo actualizar la actividad Broker." });
+  }
+});
+
+brokerRouter.post("/broker/chats/:id/actions", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("commercial", "EDIT"), async (req, res) => {
+  try {
+    const conversation = await brokerConversationForAction(req, req.params.id);
+    const action = text(req.body?.action).toUpperCase();
+    const contactName = text(conversation.contact?.name || conversation.lead?.name || conversation.contact?.externalId, "Contacto sin nombre");
+    let result;
+
+    if (action === "LINK") {
+      const targetType = text(req.body?.targetType).toUpperCase();
+      let targetId = text(req.body?.targetId);
+      let propertyId = text(req.body?.propertyId);
+      if (targetType === "PROPERTY") {
+        const property = await assertMutableRelatedProperty(req, propertyId || targetId);
+        targetId = property.id;
+        propertyId = property.id;
+      } else {
+        if (!BROKER_CHAT_TARGET_TYPES.includes(targetType) || !targetId) return res.status(422).json({ error: "Indica el antecedente Broker que se vinculará al chat." });
+        const targetTypes = targetType === "BUYER" ? ["customer", "lead"] : targetType === "CAPTURE" ? ["broker_capture_prospect"] : ["visit"];
+        const target = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: targetId, recordType: { in: targetTypes } }) });
+        if (!target || target.tenantId !== req.tenantId) return res.status(404).json({ error: "El antecedente seleccionado no pertenece a tu alcance operativo." });
+      }
+      result = await prisma.$transaction((db) => upsertBrokerChatLink(db, req, conversation, { targetType, targetId, propertyId }));
+    } else if (action === "CREATE_BUYER") {
+      const property = text(req.body?.propertyId) ? await assertMutableRelatedProperty(req, text(req.body.propertyId)) : null;
+      // El comprador y su vínculo deben existir juntos. Si falla el vínculo no
+      // queda una ficha huérfana creada desde una conversación.
+      result = await prisma.$transaction(async (db) => {
+        const buyer = await db.industryRecord.create({
+          data: {
+            tenantId: req.tenantId,
+            recordType: "customer",
+            title: contactName,
+            status: "ACTIVE",
+            assignedToId: req.user.id,
+            data: { name: contactName, phone: text(conversation.contact?.channel).toLowerCase() === "whatsapp" ? text(conversation.contact?.externalId) : "", email: text(conversation.contact?.channel).toLowerCase() === "email" ? text(conversation.contact?.externalId) : "", origin: "INBOX", conversationId: conversation.id, interestedPropertyId: property?.id || null, propertyTitle: property?.title || "" }
+          }
+        });
+        return upsertBrokerChatLink(db, req, conversation, { targetType: "BUYER", targetId: buyer.id, propertyId: property?.id || "" });
+      });
+    } else if (action === "CREATE_VISIT") {
+      const input = validateBrokerAgendaInput({ ...req.body, kind: "VISIT", client: contactName });
+      const property = await assertMutableRelatedProperty(req, input.propertyId);
+      if (!property) return res.status(422).json({ error: "Selecciona una propiedad antes de crear una visita desde el chat." });
+      const data = createBrokerAgendaData({ ...input, propertyId: property.id }, req.user);
+      data.propertyTitle = property.title;
+      // Igual que la conversión a comprador, visita y trazabilidad de Inbox son
+      // una unidad atómica para no perder el origen de la actividad.
+      result = await prisma.$transaction(async (db) => {
+        const visit = await db.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "visit", title: input.title, status: "SCHEDULED", assignedToId: req.user.id, data } });
+        return upsertBrokerChatLink(db, req, conversation, { targetType: "VISIT", targetId: visit.id, propertyId: property.id });
+      });
+    } else if (action === "PREPARE_CAPTURE") {
+      const title = text(req.body?.title);
+      const intendedService = text(req.body?.intendedService).toUpperCase();
+      if (!title || !["VENTA", "ARRIENDO", "ADMINISTRACION"].includes(intendedService)) return res.status(422).json({ error: "Indica el inmueble y el destino para preparar la captación desde el chat." });
+      result = await prisma.$transaction(async (db) => {
+        const prospect = await db.industryRecord.create({
+          data: {
+            tenantId: req.tenantId,
+            recordType: "broker_capture_prospect",
+            title,
+            status: "DRAFT",
+            assignedToId: req.user.id,
+            data: {
+              version: 1,
+              stage: "PROSPECCION",
+              stageEnteredAt: new Date().toISOString(),
+              ownerName: contactName,
+              ownerPhone: text(conversation.contact?.channel).toLowerCase() === "whatsapp" ? text(conversation.contact?.externalId) : "",
+              ownerEmail: text(conversation.contact?.channel).toLowerCase() === "email" ? text(conversation.contact?.externalId) : "",
+              captureOrigin: "CHAT",
+              intendedService,
+              currency: "CLP",
+              chatConversationId: conversation.id,
+              needsDetails: true,
+              timeline: [{ at: new Date().toISOString(), action: "CAPTACION_PREPARADA_DESDE_CHAT", userId: req.user.id }]
+            }
+          }
+        });
+        return upsertBrokerChatLink(db, req, conversation, { targetType: "CAPTURE", targetId: prospect.id });
+      });
+    } else {
+      return res.status(422).json({ error: "Acción de chat Broker no reconocida." });
+    }
+    await recordAuditLog(req, `BROKER_CHAT_${action}`, "conversation", conversation.id, { linkId: result.id, channel: text(conversation.contact?.channel), externalDelivery: false });
+    res.status(201).json({ link: result, notice: "El vínculo quedó registrado en Broker OS. La conversación conserva su canal y no se envió ningún mensaje." });
+  } catch (error) {
+    res.status(error?.status || 422).json({ error: error?.message || "No se pudo vincular la conversación a Broker OS." });
+  }
+});
 
 // El propietario no se consulta directamente por nombre. Primero se resuelve
 // la cartera inmobiliaria ya autorizada y desde ella se obtienen los IDs

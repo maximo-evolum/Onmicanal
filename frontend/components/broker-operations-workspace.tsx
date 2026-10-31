@@ -1,6 +1,6 @@
 /** Archivo: Implementa el componente de interfaz broker operations workspace para la aplicación web. */
 "use client";
-import { canBroker, canBrokerFinance, canBrokerTab, brokerTabArea } from "@/lib/broker-access";
+import { canBroker, canBrokerCommercialHub, canBrokerFinance, canBrokerTab, brokerTabArea } from "@/lib/broker-access";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BrokerJourneySummary } from "./broker-journey";
@@ -15,6 +15,8 @@ import {
   advanceBrokerPostSale,
   addBrokerMaintenanceQuote,
   createBrokerOperation,
+  createBrokerAgendaItem,
+  createBrokerMarketingPrediction,
   createBrokerRecord,
   confirmBrokerSaleCheckpoint,
   confirmBrokerMaintenanceCheckpoint,
@@ -30,6 +32,7 @@ import {
   getBrokerHoldingConfig,
   getBrokerFinancing,
   getBrokerFinancialOperations,
+  getBrokerCommercialHub,
   getBrokerGovernance,
   getBrokerLegalReadiness,
   getBrokerMonthlyAdministration,
@@ -45,6 +48,8 @@ import {
   getBrokerRecords,
   advanceBrokerFinancing,
   actBrokerFinancialCollection,
+  actBrokerAgendaItem,
+  actBrokerChat,
   previewBrokerCommission,
   prepareBrokerMonthlyLiquidation,
   runBrokerAutomationScan,
@@ -81,6 +86,9 @@ import {
   type BrokerMonthlyAdministrationRow,
   type BrokerFinancialCollectionRow,
   type BrokerFinancialOperations,
+  type BrokerCommercialHub,
+  type BrokerAgendaItem,
+  type BrokerCommercialChat,
   type BrokerOperatingConfiguration,
   type BrokerLegalReadiness,
   type BrokerAccessProfile,
@@ -91,7 +99,7 @@ import {
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | "training" | "commissions" | "administration_preview" | "financial_operations" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
+type Tab = "operations" | "agents" | "training" | "commissions" | "administration_preview" | "financial_operations" | "commercial_hub" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -376,6 +384,12 @@ export function BrokerOperationsPageContent() {
   const [financialOperations, setFinancialOperations] = useState<BrokerFinancialOperations | null>(null);
   const [financialActionNotes, setFinancialActionNotes] = useState<Record<string, string>>({});
   const [financialReportedAmounts, setFinancialReportedAmounts] = useState<Record<string, string>>({});
+  const [commercialHub, setCommercialHub] = useState<BrokerCommercialHub | null>(null);
+  const [commercialMonth, setCommercialMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [marketingDraft, setMarketingDraft] = useState({ propertyId: "", investment: "", expectedLeads: "", expectedRevenue: "" });
+  const [agendaNotes, setAgendaNotes] = useState<Record<string, string>>({});
+  const [agendaReschedules, setAgendaReschedules] = useState<Record<string, string>>({});
+  const [chatDrafts, setChatDrafts] = useState<Record<string, { propertyId: string; scheduledAt: string; captureTitle: string; intendedService: "VENTA" | "ARRIENDO" | "ADMINISTRACION" }>>({});
   const [operatingConfiguration, setOperatingConfiguration] = useState<BrokerOperatingConfiguration | null>(null);
   const [legalReadiness, setLegalReadiness] = useState<BrokerLegalReadiness | null>(null);
   const [access, setAccess] = useState<BrokerAccessProfile | null>(null);
@@ -389,7 +403,12 @@ export function BrokerOperationsPageContent() {
   const [operationEventTypes, setOperationEventTypes] = useState<Record<string, string>>({});
   const [operationReassignments, setOperationReassignments] = useState<Record<string, { assignedToId: string; reason: string }>>({});
   const writeAction = ["access", "configuration", "governance"].includes(tab) ? "CONFIGURE" : ["training", "agents"].includes(tab) ? "APPROVE" : tab === "commissions" ? "VIEW" : "EDIT";
-  const canWriteTab = canBroker(access, brokerTabArea(tab), writeAction);
+  // La vista combina Marketing (proyectos) con Agenda e Inbox (comercial).
+  // Un perfil de marketing puede preparar su borrador aunque no edite visitas;
+  // la autorización concreta sigue validándose por cada acción y en el backend.
+  const canWriteTab = tab === "commercial_hub"
+    ? canBrokerCommercialHub(access, "CREATE") || canBrokerCommercialHub(access, "EDIT")
+    : canBroker(access, brokerTabArea(tab), writeAction);
 
   const load = useCallback(async () => {
     const nextAccess = await getBrokerAccess();
@@ -436,7 +455,7 @@ export function BrokerOperationsPageContent() {
       setTab(requestedTab as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "financial_operations" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "financial_operations" || requestedTab === "commercial_hub" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
       setTab(requestedTab);
     }
   }, [searchParams]);
@@ -474,6 +493,10 @@ export function BrokerOperationsPageContent() {
       getBrokerFinancialOperations(administrationPeriod).then(setFinancialOperations).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar la cola financiera."));
       return;
     }
+    if (tab === "commercial_hub") {
+      getBrokerCommercialHub(commercialMonth).then(setCommercialHub).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar Marketing, agenda y chats."));
+      return;
+    }
     if (tab === "governance") {
       getBrokerGovernance().then(setGovernance).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el gobierno operativo."));
       return;
@@ -495,10 +518,10 @@ export function BrokerOperationsPageContent() {
     }
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
-  }, [tab, administrationPeriod, access, documentFilters]);
+  }, [tab, administrationPeriod, commercialMonth, access, documentFilters]);
 
   useEffect(() => {
-    if (!catalog || tab === "financing" || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "financial_operations" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "governance" || tab === "access") return;
+    if (!catalog || tab === "financing" || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "financial_operations" || tab === "commercial_hub" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "governance" || tab === "access") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -509,7 +532,7 @@ export function BrokerOperationsPageContent() {
   }, [overview]);
   const readModel = overview?.readModel;
   const recommendations = readModel?.priorities || overview?.recommendations || [];
-  const currentArea = tab !== "financing" && tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "financial_operations" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "governance" && tab !== "access" ? tab : null;
+  const currentArea = tab !== "financing" && tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "financial_operations" && tab !== "commercial_hub" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "governance" && tab !== "access" ? tab : null;
   useEffect(() => {
     if (!requestedRecordId || !currentArea || !records.some((record) => record.id === requestedRecordId)) return;
     const frame = window.requestAnimationFrame(() => document.getElementById(`broker-record-${requestedRecordId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
@@ -532,6 +555,10 @@ export function BrokerOperationsPageContent() {
   const canAdministrationAction = (action: string) => {
     return canBroker(access, "administration", action);
   };
+  const canCreateMarketing = canBroker(access, "projects", "CREATE");
+  const canCreateCommercial = canBroker(access, "commercial", "CREATE");
+  const canEditCommercial = canBroker(access, "commercial", "EDIT");
+  const canUseCommercialHub = canBrokerCommercialHub(access);
   const selectedScenario = scenarios.find((scenario) => scenario.key === selectedScenarioKey) || scenarios[0];
   const reporting = readModel?.reporting || overview?.reporting;
   const selectedPropertyPriorities = expedient?.operationalReadModel?.priorities
@@ -1040,6 +1067,89 @@ export function BrokerOperationsPageContent() {
     } finally { setBusy(false); }
   }
 
+  async function refreshCommercialHub() {
+    const snapshot = await getBrokerCommercialHub(commercialMonth);
+    setCommercialHub(snapshot);
+    await load();
+  }
+
+  async function prepareMarketingDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!marketingDraft.propertyId) return setNotice("Selecciona la propiedad para preparar el borrador de campaña.");
+    setBusy(true); setNotice("");
+    try {
+      const result = await createBrokerMarketingPrediction({
+        action: "CREATE_CAMPAIGN_DRAFT",
+        propertyId: marketingDraft.propertyId,
+        investment: Number(marketingDraft.investment || 0),
+        expectedLeads: Number(marketingDraft.expectedLeads || 0),
+        expectedRevenue: Number(marketingDraft.expectedRevenue || 0),
+      });
+      setMarketingDraft((current) => ({ ...current, investment: "", expectedLeads: "", expectedRevenue: "" }));
+      await refreshCommercialHub();
+      setNotice(result.notice);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo preparar el borrador de marketing."); }
+    finally { setBusy(false); }
+  }
+
+  async function createAgendaFromHub(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true); setNotice("");
+    try {
+      const result = await createBrokerAgendaItem({
+        kind: String(form.get("kind") || "VISIT") as "VISIT" | "CALL",
+        client: String(form.get("client") || ""),
+        title: String(form.get("title") || ""),
+        propertyId: String(form.get("propertyId") || "") || undefined,
+        scheduledAt: String(form.get("scheduledAt") || ""),
+        address: String(form.get("address") || ""),
+        notes: String(form.get("notes") || ""),
+      });
+      event.currentTarget.reset();
+      await refreshCommercialHub();
+      setNotice(result.notice);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo crear la actividad."); }
+    finally { setBusy(false); }
+  }
+
+  async function updateAgendaFromHub(item: BrokerAgendaItem, action: "CONFIRM" | "PREPARE_REMINDER" | "ESCALATE" | "COMPLETE" | "CANCEL" | "RESCHEDULE") {
+    setBusy(true); setNotice("");
+    try {
+      const result = await actBrokerAgendaItem(item.id, {
+        action,
+        note: agendaNotes[item.id] || "",
+        scheduledAt: action === "RESCHEDULE" ? agendaReschedules[item.id] : undefined,
+      });
+      setAgendaNotes((current) => ({ ...current, [item.id]: "" }));
+      if (action === "RESCHEDULE") setAgendaReschedules((current) => ({ ...current, [item.id]: "" }));
+      await refreshCommercialHub();
+      setNotice(result.notice);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo actualizar la actividad."); }
+    finally { setBusy(false); }
+  }
+
+  async function actionBrokerChat(chat: BrokerCommercialChat, action: "LINK" | "CREATE_BUYER" | "CREATE_VISIT" | "PREPARE_CAPTURE") {
+    const draft = chatDrafts[chat.id] || { propertyId: "", scheduledAt: "", captureTitle: "", intendedService: "VENTA" as const };
+    if (["LINK", "CREATE_VISIT"].includes(action) && !draft.propertyId) return setNotice("Selecciona una propiedad antes de vincular el chat o preparar una visita.");
+    if (action === "PREPARE_CAPTURE" && !draft.captureTitle) return setNotice("Indica el inmueble antes de preparar la captación desde el chat.");
+    setBusy(true); setNotice("");
+    try {
+      const result = await actBrokerChat(chat.id, {
+        action,
+        targetType: action === "LINK" ? "PROPERTY" : undefined,
+        targetId: action === "LINK" ? draft.propertyId : undefined,
+        propertyId: draft.propertyId || undefined,
+        title: action === "PREPARE_CAPTURE" ? draft.captureTitle : action === "CREATE_VISIT" ? `Visita desde chat · ${chat.contactName}` : undefined,
+        intendedService: action === "PREPARE_CAPTURE" ? draft.intendedService : undefined,
+        scheduledAt: action === "CREATE_VISIT" ? draft.scheduledAt : undefined,
+      });
+      await refreshCommercialHub();
+      setNotice(result.notice);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "No se pudo vincular la conversación."); }
+    finally { setBusy(false); }
+  }
+
   async function executeAutomationScan() {
     setBusy(true); setNotice("");
     try {
@@ -1220,7 +1330,7 @@ export function BrokerOperationsPageContent() {
     <nav className="broker-os-tabs" aria-label="Areas de Broker OS">
       {([
         ["operations", "Operaciones"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
-        ["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["financial_operations", "Finanzas operativas"], ["guides", "Guías operativas"],
+        ["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["financial_operations", "Finanzas operativas"], ["commercial_hub", "Marketing, agenda y chats"], ["guides", "Guías operativas"],
         ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["governance", "Gobierno y alertas"], ["compliance", "Cumplimiento"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
       ]).filter(([key]) => canBrokerTab(access, key)).map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as Tab)}>{label}</button>)}
     </nav>
@@ -1482,6 +1592,50 @@ export function BrokerOperationsPageContent() {
         </div>
         <p className="broker-human-note">{financialOperations.reports.margin.basis} Las cifras son operativas y deben revisarse con el respaldo contractual, tributario y financiero correspondiente.</p>
       </> : <p className="broker-empty">Cargando finanzas operativas...</p>}
+    </section> : null}
+
+    {tab === "commercial_hub" ? <section className="broker-commercial-hub" aria-label="Marketing, agenda y chats de Broker OS">
+      <header className="broker-monthly-header broker-commercial-header">
+        <div><span>Centro comercial Broker</span><h2>Marketing, agenda y conversaciones</h2><p>Conecta campañas, visitas, llamadas y chats con su propiedad o antecedente de origen. Las acciones preparan trabajo interno: no publican, no envían mensajes y no contactan personas automáticamente.</p></div>
+        <label>Mes de trabajo<input type="month" value={commercialMonth} onChange={(event) => setCommercialMonth(event.target.value)} /></label>
+        <button type="button" className="secondary-btn" disabled={busy} onClick={() => refreshCommercialHub().catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo actualizar el centro comercial."))}>Actualizar</button>
+      </header>
+      {commercialHub && canUseCommercialHub ? <>
+        <section className="broker-reporting broker-commercial-kpis">
+          <article><span>Campañas vinculadas</span><b>{commercialHub.summary.campaigns}</b><small>{commercialHub.summary.activePublications} publicación(es) con estado operativo</small></article>
+          <article><span>Agenda pendiente</span><b>{commercialHub.summary.agendaPending}</b><small>{commercialHub.summary.confirmationsPending} confirmación(es) por revisar</small></article>
+          <article><span>Escalamientos</span><b>{commercialHub.summary.escalationsPending}</b><small>Derivaciones internas o actividades vencidas</small></article>
+          <article><span>Chats vinculados</span><b>{commercialHub.summary.linkedChats}</b><small>{commercialHub.summary.unlinkedChats} conversación(es) sin vínculo Broker</small></article>
+        </section>
+        <div className="broker-commercial-hub-grid">
+          <section className="broker-commercial-panel">
+            <div className="broker-list-heading"><span>Marketing</span><h3>Campañas asociadas a propiedades</h3><p>{commercialHub.notes.marketing}</p></div>
+            <div className="broker-commercial-marketing-summary"><span>Inversión registrada: <b>{formatBrokerMoney(commercialHub.summary.investment)}</b></span><span>Leads: <b>{commercialHub.summary.leads}</b></span><span>CPL: <b>{commercialHub.summary.cpl === null ? "Sin leads" : formatBrokerMoney(commercialHub.summary.cpl)}</b></span><span>ROI potencial: <b>{commercialHub.summary.potentialRoi === null ? "Pendiente" : `${commercialHub.summary.potentialRoi.toFixed(1)}%`}</b></span></div>
+            {canCreateMarketing ? <form className="broker-commercial-form" onSubmit={prepareMarketingDraft}>
+              <label>Propiedad<select value={marketingDraft.propertyId} onChange={(event) => setMarketingDraft((current) => ({ ...current, propertyId: event.target.value }))} required><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select></label>
+              <label>Inversión estimada<input type="number" min="0" value={marketingDraft.investment} onChange={(event) => setMarketingDraft((current) => ({ ...current, investment: event.target.value }))} placeholder="CLP" /></label>
+              <label>Leads esperados<input type="number" min="0" value={marketingDraft.expectedLeads} onChange={(event) => setMarketingDraft((current) => ({ ...current, expectedLeads: event.target.value }))} placeholder="Ej.: 12" /></label>
+              <label>Ingreso potencial<input type="number" min="0" value={marketingDraft.expectedRevenue} onChange={(event) => setMarketingDraft((current) => ({ ...current, expectedRevenue: event.target.value }))} placeholder="CLP" /></label>
+              <button className="primary-btn" disabled={busy}>Preparar borrador IA</button>
+            </form> : <p className="broker-human-note">Tu perfil puede consultar campañas, pero no preparar borradores.</p>}
+            <div className="broker-commercial-list">{commercialHub.marketing.length ? commercialHub.marketing.map((campaign) => <article key={campaign.id}><header><div><b>{campaign.name}</b><span>{campaign.propertyTitle}</span></div><small>{readable(campaign.status)}</small></header><p>Inversión: {formatBrokerMoney(campaign.investment)} · Leads: {campaign.leads} · CPL: {campaign.cpl === null ? "Pendiente" : formatBrokerMoney(campaign.cpl)}</p><p>ROI potencial: {campaign.potentialRoi === null ? "Pendiente de indicadores" : `${campaign.potentialRoi.toFixed(1)}%`} · Origen: {readable(campaign.source)}</p><a href={campaign.sourceHref}>Abrir campañas</a></article>) : <p className="broker-empty">No hay campañas CRM vinculadas a propiedades dentro de tu alcance.</p>}</div>
+          </section>
+
+          <section className="broker-commercial-panel">
+            <div className="broker-list-heading"><span>Agenda Broker</span><h3>Visitas y llamadas con seguimiento</h3><p>{commercialHub.notes.agenda}</p></div>
+            {canCreateCommercial ? <form className="broker-commercial-form broker-agenda-create" onSubmit={createAgendaFromHub}>
+              <label>Tipo<select name="kind" defaultValue="VISIT"><option value="VISIT">Visita</option><option value="CALL">Llamada</option></select></label><label>Cliente o contacto<input name="client" required placeholder="Nombre de la persona" /></label><label>Propiedad<select name="propertyId" defaultValue=""><option value="">Sin propiedad vinculada</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select></label><label>Fecha y hora<input name="scheduledAt" type="datetime-local" required /></label><label>Dirección o contexto<input name="address" placeholder="Dirección o medio de llamada" /></label><label>Nota interna<textarea name="notes" rows={2} placeholder="Objetivo o antecedente de la actividad" /></label><button className="primary-btn" disabled={busy}>Crear actividad</button>
+            </form> : <p className="broker-human-note">Tu perfil puede consultar la agenda, pero no crear ni modificar actividades.</p>}
+            <div className="broker-commercial-list">{commercialHub.agenda.length ? commercialHub.agenda.map((item) => <article key={item.id} className={item.escalation ? "needs-review" : ""}><header><div><b>{item.kind === "CALL" ? "Llamada" : "Visita"} · {item.title}</b><span>{item.client} · {item.propertyTitle}</span></div><small>{readable(item.confirmationState)}</small></header><p>{item.scheduledAt ? new Date(item.scheduledAt).toLocaleString("es-CL", { dateStyle: "medium", timeStyle: "short" }) : "Fecha pendiente"}{item.address ? ` · ${item.address}` : ""}</p>{item.reminderPreparedAt ? <p className="broker-human-note">Recordatorio interno preparado el {new Date(item.reminderPreparedAt).toLocaleString("es-CL")}. No fue enviado.</p> : null}{item.escalation ? <p className="broker-human-note">Derivada a revisión: {item.escalation.note || "sin observación"}.</p> : null}{canEditCommercial && !["COMPLETED", "CANCELLED"].includes(item.status) ? <details className="broker-commercial-actions"><summary>Gestionar actividad</summary><label>Observación interna<textarea value={agendaNotes[item.id] || ""} onChange={(event) => setAgendaNotes((current) => ({ ...current, [item.id]: event.target.value }))} rows={2} placeholder="Motivo de escalamiento, resultado o cancelación" /></label><div><button type="button" className="secondary-btn" disabled={busy} onClick={() => updateAgendaFromHub(item, "CONFIRM")}>Confirmar internamente</button><button type="button" className="secondary-btn" disabled={busy} onClick={() => updateAgendaFromHub(item, "PREPARE_REMINDER")}>Preparar recordatorio</button><button type="button" className="secondary-btn" disabled={busy} onClick={() => updateAgendaFromHub(item, "ESCALATE")}>Escalar</button><button type="button" className="primary-btn" disabled={busy} onClick={() => updateAgendaFromHub(item, "COMPLETE")}>Marcar realizada</button><button type="button" className="secondary-btn" disabled={busy} onClick={() => updateAgendaFromHub(item, "CANCEL")}>Cancelar</button></div><label>Nueva fecha y hora<input type="datetime-local" value={agendaReschedules[item.id] || ""} onChange={(event) => setAgendaReschedules((current) => ({ ...current, [item.id]: event.target.value }))} /></label><button type="button" className="secondary-btn" disabled={busy || !agendaReschedules[item.id]} onClick={() => updateAgendaFromHub(item, "RESCHEDULE")}>Reprogramar</button></details> : null}</article>) : <p className="broker-empty">No hay visitas o llamadas para este mes dentro de tu alcance.</p>}</div>
+          </section>
+
+          <section className="broker-commercial-panel broker-commercial-chats">
+            <div className="broker-list-heading"><span>Inbox vinculado</span><h3>Chats con contexto inmobiliario</h3><p>{commercialHub.notes.chats}</p></div>
+            <div className="broker-commercial-list">{commercialHub.chats.length ? commercialHub.chats.map((chat) => { const draft = chatDrafts[chat.id] || { propertyId: "", scheduledAt: "", captureTitle: "", intendedService: "VENTA" as const }; return <article key={chat.id}><header><div><b>{chat.contactName}</b><span>{readable(chat.channel)} · {readable(chat.status)}{chat.link ? ` · Vinculado a ${readable(chat.link.targetType)}` : " · Sin vínculo Broker"}</span></div><a href={chat.inboxHref}>Abrir chat</a></header>{chat.link ? <p>{chat.link.propertyTitle || "Antecedente sin propiedad"} · vínculo creado {chat.link.createdAt ? new Date(chat.link.createdAt).toLocaleDateString("es-CL") : "sin fecha"}</p> : null}{canEditCommercial ? <details className="broker-commercial-actions"><summary>Vincular o convertir</summary><label>Propiedad<select value={draft.propertyId} onChange={(event) => setChatDrafts((current) => ({ ...current, [chat.id]: { ...draft, propertyId: event.target.value } }))}><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select></label><div><button type="button" className="secondary-btn" disabled={busy} onClick={() => actionBrokerChat(chat, "LINK")}>Vincular propiedad</button><button type="button" className="secondary-btn" disabled={busy} onClick={() => actionBrokerChat(chat, "CREATE_BUYER")}>Crear comprador</button></div><label>Fecha y hora de visita<input type="datetime-local" value={draft.scheduledAt} onChange={(event) => setChatDrafts((current) => ({ ...current, [chat.id]: { ...draft, scheduledAt: event.target.value } }))} /></label><button type="button" className="secondary-btn" disabled={busy || !draft.scheduledAt} onClick={() => actionBrokerChat(chat, "CREATE_VISIT")}>Preparar visita</button><label>Inmueble para captación<input value={draft.captureTitle} onChange={(event) => setChatDrafts((current) => ({ ...current, [chat.id]: { ...draft, captureTitle: event.target.value } }))} placeholder="Ej.: Departamento en Ñuñoa" /></label><label>Destino<select value={draft.intendedService} onChange={(event) => setChatDrafts((current) => ({ ...current, [chat.id]: { ...draft, intendedService: event.target.value as "VENTA" | "ARRIENDO" | "ADMINISTRACION" } }))}><option value="VENTA">Venta</option><option value="ARRIENDO">Arriendo</option><option value="ADMINISTRACION">Administración</option></select></label><button type="button" className="secondary-btn" disabled={busy || !draft.captureTitle} onClick={() => actionBrokerChat(chat, "PREPARE_CAPTURE")}>Preparar captación</button></details> : null}</article>; }) : <p className="broker-empty">No hay conversaciones de Inbox dentro de tu alcance comercial.</p>}</div>
+          </section>
+        </div>
+        <p className="broker-human-note">Las conversiones generan antecedentes internos con origen y bitácora. Antes de publicar, enviar mensajes, gestionar datos personales o coordinar acciones externas, la persona responsable debe revisarlos y aprobarlos por el canal correspondiente.</p>
+      </> : <p className="broker-empty">Cargando el centro comercial de Broker OS...</p>}
     </section> : null}
 
     {tab === "guides" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Guías operativas</span><h2>Qué revisar en cada etapa</h2><p>Lista interna de verificación para trabajar con orden. Las revisiones jurídicas, firmas, pagos y comunicaciones externas siempre requieren una persona responsable.</p></div><div className="broker-guide-grid">{(Object.keys(OPERATION_LABELS) as BrokerOperationType[]).map((type) => <article key={type}><h3>{OPERATION_LABELS[type]}</h3>{(catalog?.operationStages[type] || []).map((stage) => <section key={stage}><b>{readable(stage)}</b><ul>{(catalog?.operationChecklists?.[type]?.[stage] || []).map((item) => <li key={item}>{item}</li>)}</ul></section>)}</article>)}</div><div className="broker-guide-grid">{(catalog?.sopLibrary || []).map((sop) => <article key={sop.key}><h3>{sop.title}</h3><ul>{sop.steps.map((step) => <li key={step}>{step}</li>)}</ul></article>)}</div><div className="broker-guide-grid">{(catalog?.roleTemplates || []).map((role) => <article key={role.key}><h3>{role.label}</h3><p>{role.scope}</p><ul>{role.permissions.map((permission) => <li key={permission}>{permission}</li>)}</ul></article>)}</div></section> : null}

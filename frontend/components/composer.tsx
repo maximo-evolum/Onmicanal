@@ -43,9 +43,10 @@ export function Composer({ disabled, suggestedReply, onSend }: Props) {
             <div>
               <strong>Respuesta sugerida por IA</strong>
               <p>{suggestedReply}</p>
+              <small>Se copia al editor como borrador; revísala y edítala antes de enviarla.</small>
             </div>
-            <button className="ghost-btn" type="button" onClick={() => setValue(suggestedReply)}>
-              Usar
+            <button className="ghost-btn" type="button" onClick={() => setValue(suggestedReply)} aria-label="Usar la respuesta sugerida como borrador editable">
+              Usar como borrador
             </button>
           </div>
         ) : null}

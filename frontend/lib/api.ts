@@ -2359,6 +2359,126 @@ export function actBrokerFinancialCollection(id: string, input: { action: "PREPA
   return request(`/broker/finance/collections/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify(input) });
 }
 
+export type BrokerCommercialCampaign = {
+  id: string;
+  name: string;
+  status: string;
+  propertyId: string | null;
+  propertyTitle: string;
+  investment: number;
+  leads: number;
+  cpl: number | null;
+  expectedRevenue: number;
+  potentialRoi: number | null;
+  source: string;
+  requiresHumanApproval: boolean;
+  scheduledAt: string | null;
+  updatedAt: string | null;
+  sourceHref: string;
+};
+
+export type BrokerAgendaItem = {
+  id: string;
+  title: string;
+  kind: "VISIT" | "CALL";
+  status: string;
+  client: string;
+  propertyId: string | null;
+  propertyTitle: string;
+  scheduledAt: string | null;
+  address: string;
+  confirmationState: string;
+  reminderPreparedAt: string | null;
+  escalation: { status?: string; note?: string; escalatedAt?: string } | null;
+  notes: string;
+  result: string;
+  sourceHref: string;
+};
+
+export type BrokerCommercialChat = {
+  id: string;
+  contactName: string;
+  channel: string;
+  status: string;
+  mode: string;
+  assignedToId: string | null;
+  lastMessageAt: string | null;
+  leadStatus: string;
+  link: { id: string; targetType: string; targetId: string; propertyId: string | null; propertyTitle: string; createdAt: string | null } | null;
+  inboxHref: string;
+};
+
+export type BrokerCommercialHub = {
+  month: string;
+  summary: {
+    campaigns: number;
+    activePublications: number;
+    investment: number;
+    leads: number;
+    cpl: number | null;
+    potentialRoi: number | null;
+    agendaPending: number;
+    confirmationsPending: number;
+    escalationsPending: number;
+    linkedChats: number;
+    unlinkedChats: number;
+  };
+  marketing: BrokerCommercialCampaign[];
+  agenda: BrokerAgendaItem[];
+  chats: BrokerCommercialChat[];
+  notes: { marketing: string; agenda: string; chats: string };
+};
+
+export function getBrokerCommercialHub(month?: string): Promise<BrokerCommercialHub> {
+  const query = month ? `?month=${encodeURIComponent(month)}` : "";
+  return request<BrokerCommercialHub>(`/broker/commercial-hub${query}`);
+}
+
+export function createBrokerMarketingPrediction(input: {
+  action: "CREATE_CAMPAIGN_DRAFT" | "CREATE_PROSPECT_DRAFT";
+  propertyId: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  campaignId?: string;
+  investment?: number;
+  expectedLeads?: number;
+  expectedRevenue?: number;
+}): Promise<{ notice: string }> {
+  return request("/broker/marketing/predictions", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function createBrokerAgendaItem(input: {
+  kind: "VISIT" | "CALL";
+  title?: string;
+  client: string;
+  propertyId?: string;
+  scheduledAt: string;
+  address?: string;
+  notes?: string;
+  assignedToId?: string;
+}): Promise<{ record: IndustryRecord; notice: string }> {
+  return request("/broker/agenda", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function actBrokerAgendaItem(id: string, input: { action: "CONFIRM" | "PREPARE_REMINDER" | "ESCALATE" | "COMPLETE" | "CANCEL" | "RESCHEDULE"; note?: string; scheduledAt?: string }): Promise<{ record: IndustryRecord; notice: string }> {
+  return request(`/broker/agenda/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function actBrokerChat(id: string, input: {
+  action: "LINK" | "CREATE_BUYER" | "CREATE_VISIT" | "PREPARE_CAPTURE";
+  targetType?: "PROPERTY" | "BUYER" | "CAPTURE" | "VISIT";
+  targetId?: string;
+  propertyId?: string;
+  title?: string;
+  intendedService?: "VENTA" | "ARRIENDO" | "ADMINISTRACION";
+  scheduledAt?: string;
+  address?: string;
+  notes?: string;
+}): Promise<{ link: IndustryRecord; notice: string }> {
+  return request(`/broker/chats/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify(input) });
+}
+
 export function runBrokerAutomationScan(): Promise<{ recommendations: BrokerRecommendation[]; created: IndustryRecord[]; message: string }> {
   return request("/broker/automation-scan", { method: "POST" });
 }
