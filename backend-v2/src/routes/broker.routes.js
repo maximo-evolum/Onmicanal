@@ -53,6 +53,7 @@ import { BROKER_JOURNEY_CATALOG, BROKER_JOURNEY_VERSION, brokerOperationPayload,
 import { buildBrokerGovernanceSummary, normalizeBrokerAlertResolution } from "../services/broker-governance.service.js";
 import { BROKER_PUBLICATION_CHANNELS, BROKER_PUBLICATION_PROVIDER_STATUSES, BROKER_PUBLICATION_STATUSES, brokerPublicationAnalytics, brokerPublicationConnectionKey, brokerPublicationExport, brokerPublicationProviderPreflight, brokerPublicationReadiness, brokerPublicationCopy, createBrokerPublicationData, normalizeBrokerPublicationMetrics, normalizeBrokerPublicationProvider, publicBrokerPublication, publicBrokerPublicationProvider, transitionBrokerPublication } from "../services/broker-publication.service.js";
 import { BROKER_DOCUMENT_SOURCE_TYPES, brokerDocumentSourceArea, buildBrokerDocumentIndex } from "../services/broker-document-index.service.js";
+import { COLLECTION_SOURCE_TYPES, applyBrokerFinancialAction, buildBrokerFinancialOperations } from "../services/broker-financial-operations.service.js";
 
 export const brokerRouter = Router();
 
@@ -114,6 +115,42 @@ function allowBrokerAreaAction(req, res, area, action) {
   if (canBrokerAction(req.brokerAccess, area, action)) return true;
   res.status(403).json({ error: "No tienes permiso para esta acción en el área de Broker OS.", area, action, scope: req.brokerAccess?.accessScope || "ASSIGNED" });
   return false;
+}
+
+// Finanzas operativas combina dos capacidades ya existentes: comisiones y
+// administración. No se crea un permiso genérico que pudiera ampliar el
+// alcance de una persona que solo debe consultar una de ellas.
+function canViewBrokerFinance(req) {
+  return canBrokerAction(req.brokerAccess, "commissions", "VIEW") || canBrokerAction(req.brokerAccess, "administration", "VIEW");
+}
+
+function requireBrokerFinanceView(req, res, next) {
+  if (canViewBrokerFinance(req)) return next();
+  return res.status(403).json({ error: "No tienes permiso para consultar las finanzas operativas de Broker OS." });
+}
+
+function brokerFinanceResource(recordType) {
+  return recordType === "commission_settlement" ? "commissions" : "administration";
+}
+
+async function brokerFinancialSnapshot(req, period) {
+  const recordTypes = [];
+  if (canBrokerAction(req.brokerAccess, "commissions", "VIEW")) recordTypes.push("commission_settlement");
+  if (canBrokerAction(req.brokerAccess, "administration", "VIEW")) recordTypes.push("rental_payment", "administration_liquidation");
+  if (canBrokerAction(req.brokerAccess, "maintenance", "VIEW")) recordTypes.push("maintenance_ticket", "utility_monitoring", "material_purchase", "provider_quote");
+  if (canBrokerAction(req.brokerAccess, "rentals", "VIEW")) recordTypes.push("rental_contract");
+  const [properties, records] = await Promise.all([
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), select: { id: true, title: true }, take: 1500 }),
+    recordTypes.length
+      ? prisma.industryRecord.findMany({
+          where: brokerWhere(req, { recordType: { in: [...new Set(recordTypes)] } }),
+          select: { id: true, title: true, recordType: true, status: true, data: true, updatedAt: true },
+          orderBy: { updatedAt: "desc" },
+          take: 3500
+        })
+      : Promise.resolve([])
+  ]);
+  return buildBrokerFinancialOperations({ records, properties, period: text(period) });
 }
 
 async function monthlyAdministrationSnapshot(req, period) {
@@ -1694,6 +1731,57 @@ brokerRouter.patch("/broker/administration/monthly/liquidations/:id/status", req
   } catch (error) {
     console.error("Update broker monthly liquidation error:", error);
     res.status(500).json({ error: "No se pudo actualizar el estado de la liquidación mensual." });
+  }
+});
+
+// Cola financiera derivada. Presenta cobros y liquidaciones desde sus
+// antecedentes de origen; no genera transferencias, boletas ni cobranzas a
+// terceros. La visibilidad se calcula desde los permisos de comisión y/o
+// administración de cada persona.
+brokerRouter.get("/broker/finance/operations", requireBrokerFinanceView, async (req, res) => {
+  try {
+    res.json(await brokerFinancialSnapshot(req, req.query?.period));
+  } catch (error) {
+    console.error("Broker financial operations error:", error);
+    res.status(500).json({ error: "No se pudo construir la cola financiera de Broker OS." });
+  }
+});
+
+// Las tres acciones son internas y auditadas. En especial, REPORT_PAYMENT
+// deja el pago como informado y pendiente de revisión; jamás ordena una
+// transferencia ni declara una conciliación bancaria real.
+brokerRouter.post("/broker/finance/collections/:id/actions", requireRole(ROLE_GROUPS.STAFF), requireBrokerFinanceView, async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({
+      where: brokerWhere(req, { id: req.params.id, recordType: { in: COLLECTION_SOURCE_TYPES } })
+    });
+    if (!record) return res.status(404).json({ error: "El antecedente financiero no existe dentro de tu alcance autorizado." });
+    const resource = brokerFinanceResource(record.recordType);
+    if (!canBrokerAction(req.brokerAccess, resource, "EDIT")) {
+      return res.status(403).json({ error: "No tienes permiso para registrar esta acción financiera.", resource, action: "EDIT" });
+    }
+    const result = applyBrokerFinancialAction({
+      record,
+      action: req.body?.action,
+      input: req.body || {},
+      actor: req.user?.name || req.user?.email || "Usuario autorizado"
+    });
+    if (!result.ok) return res.status(422).json({ error: result.error });
+    const updated = await prisma.industryRecord.update({ where: { id: record.id }, data: { data: result.data } });
+    await recordAuditLog(req, `BROKER_FINANCE_${result.action}`, record.recordType, record.id, {
+      action: result.action,
+      amount: result.event?.type === "REPORT_PAYMENT" ? result.data.paymentReport?.amount || null : null,
+      externalDelivery: false,
+      requiresHumanApproval: true
+    });
+    res.json({ record: updated, action: result.action, message: result.action === "REPORT_PAYMENT"
+      ? "Pago informado registrado para revisión humana. No se ejecutó ningún pago, transferencia ni conciliación."
+      : result.action === "PREPARE_REMINDER"
+        ? "Recordatorio interno preparado. No se envió ninguna comunicación externa."
+        : "Antecedente derivado a revisión interna." });
+  } catch (error) {
+    console.error("Broker finance collection action error:", error);
+    res.status(500).json({ error: "No se pudo registrar la acción financiera interna." });
   }
 });
 

@@ -2305,6 +2305,60 @@ export function updateBrokerMonthlyLiquidationStatus(id: string, input: { status
   return request<IndustryRecord>(`/broker/administration/monthly/liquidations/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
+export type BrokerFinancialCollectionRow = {
+  id: string;
+  title: string;
+  recordType: "commission_settlement" | "rental_payment" | "administration_liquidation";
+  sourceKind: "COMMISSION" | "RENT" | "ADMINISTRATION";
+  resource: "commissions" | "administration";
+  area: "commercial" | "rentals";
+  sourceHref: string;
+  party: string;
+  propertyId: string | null;
+  propertyTitle: string;
+  operationId: string | null;
+  period: string | null;
+  dueDate: string | null;
+  totalAmount: number;
+  outstanding: number;
+  reportedAmount: number;
+  state: "PAID" | "PAYMENT_REPORTED" | "OVERDUE" | "PENDING_APPROVAL" | "DRAFT" | "PENDING" | string;
+  stateLabel: string;
+  terminal: boolean;
+  overdueDays: number;
+  priority: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "INFO" | string;
+  reminderPreparedAt: string | null;
+  paymentReport: { amount: number; reportedAt: string; reportedBy: string; note: string | null; status: "PENDING_REVIEW" } | null;
+  reportGroup: "SALE" | "RENTAL_PLACEMENT" | "ADMINISTRATION";
+  brokerAmount: number;
+  companyAmount: number;
+  updatedAt: string | null;
+};
+
+export type BrokerFinancialOperations = {
+  period: string | null;
+  queue: BrokerFinancialCollectionRow[];
+  summary: { pendingCount: number; overdueCount: number; reviewCount: number; pendingAmount: number; reportedAmount: number };
+  reports: {
+    sales: { count: number; total: number; paid: number; reported: number; pending: number };
+    rentalPlacement: { count: number; total: number; paid: number; reported: number; pending: number };
+    administration: { count: number; total: number; paid: number; reported: number; pending: number };
+    margin: { grossRevenue: number; costs: number; amount: number; roiPct: number | null; basis: string };
+    brokerSettlements: Array<{ broker: string; count: number; gross: number; paid: number; pending: number; reported: number }>;
+  };
+  tenantSimulation: Array<{ id: string; tenantName: string; propertyTitle: string; period: string | null; dueDate: string | null; totalAmount: number; outstanding: number; reportedAmount: number; state: string; stateLabel: string; sourceHref: string }>;
+  renewalAlerts: Array<{ id: string; title: string; propertyId: string | null; propertyTitle: string; tenantName: string; endDate: string | null; daysRemaining: number | null; status: string; sourceHref: string }>;
+};
+
+export function getBrokerFinancialOperations(period?: string): Promise<BrokerFinancialOperations> {
+  const query = period ? `?period=${encodeURIComponent(period)}` : "";
+  return request<BrokerFinancialOperations>(`/broker/finance/operations${query}`);
+}
+
+export function actBrokerFinancialCollection(id: string, input: { action: "PREPARE_REMINDER" | "REPORT_PAYMENT" | "REQUEST_REVIEW"; note?: string; amount?: number }): Promise<{ record: IndustryRecord; action: string; message: string }> {
+  return request(`/broker/finance/collections/${encodeURIComponent(id)}/actions`, { method: "POST", body: JSON.stringify(input) });
+}
+
 export function runBrokerAutomationScan(): Promise<{ recommendations: BrokerRecommendation[]; created: IndustryRecord[]; message: string }> {
   return request("/broker/automation-scan", { method: "POST" });
 }
