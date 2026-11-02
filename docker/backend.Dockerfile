@@ -1,5 +1,5 @@
 # Archivo: Construye una imagen local reproducible del backend de EVOLUM OS.
-FROM node:22.23.3-bookworm-slim
+FROM node:22.23.4-bookworm-slim
 
 WORKDIR /app/backend-v2
 
