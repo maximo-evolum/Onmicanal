@@ -18130,3 +18130,21 @@ html.dark .finance-bank-statement-state.is-protected,
 :root[data-theme="dark"] :is(.broker-tracker-context b,.broker-tracker-checklist textarea),:root[data-design-system="dark"] :is(.broker-tracker-context b,.broker-tracker-checklist textarea) { color:#f5f0ff; }:root[data-theme="dark"] :is(.broker-tracker-context span,.broker-tracker-context small),:root[data-design-system="dark"] :is(.broker-tracker-context span,.broker-tracker-context small) { color:#d1c9df; }:root[data-theme="dark"] .broker-tracker-checklist textarea,:root[data-design-system="dark"] .broker-tracker-checklist textarea { border-color:rgba(197,181,255,.28); background:#17132a; }
 @media (max-width:1180px) { .broker-executive-three { grid-template-columns:repeat(2,minmax(0,1fr)); }.broker-executive-assumptions form { grid-template-columns:repeat(4,minmax(0,1fr)); }.broker-tracker-timeline>ol { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:760px) { .broker-executive-header,.broker-tracker-header,.broker-executive-card header,.broker-executive-assumptions header,.broker-tracker-timeline header,.broker-tracker-current header,.broker-tracker-actor header { display:grid; }.broker-executive-header>div:last-child { justify-items:start; text-align:left; }.broker-tracker-header>label { min-width:0; }.broker-executive-kpis,.broker-executive-grid,.broker-executive-three,.broker-tracker-summary,.broker-tracker-context,.broker-tracker-timeline>ol,.broker-tracker-actor-view,.broker-tracker-map>div { grid-template-columns:1fr; }.broker-executive-table { overflow-x:auto; }.broker-executive-table-head,.broker-executive-table>a { min-width:560px; }.broker-executive-assumptions form { grid-template-columns:repeat(2,minmax(0,1fr)); }.broker-executive-assumptions button { grid-column:1/-1; }.broker-tracker-complete { grid-template-columns:1fr; }.broker-tracker-complete button { width:100%; }.broker-tracker-actor header>div:last-child { display:grid; grid-template-columns:1fr; }.broker-tracker-actor select,.broker-tracker-actor button { width:100%; }.broker-executive-bottlenecks>div,.broker-executive-risks>a,.broker-executive-rank>div { grid-template-columns:minmax(0,1fr) auto; } }
+
+/* En móviles el navegador debe desplazar el documento completo. Mantener una
+   altura fija en html/body recortaba Trackers y formularios largos aunque el
+   contenido estuviera renderizado correctamente dentro de Broker OS. */
+@media (max-width: 760px) {
+  html,
+  body {
+    height: auto !important;
+    min-height: 100%;
+  }
+
+  .vertical-shell,
+  .vertical-shell.nav-collapsed {
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+}

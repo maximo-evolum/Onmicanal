@@ -9,6 +9,7 @@ const workspace = fs.readFileSync(path.resolve(__dirname, "../components/broker-
 const tracker = fs.readFileSync(path.resolve(__dirname, "../components/broker-operation-tracker.tsx"), "utf8");
 const dashboard = fs.readFileSync(path.resolve(__dirname, "../components/broker-executive-dashboard.tsx"), "utf8");
 const access = fs.readFileSync(path.resolve(__dirname, "../lib/broker-access.ts"), "utf8");
+const styles = fs.readFileSync(path.resolve(__dirname, "../app/globals.css"), "utf8");
 
 test("La web expone el tablero ejecutivo con forecast explícitamente potencial", () => {
   assert.match(api, /getBrokerExecutiveDashboard/);
@@ -29,4 +30,9 @@ test("El Tracker consume la misma operación, contexto, documentos y controles p
   assert.match(tracker, /Completar hito y avanzar/);
   assert.match(tracker, /sin duplicar etapas/i);
   assert.match(access, /operation_tracker/);
+});
+
+test("El Tracker largo mantiene desplazamiento del documento en pantallas móviles", () => {
+  assert.match(styles, /@media \(max-width: 760px\) \{\s*html,\s*body \{\s*height: auto !important;/);
+  assert.match(styles, /\.vertical-shell,\s*\.vertical-shell\.nav-collapsed \{\s*height: auto !important;/);
 });

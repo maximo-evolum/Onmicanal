@@ -2522,7 +2522,7 @@ brokerRouter.get("/broker/operation-tracker/:operationId", requireBrokerAction("
     const projected = (await projectBrokerOperations(prisma, [operation]))[0];
     if (String(projected?.data?.operationType || "").toUpperCase() !== "SALE") return res.status(422).json({ error: "El Operation Tracker solo está disponible para negocios de venta." });
     const propertyId = text(dataOf(operation).propertyId);
-    const [saleCase, property, relatedDocuments] = await Promise.all([
+    const [saleCase, property, relatedDocuments, responsible] = await Promise.all([
       prisma.brokerSaleCase.findFirst({ where: { tenantId: operation.tenantId, operationId: operation.id } }),
       propertyId ? prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: propertyId, recordType: "property" }), select: { title: true } }) : Promise.resolve(null),
       propertyId ? prisma.industryRecord.findMany({
@@ -2530,10 +2530,12 @@ brokerRouter.get("/broker/operation-tracker/:operationId", requireBrokerAction("
         select: { id: true, title: true, recordType: true, status: true, data: true, updatedAt: true },
         orderBy: { updatedAt: "desc" },
         take: 1000
-      }) : Promise.resolve([])
+      }) : Promise.resolve([]),
+      operation.assignedToId ? prisma.workspaceUser.findFirst({ where: { id: operation.assignedToId, tenantId: operation.tenantId, isActive: true }, select: { name: true, email: true } }) : Promise.resolve(null)
     ]);
     const documents = relatedDocuments.filter((document) => text(dataOf(document).propertyId) === propertyId);
-    const tracker = buildBrokerOperationTracker({ operation: projected, saleCase: saleCase ? { ...saleCase, propertyTitle: property?.title || null } : null, documents, actor: req.query?.actor });
+    const trackerOperation = { ...projected, assignedToName: text(responsible?.name || responsible?.email) || null };
+    const tracker = buildBrokerOperationTracker({ operation: trackerOperation, saleCase: saleCase ? { ...saleCase, propertyTitle: property?.title || null } : null, documents, actor: req.query?.actor });
     res.json(tracker);
   } catch (error) {
     console.error("Get broker operation tracker error:", error);

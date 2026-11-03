@@ -61,6 +61,11 @@ test("Tracker usa la misma operación, expone contexto documental y exige checkl
   assert.equal(first.context.risk.level, "MEDIO");
   assert.equal(first.context.documents.total, 2);
   assert.equal(first.context.documents.pending, 1);
+  const withNamedResponsible = buildBrokerOperationTracker({
+    operation: { ...operation, assignedToName: "Camila Rojas" },
+    now: new Date("2026-10-20T10:00:00.000Z")
+  });
+  assert.equal(withNamedResponsible.context.responsible, "Camila Rojas");
   assert.equal(trackerAdvanceReadiness(operation).ok, false);
   let updated = operation;
   for (const entry of first.current.checklist) {
