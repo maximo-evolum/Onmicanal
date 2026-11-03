@@ -38,6 +38,9 @@ export function brokerQaEnvironment(input = process.env) {
     DOTENV_CONFIG_PATH: fileURLToPath(new URL('./.qa-no-env', import.meta.url)),
     JWT_SECRET: 'broker_qa_only_not_for_production_minimum_32_chars',
     ENABLE_AUTOMATION: 'false',
-    FINANCE_NUBOX_SYNC_ENABLED: 'false'
+    FINANCE_NUBOX_SYNC_ENABLED: 'false',
+    // La base de QA nace vacía en CI. Esta marca permite crear solamente el
+    // tenant sintético aislado antes de cargar el escenario demostrable.
+    BROKER_QA_BOOTSTRAP_TENANT: 'YES'
   };
 }

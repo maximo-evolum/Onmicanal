@@ -14,6 +14,7 @@ test('Broker QA acepta solamente la base local dedicada y elimina secretos hered
   assert.equal(env.DATABASE_URL, valid.QA_BROKER_DATABASE_URL);
   assert.equal(env.NUBOX_API_KEY, undefined);
   assert.equal(env.ENABLE_AUTOMATION, 'false');
+  assert.equal(env.BROKER_QA_BOOTSTRAP_TENANT, 'YES');
 });
 
 test('Broker QA rechaza producción, hosts remotos y otra base', () => {

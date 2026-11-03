@@ -18,7 +18,12 @@ async function collect(directory) {
 const files = await collect(path.join(root, "test"));
 if (!files.length) throw new Error("No se encontraron pruebas del backend.");
 console.log(`Backend: ${files.length} archivos de pruebas con Node ${process.version}`);
-const child = spawn(process.execPath, ["--test", ...process.argv.slice(2), ...files], {
+// Algunos tests levantan servidores HTTP efímeros y reemplazan adaptadores del
+// proceso. En CI se ejecutan de forma secuencial para que un runner más rápido
+// o con menos recursos no introduzca interferencias entre archivos. El trabajo
+// local conserva el paralelismo normal de Node.
+const ciConcurrency = process.env.CI ? ["--test-concurrency=1"] : [];
+const child = spawn(process.execPath, ["--test", ...ciConcurrency, ...process.argv.slice(2), ...files], {
   cwd: root, stdio: "inherit", windowsHide: true
 });
 child.on("error", (error) => { console.error(error.message); process.exitCode = 1; });

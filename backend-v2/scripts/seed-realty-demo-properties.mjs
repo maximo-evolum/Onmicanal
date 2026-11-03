@@ -394,7 +394,21 @@ async function findTenant() {
   if (byAdmin?.tenant) return byAdmin.tenant;
 
   const tenants = await prisma.tenant.findMany({ orderBy: { createdAt: "asc" } });
-  return tenants.find(tenantLooksRealty) || tenants[0] || null;
+  const existing = tenants.find(tenantLooksRealty) || tenants[0] || null;
+  if (existing || process.env.BROKER_QA_BOOTSTRAP_TENANT !== "YES") return existing;
+
+  // Sólo la QA aislada puede iniciar desde una base vacía. El seed normal no
+  // crea tenants para impedir cargas accidentales fuera de un entorno de prueba.
+  return prisma.tenant.create({
+    data: {
+      name: "Inmobiliaria QA Broker OS",
+      slug: "inmobiliaria",
+      type: "BUSINESS",
+      industry: "REAL_ESTATE",
+      plan: "ENTERPRISE",
+      onboardingCompleted: true
+    }
+  });
 }
 
 async function ensureRealtyTenant(tenant) {
