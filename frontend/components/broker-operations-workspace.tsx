@@ -6,6 +6,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BrokerJourneySummary } from "./broker-journey";
 import { BrokerOperationalSummary } from "./broker-operational-summary";
 import { BrokerDocumentIndexPanel } from "./broker-document-index";
+import { BrokerExecutiveDashboardPanel } from "./broker-executive-dashboard";
+import { BrokerOperationTrackerPanel } from "./broker-operation-tracker";
 import { useSearchParams } from "next/navigation";
 import {
   advanceBrokerOperation,
@@ -99,7 +101,7 @@ import {
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "agents" | "training" | "commissions" | "administration_preview" | "financial_operations" | "commercial_hub" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
+type Tab = "operations" | "executive_dashboard" | "operation_tracker" | "agents" | "training" | "commissions" | "administration_preview" | "financial_operations" | "commercial_hub" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -455,7 +457,7 @@ export function BrokerOperationsPageContent() {
       setTab(requestedTab as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "financial_operations" || requestedTab === "commercial_hub" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "executive_dashboard" || requestedTab === "operation_tracker" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "financial_operations" || requestedTab === "commercial_hub" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
       setTab(requestedTab);
     }
   }, [searchParams]);
@@ -501,7 +503,7 @@ export function BrokerOperationsPageContent() {
       getBrokerGovernance().then(setGovernance).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el gobierno operativo."));
       return;
     }
-    if (tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
+    if (tab === "operations" || tab === "executive_dashboard" || tab === "operation_tracker" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
     if (tab === "documents") {
       let active = true;
       setRecords([]);
@@ -521,7 +523,7 @@ export function BrokerOperationsPageContent() {
   }, [tab, administrationPeriod, commercialMonth, access, documentFilters]);
 
   useEffect(() => {
-    if (!catalog || tab === "financing" || tab === "operations" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "financial_operations" || tab === "commercial_hub" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "governance" || tab === "access") return;
+    if (!catalog || tab === "financing" || tab === "operations" || tab === "executive_dashboard" || tab === "operation_tracker" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "financial_operations" || tab === "commercial_hub" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "governance" || tab === "access") return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -532,7 +534,7 @@ export function BrokerOperationsPageContent() {
   }, [overview]);
   const readModel = overview?.readModel;
   const recommendations = readModel?.priorities || overview?.recommendations || [];
-  const currentArea = tab !== "financing" && tab !== "operations" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "financial_operations" && tab !== "commercial_hub" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "governance" && tab !== "access" ? tab : null;
+  const currentArea = tab !== "financing" && tab !== "operations" && tab !== "executive_dashboard" && tab !== "operation_tracker" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "financial_operations" && tab !== "commercial_hub" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "governance" && tab !== "access" ? tab : null;
   useEffect(() => {
     if (!requestedRecordId || !currentArea || !records.some((record) => record.id === requestedRecordId)) return;
     const frame = window.requestAnimationFrame(() => document.getElementById(`broker-record-${requestedRecordId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
@@ -1329,7 +1331,7 @@ export function BrokerOperationsPageContent() {
 
     <nav className="broker-os-tabs" aria-label="Areas de Broker OS">
       {([
-        ["operations", "Operaciones"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
+        ["operations", "Operaciones"], ["executive_dashboard", "Dashboard Ejecutivo"], ["operation_tracker", "Operation Tracker"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
         ["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["financial_operations", "Finanzas operativas"], ["commercial_hub", "Marketing, agenda y chats"], ["guides", "Guías operativas"],
         ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["governance", "Gobierno y alertas"], ["compliance", "Cumplimiento"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
       ]).filter(([key]) => canBrokerTab(access, key)).map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as Tab)}>{label}</button>)}
@@ -1337,6 +1339,10 @@ export function BrokerOperationsPageContent() {
     {notice ? <p className="broker-os-notice" role="status">{notice}</p> : null}
     {access && !canWriteTab ? <p className="broker-human-note">Vista de consulta. Las modificaciones dependen de los permisos de tu perfil.</p> : null}
     {!canBrokerTab(access, tab) ? <p role="status">{access ? "Esta área no está habilitada para tu perfil. Selecciona una de las áreas disponibles." : "Consultando tus permisos…"}</p> : <>
+
+    {tab === "executive_dashboard" ? <BrokerExecutiveDashboardPanel canConfigure={canBroker(access, "configuration", "CONFIGURE")} /> : null}
+
+    {tab === "operation_tracker" ? <BrokerOperationTrackerPanel operations={operations} requestedOperationId={requestedOperationId} canEdit={canBroker(access, "operations", "EDIT")} /> : null}
 
     {tab === "operations" ? <>
       <BrokerOperationalSummary model={readModel} showPriorities={false} />

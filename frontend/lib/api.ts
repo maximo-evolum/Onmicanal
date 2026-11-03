@@ -1807,6 +1807,81 @@ export type BrokerOverview = {
   };
 };
 
+export type BrokerForecastAssumptions = {
+  probabilities: Record<string, number>;
+  configured: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  notice: string;
+};
+
+export type BrokerExecutiveDashboard = {
+  generatedAt: string;
+  scope: { level: string; description: string };
+  kpis: { effectivenessPct: number; activeOperations: number; closedOperations: number; projectedRevenue: number; weightedForecast: number; weightedCommission: number; averageCloseTimeDays: number | null };
+  forecast: {
+    notice: string;
+    assumptions: Record<string, number>;
+    lines: Array<{ operationId: string; title: string; commercialStage: string; probabilityPct: number; amount: number; weightedAmount: number; projectedCommission: number; weightedCommission: number; responsible: string; health: string; stageAgeDays: number }>;
+  };
+  bottlenecks: Array<{ key: string; label: string; count: number; attention: number; risk: number; averageStageAgeDays: number; kind: "RISK" | "ATTENTION" }>;
+  risks: Array<{ operationId: string; title: string; detail: string; stage: string; responsible: string }>;
+  conversion: { byCommune: Array<{ label: string; total: number; advanced: number; closed: number; projected: number; conversionPct: number }>; byBroker: Array<{ label: string; total: number; advanced: number; closed: number; projected: number; conversionPct: number }> };
+  teamRanking: Array<{ userId: string; name: string; activeOperations: number; attentionOperations: number; riskOperations: number; projectedCommission: number; conversionPct: number }>;
+  campaigns: Array<{ id: string; name: string; status: string; investment: number; expectedRevenue: number; expectedLeads: number; costPerLead: number | null; potentialRoiPct: number | null; source: string }>;
+  recommendations: BrokerRecommendation[];
+};
+
+export type BrokerExecutiveDashboardResponse = { dashboard: BrokerExecutiveDashboard; assumptions: BrokerForecastAssumptions };
+
+export function getBrokerExecutiveDashboard(): Promise<BrokerExecutiveDashboardResponse> {
+  return request<BrokerExecutiveDashboardResponse>("/broker/executive-dashboard");
+}
+
+export function getBrokerForecastAssumptions(): Promise<BrokerForecastAssumptions> {
+  return request<BrokerForecastAssumptions>("/broker/forecast-assumptions");
+}
+
+export function saveBrokerForecastAssumptions(probabilities: Record<string, number>): Promise<BrokerForecastAssumptions> {
+  return request<BrokerForecastAssumptions>("/broker/forecast-assumptions", { method: "PUT", body: JSON.stringify({ probabilities }) });
+}
+
+export type BrokerOperationTracker = {
+  operationId: string;
+  source: { operationStage: string; commercialStage: BrokerStageLabel | null; pipelineStage: BrokerStageLabel | null; trackerStage: BrokerStageLabel | null; evidencePolicy: string };
+  notice: string;
+  saleCase: { buyerName: string | null; offerStatus: string; promiseStatus: string; titleStudyStatus: string; deedStatus: string; cbrStatus: string } | null;
+  context: {
+    responsible: string;
+    stageStartedAt: string | null;
+    stageAgeDays: number;
+    risk: { level: "CONTROLADO" | "MEDIO" | "ALTO"; detail: string };
+    nextStep: string;
+    documents: { total: number; completed: number; pending: number; items: Array<{ id: string; title: string; type: string; status: string; updatedAt: string | null }> };
+  };
+  milestones: Array<{ key: string; label: string; status: "COMPLETADA" | "ACTUAL" | "ATRASADA" | "SIN_EVIDENCIA" | "PENDIENTE"; isCurrent: boolean; completedAt: string | null; checklist: Array<{ key: string; label: string; completed: boolean; completedAt: string | null; completedBy: string | null; note: string | null }>; allChecklistComplete: boolean; summary: string }>;
+  current: { key: string; label: string; status: string; isCurrent: boolean; checklist: Array<{ key: string; label: string; completed: boolean; completedAt: string | null; completedBy: string | null; note: string | null }>; allChecklistComplete: boolean; summary: string } | null;
+  actorView: { actor: string; visibilityNotice: string; operation: { title: string; currentStage: string; property: string | null }; timeline: Array<{ key: string; label: string; status: string; completedAt: string | null; visibleDetail: string }> } | null;
+  commercialMapping: Array<{ commercial: string; tracker: string }>;
+};
+
+export function getBrokerOperationTracker(operationId: string, actor?: string): Promise<BrokerOperationTracker> {
+  const query = actor ? `?actor=${encodeURIComponent(actor)}` : "";
+  return request<BrokerOperationTracker>(`/broker/operation-tracker/${encodeURIComponent(operationId)}${query}`);
+}
+
+export function updateBrokerOperationTrackerChecklist(operationId: string, input: { checklistKey: string; completed: boolean; note?: string }): Promise<BrokerOperationTracker> {
+  return request<BrokerOperationTracker>(`/broker/operation-tracker/${encodeURIComponent(operationId)}/checklist`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function completeBrokerOperationTrackerStage(operationId: string, note?: string): Promise<BrokerOperationTracker> {
+  return request<BrokerOperationTracker>(`/broker/operation-tracker/${encodeURIComponent(operationId)}/complete`, { method: "POST", body: JSON.stringify({ note }) });
+}
+
+export function prepareBrokerOperationTrackerNotification(operationId: string, actor: "PROPIETARIO" | "COMPRADOR"): Promise<{ actor: string; draft: string; externalDelivery: false; notice: string }> {
+  return request(`/broker/operation-tracker/${encodeURIComponent(operationId)}/notification-preview`, { method: "POST", body: JSON.stringify({ actor }) });
+}
+
 export type BrokerRecordArea = "commercial" | "rentals" | "maintenance" | "projects" | "post_sale" | "documents" | "financing";
 
 export type BrokerRecordDefinition = {

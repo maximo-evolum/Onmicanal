@@ -9,7 +9,7 @@ export function canBroker(access: BrokerAccessProfile | null, area: string, acti
 }
 
 export function brokerTabArea(tab: string) {
-  return ({ agents: "ai", training: "ai", administration_preview: "administration", financial_operations: "administration", commercial_hub: "commercial", guides: "overview", compliance: "documents", governance: "access" } as Record<string, string>)[tab] || tab;
+  return ({ agents: "ai", training: "ai", administration_preview: "administration", financial_operations: "administration", commercial_hub: "commercial", operation_tracker: "operations", executive_dashboard: "overview", guides: "overview", compliance: "documents", governance: "access" } as Record<string, string>)[tab] || tab;
 }
 
 export function canBrokerFinance(access: BrokerAccessProfile | null, action = "VIEW") {
@@ -25,6 +25,10 @@ export function canBrokerCommercialHub(access: BrokerAccessProfile | null, actio
 export function canBrokerTab(access: BrokerAccessProfile | null, tab: string) {
   if (tab === "financial_operations") return canBrokerFinance(access);
   if (tab === "commercial_hub") return canBrokerCommercialHub(access);
+  if (tab === "operation_tracker") return canBroker(access, "operations", "VIEW");
+  if (tab === "executive_dashboard") {
+    return Boolean(access && canBroker(access, "overview", "VIEW") && (access.technicalRole === "SUPER_ADMIN" || ["CEO", "GERENTE_COMERCIAL", "COORDINADOR_COMERCIAL"].includes(access.businessRole)));
+  }
   return canBroker(access, brokerTabArea(tab), ["access", "governance"].includes(tab) ? "CONFIGURE" : "VIEW");
 }
 
