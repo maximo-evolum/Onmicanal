@@ -55,6 +55,7 @@ import { BROKER_PUBLICATION_CHANNELS, BROKER_PUBLICATION_PROVIDER_STATUSES, BROK
 import { BROKER_DOCUMENT_SOURCE_TYPES, brokerDocumentSourceArea, buildBrokerDocumentIndex } from "../services/broker-document-index.service.js";
 import { COLLECTION_SOURCE_TYPES, applyBrokerFinancialAction, buildBrokerFinancialOperations } from "../services/broker-financial-operations.service.js";
 import { BROKER_CHAT_TARGET_TYPES, applyBrokerAgendaAction, buildBrokerCommercialHub, createBrokerAgendaData, validateBrokerAgendaInput } from "../services/broker-commercial-hub.service.js";
+import { BROKER_FORECAST_DEFAULT_ASSUMPTIONS, buildBrokerExecutiveDashboard, buildBrokerOperationTracker, trackerAdvanceReadiness, trackerChecklistUpdate, validateBrokerForecastAssumptions } from "../services/broker-executive-dashboard.service.js";
 
 export const brokerRouter = Router();
 
@@ -265,6 +266,59 @@ function requireBrokerCommercialHubView(req, res, next) {
 function brokerMonth(value) {
   const normalized = text(value);
   return /^\d{4}-\d{2}$/.test(normalized) ? normalized : new Date().toISOString().slice(0, 7);
+}
+
+// El tablero ejecutivo es una herramienta de jefatura. Se calcula dentro del
+// alcance ya autorizado, sin convertirlo en un acceso adicional a cartera,
+// documentos ni conversaciones de otras personas.
+function canViewBrokerExecutiveDashboard(req) {
+  if (!canBrokerAction(req.brokerAccess, "overview", "VIEW")) return false;
+  return req.brokerAccess?.technicalRole === "SUPER_ADMIN"
+    || ["CEO", "GERENTE_COMERCIAL", "COORDINADOR_COMERCIAL"].includes(String(req.brokerAccess?.businessRole || "").toUpperCase());
+}
+
+function requireBrokerExecutiveDashboard(req, res, next) {
+  if (canViewBrokerExecutiveDashboard(req)) return next();
+  return res.status(403).json({ error: "El Dashboard Ejecutivo está disponible solo para perfiles de jefatura autorizados dentro de su alcance Broker OS." });
+}
+
+function forecastAssumptionsPayload(record) {
+  const data = dataOf(record);
+  return {
+    probabilities: validateBrokerForecastAssumptions(data.probabilities || BROKER_FORECAST_DEFAULT_ASSUMPTIONS).probabilities || BROKER_FORECAST_DEFAULT_ASSUMPTIONS,
+    configured: Boolean(record),
+    updatedAt: record?.updatedAt || null,
+    updatedBy: text(data.updatedBy) || null,
+    notice: "Estas probabilidades son supuestos internos para proyección. No garantizan ventas, ingresos ni comisiones."
+  };
+}
+
+async function brokerExecutiveDashboardSnapshot(req) {
+  const overviewWhere = (extra) => ({ AND: [brokerWhere(req, extra), { recordType: { in: Object.keys(BROKER_RECORD_RESOURCES).filter(type => canBrokerAction(req.brokerAccess, BROKER_RECORD_RESOURCES[type], "VIEW")) } }] });
+  const allowedTeamIds = Array.isArray(req.brokerAccess?.scopeUserIds) ? req.brokerAccess.scopeUserIds : undefined;
+  const [properties, operations, evaluations, brokerRecords, teamMembers, assumptionsRecord, campaigns] = await Promise.all([
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), orderBy: { updatedAt: "desc" }, take: 1500 }),
+    prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 1500 }),
+    prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 1000 }),
+    prisma.industryRecord.findMany({ where: overviewWhere({ recordType: { in: BROKER_RECORD_TYPES } }), orderBy: { updatedAt: "desc" }, take: 5000 }),
+    prisma.workspaceUser.findMany({ where: { tenantId: req.tenantId, isActive: true, ...(allowedTeamIds ? { id: { in: allowedTeamIds } } : {}) }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+    prisma.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "broker_forecast_assumptions", status: "ACTIVE" }, orderBy: { updatedAt: "desc" } }),
+    canBrokerAction(req.brokerAccess, "projects", "VIEW") ? prisma.campaign.findMany({ where: { tenantId: brokerTenantWhere(req) }, orderBy: { updatedAt: "desc" }, take: 500 }) : Promise.resolve([])
+  ]);
+  const normalizedOperations = await projectBrokerOperations(prisma, operations);
+  const readModel = buildBrokerOperationalReadModel({
+    properties: canBrokerAction(req.brokerAccess, "commercial", "VIEW") ? properties : [],
+    operations: normalizedOperations,
+    evaluations,
+    brokerRecords,
+    teamMembers,
+    scope: { level: req.brokerAccess?.accessScope || "ASSIGNED", description: req.brokerAccess?.scopeDescription || "Solo se muestran registros dentro de tu alcance autorizado." },
+    counts: {}
+  });
+  return {
+    dashboard: buildBrokerExecutiveDashboard({ readModel, operations: normalizedOperations, properties, teamMembers, campaigns, assumptions: dataOf(assumptionsRecord).probabilities || BROKER_FORECAST_DEFAULT_ASSUMPTIONS }),
+    assumptions: forecastAssumptionsPayload(assumptionsRecord)
+  };
 }
 
 async function brokerCommercialHubSnapshot(req, month) {
@@ -1652,6 +1706,47 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
   }
 });
 
+// Panel de dirección: reutiliza la lectura operacional y la operación
+// proyectada; no persiste métricas manuales ni ejecuta acciones comerciales.
+brokerRouter.get("/broker/executive-dashboard", requireBrokerExecutiveDashboard, async (req, res) => {
+  try {
+    res.json(await brokerExecutiveDashboardSnapshot(req));
+  } catch (error) {
+    console.error("Broker executive dashboard error:", error);
+    res.status(500).json({ error: "No se pudo preparar el Dashboard Ejecutivo de Broker OS." });
+  }
+});
+
+brokerRouter.get("/broker/forecast-assumptions", requireBrokerExecutiveDashboard, async (req, res) => {
+  try {
+    const record = await prisma.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "broker_forecast_assumptions", status: "ACTIVE" }, orderBy: { updatedAt: "desc" } });
+    res.json(forecastAssumptionsPayload(record));
+  } catch (error) {
+    console.error("Broker forecast assumptions error:", error);
+    res.status(500).json({ error: "No se pudieron obtener los supuestos de proyección." });
+  }
+});
+
+// Solo la dirección propietaria puede cambiar supuestos por empresa. El
+// cambio queda auditado y se aplica inmediatamente a la próxima consulta;
+// nunca recalcula ni modifica etapas históricas de las operaciones.
+brokerRouter.put("/broker/forecast-assumptions", requireRole("OWNER", "ADMIN"), requireBrokerAction("configuration", "CONFIGURE"), async (req, res) => {
+  try {
+    const validation = validateBrokerForecastAssumptions(req.body?.probabilities || req.body || {});
+    if (!validation.ok) return res.status(422).json({ error: validation.error });
+    const data = { probabilities: validation.probabilities, updatedBy: req.user?.name || req.user?.email || "Usuario autorizado", source: "broker_executive_dashboard" };
+    const existing = await prisma.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "broker_forecast_assumptions", status: "ACTIVE" }, orderBy: { updatedAt: "desc" } });
+    const record = existing
+      ? await prisma.industryRecord.update({ where: { id: existing.id }, data: { title: "Supuestos de proyección Broker OS", data, status: "ACTIVE" } })
+      : await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "broker_forecast_assumptions", title: "Supuestos de proyección Broker OS", status: "ACTIVE", data } });
+    await recordAuditLog(req, "BROKER_FORECAST_ASSUMPTIONS_UPDATED", "broker_forecast_assumptions", record.id, { probabilities: validation.probabilities });
+    res.json(forecastAssumptionsPayload(record));
+  } catch (error) {
+    console.error("Update broker forecast assumptions error:", error);
+    res.status(500).json({ error: "No se pudieron guardar los supuestos de proyección." });
+  }
+});
+
 // Workspace relacional de propietarios. Sus listados se forman exclusivamente
 // desde propiedades visibles dentro del alcance del usuario; no existe una
 // búsqueda global por nombre, correo o RUT que pueda exponer otra cartera.
@@ -2417,6 +2512,122 @@ brokerRouter.post("/broker/operations", requireRole(ROLE_GROUPS.STAFF), requireB
   }
 });
 
+// Tracker de venta: una vista derivada de la misma operación y su línea de
+// tiempo. No mantiene una tabla paralela de hitos ni expone antecedentes de
+// otra empresa cuando se consulta con alcance holding.
+brokerRouter.get("/broker/operation-tracker/:operationId", requireBrokerAction("operations", "VIEW"), async (req, res) => {
+  try {
+    const operation = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.operationId, recordType: "broker_operation" }) });
+    if (!operation) return res.status(404).json({ error: "Operación no encontrada." });
+    const projected = (await projectBrokerOperations(prisma, [operation]))[0];
+    if (String(projected?.data?.operationType || "").toUpperCase() !== "SALE") return res.status(422).json({ error: "El Operation Tracker solo está disponible para negocios de venta." });
+    const propertyId = text(dataOf(operation).propertyId);
+    const [saleCase, property, relatedDocuments] = await Promise.all([
+      prisma.brokerSaleCase.findFirst({ where: { tenantId: operation.tenantId, operationId: operation.id } }),
+      propertyId ? prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: propertyId, recordType: "property" }), select: { title: true } }) : Promise.resolve(null),
+      propertyId ? prisma.industryRecord.findMany({
+        where: brokerWhere(req, { recordType: { in: ["property_document", "legal_document", "digital_signature"] } }),
+        select: { id: true, title: true, recordType: true, status: true, data: true, updatedAt: true },
+        orderBy: { updatedAt: "desc" },
+        take: 1000
+      }) : Promise.resolve([])
+    ]);
+    const documents = relatedDocuments.filter((document) => text(dataOf(document).propertyId) === propertyId);
+    const tracker = buildBrokerOperationTracker({ operation: projected, saleCase: saleCase ? { ...saleCase, propertyTitle: property?.title || null } : null, documents, actor: req.query?.actor });
+    res.json(tracker);
+  } catch (error) {
+    console.error("Get broker operation tracker error:", error);
+    res.status(500).json({ error: "No se pudo preparar el Operation Tracker." });
+  }
+});
+
+brokerRouter.put("/broker/operation-tracker/:operationId/checklist", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
+  try {
+    const operation = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.operationId, recordType: "broker_operation" }) });
+    if (!operation) return res.status(404).json({ error: "Operación no encontrada." });
+    if (operation.tenantId !== req.tenantId) return res.status(403).json({ error: "No puedes modificar una operación de otra empresa desde este acceso." });
+    const projected = operationPayload(operation);
+    const checklistKey = text(req.body?.checklistKey);
+    const note = text(req.body?.note);
+    if (!checklistKey || note.length > 1200) return res.status(422).json({ error: "Indica un punto válido y una observación de máximo 1.200 caracteres." });
+    const result = trackerChecklistUpdate({ operation: projected, checklistKey, completed: req.body?.completed !== false, note, actor: req.user?.name || req.user?.email });
+    if (!result.ok) return res.status(422).json({ error: result.error });
+    const now = new Date().toISOString();
+    const nextData = {
+      ...dataOf(operation),
+      trackerChecklist: result.checks,
+      timeline: [...(Array.isArray(dataOf(operation).timeline) ? dataOf(operation).timeline : []), { at: now, type: "TRACKER_CHECKLIST_UPDATED", trackerKey: result.trackerKey, checklistKey, completed: req.body?.completed !== false, note: note || "Checklist actualizado" }]
+    };
+    await prisma.$transaction((db) => updateBrokerOperationSnapshot(db, operation, nextData));
+    await recordAuditLog(req, "BROKER_TRACKER_CHECKLIST_UPDATED", "broker_operation", operation.id, { trackerKey: result.trackerKey, checklistKey, completed: req.body?.completed !== false });
+    const refreshed = await prisma.industryRecord.findUnique({ where: { id: operation.id } });
+    res.json(buildBrokerOperationTracker({ operation: (await projectBrokerOperations(prisma, [refreshed]))[0] }));
+  } catch (error) {
+    console.error("Update broker tracker checklist error:", error);
+    if (error?.status === 409) return res.status(409).json({ error: error.message });
+    res.status(500).json({ error: "No se pudo actualizar el checklist del tracker." });
+  }
+});
+
+brokerRouter.post("/broker/operation-tracker/:operationId/complete", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
+  try {
+    const operation = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.operationId, recordType: "broker_operation" }) });
+    if (!operation) return res.status(404).json({ error: "Operación no encontrada." });
+    if (operation.tenantId !== req.tenantId) return res.status(403).json({ error: "No puedes modificar una operación de otra empresa desde este acceso." });
+    const current = operationPayload(operation);
+    if (String(current.data.operationType || "").toUpperCase() !== "SALE") return res.status(422).json({ error: "El Operation Tracker solo está disponible para negocios de venta." });
+    const trackerReadiness = trackerAdvanceReadiness(current);
+    if (!trackerReadiness.ok) return res.status(422).json({ error: trackerReadiness.error, missing: trackerReadiness.missing || [] });
+    const tracker = trackerReadiness.tracker;
+    const alreadyCompleted = tracker.current?.status === "COMPLETADA";
+    if (alreadyCompleted) return res.status(422).json({ error: "El hito actual ya fue completado." });
+    const stages = stagesForBrokerOperation("SALE");
+    const currentIndex = stages.indexOf(String(current.data.stage));
+    const target = stages[currentIndex + 1] || null;
+    const now = new Date().toISOString();
+    const timeline = [...current.data.timeline, { at: now, type: "TRACKER_STAGE_COMPLETED", trackerKey: tracker.current.key, stage: current.data.stage, note: text(req.body?.note, `Checklist completo: ${tracker.current.label}`) }];
+    let persisted;
+    // Inscripción es el último hito del tracker. La entrega/postventa sigue
+    // existiendo en el negocio, pero no se hace pasar por un décimo hito legal.
+    if (current.data.stage === "INSCRIPCION_CBR" || !target) {
+      await prisma.$transaction((db) => updateBrokerOperationSnapshot(db, operation, { ...current.data, timeline }));
+      persisted = await prisma.industryRecord.findUnique({ where: { id: operation.id } });
+    } else {
+      const context = await brokerSaleContext(req, operation);
+      const readiness = brokerSaleReadiness({ targetStage: target, saleCase: context.saleCase, capture: context.capture, relatedRecords: context.relatedRecords });
+      if (!readiness.ready) return res.status(422).json({ error: `Antes de avanzar debes completar: ${readiness.missing.join(", ")}.`, missing: readiness.missing, requirements: readiness.requirements });
+      const withTransition = [...timeline, { at: now, type: "STAGE_CHANGED", from: current.data.stage, stage: target, note: `Avance desde Operation Tracker a ${target}` }];
+      persisted = await persistBrokerOperationStage(prisma, { existing: operation, type: "SALE", stage: target, terminal: false, data: { ...current.data, journeyVersion: BROKER_JOURNEY_VERSION, stage: target, checklist: brokerStageChecklist("SALE", target), timeline: withTransition } });
+    }
+    await recordAuditLog(req, "BROKER_TRACKER_STAGE_COMPLETED", "broker_operation", operation.id, { trackerKey: tracker.current.key, from: current.data.stage, to: target, timelineOnly: current.data.stage === "INSCRIPCION_CBR" || !target });
+    res.json(buildBrokerOperationTracker({ operation: (await projectBrokerOperations(prisma, [persisted]))[0] }));
+  } catch (error) {
+    console.error("Complete broker tracker stage error:", error);
+    if ([409, 422].includes(error?.status)) return res.status(error.status).json({ error: error.message });
+    res.status(500).json({ error: "No se pudo completar el hito del tracker." });
+  }
+});
+
+// Este borrador deja constancia de la actualización que se debería comunicar.
+// No llama a Meta, correo ni WhatsApp y no se presenta como una notificación enviada.
+brokerRouter.post("/broker/operation-tracker/:operationId/notification-preview", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "EDIT"), async (req, res) => {
+  try {
+    const operation = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.operationId, recordType: "broker_operation" }) });
+    if (!operation) return res.status(404).json({ error: "Operación no encontrada." });
+    if (operation.tenantId !== req.tenantId) return res.status(403).json({ error: "No puedes preparar comunicaciones de otra empresa." });
+    const tracker = buildBrokerOperationTracker({ operation: operationPayload(operation), actor: text(req.body?.actor, "PROPIETARIO") });
+    if (!tracker?.current) return res.status(422).json({ error: "No existe una etapa de tracker disponible." });
+    const actor = text(req.body?.actor, "PROPIETARIO").toUpperCase();
+    if (!["PROPIETARIO", "COMPRADOR"].includes(actor)) return res.status(422).json({ error: "Selecciona Propietario o Comprador para preparar el aviso." });
+    const draft = `Actualización de ${operation.title}: el proceso se encuentra en “${tracker.current.label}”. ${tracker.current.allChecklistComplete ? "El equipo registró los controles internos correspondientes." : "El equipo continúa revisando antecedentes y próximos pasos."}`;
+    await recordAuditLog(req, "BROKER_TRACKER_PROGRESS_NOTIFICATION_PREPARED", "broker_operation", operation.id, { actor, trackerKey: tracker.current.key, externalDelivery: false });
+    res.status(201).json({ actor, draft, externalDelivery: false, notice: "Borrador preparado para revisión humana. No se envió ningún mensaje externo." });
+  } catch (error) {
+    console.error("Prepare broker tracker notification error:", error);
+    res.status(500).json({ error: "No se pudo preparar el borrador de aviso." });
+  }
+});
+
 brokerRouter.get("/broker/sales/:operationId", requireBrokerAction("operations", "VIEW"), async (req, res) => {
   try {
     const operation = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.operationId, recordType: "broker_operation" }) });
@@ -2802,6 +3013,8 @@ brokerRouter.patch("/broker/operations/:id/stage", requireRole(ROLE_GROUPS.STAFF
     if (!transition.ok) return res.status(422).json({ error: transition.error });
     if (transition.current === transition.next) return res.json((await projectBrokerOperations(prisma, [existing]))[0]);
     if (current.data.operationType === "SALE" && transition.next !== transition.current && !["CANCELADA", "PERDIDA"].includes(transition.next)) {
+      const trackerReadiness = trackerAdvanceReadiness(current);
+      if (!trackerReadiness.ok) return res.status(422).json({ error: "Completa el checklist del Operation Tracker antes de avanzar una venta.", missing: trackerReadiness.missing || [], nextEndpoint: `/broker/operation-tracker/${existing.id}` });
       const context = await brokerSaleContext(req, existing);
       const readiness = brokerSaleReadiness({ targetStage: transition.next, saleCase: context.saleCase, capture: context.capture, relatedRecords: context.relatedRecords });
       if (!readiness.ready) return res.status(422).json({ error: `Antes de avanzar debes completar: ${readiness.missing.join(", ")}.`, missing: readiness.missing, requirements: readiness.requirements });
