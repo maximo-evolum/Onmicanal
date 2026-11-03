@@ -44,7 +44,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "deploy:check": "prisma migrate status",
     "audit:production": "npm audit --omit=dev --json",
-    "audit:security": "npm audit --audit-level=low",
+    "audit:security": "node scripts/audit-security.mjs",
     "load:test": "node scripts/load-test.mjs"
   },
   "dependencies": {
