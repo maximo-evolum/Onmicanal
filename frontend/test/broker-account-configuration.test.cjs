@@ -29,3 +29,12 @@ test("La interfaz usa rutas auditables para perfiles, carga y baja segura", () =
   assert.match(workspace, /BrokerAccountConfigurationPanel/);
   assert.match(workspace, /\["account", "Cuenta y equipo"\]/);
 });
+
+test("Cuenta y equipo comunica carga, error recuperable y foco visible", () => {
+  for (const token of ["aria-busy={loading || busy}", "broker-account-load-error", "Reintentar carga", "role=\"alert\"", "role=\"status\""]) {
+    assert.match(panel, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  const styles = fs.readFileSync(path.join(root, "app", "globals.css"), "utf8");
+  assert.match(styles, /\.broker-account-panel :is\(button,a,input,select,textarea,summary\):focus-visible/);
+  assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
+});

@@ -37,16 +37,27 @@ export function BrokerAccountConfigurationPanel({ canConfigure }: { canConfigure
   const [profiles, setProfiles] = useState<BrokerAccessProfiles | null>(null);
   const [team, setTeam] = useState<BrokerAccessTeamMember[]>([]);
   const [notice, setNotice] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [busy, setBusy] = useState(false);
   const [replacement, setReplacement] = useState<Record<string, string>>({});
   const [editingCustomProfileId, setEditingCustomProfileId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const [nextAccount, nextProfiles, nextTeam] = await Promise.all([getBrokerAccount(), getBrokerAccessProfiles(), getBrokerAccessTeam()]);
-    setAccount(nextAccount); setProfiles(nextProfiles); setTeam(nextTeam.users);
+    setLoading(true);
+    setLoadError("");
+    try {
+      const [nextAccount, nextProfiles, nextTeam] = await Promise.all([getBrokerAccount(), getBrokerAccessProfiles(), getBrokerAccessTeam()]);
+      setAccount(nextAccount); setProfiles(nextProfiles); setTeam(nextTeam.users);
+    } catch (error) {
+      setLoadError(technicalError(error, "No se pudo cargar la configuración de la cuenta Broker."));
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { refresh().catch((error) => setNotice(technicalError(error, "No se pudo cargar la configuración de la cuenta Broker."))); }, [refresh]);
+  useEffect(() => { refresh().catch(() => undefined); }, [refresh]);
 
   const activeReplacements = useMemo(() => team.filter((user) => user.isActive), [team]);
 
@@ -138,10 +149,13 @@ export function BrokerAccountConfigurationPanel({ canConfigure }: { canConfigure
 
   if (!canConfigure) return <section className="broker-account-panel"><h2>Cuenta y equipo</h2><p className="broker-human-note">Tu perfil puede consultar Broker OS, pero no administrar la cuenta, dotación, perfiles ni permisos.</p></section>;
 
-  return <section className="broker-account-panel">
+  return <section className="broker-account-panel" aria-busy={loading || busy}>
     <header className="broker-list-heading"><span>Cuenta Broker</span><h2>Equipo, perfiles y capacidades de la empresa</h2><p>Los cambios se limitan a esta empresa, quedan auditados y no eliminan datos históricos. Los módulos se habilitan o bloquean desde Desarrollador.</p></header>
     {notice ? <p className="broker-os-notice" role="status">{notice}</p> : null}
-    {!account || !profiles ? <p className="broker-empty">Cargando cuenta, perfiles y carga operativa…</p> : <>
+    {loadError ? <section className="broker-account-load-error" role="alert" aria-live="assertive"><div><b>No se pudo cargar la cuenta Broker</b><p>{loadError}</p></div><button type="button" className="secondary-btn" onClick={() => refresh().catch(() => undefined)} disabled={loading || busy}>Reintentar carga</button></section> : null}
+    {loading && (!account || !profiles) ? <p className="broker-empty" role="status" aria-live="polite">Cargando cuenta, perfiles y carga operativa…</p> : null}
+    {!loading && !loadError && (!account || !profiles) ? <p className="broker-empty" role="alert">No se recibió la configuración completa de la cuenta. Actualiza la página o vuelve a intentarlo.</p> : null}
+    {account && profiles ? <>
       <section className="broker-account-kpis" aria-label="Resumen de cuenta Broker">
         <article><span>Plan vigente</span><b>{account.account.plan.name}</b><small>{account.account.plan.code}</small></article>
         <article><span>Equipo activo</span><b>{account.account.team.active}{account.account.limits.users === null ? "" : ` / ${account.account.limits.users}`}</b><small>{account.account.team.remaining === null ? "Sin límite informado" : `${account.account.team.remaining} cupo(s) disponible(s)`}</small></article>
@@ -151,7 +165,7 @@ export function BrokerAccountConfigurationPanel({ canConfigure }: { canConfigure
 
       <section className="broker-account-section broker-data-retention"><div><span>Continuidad de datos</span><h3>Deshabilitar no borra</h3><p>{account.modules.retention.message}</p></div><div className="broker-module-pills">{account.modules.active.slice(0, 14).map((item) => <span key={item.module}>{item.label}</span>)}{account.modules.inactive.slice(0, 8).map((item) => <span key={item.module} className="inactive">{item.label} · bloqueado</span>)}</div></section>
 
-      <section className="broker-account-section"><header><div><span>Reparto con supervisión</span><h3>Carga por persona y pendientes sin asignar</h3><p>La recomendación usa una carga ponderada. Una jefatura debe confirmar cada asignación; no existe reparto automático en segundo plano.</p></div><button type="button" className="secondary-btn" disabled={busy} onClick={() => refresh().catch((error) => setNotice(technicalError(error, "No se pudo actualizar la carga.")))}>Actualizar carga</button></header>
+      <section className="broker-account-section"><header><div><span>Reparto con supervisión</span><h3>Carga por persona y pendientes sin asignar</h3><p>La recomendación usa una carga ponderada. Una jefatura debe confirmar cada asignación; no existe reparto automático en segundo plano.</p></div><button type="button" className="secondary-btn" disabled={busy || loading} onClick={() => refresh().catch(() => undefined)}>Actualizar carga</button></header>
         <div className="broker-workload-grid">{(account.workload?.members || []).map((member) => <article key={member.id} className={!member.isActive ? "inactive" : ""}><div><b>{member.name}</b><span>{member.profile?.profileLabel || "Perfil por defecto"}</span></div><strong>{member.workload.score}</strong><small>{member.workload.properties} propiedades · {member.workload.operations} operaciones · {member.workload.visits} visitas</small><em>{member.canReceivePortfolio ? "Puede recibir cartera" : "No recibe asignaciones"}</em></article>)}</div>
         {account.workload?.unassignedProperties?.length ? <div className="broker-unassigned-properties"><b>Propiedades sin responsable</b>{account.workload.unassignedProperties.map((property) => <div key={property.id}><span>{property.title}</span><button type="button" className="secondary-btn" disabled={busy} onClick={() => balanceProperty(property.id)}>Asignar con carga balanceada</button></div>)}</div> : <p className="broker-human-note">No hay propiedades sin responsable dentro de la cartera actual.</p>}
       </section>
@@ -174,6 +188,6 @@ export function BrokerAccountConfigurationPanel({ canConfigure }: { canConfigure
       <section className="broker-account-section"><header><div><span>Equipo</span><h3>Acceso, alcance y alta/baja segura</h3><p>La baja no elimina registros. Si una persona conserva cartera, selecciona antes un reemplazo activo para mantener continuidad.</p></div></header><div className="broker-team-config-grid">{team.map((user) => <form key={user.id} className={!user.isActive ? "inactive" : ""} onSubmit={(event) => saveMember(user, event)}><div className="broker-team-member-heading"><div><b>{user.name}</b><span>{user.email} · {user.jobTitle || user.role}</span></div><em>{user.isActive ? "Activa" : "Desactivada"}</em></div><label>Perfil personalizado<select name="customProfileId" defaultValue={user.profile.customProfileId || ""}><option value="">Usar perfil de sistema</option>{profiles.customProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}</select></label><label>Rol de sistema<select name="businessRole" defaultValue={user.profile.businessRole}>{SYSTEM_ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Alcance<select name="accessScope" defaultValue={user.profile.accessScope}>{SCOPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>Equipo<input name="teamKey" defaultValue={user.profile.teamKey || ""} placeholder="ventas-norte" /></label><label>Sucursal<input name="branchKey" defaultValue={user.profile.branchKey || ""} placeholder="santiago" /></label>{user.isActive ? <label>Reemplazo si se desactiva<select value={replacement[user.id] || ""} onChange={(event) => setReplacement((current) => ({ ...current, [user.id]: event.target.value }))}><option value="">Solo si tiene registros asignados</option>{activeReplacements.filter((candidate) => candidate.id !== user.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></label> : null}<div className="broker-team-actions"><button className="secondary-btn" disabled={busy || !user.isActive}>Guardar perfil</button><button type="button" className={user.isActive ? "secondary-btn danger" : "secondary-btn"} disabled={busy} onClick={() => setMemberStatus(user, !user.isActive)}>{user.isActive ? "Desactivar cuenta" : "Reactivar cuenta"}</button></div></form>)}</div></section>
 
       <section className="broker-account-section broker-external-bridge"><header><div><span>Conexiones y configuración IA</span><h3>Estado externo sin falsas integraciones</h3><p>Estos estados son de preparación. Ningún proveedor se habilita, contacta personas ni publica contenido hasta contar con contrato, autorización y configuración aprobada.</p></div></header><div>{account.externalReadiness.map((item) => <article key={item.key}><b>{item.label}</b><span>{item.category} · {item.status === "HUMAN_REVIEW" ? "Revisión humana" : "Pendiente de proveedor"}</span><p>{item.description}</p></article>)}</div></section>
-    </>}
+    </> : null}
   </section>;
 }
