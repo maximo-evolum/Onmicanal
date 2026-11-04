@@ -9,7 +9,7 @@ export function canBroker(access: BrokerAccessProfile | null, area: string, acti
 }
 
 export function brokerTabArea(tab: string) {
-  return ({ agents: "ai", training: "ai", administration_preview: "administration", financial_operations: "administration", commercial_hub: "commercial", operation_tracker: "operations", executive_dashboard: "overview", guides: "overview", compliance: "documents", governance: "access" } as Record<string, string>)[tab] || tab;
+  return ({ agents: "ai", training: "ai", ai_ops: "ai", case_management: "overview", administration_preview: "administration", financial_operations: "administration", commercial_hub: "commercial", operation_tracker: "operations", executive_dashboard: "overview", guides: "overview", compliance: "documents", governance: "access" } as Record<string, string>)[tab] || tab;
 }
 
 export function canBrokerFinance(access: BrokerAccessProfile | null, action = "VIEW") {

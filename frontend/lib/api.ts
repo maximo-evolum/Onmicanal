@@ -1956,6 +1956,24 @@ export type BrokerRecommendation = {
   dueAt?: string | null;
 };
 
+/** Vista explicable y de solo lectura de las prioridades ya calculadas por Broker OS. */
+export type BrokerAiOpsSnapshot = {
+  version: string;
+  generatedAt: string;
+  scope: { level: string; description: string };
+  notice: string;
+  summary: { totalPriorities: number; highPriorities: number; operationsVisible: number; pendingHumanReview: number };
+  priorities: Array<{
+    id: string; priority: string; priorityLabel: string; title: string; action: string; reason: string; impact: string;
+    responsible: string; dueAt: string | null; dueLabel: string; source: string; requiresApproval: boolean;
+    operationId: string | null; propertyId: string | null; href: string; evidence: string;
+  }>;
+  patterns: Array<{
+    key: string; status: "INFORMATIONAL" | "INSUFFICIENT_DATA" | string; title: string; detail: string;
+    evidence: { sampleSize: number; period: string; activity: number; averageStageAgeDays?: number };
+  }>;
+};
+
 /** Lectura única para que los paneles no recalculen métricas con criterios distintos. */
 export type BrokerOperationalReadModel = {
   version: string;
@@ -2168,6 +2186,11 @@ export function saveBrokerHoldingConfig(input: { code: string; name: string; ten
 
 export function getBrokerOverview(): Promise<BrokerOverview> {
   return request<BrokerOverview>("/broker/overview");
+}
+
+/** Consulta explicaciones de IA; el endpoint no crea ni modifica registros. */
+export function getBrokerAiOps(): Promise<BrokerAiOpsSnapshot> {
+  return request<BrokerAiOpsSnapshot>("/broker/ai-ops");
 }
 
 export function getBrokerOwners(query: { search?: string; portfolio?: BrokerOwnerPortfolioFilter } = {}): Promise<{ generatedAt: string; filters: { search: string; portfolio: BrokerOwnerPortfolioFilter }; owners: BrokerOwnerListItem[] }> {

@@ -56,6 +56,7 @@ import { BROKER_DOCUMENT_SOURCE_TYPES, brokerDocumentSourceArea, buildBrokerDocu
 import { COLLECTION_SOURCE_TYPES, applyBrokerFinancialAction, buildBrokerFinancialOperations } from "../services/broker-financial-operations.service.js";
 import { BROKER_CHAT_TARGET_TYPES, applyBrokerAgendaAction, buildBrokerCommercialHub, createBrokerAgendaData, validateBrokerAgendaInput } from "../services/broker-commercial-hub.service.js";
 import { BROKER_FORECAST_DEFAULT_ASSUMPTIONS, buildBrokerExecutiveDashboard, buildBrokerOperationTracker, trackerAdvanceReadiness, trackerChecklistUpdate, validateBrokerForecastAssumptions } from "../services/broker-executive-dashboard.service.js";
+import { buildBrokerAiOpsSnapshot } from "../services/broker-ai-ops.service.js";
 
 export const brokerRouter = Router();
 
@@ -172,6 +173,45 @@ async function monthlyAdministrationSnapshot(req, period) {
     maintenance: byType("maintenance_ticket"),
     liquidations: byType("administration_liquidation"),
   });
+}
+
+// AI Ops consume exactamente el mismo contrato operacional que Resumen,
+// Dashboard y Tracker. La consulta es deliberadamente de solo lectura: no
+// agrega alertas, no actualiza etapas y no inicia comunicaciones externas.
+async function brokerAiOpsReadModel(req) {
+  const overviewWhere = (extra) => ({ AND: [brokerWhere(req, extra), { recordType: { in: Object.keys(BROKER_RECORD_RESOURCES).filter((type) => canBrokerAction(req.brokerAccess, BROKER_RECORD_RESOURCES[type], "VIEW")) } }] });
+  const allowedTeamIds = Array.isArray(req.brokerAccess?.scopeUserIds) ? req.brokerAccess.scopeUserIds : undefined;
+  const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations, brokerRecords, teamMembers] = await Promise.all([
+    prisma.industryRecord.count({ where: overviewWhere({ recordType: "property" }) }),
+    canBrokerAction(req.brokerAccess, "commercial", "VIEW")
+      ? prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), orderBy: { updatedAt: "desc" }, take: 100 })
+      : Promise.resolve([]),
+    prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 50 }),
+    prisma.industryRecord.count({ where: overviewWhere({ recordType: "visit", status: { in: ["SCHEDULED", "PENDING", "ACTIVE"] } }) }),
+    prisma.industryRecord.count({ where: overviewWhere({ recordType: "realty_alert", status: { not: "RESOLVED" } }) }),
+    prisma.industryRecord.count({ where: overviewWhere({ recordType: "rental_contract", status: { in: ["ACTIVE", "PENDING_RENEWAL"] } }) }),
+    prisma.industryRecord.count({ where: overviewWhere({ recordType: "maintenance_ticket", status: { notIn: ["CLOSED", "CANCELLED"] } }) }),
+    prisma.industryRecord.count({ where: overviewWhere({ recordType: "post_sale_case", status: { notIn: ["CLOSED", "RESOLVED"] } }) }),
+    prisma.industryRecord.count({ where: overviewWhere({ recordType: "operation_financing", status: { in: ["REQUESTED", "UNDER_REVIEW", "APPROVED", "DISBURSED"] } }) }),
+    prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 100 }),
+    prisma.industryRecord.findMany({ where: overviewWhere({ recordType: { in: BROKER_RECORD_TYPES } }), orderBy: { updatedAt: "desc" }, take: 500 }),
+    prisma.workspaceUser.findMany({
+      where: { tenantId: req.tenantId, isActive: true, ...(allowedTeamIds ? { id: { in: allowedTeamIds } } : {}) },
+      select: { id: true, name: true, email: true }, orderBy: { name: "asc" }
+    })
+  ]);
+  return {
+    readModel: buildBrokerOperationalReadModel({
+      properties,
+      operations: await projectBrokerOperations(prisma, operations),
+      evaluations,
+      brokerRecords,
+      teamMembers,
+      scope: { level: req.brokerAccess?.accessScope || "ASSIGNED", description: req.brokerAccess?.scopeDescription || "Solo se muestran registros dentro de tu alcance autorizado." },
+      counts: { properties: propertyCount, scheduledVisits: visits, openAlerts: alerts, activeRentals: rentals, openMaintenance: maintenance, openPostSale: postSale, activeFinancing: financing }
+    }),
+    teamMembers,
+  };
 }
 
 function operationPayload(record) {
@@ -1703,6 +1743,19 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
   } catch (error) {
     console.error("Broker overview error:", error);
     res.status(500).json({ error: "No se pudo preparar el resumen operativo del Broker." });
+  }
+});
+
+// Vista explicable de IA: prioriza el mismo universo autorizado que el
+// resumen de Broker, pero no ofrece mutaciones. Cada tarjeta enlaza al
+// expediente u operación que conserva el estado real.
+brokerRouter.get("/broker/ai-ops", requireBrokerAction("ai", "VIEW"), async (req, res) => {
+  try {
+    const { readModel, teamMembers } = await brokerAiOpsReadModel(req);
+    res.json(buildBrokerAiOpsSnapshot({ readModel, teamMembers }));
+  } catch (error) {
+    console.error("Broker AI Ops error:", error);
+    res.status(500).json({ error: "No se pudo preparar AI Ops de Broker OS." });
   }
 });
 

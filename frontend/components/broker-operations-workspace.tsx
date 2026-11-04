@@ -8,6 +8,8 @@ import { BrokerOperationalSummary } from "./broker-operational-summary";
 import { BrokerDocumentIndexPanel } from "./broker-document-index";
 import { BrokerExecutiveDashboardPanel } from "./broker-executive-dashboard";
 import { BrokerOperationTrackerPanel } from "./broker-operation-tracker";
+import { BrokerAiOpsPanel } from "./broker-ai-ops";
+import { BrokerCaseManagementPanel } from "./broker-case-management";
 import { useSearchParams } from "next/navigation";
 import {
   advanceBrokerOperation,
@@ -101,7 +103,7 @@ import {
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "executive_dashboard" | "operation_tracker" | "agents" | "training" | "commissions" | "administration_preview" | "financial_operations" | "commercial_hub" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
+type Tab = "operations" | "executive_dashboard" | "operation_tracker" | "ai_ops" | "case_management" | "agents" | "training" | "commissions" | "administration_preview" | "financial_operations" | "commercial_hub" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -117,6 +119,10 @@ const BROKER_SCOPE_OPTIONS = [["ASSIGNED", "Solo registros asignados"], ["TEAM",
 const FINANCING_TERMINAL_STAGES = new Set(["CIERRE", "RECHAZADO", "CANCELADO"]);
 const ADMINISTRATION_LIQUIDATION_STAGES = ["DRAFT", "PENDING_APPROVAL", "ISSUED", "PAID"] as const;
 const CONTROLLED_BROKER_RECORD_TYPES = new Set(["maintenance_ticket", "remodeling_project", "property_inspection", "property_handover", "post_sale_case", "warranty_case"]);
+
+function isBrokerRecordArea(value: string): value is BrokerRecordArea {
+  return Object.prototype.hasOwnProperty.call(AREA_CONFIG, value);
+}
 
 function financingActionForStage(stage: string) {
   const normalized = String(stage || "").trim().toUpperCase();
@@ -404,11 +410,12 @@ export function BrokerOperationsPageContent() {
   const [operationEventNotes, setOperationEventNotes] = useState<Record<string, string>>({});
   const [operationEventTypes, setOperationEventTypes] = useState<Record<string, string>>({});
   const [operationReassignments, setOperationReassignments] = useState<Record<string, { assignedToId: string; reason: string }>>({});
+  const isReadOnlyTab = ["ai_ops", "case_management"].includes(tab);
   const writeAction = ["access", "configuration", "governance"].includes(tab) ? "CONFIGURE" : ["training", "agents"].includes(tab) ? "APPROVE" : tab === "commissions" ? "VIEW" : "EDIT";
   // La vista combina Marketing (proyectos) con Agenda e Inbox (comercial).
   // Un perfil de marketing puede preparar su borrador aunque no edite visitas;
   // la autorización concreta sigue validándose por cada acción y en el backend.
-  const canWriteTab = tab === "commercial_hub"
+  const canWriteTab = isReadOnlyTab ? false : tab === "commercial_hub"
     ? canBrokerCommercialHub(access, "CREATE") || canBrokerCommercialHub(access, "EDIT")
     : canBroker(access, brokerTabArea(tab), writeAction);
 
@@ -457,7 +464,7 @@ export function BrokerOperationsPageContent() {
       setTab(requestedTab as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "operations" || requestedTab === "executive_dashboard" || requestedTab === "operation_tracker" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "financial_operations" || requestedTab === "commercial_hub" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "ai_ops" || requestedTab === "case_management" || requestedTab === "operations" || requestedTab === "executive_dashboard" || requestedTab === "operation_tracker" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "financial_operations" || requestedTab === "commercial_hub" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
       setTab(requestedTab);
     }
   }, [searchParams]);
@@ -518,12 +525,16 @@ export function BrokerOperationsPageContent() {
         .finally(() => { if (active) setDocumentIndexLoading(false); });
       return () => { active = false; };
     }
+    if (!isBrokerRecordArea(tab)) {
+      setRecords([]);
+      return;
+    }
     setRecords([]);
     getBrokerRecords(tab).then(setRecords).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el expediente."));
   }, [tab, administrationPeriod, commercialMonth, access, documentFilters]);
 
   useEffect(() => {
-    if (!catalog || tab === "financing" || tab === "operations" || tab === "executive_dashboard" || tab === "operation_tracker" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "administration_preview" || tab === "financial_operations" || tab === "commercial_hub" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "governance" || tab === "access") return;
+    if (!catalog || !isBrokerRecordArea(tab)) return;
     const options = catalog.areas[tab] || [];
     setRecordType((current) => options.includes(current) ? current : options[0] || "");
   }, [catalog, tab]);
@@ -534,7 +545,7 @@ export function BrokerOperationsPageContent() {
   }, [overview]);
   const readModel = overview?.readModel;
   const recommendations = readModel?.priorities || overview?.recommendations || [];
-  const currentArea = tab !== "financing" && tab !== "operations" && tab !== "executive_dashboard" && tab !== "operation_tracker" && tab !== "agents" && tab !== "training" && tab !== "commissions" && tab !== "administration_preview" && tab !== "financial_operations" && tab !== "commercial_hub" && tab !== "guides" && tab !== "configuration" && tab !== "compliance" && tab !== "governance" && tab !== "access" ? tab : null;
+  const currentArea = isBrokerRecordArea(tab) ? tab : null;
   useEffect(() => {
     if (!requestedRecordId || !currentArea || !records.some((record) => record.id === requestedRecordId)) return;
     const frame = window.requestAnimationFrame(() => document.getElementById(`broker-record-${requestedRecordId}`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
@@ -1331,7 +1342,7 @@ export function BrokerOperationsPageContent() {
 
     <nav className="broker-os-tabs" aria-label="Areas de Broker OS">
       {([
-        ["operations", "Operaciones"], ["executive_dashboard", "Dashboard Ejecutivo"], ["operation_tracker", "Operation Tracker"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
+        ["operations", "Operaciones"], ["executive_dashboard", "Dashboard Ejecutivo"], ["operation_tracker", "Operation Tracker"], ["ai_ops", "AI Ops"], ["case_management", "Case Management"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
         ["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["financial_operations", "Finanzas operativas"], ["commercial_hub", "Marketing, agenda y chats"], ["guides", "Guías operativas"],
         ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["governance", "Gobierno y alertas"], ["compliance", "Cumplimiento"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
       ]).filter(([key]) => canBrokerTab(access, key)).map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as Tab)}>{label}</button>)}
@@ -1343,6 +1354,10 @@ export function BrokerOperationsPageContent() {
     {tab === "executive_dashboard" ? <BrokerExecutiveDashboardPanel canConfigure={canBroker(access, "configuration", "CONFIGURE")} /> : null}
 
     {tab === "operation_tracker" ? <BrokerOperationTrackerPanel operations={operations} requestedOperationId={requestedOperationId} canEdit={canBroker(access, "operations", "EDIT")} /> : null}
+
+    {tab === "ai_ops" ? <BrokerAiOpsPanel /> : null}
+
+    {tab === "case_management" ? <BrokerCaseManagementPanel access={access} /> : null}
 
     {tab === "operations" ? <>
       <BrokerOperationalSummary model={readModel} showPriorities={false} />
