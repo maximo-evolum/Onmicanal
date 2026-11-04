@@ -2,6 +2,10 @@
 /** @type {import("next").NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Conserva AGENTS.md como guía interna en español para el equipo. Next no
+  // debe insertar reglas automáticas ajenas al proyecto cada vez que se use
+  // el servidor de desarrollo.
+  agentRules: false,
   allowedDevOrigins: ["192.168.1.6"],
   async headers() {
     const headers = [

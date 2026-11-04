@@ -36,3 +36,8 @@ test("El Tracker largo mantiene desplazamiento del documento en pantallas móvil
   assert.match(styles, /@media \(max-width: 760px\) \{\s*html,\s*body \{\s*height: auto !important;/);
   assert.match(styles, /\.vertical-shell,\s*\.vertical-shell\.nav-collapsed \{\s*height: auto !important;/);
 });
+
+test("El Tracker largo mantiene desplazamiento del documento en escritorio", () => {
+  assert.match(styles, /html,\s*body \{\s*height: auto !important;\s*min-height: 100%;/);
+  assert.match(styles, /body \{\s*min-height: 100dvh;/);
+});

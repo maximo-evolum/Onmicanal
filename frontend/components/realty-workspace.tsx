@@ -418,7 +418,9 @@ function RealtyIntelligencePanel() {
     getRealtyIntelligence().then(setIntelligence).catch(() => setIntelligence(null));
   }, []);
 
-  if (!intelligence) return null;
+  // La inteligencia es un apoyo. Si una respuesta parcial no contiene sus
+  // agregados, el portal debe seguir utilizable con la cartera base.
+  if (!intelligence?.inventory || !intelligence.marketing) return null;
   const { inventory, marketing } = intelligence;
   return (
     <section className="vertical-card realty-predictive-panel">
@@ -1314,6 +1316,7 @@ export function RealtyPropertiesPageContent() {
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"ALL" | "VENTA" | "ARRIENDO" | "UNASSIGNED" | "VISITED" | "STALE">("ALL");
+  const inventoryAlerts = intelligence?.inventory?.alerts || [];
 
   async function refreshInventory() {
     await reload();
@@ -1392,9 +1395,9 @@ export function RealtyPropertiesPageContent() {
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
       {message ? <div className="module-toast">{message}</div> : null}
-      {intelligence?.inventory.alerts.length ? <section className={`realty-ws-card ${matchingStyles.inventoryAlerts}`}>
-        <header><div><span>Alertas de inventario</span><h2>Prioridades para revisar</h2><p>Se calculan desde las fichas y mandatos actuales; no generan tareas ni mensajes automáticos.</p></div><strong>{intelligence.inventory.alerts.length} pendiente(s)</strong></header>
-        <div className={matchingStyles.inventoryAlertList}>{intelligence.inventory.alerts.slice(0, 12).map((alert) => <article className={`${matchingStyles.inventoryAlert} ${alert.priority === "HIGH" ? matchingStyles.high : ""}`} key={alert.id}>
+      {inventoryAlerts.length ? <section className={`realty-ws-card ${matchingStyles.inventoryAlerts}`}>
+        <header><div><span>Alertas de inventario</span><h2>Prioridades para revisar</h2><p>Se calculan desde las fichas y mandatos actuales; no generan tareas ni mensajes automáticos.</p></div><strong>{inventoryAlerts.length} pendiente(s)</strong></header>
+        <div className={matchingStyles.inventoryAlertList}>{inventoryAlerts.slice(0, 12).map((alert) => <article className={`${matchingStyles.inventoryAlert} ${alert.priority === "HIGH" ? matchingStyles.high : ""}`} key={alert.id}>
           <b>{alert.action}</b><span>{propertyTitle(alert.title)}</span><small>{alert.message}</small><Link href={`/realty?view=properties&propertyId=${encodeURIComponent(alert.propertyId)}`}>Ver inventario</Link>
         </article>)}</div>
       </section> : null}

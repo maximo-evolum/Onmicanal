@@ -139,6 +139,15 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     await handoff.getByRole('link',{name:'Ver captación de origen'}).click();
     await page.getByRole('link',{name:'Abrir negocio',exact:true}).waitFor();
     await page.goto(`${frontendUrl}/realty?view=properties`);
+    if(process.env.QA_DEBUG) {
+      await page.waitForTimeout(1200);
+      console.log('Inventario QA:', {
+        cards: await page.locator('.property-portal-card').count(),
+        images: await page.locator('.property-portal-card img').count(),
+        summary: (await page.locator('body').innerText()).slice(0, 1200)
+      });
+      await page.screenshot({path:path.join(out,'propiedades-diagnostico.png')});
+    }
     const cardImage=page.locator('.property-portal-card img').first();
     await cardImage.waitFor();
     assert.equal(await cardImage.getAttribute('src'),sourcePhoto,'La tarjeta debe conservar exactamente la imagen de origen');

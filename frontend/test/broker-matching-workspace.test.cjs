@@ -19,7 +19,7 @@ test("Compradores consulta coincidencias, muestra advertencias y registra solo d
 });
 
 test("Inventario consume alertas calculadas y la API conserva sus contratos tipados", () => {
-  assert.match(component, /inventory\.alerts/);
+  assert.match(component, /inventoryAlerts = intelligence\?\.inventory\?\.alerts \|\| \[\]/);
   assert.match(component, /Alertas de inventario/);
   assert.match(api, /export type RealtyMatchCompatibility/);
   assert.match(api, /externalContactExecuted: false/);
