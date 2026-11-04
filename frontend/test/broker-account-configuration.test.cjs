@@ -37,4 +37,6 @@ test("Cuenta y equipo comunica carga, error recuperable y foco visible", () => {
   const styles = fs.readFileSync(path.join(root, "app", "globals.css"), "utf8");
   assert.match(styles, /\.broker-account-panel :is\(button,a,input,select,textarea,summary\):focus-visible/);
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
+  assert.match(styles, /\.broker-team-config-grid form,.broker-team-member-heading > div \{ min-width:0; \}/);
+  assert.match(styles, /\.broker-team-member-heading span \{ overflow-wrap:anywhere; \}/);
 });
