@@ -7,6 +7,21 @@ export const BROKER_BUSINESS_ROLES = Object.freeze([
 
 const ALL_AREAS = ["overview", "operations", "commercial", "rentals", "maintenance", "projects", "post_sale", "documents", "financing", "commissions", "administration", "ai", "configuration", "access"];
 
+// Los workspaces son una capa de organización de Broker OS. Un perfil
+// personalizado nunca agrega acciones: solo reduce los permisos que ya posee
+// su perfil de sistema base a los espacios indicados aquí.
+export const BROKER_WORKSPACE_CATALOG = Object.freeze({
+  CARTERA: { label: "Cartera y operaciones", areas: ["overview", "operations", "commercial"] },
+  ARRIENDOS: { label: "Arriendos y administración", areas: ["rentals", "administration", "commissions"] },
+  OPERACIONES: { label: "Mantenciones, proyectos y postventa", areas: ["maintenance", "projects", "post_sale"] },
+  EXPEDIENTE: { label: "Expediente y documentación", areas: ["documents"] },
+  FINANZAS: { label: "Financiamiento y comisiones", areas: ["financing", "commissions", "administration"] },
+  INTELIGENCIA: { label: "IA y análisis", areas: ["ai", "overview"] },
+  CONFIGURACION: { label: "Cuenta, perfiles y configuración", areas: ["configuration", "access"] }
+});
+
+export const BROKER_CUSTOM_PROFILE_TYPE = "broker_custom_profile";
+
 const PROFILE_POLICIES = Object.freeze({
   CEO: { label: "Dirección general", defaultScope: "COMPANY", actions: { "*": BROKER_ACCESS_ACTIONS } },
   GERENTE_COMERCIAL: { label: "Gerencia comercial", defaultScope: "COMPANY", actions: { overview: ["VIEW", "EXPORT"], operations: ["VIEW", "CREATE", "EDIT", "ASSIGN", "REASSIGN", "APPROVE"], commercial: ["VIEW", "CREATE", "EDIT", "ASSIGN", "REASSIGN", "APPROVE", "EXPORT"], projects: ["VIEW", "CREATE", "EDIT", "APPROVE"], documents: ["VIEW", "CREATE", "EDIT", "EXPORT"], commissions: ["VIEW", "EXPORT"], ai: ["VIEW", "APPROVE"] } },
@@ -25,6 +40,82 @@ const PROFILE_POLICIES = Object.freeze({
 function text(value, fallback = "") { const result = String(value ?? "").trim(); return result || fallback; }
 function upper(value, fallback = "") { return text(value, fallback).toUpperCase(); }
 
+function profileSource(profile) {
+  if (!profile || typeof profile !== "object") return {};
+  return profile.data && typeof profile.data === "object" && !Array.isArray(profile.data) ? profile.data : profile;
+}
+
+function unique(values = []) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function systemActionsForArea(policy, area) {
+  return [...new Set(policy?.actions?.[area] || policy?.actions?.["*"] || [])];
+}
+
+function customProfileWorkspaces(profile) {
+  const values = Array.isArray(profile?.workspaceKeys) ? profile.workspaceKeys : [];
+  return unique(values.map((item) => upper(item)).filter((key) => Object.hasOwn(BROKER_WORKSPACE_CATALOG, key)));
+}
+
+function effectiveCustomPolicy(profile) {
+  const baseRole = BROKER_BUSINESS_ROLES.includes(upper(profile?.baseRole)) ? upper(profile.baseRole) : "LECTURA";
+  const base = PROFILE_POLICIES[baseRole] || PROFILE_POLICIES.LECTURA;
+  const workspaceKeys = customProfileWorkspaces(profile);
+  const areas = unique(workspaceKeys.flatMap((key) => BROKER_WORKSPACE_CATALOG[key].areas));
+  const actions = Object.fromEntries(areas.map((area) => [area, systemActionsForArea(base, area)]).filter(([, allowed]) => allowed.length));
+  return {
+    label: `Perfil personalizado · ${text(profile?.name, "Sin nombre")}`,
+    defaultScope: profile?.accessScope || "ASSIGNED",
+    actions,
+    baseRole,
+    workspaceKeys,
+    agentKeys: unique((Array.isArray(profile?.agentKeys) ? profile.agentKeys : []).map((item) => text(item)).filter(Boolean)).slice(0, 16)
+  };
+}
+
+export function brokerSystemProfileCatalog() {
+  return BROKER_BUSINESS_ROLES.map((key) => {
+    const policy = PROFILE_POLICIES[key];
+    const actions = Object.fromEntries(ALL_AREAS.map((area) => [area, systemActionsForArea(policy, area)]).filter(([, allowed]) => allowed.length));
+    return { key, label: policy.label, defaultScope: policy.defaultScope, actions, kind: "SYSTEM" };
+  });
+}
+
+export function normalizeBrokerCustomProfile(input = {}) {
+  const name = text(input.name).slice(0, 120);
+  const description = text(input.description).slice(0, 500);
+  const baseRole = upper(input.baseRole);
+  const accessScope = upper(input.accessScope);
+  const workspaceKeys = customProfileWorkspaces(input);
+  const agentKeys = unique((Array.isArray(input.agentKeys) ? input.agentKeys : []).map((item) => text(item).toLowerCase()).filter((item) => /^[a-z0-9_-]{2,64}$/.test(item))).slice(0, 16);
+  if (name.length < 3) return { ok: false, error: "El nombre del perfil debe tener al menos 3 caracteres." };
+  if (!BROKER_BUSINESS_ROLES.includes(baseRole)) return { ok: false, error: "Selecciona un perfil de sistema válido como base." };
+  if (!BROKER_ACCESS_SCOPES.includes(accessScope) || accessScope === "HOLDING") return { ok: false, error: "Un perfil personalizado debe usar un alcance entre asignado y empresa; el alcance holding se administra por separado." };
+  if (!workspaceKeys.length) return { ok: false, error: "Selecciona al menos un workspace para restringir el perfil." };
+  const data = { name, description, baseRole, accessScope, workspaceKeys, agentKeys, version: 1 };
+  return { ok: true, data, effective: effectiveCustomPolicy(data) };
+}
+
+export function brokerCustomProfilePayload(record, assignedUserCount = 0) {
+  const profile = profileSource(record);
+  const effective = effectiveCustomPolicy(profile);
+  return {
+    id: record?.id || null,
+    name: text(profile.name, record?.title || "Perfil personalizado"),
+    description: text(profile.description),
+    baseRole: effective.baseRole,
+    accessScope: effective.defaultScope,
+    workspaceKeys: effective.workspaceKeys,
+    agentKeys: effective.agentKeys,
+    actions: effective.actions,
+    kind: "CUSTOM",
+    assignedUserCount: Number(assignedUserCount || 0),
+    canDelete: Number(assignedUserCount || 0) === 0,
+    updatedAt: record?.updatedAt || null
+  };
+}
+
 export function defaultBrokerBusinessRole(user = {}) {
   if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(upper(user.role))) return "CEO";
   if (upper(user.role) === "VIEWER") return "LECTURA";
@@ -33,10 +124,13 @@ export function defaultBrokerBusinessRole(user = {}) {
   return "LECTURA";
 }
 
-export function normalizeBrokerAccessProfile(input = {}, user = {}) {
-  const businessRole = upper(user.role) === "VIEWER" ? "LECTURA" : BROKER_BUSINESS_ROLES.includes(upper(input.businessRole)) ? upper(input.businessRole) : input.businessRole ? "LECTURA" : defaultBrokerBusinessRole(user);
-  const policy = PROFILE_POLICIES[businessRole];
-  const requestedScope = upper(input.accessScope);
+export function normalizeBrokerAccessProfile(input = {}, user = {}, customProfile = null) {
+  const custom = profileSource(customProfile);
+  const customEnabled = Boolean(input?.customProfileId && custom?.name);
+  const customPolicy = customEnabled ? effectiveCustomPolicy(custom) : null;
+  const businessRole = upper(user.role) === "VIEWER" ? "LECTURA" : customPolicy?.baseRole || (BROKER_BUSINESS_ROLES.includes(upper(input.businessRole)) ? upper(input.businessRole) : input.businessRole ? "LECTURA" : defaultBrokerBusinessRole(user));
+  const policy = customPolicy || PROFILE_POLICIES[businessRole];
+  const requestedScope = customPolicy ? upper(customPolicy.defaultScope) : upper(input.accessScope);
   const accessScope = BROKER_ACCESS_SCOPES.includes(requestedScope) ? requestedScope : policy.defaultScope;
   return {
     businessRole,
@@ -47,7 +141,11 @@ export function normalizeBrokerAccessProfile(input = {}, user = {}) {
     requestedScope: accessScope,
     teamKey: text(input.teamKey) || null,
     branchKey: text(input.branchKey) || null,
-    policy,
+    policy: { label: policy.label, defaultScope: policy.defaultScope, actions: policy.actions },
+    profileKind: customPolicy ? "CUSTOM" : "SYSTEM",
+    customProfileId: customPolicy ? text(input.customProfileId) : null,
+    workspaceKeys: customPolicy?.workspaceKeys || null,
+    agentKeys: customPolicy?.agentKeys || null,
   };
 }
 
@@ -55,7 +153,12 @@ export function canBrokerAction(access, resource, action) {
   if (!access) return false;
   if (upper(access.technicalRole) === "SUPER_ADMIN") return true;
   if (upper(access.technicalRole) === "VIEWER" && upper(action) !== "VIEW") return false;
-  const policy = PROFILE_POLICIES[access.businessRole];
+  // Un perfil personalizado ya trae una política reducida en `access.policy`.
+  // No se debe recalcular desde businessRole porque aquello ignoraría los
+  // workspaces del perfil y podría devolver privilegios que fueron quitados.
+  const policy = access.profileKind === "CUSTOM" && access.policy && typeof access.policy === "object"
+    ? access.policy
+    : PROFILE_POLICIES[access.businessRole];
   if (!policy) return false;
   const allowed = policy.actions[resource] || policy.actions["*"] || [];
   return allowed.includes(upper(action));
@@ -71,19 +174,30 @@ export function brokerFinancingActionForStage(stage) {
   return "EDIT";
 }
 
-export function profileRecordData(userId, input, user) {
-  const normalized = normalizeBrokerAccessProfile(input, user);
-  return { userId, businessRole: normalized.businessRole, accessScope: normalized.requestedScope, teamKey: normalized.teamKey, branchKey: normalized.branchKey, version: 1 };
+export function profileRecordData(userId, input, user, customProfile = null) {
+  const normalized = normalizeBrokerAccessProfile(input, user, customProfile);
+  return {
+    userId,
+    businessRole: normalized.businessRole,
+    accessScope: normalized.requestedScope,
+    teamKey: normalized.teamKey,
+    branchKey: normalized.branchKey,
+    ...(normalized.customProfileId ? { customProfileId: normalized.customProfileId } : {}),
+    version: 1
+  };
 }
 
 function profileData(record) { return record?.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data : {}; }
 
 export async function loadBrokerAccessContext({ prisma, tenantId, user }) {
   if (!tenantId || !user?.id || user.isActive === false) throw new Error("Sesión Broker no válida.");
-  const records = await prisma.industryRecord.findMany({ where: { tenantId, recordType: "broker_access_profile", status: "ACTIVE" }, select: { data: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }] });
-  const latest = [...new Map(records.map(profileData).reverse().map(profile => [String(profile.userId), profile])).values()];
+  const records = await prisma.industryRecord.findMany({ where: { tenantId, recordType: { in: ["broker_access_profile", BROKER_CUSTOM_PROFILE_TYPE] }, status: "ACTIVE" }, select: { id: true, title: true, recordType: true, data: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }] });
+  const accessRecords = records.filter((record) => record.recordType !== BROKER_CUSTOM_PROFILE_TYPE);
+  const customProfiles = new Map(records.filter((record) => record.recordType === BROKER_CUSTOM_PROFILE_TYPE).map((record) => [String(record.id), record]));
+  const latest = [...new Map(accessRecords.map(profileData).reverse().map(profile => [String(profile.userId), profile])).values()];
   const current = latest.find((profile) => String(profile.userId) === String(user?.id)) || {};
-  const access = normalizeBrokerAccessProfile(upper(user.role) === "SUPER_ADMIN" ? { businessRole: "CEO", accessScope: current.accessScope === "HOLDING" ? "HOLDING" : "COMPANY" } : current, user);
+  const selectedCustomProfile = current.customProfileId ? customProfiles.get(String(current.customProfileId)) : null;
+  const access = normalizeBrokerAccessProfile(upper(user.role) === "SUPER_ADMIN" ? { businessRole: "CEO", accessScope: current.accessScope === "HOLDING" ? "HOLDING" : "COMPANY" } : current, user, selectedCustomProfile);
   let sameScopeUsers = latest.filter((profile) => {
     if (!profile.userId) return false;
     if (access.accessScope === "TEAM") return access.teamKey && String(profile.teamKey || "") === access.teamKey && String(profile.branchKey || "") === (access.branchKey || "");
@@ -134,12 +248,16 @@ export function brokerRecordWhere(req, extra = {}) {
   return { ...scope, ...extra };
 }
 
-export function validateBrokerAccessProfile(input = {}, user = {}) {
-  if (!BROKER_BUSINESS_ROLES.includes(upper(input.businessRole))) return "Selecciona un rol de negocio válido.";
-  if (!BROKER_ACCESS_SCOPES.includes(upper(input.accessScope))) return "Selecciona un alcance válido.";
-  if (upper(input.accessScope) === "TEAM" && !text(input.teamKey)) return "Indica el equipo para el alcance de equipo.";
-  if (upper(input.accessScope) === "BRANCH" && !text(input.branchKey)) return "Indica la sucursal para ese alcance.";
-  if (upper(user.role) === "VIEWER" && upper(input.businessRole) !== "LECTURA") return "Una cuenta de solo lectura no puede recibir un rol de escritura.";
+export function validateBrokerAccessProfile(input = {}, user = {}, customProfile = null) {
+  const custom = profileSource(customProfile);
+  const usingCustom = Boolean(input?.customProfileId && custom?.name);
+  if (!usingCustom && !BROKER_BUSINESS_ROLES.includes(upper(input.businessRole))) return "Selecciona un rol de negocio válido.";
+  if (!usingCustom && !BROKER_ACCESS_SCOPES.includes(upper(input.accessScope))) return "Selecciona un alcance válido.";
+  const scope = usingCustom ? upper(custom.accessScope) : upper(input.accessScope);
+  if (scope === "TEAM" && !text(input.teamKey)) return "Indica el equipo para el alcance de equipo.";
+  if (scope === "BRANCH" && !text(input.branchKey)) return "Indica la sucursal para ese alcance.";
+  const role = usingCustom ? upper(custom.baseRole) : upper(input.businessRole);
+  if (upper(user.role) === "VIEWER" && role !== "LECTURA") return "Una cuenta de solo lectura no puede recibir un rol de escritura.";
   return null;
 }
 

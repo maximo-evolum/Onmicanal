@@ -2167,6 +2167,10 @@ export type BrokerCatalog = {
 export type BrokerAccessProfile = {
   businessRole: string;
   profileLabel: string;
+  profileKind?: "SYSTEM" | "CUSTOM";
+  customProfileId?: string | null;
+  workspaceKeys?: string[] | null;
+  agentKeys?: string[] | null;
   accessScope: "ASSIGNED" | "TEAM" | "BRANCH" | "COMPANY" | "HOLDING";
   requestedScope: string;
   teamKey: string | null;
@@ -2185,7 +2189,7 @@ export function getRealtyBuyers(): Promise<Lead[]> {
   return request("/realty/buyers");
 }
 
-export type BrokerAccessTeamMember = { id: string; name: string; email: string; role: string; jobTitle: string | null; isActive: boolean; profile: { businessRole: string; accessScope: string; teamKey: string | null; branchKey: string | null } };
+export type BrokerAccessTeamMember = { id: string; name: string; email: string; role: string; jobTitle: string | null; isActive: boolean; profile: { businessRole: string; accessScope: string; teamKey: string | null; branchKey: string | null; customProfileId?: string | null }; workload?: { properties: number; operations: number; visits: number; pending: number; score: number } };
 
 export function getBrokerAccessTeam(): Promise<{ users: BrokerAccessTeamMember[] }> {
   return request<{ users: BrokerAccessTeamMember[] }>("/broker/access/team");
@@ -2202,8 +2206,78 @@ export function getBrokerOperationAssignees(): Promise<{ users: BrokerAssignable
   return request<{ users: BrokerAssignableUser[] }>("/broker/operations/assignees");
 }
 
-export function updateBrokerAccessProfile(userId: string, input: { businessRole: string; accessScope: string; teamKey?: string; branchKey?: string }): Promise<{ profile: BrokerAccessTeamMember["profile"] }> {
+export function updateBrokerAccessProfile(userId: string, input: { businessRole: string; accessScope: string; teamKey?: string; branchKey?: string; customProfileId?: string | null }): Promise<{ profile: BrokerAccessTeamMember["profile"] }> {
   return request(`/broker/access/users/${encodeURIComponent(userId)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export type BrokerCustomAccessProfile = {
+  id: string;
+  name: string;
+  description: string;
+  baseRole: string;
+  accessScope: string;
+  workspaceKeys: string[];
+  agentKeys: string[];
+  actions: Record<string, string[]>;
+  kind: "CUSTOM";
+  assignedUserCount: number;
+  canDelete: boolean;
+  updatedAt: string | null;
+};
+
+export type BrokerAccessProfiles = {
+  workspaces: Array<{ key: string; label: string; areas: string[] }>;
+  systemProfiles: Array<{ key: string; label: string; defaultScope: string; actions: Record<string, string[]>; kind: "SYSTEM" }>;
+  customProfiles: BrokerCustomAccessProfile[];
+};
+
+export type BrokerTeamWorkload = {
+  generatedAt: string;
+  summary: { activeUsers: number; inactiveUsers: number; unassigned: { properties: number; operations: number; visits: number; pending: number }; totalWorkload: number };
+  members: Array<{ id: string; name: string; email: string; role: string; jobTitle: string | null; isActive: boolean; profile: BrokerAccessProfile | null; workload: { properties: number; operations: number; visits: number; pending: number; score: number }; canReceivePortfolio: boolean }>;
+  suggestedAssignee: { id: string; name: string; score: number; reason: string } | null;
+  unassignedProperties?: Array<{ id: string; title: string }>;
+};
+
+export type BrokerAccountSnapshot = {
+  version: string;
+  account: { id: string | null; name: string; slug: string | null; plan: { code: string; name: string; description: string }; limits: { users: number | null; messagesMonthly: number | null }; team: { active: number; inactive: number; remaining: number | null } };
+  modules: { active: Array<{ module: string; label: string; source: string; enabled: true }>; inactive: Array<{ module: string; label: string; source: string; enabled: false }>; retention: { dataPreserved: boolean; message: string } };
+  workload: BrokerTeamWorkload | null;
+  externalReadiness: Array<{ key: string; label: string; category: string; status: string; description: string }>;
+  generatedAt: string;
+};
+
+export function getBrokerAccount(): Promise<BrokerAccountSnapshot> {
+  return request<BrokerAccountSnapshot>("/broker/account");
+}
+
+export function getBrokerTeamWorkload(): Promise<BrokerTeamWorkload> {
+  return request<BrokerTeamWorkload>("/broker/access/workload");
+}
+
+export function getBrokerAccessProfiles(): Promise<BrokerAccessProfiles> {
+  return request<BrokerAccessProfiles>("/broker/access/profiles");
+}
+
+export function createBrokerAccessProfile(input: { name: string; description?: string; baseRole: string; accessScope: string; workspaceKeys: string[]; agentKeys?: string[] }): Promise<{ profile: BrokerCustomAccessProfile }> {
+  return request("/broker/access/profiles", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBrokerCustomAccessProfile(id: string, input: { name?: string; description?: string; baseRole?: string; accessScope?: string; workspaceKeys?: string[]; agentKeys?: string[] }): Promise<{ profile: BrokerCustomAccessProfile }> {
+  return request(`/broker/access/profiles/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function archiveBrokerAccessProfile(id: string): Promise<void> {
+  return request(`/broker/access/profiles/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function updateBrokerTeamMemberStatus(userId: string, input: { isActive: boolean; reassignToId?: string }): Promise<{ user: Pick<BrokerAccessTeamMember, "id" | "name" | "email" | "isActive">; reassigned: number; notice: string }> {
+  return request(`/broker/access/users/${encodeURIComponent(userId)}/status`, { method: "PATCH", body: JSON.stringify(input) });
+}
+
+export function assignBrokerPropertyBalanced(propertyId: string): Promise<{ property: { id: string; title: string; assignedToId: string }; assignee: { id: string; name: string; score: number }; notice: string }> {
+  return request("/broker/access/assignments/balanced", { method: "POST", body: JSON.stringify({ propertyId }) });
 }
 
 export type BrokerHoldingConfig = {

@@ -1,5 +1,6 @@
 /** Archivo: Expone las rutas HTTP del dominio broker y delega su lógica a servicios protegidos. */
 import { Router } from "express";
+import { PLAN_DEFINITIONS, normalizePlanCode } from "../lib/modules.js";
 import { createBrokerProspectsRouter } from "./broker-prospects.routes.js";
 import { convertBrokerProspect } from "../services/broker-prospect-conversion.service.js";
 import { prisma } from "../lib/db.js";
@@ -46,7 +47,8 @@ import { BROKER_SALE_OPTIONS, brokerSaleReadiness, normalizeBrokerSaleCase } fro
 import { BROKER_RENTAL_OPTIONS, brokerRentalReadiness, normalizeBrokerRentalCase } from "../services/broker-rental.service.js";
 import { BROKER_MAINTENANCE_OPTIONS, brokerMaintenanceReadiness, brokerProjectReadiness, normalizeBrokerMaintenance, normalizeBrokerMaintenanceQuote, normalizeBrokerProject } from "../services/broker-maintenance-project.service.js";
 import { BROKER_POST_SALE_OPTIONS, brokerPostSaleReadiness, normalizeBrokerHandover, normalizeBrokerInspection, normalizeBrokerPostSaleCase, normalizeBrokerWarrantyCase, postSaleStages } from "../services/broker-post-sale.service.js";
-import { brokerAssigneeAllowed, validateBrokerAccessProfile, brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
+import { BROKER_CUSTOM_PROFILE_TYPE, BROKER_WORKSPACE_CATALOG, brokerAssigneeAllowed, brokerCustomProfilePayload, brokerSystemProfileCatalog, normalizeBrokerCustomProfile, normalizeBrokerAccessProfile, validateBrokerAccessProfile, brokerFinancingActionForStage, brokerRecordWhere, canBrokerAction, loadBrokerAccessContext, profileRecordData, requireBrokerAction } from "../services/broker-access.service.js";
+import { buildBrokerAccountSnapshot, buildBrokerTeamWorkload } from "../services/broker-account-configuration.service.js";
 import { BROKER_RECORD_RESOURCES } from "../services/broker-record-access.service.js";
 import { administrationActionForLiquidationStage, buildMonthlyAdministration, normalizeAdministrationPeriod, validateAdministrationLiquidationTransition } from "../services/broker-monthly-administration.service.js";
 import { BROKER_JOURNEY_CATALOG, BROKER_JOURNEY_VERSION, brokerOperationPayload, captureJourney, projectBrokerOperations, validateBrokerOperationReferences, persistBrokerOperationStage, updateBrokerOperationSnapshot } from "../services/broker-operation-contract.service.js";
@@ -110,6 +112,35 @@ function dataOf(record) {
 
 function brokerWhere(req, extra = {}) {
   return brokerRecordWhere(req, extra);
+}
+
+const BROKER_TEAM_RECORD_TYPES = [...new Set(["property", "broker_operation", "visit", ...BROKER_RECORD_TYPES])];
+
+function latestBrokerProfiles(records = []) {
+  return [...new Map(records.map((record) => dataOf(record)).reverse().map((profile) => [String(profile.userId || ""), profile])).values()];
+}
+
+async function brokerTeamState(req) {
+  const [users, accessRecords, customRecords, records] = await Promise.all([
+    prisma.workspaceUser.findMany({ where: { tenantId: req.tenantId }, select: { id: true, name: true, email: true, role: true, jobTitle: true, isActive: true }, orderBy: { name: "asc" } }),
+    prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", status: "ACTIVE" }, select: { id: true, data: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }] }),
+    prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: BROKER_CUSTOM_PROFILE_TYPE, status: "ACTIVE" }, select: { id: true, title: true, data: true, updatedAt: true }, orderBy: { updatedAt: "desc" } }),
+    prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: { in: BROKER_TEAM_RECORD_TYPES } }, select: { id: true, recordType: true, status: true, assignedToId: true, data: true }, take: 8000 })
+  ]);
+  const customById = new Map(customRecords.map((record) => [String(record.id), record]));
+  const persistedByUser = new Map(latestBrokerProfiles(accessRecords).map((profile) => [String(profile.userId), profile]));
+  const profilesByUser = new Map(users.map((user) => {
+    const raw = persistedByUser.get(String(user.id)) || {};
+    const custom = raw.customProfileId ? customById.get(String(raw.customProfileId)) : null;
+    return [String(user.id), normalizeBrokerAccessProfile(raw, user, custom)];
+  }));
+  const workload = buildBrokerTeamWorkload({
+    users,
+    records,
+    profilesByUser,
+    canOperate: (profile) => canBrokerAction(profile, "operations", "EDIT") || canBrokerAction(profile, "commercial", "EDIT")
+  });
+  return { users, accessRecords, customRecords, records, persistedByUser, customById, profilesByUser, workload };
 }
 
 brokerRouter.use("/broker/prospects", createBrokerProspectsRouter({ prisma, assertAssignedUser, convert: (db, req, prospect, terms) => convertBrokerProspect(db, req, prospect, terms, { ensureBrokerCaptureProperty, propertyDataFromCapture, ensureBrokerSaleCase, ensureBrokerRentalCase }) }));
@@ -2095,12 +2126,104 @@ brokerRouter.put("/broker/access/holding", requireBrokerAction("access", "CONFIG
 
 brokerRouter.get("/broker/access/team", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
   try {
-    const [users, profiles] = await Promise.all([
-      prisma.workspaceUser.findMany({ where: { tenantId: req.tenantId }, select: { id: true, name: true, email: true, role: true, jobTitle: true, isActive: true }, orderBy: { name: "asc" } }),
-      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", status: "ACTIVE" }, select: { data: true, updatedAt: true } }),
+    const team = await brokerTeamState(req);
+    const workloadByUser = new Map(team.workload.members.map((member) => [String(member.id), member.workload]));
+    res.json({ users: team.users.map((user) => {
+      const raw = team.persistedByUser.get(String(user.id)) || {};
+      const custom = raw.customProfileId ? team.customById.get(String(raw.customProfileId)) : null;
+      const profile = profileRecordData(user.id, raw, user, custom);
+      return { ...user, profile, workload: workloadByUser.get(String(user.id)) || { properties: 0, operations: 0, visits: 0, pending: 0, score: 0 } };
+    }) });
+  } catch (error) { next(error); }
+});
+
+// Cuenta del tenant Broker: lectura administrativa de plan, módulos y límites.
+// Desactivar un módulo se administra desde Desarrollador; este panel deja claro
+// que esa decisión bloquea capacidad, no elimina datos históricos.
+brokerRouter.get("/broker/account", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const [team, modules] = await Promise.all([
+      brokerTeamState(req),
+      prisma.tenantModule.findMany({ where: { tenantId: req.tenantId }, select: { module: true, enabled: true, source: true }, orderBy: { module: "asc" } })
     ]);
-    const profileByUser = new Map(profiles.map((record) => [String(dataOf(record).userId || ""), { ...dataOf(record), updatedAt: record.updatedAt }]));
-    res.json({ users: users.map((user) => ({ ...user, profile: profileByUser.get(user.id) || profileRecordData(user.id, {}, user) })) });
+    const planCode = normalizePlanCode(req.tenant?.plan || "STARTER");
+    const plan = PLAN_DEFINITIONS[planCode];
+    const customLimits = req.tenant?.billingLimits && typeof req.tenant.billingLimits === "object" ? req.tenant.billingLimits : {};
+    res.json(buildBrokerAccountSnapshot({
+      tenant: req.tenant,
+      plan,
+      limits: { ...(plan?.limits || {}), ...customLimits },
+      modules,
+      users: team.users,
+      workload: team.workload,
+      externalReadiness: BROKER_EXTERNAL_READINESS
+    }));
+  } catch (error) { next(error); }
+});
+
+brokerRouter.get("/broker/access/workload", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const team = await brokerTeamState(req);
+    res.json(team.workload);
+  } catch (error) { next(error); }
+});
+
+brokerRouter.get("/broker/access/profiles", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const [profiles, assignments] = await Promise.all([
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: BROKER_CUSTOM_PROFILE_TYPE, status: "ACTIVE" }, select: { id: true, title: true, data: true, updatedAt: true }, orderBy: { updatedAt: "desc" } }),
+      prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", status: "ACTIVE" }, select: { data: true } })
+    ]);
+    const usage = new Map();
+    for (const assignment of assignments) {
+      const id = text(dataOf(assignment).customProfileId);
+      if (id) usage.set(id, (usage.get(id) || 0) + 1);
+    }
+    res.json({
+      workspaces: Object.entries(BROKER_WORKSPACE_CATALOG).map(([key, value]) => ({ key, label: value.label, areas: value.areas })),
+      systemProfiles: brokerSystemProfileCatalog(),
+      customProfiles: profiles.map((profile) => brokerCustomProfilePayload(profile, usage.get(profile.id) || 0))
+    });
+  } catch (error) { next(error); }
+});
+
+brokerRouter.post("/broker/access/profiles", requireRole("OWNER", "ADMIN"), requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const normalized = normalizeBrokerCustomProfile(req.body || {});
+    if (!normalized.ok) return res.status(422).json({ error: normalized.error });
+    const record = await prisma.industryRecord.create({
+      data: { tenantId: req.tenantId, recordType: BROKER_CUSTOM_PROFILE_TYPE, title: `Perfil Broker: ${normalized.data.name}`, status: "ACTIVE", data: normalized.data }
+    });
+    await recordAuditLog(req, "BROKER_CUSTOM_PROFILE_CREATED", BROKER_CUSTOM_PROFILE_TYPE, record.id, { name: normalized.data.name, baseRole: normalized.data.baseRole, accessScope: normalized.data.accessScope, workspaceKeys: normalized.data.workspaceKeys, agentKeys: normalized.data.agentKeys });
+    res.status(201).json({ profile: brokerCustomProfilePayload(record, 0) });
+  } catch (error) { next(error); }
+});
+
+brokerRouter.patch("/broker/access/profiles/:id", requireRole("OWNER", "ADMIN"), requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const existing = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: BROKER_CUSTOM_PROFILE_TYPE, status: "ACTIVE" } });
+    if (!existing) return res.status(404).json({ error: "Perfil personalizado no encontrado en esta empresa." });
+    const normalized = normalizeBrokerCustomProfile({ ...dataOf(existing), ...(req.body || {}) });
+    if (!normalized.ok) return res.status(422).json({ error: normalized.error });
+    const assignedUserCount = await prisma.industryRecord.count({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", status: "ACTIVE", data: { path: ["customProfileId"], equals: existing.id } } });
+    const old = dataOf(existing);
+    const structuralChanged = ["baseRole", "accessScope", "workspaceKeys", "agentKeys"].some((key) => JSON.stringify(old[key] || []) !== JSON.stringify(normalized.data[key] || []));
+    if (assignedUserCount && structuralChanged) return res.status(409).json({ error: "Este perfil está asignado a usuarios. Antes de cambiar permisos, alcance, workspace o agentes, reasigna esas cuentas a otro perfil para evitar un cambio masivo no revisado." });
+    const record = await prisma.industryRecord.update({ where: { id: existing.id }, data: { title: `Perfil Broker: ${normalized.data.name}`, data: normalized.data } });
+    await recordAuditLog(req, "BROKER_CUSTOM_PROFILE_UPDATED", BROKER_CUSTOM_PROFILE_TYPE, record.id, { name: normalized.data.name, assignedUserCount });
+    res.json({ profile: brokerCustomProfilePayload(record, assignedUserCount) });
+  } catch (error) { next(error); }
+});
+
+brokerRouter.delete("/broker/access/profiles/:id", requireRole("OWNER", "ADMIN"), requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const existing = await prisma.industryRecord.findFirst({ where: { id: req.params.id, tenantId: req.tenantId, recordType: BROKER_CUSTOM_PROFILE_TYPE, status: "ACTIVE" } });
+    if (!existing) return res.status(404).json({ error: "Perfil personalizado no encontrado en esta empresa." });
+    const assignedUserCount = await prisma.industryRecord.count({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", status: "ACTIVE", data: { path: ["customProfileId"], equals: existing.id } } });
+    if (assignedUserCount) return res.status(409).json({ error: "No puedes eliminar un perfil que está en uso. Reasigna primero a las personas vinculadas; sus datos y bitácora se conservarán." });
+    await prisma.industryRecord.update({ where: { id: existing.id }, data: { status: "ARCHIVED", data: { ...dataOf(existing), archivedAt: new Date().toISOString(), archivedBy: req.user?.id || null } } });
+    await recordAuditLog(req, "BROKER_CUSTOM_PROFILE_ARCHIVED", BROKER_CUSTOM_PROFILE_TYPE, existing.id, { name: text(dataOf(existing).name, existing.title) });
+    res.json({ archived: true, id: existing.id });
   } catch (error) { next(error); }
 });
 
@@ -2108,19 +2231,71 @@ brokerRouter.put("/broker/access/users/:userId", requireBrokerAction("access", "
   try {
     const user = await prisma.workspaceUser.findFirst({ where: { id: req.params.userId, tenantId: req.tenantId }, select: { id: true, name: true, email: true, role: true, jobTitle: true } });
     if (!user) return res.status(404).json({ error: "Usuario no encontrado en esta empresa." });
-    const validationError = validateBrokerAccessProfile(req.body, user);
+    const requestedCustomProfileId = text(req.body?.customProfileId);
+    const customProfile = requestedCustomProfileId ? await prisma.industryRecord.findFirst({ where: { id: requestedCustomProfileId, tenantId: req.tenantId, recordType: BROKER_CUSTOM_PROFILE_TYPE, status: "ACTIVE" } }) : null;
+    if (requestedCustomProfileId && !customProfile) return res.status(422).json({ error: "El perfil personalizado no existe o no está activo en esta empresa." });
+    const validationError = validateBrokerAccessProfile(req.body, user, customProfile);
     if (validationError) return res.status(422).json({ error: validationError });
     if (["SUPER_ADMIN", "OWNER", "ADMIN"].includes(user.role) && !["SUPER_ADMIN", "OWNER", "ADMIN"].includes(req.user.role)) return res.status(403).json({ error: "No puedes cambiar el acceso de una cuenta administradora." });
     if (String(req.body?.accessScope || "").toUpperCase() === "HOLDING" && req.user?.role !== "SUPER_ADMIN") {
       return res.status(422).json({ error: "El alcance holding requiere una estructura multiempresa y solo puede ser asignado por un superadministrador." });
     }
-    const profile = profileRecordData(user.id, req.body || {}, user);
+    const profile = profileRecordData(user.id, req.body || {}, user, customProfile);
     const existing = await prisma.industryRecord.findFirst({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", data: { path: ["userId"], equals: user.id } } });
     const record = existing
       ? await prisma.industryRecord.update({ where: { id: existing.id }, data: { title: `Acceso Broker: ${user.name}`, status: "ACTIVE", data: profile } })
       : await prisma.industryRecord.create({ data: { tenantId: req.tenantId, recordType: "broker_access_profile", title: `Acceso Broker: ${user.name}`, status: "ACTIVE", assignedToId: user.id, data: profile } });
-    await recordAuditLog(req, "BROKER_ACCESS_PROFILE_UPDATED", "broker_access_profile", record.id, { targetUserId: user.id, businessRole: profile.businessRole, accessScope: profile.accessScope, teamKey: profile.teamKey, branchKey: profile.branchKey });
+    await recordAuditLog(req, "BROKER_ACCESS_PROFILE_UPDATED", "broker_access_profile", record.id, { targetUserId: user.id, businessRole: profile.businessRole, accessScope: profile.accessScope, teamKey: profile.teamKey, branchKey: profile.branchKey, customProfileId: profile.customProfileId || null });
     res.json({ user, profile, updatedAt: record.updatedAt });
+  } catch (error) { next(error); }
+});
+
+brokerRouter.patch("/broker/access/users/:userId/status", requireRole("OWNER", "ADMIN"), requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {
+  try {
+    const target = await prisma.workspaceUser.findFirst({ where: { id: req.params.userId, tenantId: req.tenantId }, select: { id: true, name: true, email: true, role: true, isActive: true } });
+    if (!target) return res.status(404).json({ error: "Usuario no encontrado en esta empresa." });
+    if (target.id === req.user?.id) return res.status(422).json({ error: "No puedes desactivar tu propia cuenta desde Broker OS." });
+    const nextStatus = Boolean(req.body?.isActive);
+    if (target.isActive === nextStatus) return res.status(409).json({ error: nextStatus ? "La cuenta ya está activa." : "La cuenta ya está desactivada." });
+    if (!nextStatus && ["SUPER_ADMIN", "OWNER", "ADMIN"].includes(target.role)) {
+      const otherManagers = await prisma.workspaceUser.count({ where: { tenantId: req.tenantId, isActive: true, role: { in: ["SUPER_ADMIN", "OWNER", "ADMIN"] }, NOT: { id: target.id } } });
+      if (!otherManagers) return res.status(409).json({ error: "No puedes desactivar a la última cuenta administradora activa de la empresa." });
+    }
+
+    let reassigned = 0;
+    if (!nextStatus) {
+      const assigned = await prisma.industryRecord.count({ where: { tenantId: req.tenantId, assignedToId: target.id, recordType: { in: BROKER_TEAM_RECORD_TYPES } } });
+      if (assigned) {
+        const reassignToId = text(req.body?.reassignToId);
+        if (!reassignToId) return res.status(409).json({ error: `Esta cuenta aún tiene ${assigned} registro(s) Broker asignado(s). Selecciona un responsable activo antes de desactivarla.`, assigned });
+        const team = await brokerTeamState(req);
+        const replacement = team.workload.members.find((member) => member.id === reassignToId && member.canReceivePortfolio);
+        if (!replacement || replacement.id === target.id) return res.status(422).json({ error: "El responsable de reemplazo debe estar activo y autorizado para operar cartera." });
+        const result = await prisma.industryRecord.updateMany({ where: { tenantId: req.tenantId, assignedToId: target.id, recordType: { in: BROKER_TEAM_RECORD_TYPES } }, data: { assignedToId: replacement.id } });
+        reassigned = result.count;
+      }
+    }
+    const user = await prisma.workspaceUser.update({ where: { id: target.id }, data: { isActive: nextStatus } });
+    await recordAuditLog(req, nextStatus ? "BROKER_TEAM_MEMBER_ACTIVATED" : "BROKER_TEAM_MEMBER_DEACTIVATED", "workspace_user", user.id, { targetUserId: user.id, reassigned });
+    res.json({ user: { id: user.id, name: user.name, email: user.email, isActive: user.isActive }, reassigned, notice: nextStatus ? "Cuenta reactivada. Conserva su perfil y trazabilidad anteriores." : `Cuenta desactivada de forma segura. Se preservaron los datos${reassigned ? ` y se reasignaron ${reassigned} registro(s)` : ""}.` });
+  } catch (error) { next(error); }
+});
+
+// La recomendación es explícitamente humana: toma una propiedad sin dueño y
+// la asigna al perfil operativo activo con menor carga ponderada. No reparte
+// en segundo plano ni altera operaciones ya responsables.
+brokerRouter.post("/broker/access/assignments/balanced", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("operations", "REASSIGN"), async (req, res, next) => {
+  try {
+    const propertyId = text(req.body?.propertyId);
+    if (!propertyId) return res.status(422).json({ error: "Selecciona una propiedad sin responsable para proponer el reparto." });
+    const property = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: propertyId, recordType: "property", assignedToId: null }) });
+    if (!property) return res.status(404).json({ error: "La propiedad no existe, está fuera de tu alcance o ya tiene un responsable." });
+    const team = await brokerTeamState(req);
+    const target = team.workload.suggestedAssignee && team.workload.members.find((member) => member.id === team.workload.suggestedAssignee.id && member.canReceivePortfolio);
+    if (!target) return res.status(422).json({ error: "No hay una persona activa autorizada para recibir esta propiedad. Revisa los perfiles del equipo." });
+    const record = await prisma.industryRecord.update({ where: { id: property.id }, data: { assignedToId: target.id } });
+    await recordAuditLog(req, "BROKER_BALANCED_PROPERTY_ASSIGNED", "property", record.id, { targetUserId: target.id, workloadScore: target.workload.score, method: "human_confirmed_balanced_assignment" });
+    res.json({ property: { id: record.id, title: record.title, assignedToId: target.id }, assignee: { id: target.id, name: target.name, score: target.workload.score }, notice: "Propiedad asignada tras confirmación humana usando la carga actual del equipo." });
   } catch (error) { next(error); }
 });
 
