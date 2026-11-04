@@ -27,5 +27,16 @@ test("Case Management referencia módulos reales y distingue inventario físico 
 test("las nuevas vistas respetan las áreas de acceso de Broker", () => {
   const source = fs.readFileSync(path.resolve(__dirname, "../lib/broker-access.ts"), "utf8");
   assert.match(source, /ai_ops: "ai"/);
+  assert.match(source, /ai_governance: "ai"/);
   assert.match(source, /case_management: "overview"/);
+});
+
+test("Gobierno IA declara simulación sin envío y estados técnicos verificables", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "../components/broker-ai-governance.tsx"), "utf8");
+  assert.match(source, /Simular reglas sin envío/);
+  assert.match(source, /No se creó una alerta, no se contactó a nadie y no se modificó ningún registro/);
+  assert.match(source, /Los trece agentes sin promesas falsas/);
+  assert.match(source, /Contacto externo bloqueado|contacto externo bloqueado/i);
+  assert.match(source, /createBrokerAiGovernanceRule/);
+  assert.match(source, /updateBrokerAiGovernanceRule/);
 });

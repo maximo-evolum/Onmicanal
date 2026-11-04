@@ -172,19 +172,19 @@ export const BROKER_RECORD_DEFINITIONS = Object.freeze({
 });
 
 export const BROKER_AGENT_CATALOG = Object.freeze([
-  { key: "commercial", label: "Agente Comercial", status: "AVAILABLE", scope: "Califica interesados, propone siguiente acción y deriva a un corredor." },
-  { key: "marketing", label: "Agente de Marketing", status: "AVAILABLE", scope: "Prepara copys y variantes de publicación. La publicación final se aprueba por una persona." },
-  { key: "analytics", label: "Agente de Analítica", status: "AVAILABLE", scope: "Resume cartera, tasaciones y señales de demanda sin modificar registros." },
-  { key: "legal", label: "Agente Legal", status: "PLANNED", scope: "Asistirá en checklist documental; no reemplaza revisión jurídica profesional." },
-  { key: "documental", label: "Agente Documental", status: "PLANNED", scope: "Clasificará y verificará integridad del expediente antes de una firma." },
-  { key: "maintenance", label: "Agente de Mantenciones", status: "PLANNED", scope: "Priorizará casos y sugerirá proveedores según categoría, historial y aprobación." },
-  { key: "finance", label: "Agente Financiero", status: "PLANNED", scope: "Preparará proyecciones de gastos y financiamiento; no paga ni aprueba recursos." },
-  { key: "collections", label: "Agente de Cobranza", status: "PLANNED", scope: "Preparará recordatorios de arriendo sujetos a canal, consentimiento y aprobación humana." },
-  { key: "inspection", label: "Agente Inspector", status: "PLANNED", scope: "Ayudará a estructurar checklists y evidencias de inspección." },
-  { key: "administration", label: "Agente de Administración", status: "PLANNED", scope: "Ayudará en contratos, liquidaciones y renovaciones con revisión humana." },
-  { key: "architect", label: "Agente Arquitecto", status: "PLANNED", scope: "Apoyará la lectura de planos, recintos y requerimientos de remodelación." },
-  { key: "crm", label: "Agente CRM", status: "PLANNED", scope: "Consolidará señales comerciales sin contactar personas de forma autónoma." },
-  { key: "customer_care", label: "Agente de Atención al Cliente", status: "PLANNED", scope: "Propondrá agenda y seguimiento; los envíos dependen del canal y aprobación." }
+  { key: "commercial", label: "Agente Comercial", status: "LIMITED", scope: "Califica interesados, propone siguiente acción y deriva a un corredor.", limitation: "Opera con prioridades y borradores internos; no confirma ofertas ni contacta personas." },
+  { key: "marketing", label: "Agente de Marketing", status: "LIMITED", scope: "Prepara copys y variantes de publicación. La publicación final se aprueba por una persona.", limitation: "No publica en portales ni administra presupuestos de campaña de forma autónoma." },
+  { key: "analytics", label: "Agente de Analítica", status: "AVAILABLE", scope: "Resume cartera, tasaciones y señales de demanda sin modificar registros.", limitation: "Entrega lectura explicable; no crea hechos, predicciones garantizadas ni decisiones comerciales." },
+  { key: "legal", label: "Agente Legal", status: "IN_DEVELOPMENT", scope: "Asistirá en checklist documental; no reemplaza revisión jurídica profesional.", limitation: "No está habilitado para emitir revisión legal ni validar documentos jurídicos." },
+  { key: "documental", label: "Agente Documental", status: "IN_DEVELOPMENT", scope: "Clasificará y verificará integridad del expediente antes de una firma.", limitation: "El expediente se consulta hoy; la clasificación asistida avanzada sigue en desarrollo." },
+  { key: "maintenance", label: "Agente de Mantenciones", status: "IN_DEVELOPMENT", scope: "Priorizará casos y sugerirá proveedores según categoría, historial y aprobación.", limitation: "No asigna proveedores, aprueba cotizaciones ni confirma trabajos." },
+  { key: "finance", label: "Agente Financiero", status: "NOT_ENABLED", scope: "Preparará proyecciones de gastos y financiamiento; no paga ni aprueba recursos.", limitation: "Requiere reglas financieras validadas por la empresa; no está habilitado para operaciones monetarias." },
+  { key: "collections", label: "Agente de Cobranza", status: "NOT_ENABLED", scope: "Preparará recordatorios de arriendo sujetos a canal, consentimiento y aprobación humana.", limitation: "No existe envío automático de correo, WhatsApp, SMS ni gestión de cobro externa." },
+  { key: "inspection", label: "Agente Inspector", status: "IN_DEVELOPMENT", scope: "Ayudará a estructurar checklists y evidencias de inspección.", limitation: "No certifica condiciones del inmueble ni reemplaza una inspección humana." },
+  { key: "administration", label: "Agente de Administración", status: "IN_DEVELOPMENT", scope: "Ayudará en contratos, liquidaciones y renovaciones con revisión humana.", limitation: "No emite liquidaciones definitivas, pagos ni renovaciones por su cuenta." },
+  { key: "architect", label: "Agente Arquitecto", status: "NOT_ENABLED", scope: "Apoyará la lectura de planos, recintos y requerimientos de remodelación.", limitation: "No procesa planos ni realiza validaciones técnicas de arquitectura en esta versión." },
+  { key: "crm", label: "Agente CRM", status: "LIMITED", scope: "Consolidará señales comerciales sin contactar personas de forma autónoma.", limitation: "Puede ordenar señales internas; la mensajería sigue bajo control del equipo y del canal autorizado." },
+  { key: "customer_care", label: "Agente de Atención al Cliente", status: "NOT_ENABLED", scope: "Propondrá agenda y seguimiento; los envíos dependen del canal y aprobación.", limitation: "No está habilitado como canal de atención ni puede responder o enviar comunicaciones externas." }
 ]);
 
 // Escenarios reproducibles para validar y mejorar los asistentes sin usar

@@ -129,8 +129,11 @@ test("Broker OS valida las fichas segun el proceso que representan", () => {
 
 test("Broker OS expone agentes con estado real de disponibilidad", () => {
   assert.equal(BROKER_AGENT_CATALOG.length, 13);
-  assert.equal(BROKER_AGENT_CATALOG.some((agent) => agent.key === "commercial" && agent.status === "AVAILABLE"), true);
-  assert.equal(BROKER_AGENT_CATALOG.some((agent) => agent.key === "legal" && agent.status === "PLANNED"), true);
+  assert.equal(BROKER_AGENT_CATALOG.some((agent) => agent.key === "analytics" && agent.status === "AVAILABLE"), true);
+  assert.equal(BROKER_AGENT_CATALOG.some((agent) => agent.key === "commercial" && agent.status === "LIMITED"), true);
+  assert.equal(BROKER_AGENT_CATALOG.some((agent) => agent.key === "legal" && agent.status === "IN_DEVELOPMENT"), true);
+  assert.equal(BROKER_AGENT_CATALOG.some((agent) => agent.key === "collections" && agent.status === "NOT_ENABLED"), true);
+  assert.equal(BROKER_AGENT_CATALOG.every((agent) => typeof agent.limitation === "string" && agent.limitation.length > 0), true);
 });
 
 test("Broker OS mantiene escenarios evaluables y automatizaciones con control humano", () => {

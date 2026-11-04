@@ -1894,9 +1894,10 @@ export type BrokerRecordDefinition = {
 export type BrokerAgent = {
   key: string;
   name: string;
-  status: "AVAILABLE" | "PLANNED";
+  status: "AVAILABLE" | "LIMITED" | "IN_DEVELOPMENT" | "NOT_ENABLED";
   module: string;
   description: string;
+  limitation?: string;
 };
 
 export type BrokerAiScenario = {
@@ -1962,7 +1963,7 @@ export type BrokerAiOpsSnapshot = {
   generatedAt: string;
   scope: { level: string; description: string };
   notice: string;
-  summary: { totalPriorities: number; highPriorities: number; operationsVisible: number; pendingHumanReview: number };
+  summary: { totalPriorities: number; highPriorities: number; operationsVisible: number; pendingHumanReview: number; triggeredAlerts: number };
   priorities: Array<{
     id: string; priority: string; priorityLabel: string; title: string; action: string; reason: string; impact: string;
     responsible: string; dueAt: string | null; dueLabel: string; source: string; requiresApproval: boolean;
@@ -1972,6 +1973,48 @@ export type BrokerAiOpsSnapshot = {
     key: string; status: "INFORMATIONAL" | "INSUFFICIENT_DATA" | string; title: string; detail: string;
     evidence: { sampleSize: number; period: string; activity: number; averageStageAgeDays?: number };
   }>;
+  triggeredAlerts: Array<{
+    id: string; title: string; detail: string; priority: string; requiresApproval: boolean; source: string; updatedAt: string | null; href: string;
+  }>;
+};
+
+export type BrokerAiGovernanceRule = {
+  id: string;
+  key: string;
+  kind: "OFFICIAL" | "CUSTOM";
+  editable: boolean;
+  active: boolean;
+  title: string;
+  description?: string;
+  trigger: string;
+  action: string;
+  approval: string;
+  conditionKey: string | null;
+  conditionLabel: string;
+  autonomy: string;
+  autonomyLabel: string;
+  externalContact: "BLOCKED";
+  externalContactLabel: string;
+  simulator: "NO_SEND";
+  simulatorLabel: string;
+  stateChanges: false;
+  matched: number;
+  evidence: Array<{ id: string; title: string; detail: string; priority: string; propertyId: string | null; operationId: string | null }>;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+export type BrokerAiGovernanceSnapshot = {
+  version: string;
+  generatedAt: string;
+  scope: { level: string; description: string };
+  policy: { notice: string; externalContact: "BLOCKED"; stateChanges: false; simulationMode: "NO_SEND" };
+  summary: { officialRules: number; customRules: number; activeRules: number; matchingRules: number; pendingEvaluations: number; triggeredAlerts: number };
+  agents: Array<{ key: string; name: string; status: BrokerAgent["status"]; statusLabel: string; statusDetail: string; description: string; limitation: string; externalContact: "BLOCKED"; autonomousActions: false }>;
+  conditions: Array<{ key: string; label: string; action: string }>;
+  rules: BrokerAiGovernanceRule[];
+  simulation: { mode: "NO_SEND"; generatedAt: string; notice: string; executions: Array<{ ruleId: string; ruleKey: string; title: string; matched: number; evidence: BrokerAiGovernanceRule["evidence"]; wouldPrepareInternalAlert: boolean; externalContact: false; stateChanges: false; notice: string }> };
+  triggeredAlerts: Array<{ id: string; title: string; priority: string; detail: string; source: string; requiresHumanApproval: boolean; createdAt: string | null; href: string }>;
 };
 
 /** Lectura única para que los paneles no recalculen métricas con criterios distintos. */
@@ -2191,6 +2234,23 @@ export function getBrokerOverview(): Promise<BrokerOverview> {
 /** Consulta explicaciones de IA; el endpoint no crea ni modifica registros. */
 export function getBrokerAiOps(): Promise<BrokerAiOpsSnapshot> {
   return request<BrokerAiOpsSnapshot>("/broker/ai-ops");
+}
+
+/** Gobierno IA: lectura de reglas, límites y simulación segura de Broker OS. */
+export function getBrokerAiGovernance(): Promise<BrokerAiGovernanceSnapshot> {
+  return request<BrokerAiGovernanceSnapshot>("/broker/ai-governance");
+}
+
+export function simulateBrokerAiGovernance(): Promise<BrokerAiGovernanceSnapshot> {
+  return request<BrokerAiGovernanceSnapshot>("/broker/ai-governance/simulate", { method: "POST" });
+}
+
+export function createBrokerAiGovernanceRule(input: { title: string; description?: string; conditionKey: string; isActive?: boolean }): Promise<{ rule: BrokerAiGovernanceRule; notice: string }> {
+  return request("/broker/ai-governance/rules", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateBrokerAiGovernanceRule(id: string, input: { title?: string; description?: string; conditionKey?: string; isActive?: boolean }): Promise<{ rule: BrokerAiGovernanceRule; notice: string }> {
+  return request(`/broker/ai-governance/rules/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
 export function getBrokerOwners(query: { search?: string; portfolio?: BrokerOwnerPortfolioFilter } = {}): Promise<{ generatedAt: string; filters: { search: string; portfolio: BrokerOwnerPortfolioFilter }; owners: BrokerOwnerListItem[] }> {

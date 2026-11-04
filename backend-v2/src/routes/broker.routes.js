@@ -57,6 +57,7 @@ import { COLLECTION_SOURCE_TYPES, applyBrokerFinancialAction, buildBrokerFinanci
 import { BROKER_CHAT_TARGET_TYPES, applyBrokerAgendaAction, buildBrokerCommercialHub, createBrokerAgendaData, validateBrokerAgendaInput } from "../services/broker-commercial-hub.service.js";
 import { BROKER_FORECAST_DEFAULT_ASSUMPTIONS, buildBrokerExecutiveDashboard, buildBrokerOperationTracker, trackerAdvanceReadiness, trackerChecklistUpdate, validateBrokerForecastAssumptions } from "../services/broker-executive-dashboard.service.js";
 import { buildBrokerAiOpsSnapshot } from "../services/broker-ai-ops.service.js";
+import { BROKER_AI_CUSTOM_RULE_TYPE, brokerAiCustomRulePayload, buildBrokerAiGovernanceSnapshot, normalizeBrokerAiCustomRule } from "../services/broker-ai-governance.service.js";
 
 export const brokerRouter = Router();
 
@@ -181,7 +182,7 @@ async function monthlyAdministrationSnapshot(req, period) {
 async function brokerAiOpsReadModel(req) {
   const overviewWhere = (extra) => ({ AND: [brokerWhere(req, extra), { recordType: { in: Object.keys(BROKER_RECORD_RESOURCES).filter((type) => canBrokerAction(req.brokerAccess, BROKER_RECORD_RESOURCES[type], "VIEW")) } }] });
   const allowedTeamIds = Array.isArray(req.brokerAccess?.scopeUserIds) ? req.brokerAccess.scopeUserIds : undefined;
-  const [propertyCount, properties, operations, visits, alerts, rentals, maintenance, postSale, financing, evaluations, brokerRecords, teamMembers] = await Promise.all([
+  const [propertyCount, properties, operations, visits, alerts, triggeredAlerts, rentals, maintenance, postSale, financing, evaluations, brokerRecords, teamMembers] = await Promise.all([
     prisma.industryRecord.count({ where: overviewWhere({ recordType: "property" }) }),
     canBrokerAction(req.brokerAccess, "commercial", "VIEW")
       ? prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "property" }), orderBy: { updatedAt: "desc" }, take: 100 })
@@ -189,6 +190,7 @@ async function brokerAiOpsReadModel(req) {
     prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "broker_operation" }), orderBy: { updatedAt: "desc" }, take: 50 }),
     prisma.industryRecord.count({ where: overviewWhere({ recordType: "visit", status: { in: ["SCHEDULED", "PENDING", "ACTIVE"] } }) }),
     prisma.industryRecord.count({ where: overviewWhere({ recordType: "realty_alert", status: { not: "RESOLVED" } }) }),
+    prisma.industryRecord.findMany({ where: overviewWhere({ recordType: "realty_alert", status: { not: "RESOLVED" } }), orderBy: { updatedAt: "desc" }, take: 40 }),
     prisma.industryRecord.count({ where: overviewWhere({ recordType: "rental_contract", status: { in: ["ACTIVE", "PENDING_RENEWAL"] } }) }),
     prisma.industryRecord.count({ where: overviewWhere({ recordType: "maintenance_ticket", status: { notIn: ["CLOSED", "CANCELLED"] } }) }),
     prisma.industryRecord.count({ where: overviewWhere({ recordType: "post_sale_case", status: { notIn: ["CLOSED", "RESOLVED"] } }) }),
@@ -211,6 +213,7 @@ async function brokerAiOpsReadModel(req) {
       counts: { properties: propertyCount, scheduledVisits: visits, openAlerts: alerts, activeRentals: rentals, openMaintenance: maintenance, openPostSale: postSale, activeFinancing: financing }
     }),
     teamMembers,
+    triggeredAlerts,
   };
 }
 
@@ -240,7 +243,8 @@ function brokerAgentPayload(agent) {
     name: agent.label,
     status: agent.status,
     module: BROKER_AGENT_MODULES[agent.key] || "properties",
-    description: agent.scope
+    description: agent.scope,
+    limitation: agent.limitation || "Requiere revisión humana y no ejecuta acciones externas."
   };
 }
 
@@ -1751,11 +1755,97 @@ brokerRouter.get("/broker/overview", requireBrokerAction("overview", "VIEW"), as
 // expediente u operación que conserva el estado real.
 brokerRouter.get("/broker/ai-ops", requireBrokerAction("ai", "VIEW"), async (req, res) => {
   try {
-    const { readModel, teamMembers } = await brokerAiOpsReadModel(req);
-    res.json(buildBrokerAiOpsSnapshot({ readModel, teamMembers }));
+    const { readModel, teamMembers, triggeredAlerts } = await brokerAiOpsReadModel(req);
+    res.json(buildBrokerAiOpsSnapshot({ readModel, teamMembers, triggeredAlerts }));
   } catch (error) {
     console.error("Broker AI Ops error:", error);
     res.status(500).json({ error: "No se pudo preparar AI Ops de Broker OS." });
+  }
+});
+
+// Las reglas personalizadas no son código ejecutable: se limitan a condiciones
+// predefinidas del modelo operacional. Esto impide automatismos ocultos,
+// contactos externos, cambios de estado o ampliaciones de privilegios.
+async function brokerAiGovernanceSnapshot(req) {
+  const [{ readModel, triggeredAlerts }, customRules, evaluations] = await Promise.all([
+    brokerAiOpsReadModel(req),
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: BROKER_AI_CUSTOM_RULE_TYPE }), orderBy: { updatedAt: "desc" }, take: 100 }),
+    prisma.industryRecord.findMany({ where: brokerWhere(req, { recordType: "broker_agent_evaluation" }), orderBy: { updatedAt: "desc" }, take: 200 })
+  ]);
+  return buildBrokerAiGovernanceSnapshot({ readModel, customRules, alerts: triggeredAlerts, evaluations });
+}
+
+brokerRouter.get("/broker/ai-governance", requireBrokerAction("ai", "VIEW"), async (req, res) => {
+  try {
+    res.json(await brokerAiGovernanceSnapshot(req));
+  } catch (error) {
+    console.error("Broker AI governance error:", error);
+    res.status(500).json({ error: "No se pudo preparar el gobierno IA de Broker OS." });
+  }
+});
+
+// El simulador vuelve a evaluar el universo autorizado, pero no escribe una
+// alerta, no guarda un cambio, no publica ni envía comunicaciones externas.
+brokerRouter.post("/broker/ai-governance/simulate", requireBrokerAction("ai", "VIEW"), async (req, res) => {
+  try {
+    res.json(await brokerAiGovernanceSnapshot(req));
+  } catch (error) {
+    console.error("Broker AI governance simulation error:", error);
+    res.status(500).json({ error: "No se pudo simular las reglas IA de Broker OS." });
+  }
+});
+
+brokerRouter.post("/broker/ai-governance/rules", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("ai", "APPROVE"), async (req, res) => {
+  try {
+    const normalized = normalizeBrokerAiCustomRule(req.body || {});
+    if (!normalized.ok) return res.status(422).json({ error: normalized.error });
+    const record = await prisma.industryRecord.create({
+      data: {
+        tenantId: req.tenantId,
+        assignedToId: req.user.id,
+        recordType: BROKER_AI_CUSTOM_RULE_TYPE,
+        title: normalized.value.title,
+        status: normalized.value.isActive ? "ACTIVE" : "INACTIVE",
+        data: { ...normalized.value, createdBy: req.user?.name || req.user?.email || "Usuario autorizado", createdAt: new Date().toISOString() }
+      }
+    });
+    await recordAuditLog(req, "BROKER_AI_RULE_CREATED", BROKER_AI_CUSTOM_RULE_TYPE, record.id, {
+      conditionKey: normalized.value.conditionKey,
+      isActive: normalized.value.isActive,
+      externalContact: "BLOCKED",
+      stateChanges: false,
+    });
+    res.status(201).json({ rule: brokerAiCustomRulePayload(record), notice: "Regla creada. Solo puede preparar alertas internas dentro del simulador; no ejecuta acciones reales." });
+  } catch (error) {
+    console.error("Create Broker AI rule error:", error);
+    res.status(500).json({ error: "No se pudo crear la regla personalizada." });
+  }
+});
+
+brokerRouter.patch("/broker/ai-governance/rules/:id", requireRole(ROLE_GROUPS.STAFF), requireBrokerAction("ai", "APPROVE"), async (req, res) => {
+  try {
+    const existing = await prisma.industryRecord.findFirst({ where: brokerWhere(req, { id: req.params.id, recordType: BROKER_AI_CUSTOM_RULE_TYPE }) });
+    if (!existing) return res.status(404).json({ error: "La regla personalizada no existe dentro de tu alcance." });
+    const normalized = normalizeBrokerAiCustomRule(req.body || {}, dataOf(existing));
+    if (!normalized.ok) return res.status(422).json({ error: normalized.error });
+    const record = await prisma.industryRecord.update({
+      where: { id: existing.id },
+      data: {
+        title: normalized.value.title,
+        status: normalized.value.isActive ? "ACTIVE" : "INACTIVE",
+        data: { ...dataOf(existing), ...normalized.value, updatedBy: req.user?.name || req.user?.email || "Usuario autorizado", updatedAt: new Date().toISOString() }
+      }
+    });
+    await recordAuditLog(req, "BROKER_AI_RULE_UPDATED", BROKER_AI_CUSTOM_RULE_TYPE, record.id, {
+      conditionKey: normalized.value.conditionKey,
+      isActive: normalized.value.isActive,
+      externalContact: "BLOCKED",
+      stateChanges: false,
+    });
+    res.json({ rule: brokerAiCustomRulePayload(record), notice: "Regla actualizada y registrada en la bitácora. Sus límites de seguridad no pueden modificarse." });
+  } catch (error) {
+    console.error("Update Broker AI rule error:", error);
+    res.status(500).json({ error: "No se pudo actualizar la regla personalizada." });
   }
 });
 

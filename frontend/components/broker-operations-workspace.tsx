@@ -9,6 +9,7 @@ import { BrokerDocumentIndexPanel } from "./broker-document-index";
 import { BrokerExecutiveDashboardPanel } from "./broker-executive-dashboard";
 import { BrokerOperationTrackerPanel } from "./broker-operation-tracker";
 import { BrokerAiOpsPanel } from "./broker-ai-ops";
+import { BrokerAiGovernancePanel } from "./broker-ai-governance";
 import { BrokerCaseManagementPanel } from "./broker-case-management";
 import { useSearchParams } from "next/navigation";
 import {
@@ -103,7 +104,7 @@ import {
   type IndustryRecord
 } from "@/lib/api";
 
-type Tab = "operations" | "executive_dashboard" | "operation_tracker" | "ai_ops" | "case_management" | "agents" | "training" | "commissions" | "administration_preview" | "financial_operations" | "commercial_hub" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
+type Tab = "operations" | "executive_dashboard" | "operation_tracker" | "ai_ops" | "ai_governance" | "case_management" | "agents" | "training" | "commissions" | "administration_preview" | "financial_operations" | "commercial_hub" | "guides" | "configuration" | "compliance" | "governance" | "access" | BrokerRecordArea;
 type FieldConfig = { label: string; type?: "text" | "number" | "date" | "textarea"; placeholder?: string };
 
 const OPERATION_LABELS: Record<BrokerOperationType, string> = {
@@ -411,7 +412,7 @@ export function BrokerOperationsPageContent() {
   const [operationEventTypes, setOperationEventTypes] = useState<Record<string, string>>({});
   const [operationReassignments, setOperationReassignments] = useState<Record<string, { assignedToId: string; reason: string }>>({});
   const isReadOnlyTab = ["ai_ops", "case_management"].includes(tab);
-  const writeAction = ["access", "configuration", "governance"].includes(tab) ? "CONFIGURE" : ["training", "agents"].includes(tab) ? "APPROVE" : tab === "commissions" ? "VIEW" : "EDIT";
+  const writeAction = ["access", "configuration", "governance"].includes(tab) ? "CONFIGURE" : ["training", "agents", "ai_governance"].includes(tab) ? "APPROVE" : tab === "commissions" ? "VIEW" : "EDIT";
   // La vista combina Marketing (proyectos) con Agenda e Inbox (comercial).
   // Un perfil de marketing puede preparar su borrador aunque no edite visitas;
   // la autorización concreta sigue validándose por cada acción y en el backend.
@@ -464,7 +465,7 @@ export function BrokerOperationsPageContent() {
       setTab(requestedTab as BrokerRecordArea);
       return;
     }
-    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "ai_ops" || requestedTab === "case_management" || requestedTab === "operations" || requestedTab === "executive_dashboard" || requestedTab === "operation_tracker" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "financial_operations" || requestedTab === "commercial_hub" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
+    if (requestedTab === "agents" || requestedTab === "training" || requestedTab === "ai_ops" || requestedTab === "ai_governance" || requestedTab === "case_management" || requestedTab === "operations" || requestedTab === "executive_dashboard" || requestedTab === "operation_tracker" || requestedTab === "commissions" || requestedTab === "administration_preview" || requestedTab === "financial_operations" || requestedTab === "commercial_hub" || requestedTab === "guides" || requestedTab === "configuration" || requestedTab === "compliance" || requestedTab === "governance" || requestedTab === "access") {
       setTab(requestedTab);
     }
   }, [searchParams]);
@@ -510,7 +511,7 @@ export function BrokerOperationsPageContent() {
       getBrokerGovernance().then(setGovernance).catch((error) => setNotice(error instanceof Error ? error.message : "No se pudo cargar el gobierno operativo."));
       return;
     }
-    if (tab === "operations" || tab === "executive_dashboard" || tab === "operation_tracker" || tab === "agents" || tab === "training" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
+    if (tab === "operations" || tab === "executive_dashboard" || tab === "operation_tracker" || tab === "agents" || tab === "training" || tab === "ai_governance" || tab === "commissions" || tab === "guides" || tab === "configuration" || tab === "compliance" || tab === "access") return;
     if (tab === "documents") {
       let active = true;
       setRecords([]);
@@ -1342,7 +1343,7 @@ export function BrokerOperationsPageContent() {
 
     <nav className="broker-os-tabs" aria-label="Areas de Broker OS">
       {([
-        ["operations", "Operaciones"], ["executive_dashboard", "Dashboard Ejecutivo"], ["operation_tracker", "Operation Tracker"], ["ai_ops", "AI Ops"], ["case_management", "Case Management"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
+        ["operations", "Operaciones"], ["executive_dashboard", "Dashboard Ejecutivo"], ["operation_tracker", "Operation Tracker"], ["ai_ops", "AI Ops"], ["ai_governance", "Gobierno IA"], ["case_management", "Case Management"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
         ["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["financial_operations", "Finanzas operativas"], ["commercial_hub", "Marketing, agenda y chats"], ["guides", "Guías operativas"],
         ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["governance", "Gobierno y alertas"], ["compliance", "Cumplimiento"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
       ]).filter(([key]) => canBrokerTab(access, key)).map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as Tab)}>{label}</button>)}
@@ -1356,6 +1357,8 @@ export function BrokerOperationsPageContent() {
     {tab === "operation_tracker" ? <BrokerOperationTrackerPanel operations={operations} requestedOperationId={requestedOperationId} canEdit={canBroker(access, "operations", "EDIT")} /> : null}
 
     {tab === "ai_ops" ? <BrokerAiOpsPanel /> : null}
+
+    {tab === "ai_governance" ? <BrokerAiGovernancePanel canConfigure={canBroker(access, "ai", "APPROVE")} /> : null}
 
     {tab === "case_management" ? <BrokerCaseManagementPanel access={access} /> : null}
 
@@ -1674,7 +1677,7 @@ export function BrokerOperationsPageContent() {
 
     {tab === "compliance" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Preparación legal y externa</span><h2>Qué está listo y qué requiere validación</h2><p>Este panel organiza evidencia y dependencias. No sustituye asesoría legal, tributaria ni la habilitación formal de un proveedor.</p></div>{legalReadiness ? <><section className="broker-reporting"><article><span>Consentimientos otorgados</span><b>{legalReadiness.summary.GRANTED}</b><small>Con evidencia registrada</small></article><article><span>Pendientes</span><b>{legalReadiness.summary.PENDING}</b><small>Antes de proponer uso externo</small></article><article><span>Revocados o vencidos</span><b>{legalReadiness.summary.REVOKED + legalReadiness.summary.EXPIRED}</b><small>Requieren bloqueo o renovación</small></article><article><span>Proveedores externos</span><b>{legalReadiness.providers.length}</b><small>Todos desactivados hasta su validación</small></article></section><div className="broker-compliance-grid"><section><h3>Proveedores y dependencias</h3>{legalReadiness.providers.map((item) => <article key={item.key}><b>{item.label}</b><span>{item.category} · {item.status === "HUMAN_REVIEW" ? "Revisión humana" : "Pendiente de proveedor"}</span><p>{item.description}</p></article>)}</section><section><h3>Consentimientos registrados</h3>{legalReadiness.consents.length ? legalReadiness.consents.map((item) => <article key={item.id}><b>{item.title}</b><span>{readable(item.status)}</span><p>{recordSummary(item, catalog?.recordDefinitions[item.recordType])}</p></article>) : <p className="broker-empty">Aún no hay consentimientos registrados. Puedes crearlos desde “Expediente y documentos”.</p>}</section></div><p className="broker-human-note">Para registrar una autorización utiliza el área “Expediente y documentos”. El sistema exige titular, finalidad, fecha y referencia de evidencia; una autorización registrada no activa por sí misma ningún envío, firma, publicación, acceso bancario ni integración.</p></> : <p className="broker-empty">Cargando estado de cumplimiento...</p>}</section> : null}
 
-    {tab === "agents" ? <section className="broker-agents-panel"><div className="broker-list-heading"><span>Agentes de IA</span><h2>Asistentes especializados del Broker</h2><p>Los agentes disponibles preparan análisis y borradores; ninguna acción legal, pago, firma o comunicación externa se ejecuta sin aprobación humana.</p></div><div className="broker-agent-grid">{(overview?.agents || catalog?.agents || []).map((agent) => <article key={agent.key} className={`broker-agent-card ${agent.status === "AVAILABLE" ? "available" : "planned"}`}><span>{agent.status === "AVAILABLE" ? "Disponible" : "Próxima etapa"}</span><h3>{agent.name}</h3><p>{agent.description}</p><small>Módulo: {readable(agent.module)}</small></article>)}</div></section> : null}
+    {tab === "agents" ? <section className="broker-agents-panel"><div className="broker-list-heading"><span>Agentes de IA</span><h2>Asistentes especializados del Broker</h2><p>El estado técnico de cada agente se detalla en Gobierno IA. Ningún agente ejecuta acciones legales, pagos, firmas, publicaciones ni comunicaciones externas por su cuenta.</p></div><div className="broker-agent-grid">{(overview?.agents || catalog?.agents || []).map((agent) => <article key={agent.key} className={`broker-agent-card ${agent.status.toLowerCase().replaceAll("_", "-")}`}><span>{agent.status === "AVAILABLE" ? "Disponible" : agent.status === "LIMITED" ? "Disponible con límites" : agent.status === "IN_DEVELOPMENT" ? "En desarrollo" : "No habilitado"}</span><h3>{agent.name}</h3><p>{agent.description}</p><small><b>Límite:</b> {agent.limitation || "Requiere revisión humana y no ejecuta acciones externas."}</small><small>Módulo: {readable(agent.module)}</small></article>)}</div></section> : null}
 
     {tab === "training" ? <section className="broker-training-panel"><div className="broker-list-heading"><span>Entrenamiento supervisado</span><h2>Evalúa sugerencias antes de usarlas</h2><p>Estos escenarios de demostración permiten registrar el criterio del equipo. El resultado mejora las reglas operativas, pero nunca activa comunicaciones, firmas, pagos ni cambios de estado automáticamente.</p></div><div className="broker-training-grid"><section className="broker-training-scenarios">{scenarios.map((scenario: BrokerAiScenario) => { const evaluation = evaluations.find((item) => item.scenarioKey === scenario.key); return <button type="button" key={scenario.key} onClick={() => setSelectedScenarioKey(scenario.key)} className={selectedScenario?.key === scenario.key ? "selected" : ""}><strong>{scenario.title}</strong><span>{evaluation ? readable(evaluation.decision) : "Pendiente de revisión"}</span><small>{scenario.trigger}</small></button>; })}</section><section className="broker-training-review">{selectedScenario ? <><span>Escenario seleccionado</span><h3>{selectedScenario.title}</h3><p><b>Cuando ocurre:</b> {selectedScenario.trigger}</p><p><b>La IA propone:</b> {selectedScenario.expectedRecommendation}</p><p className="broker-human-note">Requiere confirmación humana antes de afectar la operación.</p><label>Comentario del equipo<textarea value={evaluationNote} onChange={(event) => setEvaluationNote(event.target.value)} rows={4} placeholder="Qué fue útil, qué debe cambiar o qué evidencia faltó" /></label><div><button className="primary-btn" disabled={busy || !canWriteTab} onClick={() => saveEvaluation("CONFIRMED")}>Confirmar sugerencia</button><button className="secondary-btn" disabled={busy || !canWriteTab} onClick={() => saveEvaluation("ADJUSTMENT_NEEDED")}>Pedir ajuste</button><button className="secondary-btn" disabled={busy || !canWriteTab} onClick={() => saveEvaluation("DISCARDED")}>Descartar</button></div></> : <p className="broker-empty">No hay escenarios de entrenamiento disponibles.</p>}</section></div><section className="broker-automation-rules"><span>Automatizaciones seguras</span><div>{automationRules.map((rule) => <article key={rule.key}><b>{rule.title}</b><p><strong>Disparador:</strong> {rule.trigger}</p><p><strong>Acción interna:</strong> {rule.action}</p><small>{rule.approval}</small></article>)}</div></section></section> : null}
     </>}

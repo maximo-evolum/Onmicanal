@@ -44,11 +44,33 @@ function dueLabel(value) {
   return `Hasta el ${date.toLocaleDateString("es-CL")}`;
 }
 
+function triggeredAlertPayload(record) {
+  const data = record?.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data : {};
+  const operationId = data.operationId || null;
+  const propertyId = data.propertyId || null;
+  const area = text(data.area, "operations");
+  const tab = area === "overview" ? "operations" : area;
+  return {
+    id: record.id,
+    title: text(record.title, "Alerta interna"),
+    detail: text(data.detail, "Alerta interna pendiente de revisión."),
+    priority: text(data.priority, "MEDIUM").toUpperCase(),
+    requiresApproval: Boolean(data.requiresHumanApproval),
+    source: text(data.source, "broker_automation_scan"),
+    updatedAt: record.updatedAt || record.createdAt || null,
+    href: operationId
+      ? `/realty?view=broker_os&tab=operations&operationId=${encodeURIComponent(operationId)}`
+      : propertyId
+        ? `/realty?view=broker_os&tab=operations&propertyId=${encodeURIComponent(propertyId)}`
+        : `/realty?view=broker_os&tab=${encodeURIComponent(tab)}`,
+  };
+}
+
 /**
  * AI Ops no recalcula ni ejecuta procesos. Recibe el contrato operacional que
  * ya usan Resumen, Dashboard y Tracker y lo expone con lenguaje accionable.
  */
-export function buildBrokerAiOpsSnapshot({ readModel, teamMembers = [] } = {}) {
+export function buildBrokerAiOpsSnapshot({ readModel, teamMembers = [], triggeredAlerts = [] } = {}) {
   if (!readModel || typeof readModel !== "object") throw new Error("Se requiere la lectura operacional de Broker para preparar AI Ops.");
   const teamById = new Map((teamMembers || []).map((member) => [String(member.id), member]));
   const priorities = (readModel.priorities || []).map((priority) => {
@@ -133,8 +155,12 @@ export function buildBrokerAiOpsSnapshot({ readModel, teamMembers = [] } = {}) {
       highPriorities: priorities.filter((item) => item.priority === "HIGH").length,
       operationsVisible: visibleOperations,
       pendingHumanReview: Number(readModel.operationalCenter?.aiApprovalsPending || 0),
+      triggeredAlerts: (triggeredAlerts || []).filter((alert) => String(alert?.status || "OPEN").toUpperCase() !== "RESOLVED").length,
     },
     priorities,
     patterns,
+    // Estas alertas proceden del mismo registro interno que usa el Centro
+    // Operacional y Gobierno. AI Ops no las genera ni las resuelve.
+    triggeredAlerts: (triggeredAlerts || []).filter((alert) => String(alert?.status || "OPEN").toUpperCase() !== "RESOLVED").slice(0, 12).map(triggeredAlertPayload),
   };
 }

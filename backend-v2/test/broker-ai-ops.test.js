@@ -39,6 +39,6 @@ test("la ruta AI Ops exige permiso de IA y reutiliza la lectura operacional", ()
   const dirname = path.dirname(fileURLToPath(import.meta.url));
   const source = fs.readFileSync(path.resolve(dirname, "../src/routes/broker.routes.js"), "utf8");
   assert.match(source, /brokerRouter\.get\("\/broker\/ai-ops", requireBrokerAction\("ai", "VIEW"\)/);
-  assert.match(source, /buildBrokerAiOpsSnapshot\(\{ readModel, teamMembers \}\)/);
+  assert.match(source, /buildBrokerAiOpsSnapshot\(\{ readModel, teamMembers, triggeredAlerts \}\)/);
   assert.match(source, /no actualiza etapas y no inicia comunicaciones externas/);
 });

@@ -37,6 +37,13 @@ export function BrokerAiOpsPanel() {
       <article><span>Operaciones analizadas</span><b>{data.summary.operationsVisible}</b><small>Fuente del mismo modelo operativo</small></article>
       <article><span>Revisiones IA</span><b>{data.summary.pendingHumanReview}</b><small>Sin decisión humana registrada</small></article>
     </section>
+    <section className="broker-ai-ops-section broker-ai-ops-alerts">
+      <header><div><span>Alertas internas activadas</span><h3>Conectadas al Centro Operacional</h3></div><small>AI Ops las explica y enlaza a su origen; no las crea ni las resuelve.</small></header>
+      {data.triggeredAlerts.length ? <div className="broker-ai-ops-alert-list">{data.triggeredAlerts.map((item) => <article key={item.id} className={item.priority.toLowerCase()}>
+        <div><b>{item.priority === "HIGH" ? "Prioridad alta" : item.priority === "LOW" ? "Informativa" : "Prioridad media"}</b><h4>{item.title}</h4><p>{item.detail}</p><small>{item.requiresApproval ? "Requiere revisión humana" : "Control interno"}</small></div>
+        <Link className="secondary-btn" href={item.href}>Abrir origen</Link>
+      </article>)}</div> : <p className="broker-empty">No hay alertas internas activas dentro de tu alcance.</p>}
+    </section>
     <section className="broker-ai-ops-section">
       <header><div><span>Prioridades</span><h3>Qué revisar y por qué</h3></div><small>Las tarjetas enlazan al expediente o módulo que conserva el dato de origen.</small></header>
       {data.priorities.length ? <div className="broker-ai-priority-grid">{data.priorities.map((item) => <article key={item.id} className={`broker-ai-priority ${item.priority.toLowerCase()}`}>
