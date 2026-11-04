@@ -647,6 +647,118 @@ async function upsertProperty(tenantId, property, index, brokers) {
   });
 }
 
+// El catálogo histórico mantiene la compatibilidad con las vistas antiguas,
+// mientras que Broker OS opera sobre entidades relacionales. Esta sincronización
+// deja ambas representaciones disponibles para la demostración y es idempotente.
+async function seedBrokerRelationalProperties(tenantId, properties) {
+  let owners = 0;
+  let communities = 0;
+  let brokerProperties = 0;
+
+  for (const legacy of properties) {
+    const source = legacy.data && typeof legacy.data === "object" ? legacy.data : {};
+    const ownerName = String(source.ownerName || "Propietario de demostración").trim();
+    const ownerEmail = source.ownerEmail ? String(source.ownerEmail).trim().toLowerCase() : null;
+    const ownerPhone = source.ownerPhone ? String(source.ownerPhone).trim() : null;
+
+    let owner = ownerEmail
+      ? await prisma.brokerOwner.findFirst({ where: { tenantId, email: ownerEmail } })
+      : await prisma.brokerOwner.findFirst({ where: { tenantId, name: ownerName } });
+    if (owner) {
+      owner = await prisma.brokerOwner.update({
+        where: { id: owner.id },
+        data: { name: ownerName, email: ownerEmail, phone: ownerPhone, isActive: true },
+      });
+    } else {
+      owner = await prisma.brokerOwner.create({
+        data: {
+          tenantId,
+          name: ownerName,
+          email: ownerEmail,
+          phone: ownerPhone,
+          legalType: /spa|sociedad|constructora|comercial|logistica/i.test(ownerName) ? "PERSONA_JURIDICA" : "PERSONA_NATURAL",
+          legacyRecordId: `demo-owner:${legacy.id}`,
+          isActive: true,
+        },
+      });
+      owners += 1;
+    }
+
+    let communityId = null;
+    const commonExpenses = Number(source.commonExpenses || 0);
+    if (Number.isFinite(commonExpenses) && commonExpenses > 0) {
+      const communityName = `Comunidad ${legacy.title}`;
+      let community = await prisma.brokerCommunity.findFirst({ where: { tenantId, name: communityName } });
+      if (community) {
+        community = await prisma.brokerCommunity.update({
+          where: { id: community.id },
+          data: {
+            address: source.address || null,
+            averageCommonExpenses: commonExpenses,
+            amenities: Array.isArray(source.features) ? source.features : [],
+          },
+        });
+      } else {
+        community = await prisma.brokerCommunity.create({
+          data: {
+            tenantId,
+            name: communityName,
+            address: source.address || null,
+            averageCommonExpenses: commonExpenses,
+            amenities: Array.isArray(source.features) ? source.features : [],
+          },
+        });
+        communities += 1;
+      }
+      communityId = community.id;
+    }
+
+    const builtSquareMeters = Number(source.builtM2 || source.meters || 0);
+    const landSquareMeters = Number(source.landM2 || 0);
+    const yearBuilt = Number(source.yearBuilt || 0);
+    const askingPrice = Number(source.price || 0);
+    const data = {
+      tenantId,
+      ownerId: owner.id,
+      communityId,
+      assignedBrokerId: legacy.assignedToId || null,
+      address: String(source.address || legacy.title),
+      comuna: String(source.comuna || "Sin comuna"),
+      region: source.region ? String(source.region) : null,
+      propertyType: String(source.propertyType || "Propiedad"),
+      bedrooms: Number.isFinite(Number(source.bedrooms)) ? Number(source.bedrooms) : null,
+      bathrooms: Number.isFinite(Number(source.bathrooms)) ? Number(source.bathrooms) : null,
+      usableSquareMeters: Number.isFinite(builtSquareMeters) && builtSquareMeters > 0 ? builtSquareMeters : null,
+      totalSquareMeters: Number.isFinite(landSquareMeters) && landSquareMeters > 0 ? landSquareMeters : (Number.isFinite(builtSquareMeters) && builtSquareMeters > 0 ? builtSquareMeters : null),
+      parkingSpaces: Number.isFinite(Number(source.parking)) ? Number(source.parking) : null,
+      ageYears: Number.isFinite(yearBuilt) && yearBuilt > 0 ? Math.max(0, 2026 - yearBuilt) : null,
+      conservationStatus: "BUEN_ESTADO",
+      askingPrice: Number.isFinite(askingPrice) && askingPrice > 0 ? askingPrice : null,
+      currency: "CLP",
+      operationalStatus: String(source.stage || "CAPTACION"),
+      coverImageUrl: source.photoUrl ? String(source.photoUrl) : null,
+      metadata: {
+        source: DEMO_SOURCE,
+        demo: true,
+        legacyTitle: legacy.title,
+        operation: source.operation || null,
+        ufPrice: Number.isFinite(Number(source.ufPrice)) ? Number(source.ufPrice) : null,
+        features: Array.isArray(source.features) ? source.features : [],
+      },
+      isActive: true,
+    };
+
+    await prisma.brokerProperty.upsert({
+      where: { legacyRecordId: legacy.id },
+      create: { ...data, legacyRecordId: legacy.id },
+      update: data,
+    });
+    brokerProperties += 1;
+  }
+
+  return { owners, communities, properties: brokerProperties };
+}
+
 async function upsertDemoRecord(tenantId, { recordType, title, status, data, assignedToId = null }) {
   const payload = {
     ...data,
@@ -1207,6 +1319,7 @@ async function main() {
   for (let index = 0; index < PROPERTIES.length; index += 1) {
     properties.push(await upsertProperty(realtyTenant.id, PROPERTIES[index], index, brokers));
   }
+  const relationalProperties = await seedBrokerRelationalProperties(realtyTenant.id, properties);
   const brokerRecords = await seedBrokerWorkspace(realtyTenant.id, properties, brokers, buyers);
   const agentEvaluations = await seedAgentEvaluations(realtyTenant.id);
   const captures = await seedBrokerCaptures(realtyTenant.id, properties, brokers);
@@ -1223,6 +1336,7 @@ async function main() {
     brokers: brokers.length,
     buyers: buyers.length,
     properties: properties.length,
+    relationalProperties,
     brokerWorkspaceRecords: brokerRecords.length,
     agentEvaluations: agentEvaluations.length,
     captureRecords: captures,
