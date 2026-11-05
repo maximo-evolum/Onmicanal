@@ -100,6 +100,7 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     await root.getByRole('button',{name:'Registrar nota',exact:true}).click();
     await root.getByRole('button',{name:'Avanzar a Negociación de mandato',exact:true}).click();
     await root.getByRole('heading',{name:'Tasación preliminar',exact:true}).scrollIntoViewIfNeeded();
+    assert.equal(await page.locator('.evolum-sidebar-context').count(),1,'El menú debe identificar el espacio activo sin duplicar la vertical');
     await page.screenshot({path:path.join(out,'captacion-escritorio.png')});
     await root.getByRole('button',{name:'Registrar mandato firmado',exact:true}).click();
     await root.getByLabel('Fecha de firma',{exact:true}).fill('2026-01-01');
@@ -118,6 +119,9 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     await page.setViewportSize({width:390,height:844});
     await page.waitForFunction(() => !document.querySelector('aside.evolum-unified-nav'));
     assert.equal(await page.getByRole('button',{name:'Abrir menu EVOLUM',exact:true}).count(),1,'En móvil el menú debe iniciar plegado y no cubrir la ficha');
+    const compactLogout=page.getByRole('button',{name:'Cerrar sesión',exact:true});
+    assert.equal(await compactLogout.count(),1,'El menú contraído debe conservar una salida de sesión accesible');
+    assert.match(await compactLogout.evaluate(el=>getComputedStyle(el).backgroundImage),/rgb\(239, 68, 68\)/,'La salida compacta debe conservar su color rojo');
     await root.getByRole('heading',{name:'Propietario registrado: Ana Pérez',exact:true}).scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(out,'captacion-movil.png')});
     if(process.env.QA_DEBUG) console.log(await root.evaluate(el=>{const a=[];for(let n=el;n;n=n.parentElement){const r=n.getBoundingClientRect(),s=getComputedStyle(n);a.push({class:n.className,width:r.width,left:r.left,min:s.minWidth,grid:s.gridTemplateColumns,pad:s.padding});}return a;}));

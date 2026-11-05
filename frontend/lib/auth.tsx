@@ -185,7 +185,12 @@ export function LoginPage() {
   );
 }
 
-export function LogoutButton() {
+type LogoutButtonProps = {
+  /** Muestra una acción compacta cuando la barra lateral está contraída. */
+  compact?: boolean;
+};
+
+export function LogoutButton({ compact = false }: LogoutButtonProps) {
   const router = useRouter();
   function handleLogout() {
     void fetch(`${API_BASE_URL}/auth/logout`, { method: "POST", credentials: "include" });
@@ -194,5 +199,15 @@ export function LogoutButton() {
     router.refresh();
   }
 
-  return <button className="ghost-btn logout-button" onClick={handleLogout}>Cerrar sesión</button>;
+  return (
+    <button
+      className={`ghost-btn logout-button${compact ? " logout-button-compact" : ""}`}
+      type="button"
+      onClick={handleLogout}
+      aria-label="Cerrar sesión"
+      title={compact ? "Cerrar sesión" : undefined}
+    >
+      {compact ? <span aria-hidden="true">⇥</span> : "Cerrar sesión"}
+    </button>
+  );
 }

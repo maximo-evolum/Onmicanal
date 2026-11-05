@@ -487,11 +487,12 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
 
   if (!isOpen) {
     return (
-      <div className="evolum-menu-rail-actions">
+      <div className="evolum-menu-rail-actions" aria-label="Controles del menú EVOLUM">
         <button className="evolum-menu-bubble" type="button" onClick={toggleMenu} aria-label="Abrir menu EVOLUM">
           <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt={brandLabel} />
         </button>
         {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
+        <LogoutButton compact />
       </div>
     );
   }
@@ -511,8 +512,13 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
         </div>
       </div>
 
-      <nav className="inbox-unified-nav-list evolum-nav-groups" ref={navRef} onScroll={saveMenuPosition} aria-busy={!menuReady}>
-        {!menuReady ? <div className="evolum-nav-loading">Cargando menú de esta cuenta…</div> : navigationGroups.map((group) => {
+      <div className="evolum-sidebar-context" aria-label={`Espacio activo: ${brandLabel}`}>
+        <span>Espacio activo</span>
+        <strong>{brandLabel}</strong>
+      </div>
+
+      <nav className="inbox-unified-nav-list evolum-nav-groups" ref={navRef} onScroll={saveMenuPosition} aria-busy={!menuReady} aria-label="Navegación principal">
+        {!menuReady ? <div className="evolum-nav-loading">Cargando menú de esta cuenta…</div> : navigationGroups.length === 0 ? <div className="evolum-nav-empty">Esta cuenta aún no tiene módulos habilitados.</div> : navigationGroups.map((group) => {
           return (
             <details className="evolum-nav-group" key={group.id} open={openGroupId === group.id}>
               <summary onClick={(event) => {

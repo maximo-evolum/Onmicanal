@@ -154,6 +154,7 @@ const frontendUrl=(process.env.BROKER_WEB_URL||'http://localhost:3001').replace(
         await page.setViewportSize({width:390,height:844});
         await page.waitForFunction(() => !document.querySelector('aside.evolum-unified-nav'));
         assert.equal(await page.getByRole('button',{name:'Abrir menu EVOLUM',exact:true}).count(),1,'En móvil el menú debe iniciar plegado y no cubrir la ficha');
+        assert.equal(await page.getByRole('button',{name:'Cerrar sesión',exact:true}).count(),1,'El menú contraído debe conservar una salida de sesión accesible');
         await root.scrollIntoViewIfNeeded();
         assert.equal(await root.evaluate(el=>el.scrollWidth<=el.clientWidth+2&&el.getBoundingClientRect().right<=innerWidth+1),true);
         await page.screenshot({path:path.join(output,`${destination}-movil.png`)});

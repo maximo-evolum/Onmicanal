@@ -16955,16 +16955,66 @@ html[data-theme="dark"] .realty-capture-section { background: color-mix(in srgb,
 .evolum-unified-nav .evolum-nav-group-links {
   max-block-size: min(300px, calc(100dvh - 365px));
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
   padding-right: 7px;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  -ms-overflow-style: auto;
-  scrollbar-width: thin;
-  scrollbar-color: #7d91a8 transparent;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
-.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar { display: block; width: 7px; }
-.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar-thumb { background: #7d91a8; border-radius: 10px; }
+.evolum-unified-nav .evolum-nav-group-links::-webkit-scrollbar { display: none; }
+.evolum-sidebar-context {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 18%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--theme-primary) 6%, transparent);
+}
+.evolum-sidebar-context span {
+  color: #c7bcdd;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+.evolum-sidebar-context strong {
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.25;
+}
+.evolum-nav-empty {
+  padding: 14px 12px;
+  border: 1px dashed color-mix(in srgb, var(--theme-primary-2) 30%, transparent);
+  border-radius: 12px;
+  color: #d9d1e8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.evolum-menu-rail-actions .logout-button-compact {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  place-items: center;
+  border-radius: 50% !important;
+  font-size: 20px;
+  line-height: 1;
+}
+.evolum-menu-rail-actions .logout-button-compact span {
+  display: block;
+  transform: translateX(1px);
+}
+
+/* La salida no puede heredar el aspecto neutro de los controles del rail. */
+.evolum-menu-rail-actions .logout-button.logout-button-compact {
+  color: #ffffff !important;
+  border: 1px solid #dc2626 !important;
+  background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
+  box-shadow: 0 10px 22px rgba(220, 38, 38, .28) !important;
+}
 .finance-bank-selection { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
 .finance-bank-statement-preview h3 label { display: flex; align-items: center; gap: 10px; }
 .finance-bank-selection input[type="checkbox"], .finance-bank-statement-preview input[type="checkbox"] { width: 18px; height: 18px; min-height: 18px; flex: 0 0 18px; }
@@ -18239,5 +18289,397 @@ body {
     height: auto !important;
     min-height: 100dvh !important;
     overflow: visible !important;
+  }
+}
+
+/*
+ * Navegación EVOLUM · Marco común del Explorador
+ *
+ * Esta capa se aplica sobre el menú compartido, no sobre cada vertical. Así
+ * CRM, Broker OS, Core y Configuración conservan sus permisos/rutas actuales
+ * y comparten una lectura consistente. Finanzas conserva su tratamiento
+ * visual propio, definido por data-design-system="finance".
+ */
+.evolum-unified-nav {
+  grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+}
+
+/* Modo claro: superficie blanca, jerarquía suave y acento teal/azul. */
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav {
+  color: #173640 !important;
+  background: linear-gradient(180deg, #ffffff 0%, #f6fbfb 100%) !important;
+  border-right-color: #d5e7e5 !important;
+  box-shadow: inset -1px 0 0 #e4f0ef, 10px 0 28px rgba(27, 77, 82, .045) !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .inbox-nav-brand,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .inbox-nav-brand strong {
+  color: #193840 !important;
+  text-shadow: none;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .inbox-nav-toggle {
+  border-color: #c8e0dd !important;
+  color: #1b5f67 !important;
+  background: #f2fbfa !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .inbox-nav-toggle:hover {
+  border-color: #7fc8c2 !important;
+  background: #e3f7f4 !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-sidebar-context,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group {
+  border-color: #d7e8e6 !important;
+  background: #ffffff !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-sidebar-context span,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-copy small {
+  color: #678089 !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-sidebar-context strong,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group > summary,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-copy strong {
+  color: #183842 !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group:not([open]) > summary,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links {
+  background: #ffffff !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group > summary:hover,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group[open] > summary {
+  background: linear-gradient(110deg, #eaf9f7 0%, #eef5ff 100%) !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group > summary > .evolum-module-symbol,
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a:not(.active) .evolum-module-symbol {
+  border-color: #cae6e3 !important;
+  color: #087f85 !important;
+  background: #ecf9f7 !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a:not(.active) {
+  color: #29434b !important;
+  background: transparent !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a:not(.active):hover {
+  border-color: #b9e0dc !important;
+  background: #f1fbfa !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a:not(.active) strong {
+  color: #26434c !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a:not(.active) small {
+  color: #6c8289 !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a.active {
+  border-color: #087f98 !important;
+  background: linear-gradient(135deg, #087f98, #08a99b) !important;
+  box-shadow: 0 8px 16px rgba(8, 143, 139, .18);
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a.active :is(strong, small),
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a.active .evolum-module-symbol {
+  color: #ffffff !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-group-links a.active .evolum-module-symbol {
+  border-color: rgba(255, 255, 255, .32) !important;
+  background: rgba(255, 255, 255, .15) !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .evolum-nav-subsection {
+  color: #087f85 !important;
+  border-bottom-color: #d9ebea !important;
+}
+:root:not([data-theme="dark"]):not([data-design-system="neon"]):not([data-design-system="dark"]):not([data-design-system="finance"]) .evolum-unified-nav .inbox-nav-footer {
+  border-top-color: #dceceb !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), #f8fcfc) !important;
+}
+
+/* Modo oscuro: se mantiene el carácter negro, morado neón y azul de EVOLUM. */
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav {
+  background: linear-gradient(180deg, #0a0814 0%, #151027 54%, #090d1a 100%) !important;
+  border-right-color: rgba(160, 123, 255, .28) !important;
+}
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav .evolum-sidebar-context,
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav .evolum-nav-group {
+  border-color: rgba(187, 166, 255, .18) !important;
+  background: rgba(255, 255, 255, .035) !important;
+}
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav .evolum-sidebar-context span,
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav .evolum-nav-group-copy small,
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav .evolum-nav-group-links a:not(.active) small {
+  color: #cdc4df !important;
+}
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav :is(.evolum-sidebar-context strong, .evolum-nav-group > summary, .evolum-nav-group-copy strong, .evolum-nav-group-links a:not(.active) strong) {
+  color: #faf7ff !important;
+}
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav .evolum-nav-group > summary:hover,
+:root:is([data-theme="dark"], [data-design-system="neon"], [data-design-system="dark"]) .evolum-unified-nav .evolum-nav-group[open] > summary {
+  background: linear-gradient(105deg, rgba(138, 46, 255, .29), rgba(32, 125, 255, .16)) !important;
+}
+
+@media (max-width: 980px) {
+  .evolum-unified-nav .evolum-sidebar-context {
+    margin-inline: 1px;
+  }
+  .evolum-menu-rail-actions .logout-button-compact {
+    width: 42px;
+    height: 42px;
+    min-height: 42px;
+  }
+}
+
+/*
+ * Marco visual compartido · EVOLUM OS
+ *
+ * Las páginas históricas poseen estructuras distintas, pero todas comparten
+ * un encabezado operativo, superficies de trabajo y controles. Esta capa les
+ * da la misma jerarquía sin cambiar datos, formularios, permisos ni rutas.
+ * Finanzas mantiene su workspace específico definido en su propio bloque.
+ */
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+) {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  margin-bottom: 20px !important;
+  padding: clamp(18px, 2vw, 26px) !important;
+  border: 1px solid #d7e6e4 !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(8, 169, 155, .11), transparent 30%),
+    linear-gradient(128deg, #ffffff 0%, #f7fbfb 58%, #f5f1fb 100%) !important;
+  box-shadow: 0 12px 30px rgba(23, 63, 67, .06) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+)::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 148px;
+  height: 148px;
+  right: -62px;
+  bottom: -94px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(75, 45, 112, .10), transparent 68%);
+  pointer-events: none;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+) :is(h1, h2) {
+  color: #182f37 !important;
+  letter-spacing: -.025em;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+) :is(p, .meta-line) {
+  color: #60757c !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+) :is(.eyebrow, .module-kicker, .crm-main-kicker, .documents-eyebrow) {
+  color: #087f85 !important;
+  font-size: 10px !important;
+  font-weight: 900 !important;
+  letter-spacing: .13em !important;
+}
+
+/* Paneles equivalentes: lectura clara primero, decoración secundaria. */
+:root[data-design-system="finance"] :is(
+  .phase5-panel,
+  .workflow-card,
+  .executive-panel,
+  .executive-kpi-card,
+  .crm-main-panel,
+  .ai-ops-panel,
+  .ai-ops-work-card,
+  .connection-summary-card,
+  .documents-upload-card,
+  .documents-list-card
+) {
+  border-color: #d9e8e6 !important;
+  border-radius: 18px !important;
+  background: #ffffff !important;
+  box-shadow: 0 8px 24px rgba(26, 62, 67, .045) !important;
+}
+
+/* Barra de acciones: evita que las cuentas, filtros y botones se pierdan en
+   encabezados extensos o con varios módulos habilitados. */
+:root[data-design-system="finance"] :is(
+  .module-app-actions,
+  .agenda-app-actions,
+  .pipeline-kpis,
+  .executive-top-actions,
+  .header-actions,
+  .metadata-header-actions
+) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-actions,
+  .agenda-app-actions,
+  .pipeline-kpis,
+  .executive-top-actions,
+  .header-actions,
+  .metadata-header-actions
+) > :is(button, a, .badge, .account-pill-control) {
+  flex: 0 0 auto;
+}
+
+/* El contraste de la experiencia nocturna conserva la estética morada/azul
+   original, sin cajas claras heredadas del modo Lumen. */
+:root[data-design-system="dark"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+),
+:root[data-theme="dark"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+) {
+  border-color: rgba(180, 150, 255, .24) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(46, 139, 255, .17), transparent 32%),
+    linear-gradient(128deg, #17112e 0%, #18152f 58%, #0d1b2d 100%) !important;
+  box-shadow: none !important;
+}
+
+:root[data-design-system="dark"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+) :is(h1, h2),
+:root[data-theme="dark"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header
+) :is(h1, h2) {
+  color: #faf7ff !important;
+}
+
+:root[data-design-system="dark"] :is(
+  .phase5-panel,
+  .workflow-card,
+  .executive-panel,
+  .executive-kpi-card,
+  .crm-main-panel,
+  .ai-ops-panel,
+  .ai-ops-work-card,
+  .connection-summary-card,
+  .documents-upload-card,
+  .documents-list-card
+),
+:root[data-theme="dark"] :is(
+  .phase5-panel,
+  .workflow-card,
+  .executive-panel,
+  .executive-kpi-card,
+  .crm-main-panel,
+  .ai-ops-panel,
+  .ai-ops-work-card,
+  .connection-summary-card,
+  .documents-upload-card,
+  .documents-list-card
+) {
+  border-color: rgba(190, 169, 255, .19) !important;
+  background: #1b1732 !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 1080px) {
+  :root[data-design-system="finance"] :is(.crm-main-header, .pipeline-pro-topbar, .executive-topbar) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  }
+}
+
+@media (max-width: 760px) {
+  :root[data-design-system="finance"] :is(
+    .module-app-header,
+    .agenda-app-header,
+    .documents-header,
+    .pipeline-pro-topbar,
+    .executive-topbar,
+    .workflow-hero,
+    .vertical-hero,
+    .crm-main-header
+  ) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 14px !important;
+    padding: 17px !important;
+    border-radius: 16px !important;
+  }
+  :root[data-design-system="finance"] :is(
+    .module-app-actions,
+    .agenda-app-actions,
+    .pipeline-kpis,
+    .executive-top-actions,
+    .header-actions,
+    .metadata-header-actions
+  ) {
+    justify-content: flex-start;
   }
 }
