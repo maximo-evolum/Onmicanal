@@ -11,6 +11,7 @@ import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import { getVerticalProduct, type VerticalProductCode } from "@/lib/vertical-products";
 import { getStoredTenantAccess, storeTenantAccess } from "@/lib/session-access";
 import { NotificationCenter } from "@/components/notification-center";
+import { EvolumWorkspaceChrome, type EvolumWorkspaceShortcut } from "@/components/evolum-workspace-chrome";
 
 type EvolumSidebarProps = {
   active: string;
@@ -212,6 +213,27 @@ function brokerNavigationOrder(item: SidebarItem) {
   return index === -1 ? order.length : index;
 }
 
+function itemIsActive(
+  label: string,
+  href: string,
+  active: string,
+  pathname: string,
+  currentSearchParams: URLSearchParams,
+) {
+  const [targetPath, targetQuery] = href.split("?");
+  const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
+    const [key, value = ""] = entry.split("=");
+    return currentSearchParams.get(key) === value;
+  });
+  if (targetPath === "/realty") return label === active;
+  if (targetPath === "/finance") {
+    return targetQuery
+      ? pathname === targetPath && queryMatches
+      : pathname === targetPath && !currentSearchParams.get("tab");
+  }
+  return label === active || (pathname === targetPath && queryMatches);
+}
+
 function contextualizeItem(item: SidebarItem, industry?: string | null): SidebarItem {
   const [, href, , icon, moduleKey] = item;
   if (moduleKey === "inbox" && isRealtyIndustry(industry)) {
@@ -296,7 +318,14 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
 
     applyMobileDefault();
     mobileViewport.addEventListener("change", applyMobileDefault);
-    return () => mobileViewport.removeEventListener("change", applyMobileDefault);
+    // Algunos navegadores embebidos no notifican el cambio de media query al
+    // rotar o redimensionar una pestaña ya abierta. El evento resize es un
+    // respaldo para que el menú nunca cubra el módulo al pasar a móvil.
+    window.addEventListener("resize", applyMobileDefault);
+    return () => {
+      mobileViewport.removeEventListener("change", applyMobileDefault);
+      window.removeEventListener("resize", applyMobileDefault);
+    };
   }, [isOpen, onToggle]);
 
   useEffect(() => {
@@ -458,25 +487,17 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
     return groups;
   }, [industry, items]);
 
+  const workspaceShortcuts = useMemo<EvolumWorkspaceShortcut[]>(() => navigationGroups.flatMap((group) => group.items.map(([label, href, description]) => ({
+    label,
+    href,
+    description,
+    group: group.label,
+    active: itemIsActive(label, href, active, pathname, currentSearchParams)
+  }))), [active, currentSearchParams, navigationGroups, pathname]);
+
   useEffect(() => {
     const product = getVerticalProduct(industry);
-    const currentGroup = navigationGroups.find((group) => group.items.some(([label, href]) => {
-      const [targetPath, targetQuery] = href.split("?");
-      const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
-        const [key, value = ""] = entry.split("=");
-        return currentSearchParams.get(key) === value;
-      });
-      if (targetPath === "/realty") return label === active;
-      // Finanzas conserva el estado de cada sección en ?tab=. No usar el
-      // nombre activo como respaldo aquí: al cambiar de pestaña podía dejar
-      // marcada la anterior junto a la actual.
-      if (targetPath === "/finance") {
-        return targetQuery
-          ? pathname === targetPath && queryMatches
-          : pathname === targetPath && !currentSearchParams.get("tab");
-      }
-      return label === active || (pathname === targetPath && queryMatches);
-    }));
+    const currentGroup = navigationGroups.find((group) => group.items.some(([label, href]) => itemIsActive(label, href, active, pathname, currentSearchParams)));
     const brokerContextGroup: NavigationGroup["id"] | null = product?.code === "REAL_ESTATE"
       && ["Agenda", "Pipeline"].includes(active)
       ? "vertical"
@@ -513,19 +534,32 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
     }
   }
 
+  const workspaceChrome = <EvolumWorkspaceChrome
+    activeLabel={active}
+    workspaceLabel={brandLabel}
+    menuOpen={isOpen}
+    onToggleMenu={toggleMenu}
+    shortcuts={workspaceShortcuts}
+  />;
+
   if (!isOpen) {
     return (
-      <div className="evolum-menu-rail-actions" aria-label="Controles del menú EVOLUM">
-        <button className="evolum-menu-bubble" type="button" onClick={toggleMenu} aria-label="Abrir menu EVOLUM">
-          <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt={brandLabel} />
-        </button>
-        {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
-        <LogoutButton compact />
-      </div>
+      <>
+        {workspaceChrome}
+        <div className="evolum-menu-rail-actions" aria-label="Controles del menú EVOLUM">
+          <button className="evolum-menu-bubble" type="button" onClick={toggleMenu} aria-label="Abrir menu EVOLUM">
+            <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt={brandLabel} />
+          </button>
+          {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
+          <LogoutButton compact />
+        </div>
+      </>
     );
   }
 
   return (
+    <>
+    {workspaceChrome}
     <aside className="inbox-unified-nav evolum-unified-nav">
       <div className="inbox-nav-head">
         <div className="inbox-nav-brand" title={brandLabel}>
@@ -568,19 +602,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
                   const previousBrokerSection = index > 0 && isRealtyIndustry(industry) && group.id === "vertical"
                     ? brokerNavigationSection(group.items[index - 1])
                     : null;
-                  const [targetPath, targetQuery] = href.split("?");
-                  const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
-                    const [key, value = ""] = entry.split("=");
-                    return currentSearchParams.get(key) === value;
-                  });
-                  const matchesRoute = pathname === targetPath && queryMatches;
-                  // Para cada pestaña de Finanzas la URL completa es la
-                  // fuente única de verdad; así solo un módulo queda activo.
-                  const selected = targetPath === "/realty"
-                    ? label === active
-                    : targetPath === "/finance"
-                      ? (targetQuery ? matchesRoute : pathname === targetPath && !currentSearchParams.get("tab"))
-                      : (label === active || matchesRoute);
+                  const selected = itemIsActive(label, href, active, pathname, currentSearchParams);
                   return (
                     <Fragment key={label}>
                       {brokerSection && brokerSection !== previousBrokerSection ? <span className="evolum-nav-subsection">{brokerSection}</span> : null}
@@ -603,5 +625,6 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
         </div>
       </div>
     </aside>
+    </>
   );
 }

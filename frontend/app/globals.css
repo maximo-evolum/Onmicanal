@@ -9575,6 +9575,363 @@ body {
   }
 }
 
+/* La salida se mantiene inequívocamente roja incluso dentro de los workspaces
+   nocturnos que recolorean los botones genéricos. */
+.evolum-workspace-chrome .evolum-workspace-mobile-logout .logout-button.logout-button-compact,
+:root[data-design-system="dark"] .realty-product-workspace .evolum-workspace-chrome .evolum-workspace-mobile-logout .logout-button.logout-button-compact,
+:root[data-theme="dark"] .realty-product-workspace .evolum-workspace-chrome .evolum-workspace-mobile-logout .logout-button.logout-button-compact {
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
+  background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
+  box-shadow: 0 6px 15px rgba(185, 28, 28, .24) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Modelo A · marco ejecutivo compartido
+
+   La maqueta aprobada no era solo una nueva paleta: definía una barra de
+   contexto persistente, navegación rápida y un área de trabajo que comienza
+   bajo ella. Esta capa aplica esa estructura a CRM, Broker OS y Core EVOLUM
+   sin cambiar la fuente de datos, los formularios ni las rutas existentes.
+   -------------------------------------------------------------------------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.evolum-workspace-chrome {
+  --evolum-chrome-height: 98px;
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 252px;
+  z-index: 45;
+  display: grid;
+  grid-template-rows: 59px 39px;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  background: color-mix(in srgb, var(--theme-surface-strong) 94%, transparent);
+  box-shadow: 0 7px 22px color-mix(in srgb, var(--theme-shadow, #18312f) 9%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.evolum-workspace-chrome-main {
+  display: grid;
+  grid-template-columns: auto minmax(160px, auto) minmax(230px, 440px) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  padding: 0 22px;
+}
+
+.evolum-workspace-menu-toggle,
+.evolum-workspace-user {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-strong);
+  background: var(--theme-surface);
+  font: inherit;
+  font-weight: 900;
+}
+
+.evolum-workspace-menu-toggle {
+  font-size: 23px;
+  line-height: 1;
+}
+
+.evolum-workspace-menu-toggle:hover,
+.evolum-workspace-menu-toggle:focus-visible {
+  border-color: var(--theme-primary-2);
+  background: var(--theme-surface-soft);
+  outline: none;
+}
+
+.evolum-workspace-location {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.evolum-workspace-location span,
+.evolum-workspace-location strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.evolum-workspace-location strong { color: var(--text-strong); }
+.evolum-workspace-location b { color: var(--theme-primary-2); }
+
+.evolum-workspace-search {
+  position: relative;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  height: 35px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--theme-surface) 82%, transparent);
+}
+
+.evolum-workspace-search > span:first-child {
+  color: var(--theme-primary-2);
+  font-size: 17px;
+  line-height: 1;
+}
+
+.evolum-workspace-search input {
+  width: 100%;
+  min-width: 0;
+  height: 33px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--text);
+  background: transparent;
+  box-shadow: none;
+  font-size: 12px;
+}
+
+.evolum-workspace-search input:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.evolum-workspace-search:focus-within {
+  border-color: var(--theme-primary-2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary-2) 13%, transparent);
+}
+
+.evolum-workspace-search-results {
+  position: absolute;
+  z-index: 72;
+  top: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(430px, calc(100dvh - 126px));
+  overflow-y: auto;
+  padding: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  background: var(--theme-surface-strong);
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--theme-shadow, #18312f) 20%, transparent);
+}
+
+.evolum-workspace-search-results a,
+.evolum-workspace-search-empty {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 9px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.evolum-workspace-search-results a:hover,
+.evolum-workspace-search-results a:focus-visible {
+  color: var(--text-strong);
+  background: var(--theme-surface-soft);
+  outline: none;
+}
+
+.evolum-workspace-search-results small { color: var(--theme-primary-2); font-size: 9px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.evolum-workspace-search-results strong { color: inherit; font-size: 12px; }
+.evolum-workspace-search-results a > span,
+.evolum-workspace-search-empty { color: var(--text-muted); font-size: 11px; line-height: 1.35; }
+
+.evolum-workspace-module-select { display: none; min-width: 0; }
+
+.evolum-workspace-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.evolum-workspace-actions .notification-center { position: relative; }
+.evolum-workspace-actions .notification-center-trigger { width: 34px; height: 34px; }
+.evolum-workspace-user { border-color: transparent; color: #fff; background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)); }
+.evolum-workspace-mobile-logout { display: none; }
+.evolum-workspace-mobile-logout .logout-button.logout-button-compact {
+  color: #fff !important;
+  border: 1px solid #dc2626 !important;
+  background: linear-gradient(135deg, #ef4444, #b91c1c) !important;
+  box-shadow: 0 6px 15px rgba(185, 28, 28, .22);
+}
+
+.evolum-workspace-context-tabs {
+  display: flex;
+  gap: 4px;
+  align-items: end;
+  min-width: 0;
+  padding: 0 22px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.evolum-workspace-context-tabs::-webkit-scrollbar { display: none; }
+.evolum-workspace-context-tabs a {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 11px;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.evolum-workspace-context-tabs a:hover { color: var(--text-strong); }
+.evolum-workspace-context-tabs a.active { border-bottom-color: var(--theme-primary-2); color: var(--text-strong); }
+
+/* Las alturas y offsets se calculan según cada shell ya existente. */
+.vertical-shell > .evolum-workspace-chrome.is-menu-open { left: var(--ev-nav-width); }
+.workflow-shell > .evolum-workspace-chrome.is-menu-open { left: 304px; }
+.vertical-shell > .evolum-workspace-chrome.is-menu-collapsed { left: 92px; }
+.module-with-menu-shell > .evolum-workspace-chrome.is-menu-collapsed,
+.executive-shell > .evolum-workspace-chrome.is-menu-collapsed,
+.pipeline-pro-shell > .evolum-workspace-chrome.is-menu-collapsed,
+.workflow-shell > .evolum-workspace-chrome.is-menu-collapsed,
+.inbox-unified-shell > .evolum-workspace-chrome.is-menu-collapsed,
+.crm-main > .evolum-workspace-chrome.is-menu-collapsed { left: var(--ev-rail-width, 78px); }
+
+.module-with-menu-shell > main,
+.executive-shell > main,
+.pipeline-pro-shell > main,
+.workflow-shell > main,
+.vertical-shell > main {
+  padding-top: calc(var(--evolum-chrome-height, 98px) + 18px) !important;
+}
+.crm-main > .crm-main-workspace { padding-top: calc(var(--evolum-chrome-height, 98px) + 22px) !important; }
+.inbox-unified-shell > .inbox-unified-workspace { padding-top: calc(var(--evolum-chrome-height, 98px) + 14px) !important; }
+.finance-product-workspace .finance-header { top: var(--evolum-chrome-height, 98px) !important; }
+
+/* Un único centro de notificaciones evita dos campanas con acciones idénticas
+   en la misma vista; el de la barra operativa permanece disponible. */
+.evolum-workspace-chrome ~ :not(.evolum-workspace-chrome) .account-pill-control > .notification-center { display: none; }
+
+:root[data-theme="dark"] .evolum-workspace-chrome,
+:root[data-design-system="dark"] .evolum-workspace-chrome,
+:root[data-design-system="neon"] .evolum-workspace-chrome {
+  border-color: rgba(183, 153, 255, .25);
+  color: #eeeaff;
+  background: color-mix(in srgb, #0d0a1b 92%, transparent);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .26);
+}
+
+:root[data-theme="dark"] .evolum-workspace-menu-toggle,
+:root[data-design-system="dark"] .evolum-workspace-menu-toggle,
+:root[data-design-system="neon"] .evolum-workspace-menu-toggle,
+:root[data-theme="dark"] .evolum-workspace-search,
+:root[data-design-system="dark"] .evolum-workspace-search,
+:root[data-design-system="neon"] .evolum-workspace-search {
+  border-color: rgba(183, 153, 255, .24);
+  color: #f7f4ff;
+  background: rgba(23, 18, 43, .88);
+}
+
+:root[data-theme="dark"] .evolum-workspace-search-results,
+:root[data-design-system="dark"] .evolum-workspace-search-results,
+:root[data-design-system="neon"] .evolum-workspace-search-results { border-color: rgba(183, 153, 255, .28); background: #18132e; }
+
+/* Los controles nativos traían el fondo claro de otros módulos. Esta regla
+   mantiene íntegro el modo oscuro existente, también en la barra nueva. */
+:root[data-theme="dark"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .evolum-workspace-module-select select, .notification-center-trigger),
+:root[data-design-system="dark"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .evolum-workspace-module-select select, .notification-center-trigger),
+:root[data-design-system="neon"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .evolum-workspace-module-select select, .notification-center-trigger) {
+  border-color: rgba(183, 153, 255, .36) !important;
+  color: #eeeaff !important;
+  background: #17132a !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="dark"] .evolum-workspace-module-select select,
+:root[data-design-system="dark"] .evolum-workspace-module-select select,
+:root[data-design-system="neon"] .evolum-workspace-module-select select { color-scheme: dark; }
+
+@media (max-width: 980px) {
+  .evolum-workspace-chrome,
+  .vertical-shell > .evolum-workspace-chrome.is-menu-open,
+  .vertical-shell > .evolum-workspace-chrome.is-menu-collapsed,
+  .workflow-shell > .evolum-workspace-chrome.is-menu-open,
+  .module-with-menu-shell > .evolum-workspace-chrome.is-menu-collapsed,
+  .executive-shell > .evolum-workspace-chrome.is-menu-collapsed,
+  .pipeline-pro-shell > .evolum-workspace-chrome.is-menu-collapsed,
+  .workflow-shell > .evolum-workspace-chrome.is-menu-collapsed,
+  .inbox-unified-shell > .evolum-workspace-chrome.is-menu-collapsed,
+  .crm-main > .evolum-workspace-chrome.is-menu-collapsed {
+    --evolum-chrome-height: 62px;
+    left: 0;
+    grid-template-rows: 62px;
+  }
+  .evolum-workspace-chrome-main { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 0 14px; }
+  /* En un teléfono el selector ya expresa el módulo activo. Ocultar la
+     miga evita que notificaciones o cierre de sesión salten a una segunda
+     fila y queden encima del contenido. */
+  .evolum-workspace-location { display: none; }
+  .evolum-workspace-menu-toggle { grid-column: 1; }
+  .evolum-workspace-search { display: none; }
+  .evolum-workspace-module-select { display: block; grid-column: 2; min-width: 0; }
+  .evolum-workspace-module-select select { min-width: 0; height: 34px; padding: 0 28px 0 9px; border-radius: 9px; font-size: 11px; }
+  .evolum-workspace-actions { grid-column: 3; }
+  /* El encabezado reemplaza los controles flotantes de la barra contraída.
+     Así los accesos no se montan sobre la zona segura del teléfono. */
+  .evolum-menu-rail-actions { display: none !important; }
+  .evolum-workspace-mobile-logout { display: block; }
+  .evolum-workspace-mobile-logout .logout-button-compact {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    min-height: 32px;
+    place-items: center;
+    padding: 0;
+    border-radius: 9px;
+  }
+  .evolum-workspace-context-tabs { display: none; }
+  .module-with-menu-shell > main,
+  .executive-shell > main,
+  .pipeline-pro-shell > main,
+  .workflow-shell > main,
+  .vertical-shell > main { padding-top: calc(var(--evolum-chrome-height) + 18px) !important; }
+  .crm-main > .crm-main-workspace { padding-top: calc(var(--evolum-chrome-height) + 18px) !important; }
+  .inbox-unified-shell > .inbox-unified-workspace { padding-top: calc(var(--evolum-chrome-height) + 12px) !important; }
+  .finance-product-workspace .finance-header { top: var(--evolum-chrome-height) !important; }
+}
+
+@media (max-width: 560px) {
+  .evolum-workspace-location b,
+  .evolum-workspace-location span { display: none; }
+  .evolum-workspace-location strong { max-width: 106px; }
+  .evolum-workspace-actions .notification-center-trigger,
+  .evolum-workspace-user,
+  .evolum-workspace-menu-toggle { width: 32px; height: 32px; }
+  .evolum-workspace-user { display: none; }
+}
+
 /* Fase 10 Broker OS: cuenta, perfiles y carga de equipo. */
 .broker-account-panel { display:grid; gap:18px; }
 .broker-account-panel :is(button,a,input,select,textarea,summary):focus-visible { outline:3px solid rgba(8,143,146,.5); outline-offset:3px; }
