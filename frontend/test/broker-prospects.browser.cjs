@@ -128,6 +128,7 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     const overflow=await root.evaluate(el=>el.scrollWidth>el.clientWidth+2);
     assert.equal(overflow,false,'La captación no debe desbordarse horizontalmente');
     assert.equal(await root.evaluate(el=>el.getBoundingClientRect().right<=innerWidth+1),true,'La ficha debe caber en el viewport móvil');
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2&&document.body.scrollWidth<=innerWidth+2),true,'La página móvil no debe conservar desbordes decorativos fuera del viewport');
     await page.evaluate(()=>{document.documentElement.dataset.theme='purple';document.documentElement.dataset.designSystem='dark';});
     await page.screenshot({path:path.join(out,'captacion-movil-oscuro.png')});
     await page.setViewportSize({width:1440,height:1050});

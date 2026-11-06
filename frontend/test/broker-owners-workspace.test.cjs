@@ -28,6 +28,6 @@ test("La ficha ofrece navegación contextual sin duplicar datos del expediente",
 
 test("Propietarios queda disponible como vista y navegación de Broker OS", () => {
   assert.match(realtyPage, /owners:\s*\{ label: "Propietarios y cartera"/);
-  assert.match(sidebar, /\["Propietarios", "\/realty\?view=owners"/);
+  assert.match(sidebar, /\["Propietarios y cartera", "\/realty\?view=owners"/);
   assert.match(sidebar, /view=owners/);
 });

@@ -59,7 +59,7 @@ const baseItems: SidebarItem[] = [
   ["Operaciones Broker", "/realty?view=broker_os", "Ventas, arriendos, expedientes y postventa", "BO", "properties"],
   ["Captación e importación", "/realty?view=operations", "Carga manual e importación de propiedades", "RC", "realty_loads"],
   ["Propiedades", "/realty?view=properties", "Inventario, fichas y publicación", "RP", "properties"],
-  ["Propietarios", "/realty?view=owners", "Cartera patrimonial, vencimientos y seguimiento interno", "PO", "properties"],
+  ["Propietarios y cartera", "/realty?view=owners", "Cartera patrimonial, vencimientos y seguimiento interno", "PO", "properties"],
   ["Corredores y asignaciones", "/realty?view=brokers", "Equipo comercial y reparto de cartera", "RB", "brokers"],
   ["Visitas y seguimiento", "/realty?view=activity", "Visitas, alertas y próximos pasos", "RA", "realty_activity"],
   ["Cartera del corredor", "/realty?view=portal", "Propiedades asignadas y publicación", "RO", "broker_portal"],
@@ -276,6 +276,29 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
   const [industry, setIndustry] = useState<string | null>(null);
   const [menuReady, setMenuReady] = useState(false);
   const [brokerAccess, setBrokerAccess] = useState<BrokerAccessProfile | null>(null);
+  const mobileDefaultAppliedRef = useRef(false);
+
+  // Cada módulo monta el mismo menú EV, pero históricamente solo algunas
+  // vistas cerraban la barra al abrirse en un teléfono. Se pliega una vez por
+  // cambio a móvil, sin impedir que la persona la vuelva a abrir manualmente.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mobileViewport = window.matchMedia("(max-width: 980px)");
+    const applyMobileDefault = () => {
+      if (!mobileViewport.matches) {
+        mobileDefaultAppliedRef.current = false;
+        return;
+      }
+      if (mobileDefaultAppliedRef.current) return;
+      mobileDefaultAppliedRef.current = true;
+      if (isOpen) onToggle();
+    };
+
+    applyMobileDefault();
+    mobileViewport.addEventListener("change", applyMobileDefault);
+    return () => mobileViewport.removeEventListener("change", applyMobileDefault);
+  }, [isOpen, onToggle]);
+
   useEffect(() => {
     if (!isRealtyIndustry(industry)) { setBrokerAccess(null); return; }
     let active = true;
@@ -436,6 +459,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
   }, [industry, items]);
 
   useEffect(() => {
+    const product = getVerticalProduct(industry);
     const currentGroup = navigationGroups.find((group) => group.items.some(([label, href]) => {
       const [targetPath, targetQuery] = href.split("?");
       const queryMatches = !targetQuery || targetQuery.split("&").every((entry) => {
@@ -453,8 +477,12 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
       }
       return label === active || (pathname === targetPath && queryMatches);
     }));
-    setOpenGroupId(currentGroup?.id || null);
-  }, [active, navigationGroups, pathname]);
+    const brokerContextGroup: NavigationGroup["id"] | null = product?.code === "REAL_ESTATE"
+      && ["Agenda", "Pipeline"].includes(active)
+      ? "vertical"
+      : null;
+    setOpenGroupId(currentGroup?.id || brokerContextGroup);
+  }, [active, industry, navigationGroups, pathname]);
 
   useEffect(() => {
     const nav = navRef.current;
