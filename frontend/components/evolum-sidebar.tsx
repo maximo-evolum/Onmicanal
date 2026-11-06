@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { getMe, getBrokerAccess, type BrokerAccessProfile } from "@/lib/api";
 import { canBrokerLink } from "@/lib/broker-access";
@@ -281,7 +281,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
   // Cada módulo monta el mismo menú EV, pero históricamente solo algunas
   // vistas cerraban la barra al abrirse en un teléfono. Se pliega una vez por
   // cambio a móvil, sin impedir que la persona la vuelva a abrir manualmente.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof window === "undefined") return;
     const mobileViewport = window.matchMedia("(max-width: 980px)");
     const applyMobileDefault = () => {
