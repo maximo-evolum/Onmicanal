@@ -19053,3 +19053,1171 @@ body {
     justify-content: flex-start;
   }
 }
+
+/* ==========================================================================
+   MODELO A · COMPOSICIÓN EJECUTIVA TRANSVERSAL
+
+   El menú y la barra superior ya son compartidos. Esta capa lleva la otra
+   parte de la maqueta aprobada a las pantallas reales: una lectura de arriba
+   hacia abajo (contexto, indicadores, paneles y detalle), sin tocar rutas,
+   datos, permisos ni acciones existentes.
+   ========================================================================== */
+:root[data-design-system="finance"] {
+  --evolum-workspace-gap: clamp(14px, 1.45vw, 22px);
+  --evolum-workspace-panel: #ffffff;
+  --evolum-workspace-line: #dbe6e4;
+  --evolum-workspace-line-strong: #c6d8d4;
+  --evolum-workspace-ink: #17212b;
+  --evolum-workspace-muted: #64737d;
+  --evolum-workspace-shadow: 0 12px 30px rgba(24, 51, 57, .06);
+}
+
+/* Un mismo lienzo de trabajo, incluso cuando las páginas históricas usan
+   nombres de clase distintos. No se modifica el espacio reservado al menú
+   EV ni la altura de la barra global. */
+:root[data-design-system="finance"] :is(
+  .module-with-menu-shell > main,
+  .vertical-shell > main,
+  .executive-shell > main,
+  .pipeline-pro-shell > main,
+  .workflow-shell > main,
+  .inbox-unified-shell > .inbox-unified-workspace,
+  .crm-main > .crm-main-workspace
+) {
+  width: min(100%, 1680px);
+  min-width: 0;
+  margin-inline: auto;
+  padding-bottom: clamp(28px, 4vw, 52px) !important;
+  display: grid !important;
+  align-content: start;
+  gap: var(--evolum-workspace-gap);
+}
+
+:root[data-design-system="finance"] :is(
+  .module-with-menu-shell > main,
+  .vertical-shell > main,
+  .executive-shell > main,
+  .pipeline-pro-shell > main,
+  .workflow-shell > main,
+  .inbox-unified-shell > .inbox-unified-workspace,
+  .crm-main > .crm-main-workspace
+) > :is(header, section, article, form) {
+  min-width: 0;
+  margin-block: 0 !important;
+}
+
+/* Página: contexto a la izquierda y acciones agrupadas a la derecha. */
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header,
+  .realty-hero
+) {
+  min-height: 0 !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap;
+  gap: 16px 22px !important;
+  padding: clamp(19px, 2.2vw, 28px) !important;
+  border: 1px solid var(--evolum-workspace-line) !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(8, 169, 155, .10), transparent 34%),
+    linear-gradient(132deg, #ffffff 0%, #fbfdfd 56%, #f5f1fb 100%) !important;
+  box-shadow: var(--evolum-workspace-shadow) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header,
+  .realty-hero
+) > :first-child {
+  min-width: min(100%, 260px);
+  flex: 1 1 420px;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header,
+  .realty-hero
+) :is(h1, h2) {
+  max-width: 840px;
+  margin: 4px 0 6px !important;
+  color: var(--evolum-workspace-ink) !important;
+  font-size: clamp(1.55rem, 2.3vw, 2.25rem) !important;
+  line-height: 1.08;
+  letter-spacing: -.04em !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header,
+  .realty-hero
+) :is(p, .meta-line) {
+  max-width: 780px;
+  color: var(--evolum-workspace-muted) !important;
+  font-size: .88rem;
+  line-height: 1.52;
+}
+
+:root[data-design-system="finance"] :is(
+  .module-app-actions,
+  .agenda-app-actions,
+  .pipeline-kpis,
+  .executive-top-actions,
+  .header-actions,
+  .metadata-header-actions,
+  .realty-hero-actions
+) {
+  flex: 0 1 auto;
+  align-self: center;
+  justify-content: flex-end;
+  gap: 8px !important;
+}
+
+:root[data-design-system="finance"] .crm-main-header { align-items: center !important; }
+:root[data-design-system="finance"] .crm-main-header .crm-main-search { flex: 1 1 320px; min-width: min(100%, 260px); max-width: 520px; }
+:root[data-design-system="finance"] :is(.crm-main-header .crm-main-ops, .crm-main-header .crm-main-profile) { flex: 0 0 auto; }
+
+/* Indicadores: misma escala, mismas alturas y un bloque claro de tendencia. */
+:root[data-design-system="finance"] :is(
+  .dashboard-grid,
+  .executive-kpi-grid,
+  .connection-summary-grid,
+  .workflow-overview,
+  .realty-ws-kpis,
+  .realty-kpi-grid,
+  .realty-ws-activity-summary,
+  .realty-ws-service-strip,
+  .crm-main-kpi-grid,
+  .finance-kpis,
+  .pipeline-month-summary
+) {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .dashboard-grid > *,
+  .executive-kpi-grid > *,
+  .connection-summary-grid > *,
+  .workflow-overview > *,
+  .realty-ws-kpis > *,
+  .realty-kpi-grid > *,
+  .realty-ws-activity-summary > *,
+  .realty-ws-service-strip > *,
+  .crm-main-kpi-grid > *,
+  .finance-kpis > *,
+  .pipeline-month-summary > *
+) {
+  min-height: 124px;
+  padding: 16px !important;
+  border: 1px solid var(--evolum-workspace-line) !important;
+  border-radius: 16px !important;
+  background: linear-gradient(145deg, #ffffff, #f8fbfa) !important;
+  box-shadow: 0 8px 20px rgba(24, 51, 57, .045) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .dashboard-grid > *,
+  .executive-kpi-grid > *,
+  .connection-summary-grid > *,
+  .workflow-overview > *,
+  .realty-ws-kpis > *,
+  .realty-kpi-grid > *,
+  .realty-ws-activity-summary > *,
+  .realty-ws-service-strip > *,
+  .crm-main-kpi-grid > *,
+  .finance-kpis > *,
+  .pipeline-month-summary > *
+) :is(span, small, p) { color: var(--evolum-workspace-muted) !important; }
+
+:root[data-design-system="finance"] :is(
+  .dashboard-grid > *,
+  .executive-kpi-grid > *,
+  .connection-summary-grid > *,
+  .workflow-overview > *,
+  .realty-ws-kpis > *,
+  .realty-kpi-grid > *,
+  .realty-ws-activity-summary > *,
+  .realty-ws-service-strip > *,
+  .crm-main-kpi-grid > *,
+  .finance-kpis > *,
+  .pipeline-month-summary > *
+) :is(strong, b) { color: var(--evolum-workspace-ink) !important; letter-spacing: -.035em; }
+
+/* Paneles: cada bloque de trabajo adquiere el encabezado y la zona de datos
+   propios del Modelo A. Se evita el efecto de cajas dentro de otras cajas. */
+:root[data-design-system="finance"] :is(
+  .phase5-panel,
+  .workflow-card,
+  .executive-panel,
+  .crm-main-panel,
+  .ai-ops-panel,
+  .ai-ops-work-card,
+  .connection-summary-card,
+  .connection-command-strip article,
+  .documents-upload-card,
+  .documents-list-card,
+  .realty-ws-card,
+  .realty-dashboard-section,
+  .realty-workspace .vertical-card,
+  .realty-buyer-form,
+  .realty-buyer-results,
+  .realty-match-panel,
+  .realty-property-match,
+  .property-portal-card,
+  .broker-profile-card,
+  .pipeline-column,
+  .pipeline-insights-panel article,
+  .reports-section,
+  .connection-provider-card,
+  .connection-detail-card,
+  .metadata-card,
+  .module-help-card,
+  .vertical-card,
+  .vertical-list
+) {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--evolum-workspace-line) !important;
+  border-radius: 18px !important;
+  background: var(--evolum-workspace-panel) !important;
+  box-shadow: 0 9px 24px rgba(24, 51, 57, .045) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .phase5-panel-head,
+  .workflow-card-header,
+  .executive-panel-head,
+  .crm-main-panel-head,
+  .realty-ws-card-head,
+  .vertical-card-head,
+  .documents-list-heading,
+  .connection-card-head,
+  .reports-section-head,
+  .ai-ops-section-header
+) {
+  min-width: 0;
+  margin-bottom: 14px !important;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--evolum-workspace-line);
+}
+
+:root[data-design-system="finance"] :is(
+  .phase5-panel-head,
+  .workflow-card-header,
+  .executive-panel-head,
+  .crm-main-panel-head,
+  .realty-ws-card-head,
+  .vertical-card-head,
+  .documents-list-heading,
+  .connection-card-head,
+  .reports-section-head,
+  .ai-ops-section-header
+) :is(h2, h3) {
+  margin: 2px 0 4px !important;
+  color: var(--evolum-workspace-ink) !important;
+  font-size: clamp(1rem, 1.5vw, 1.2rem) !important;
+  letter-spacing: -.024em;
+}
+
+:root[data-design-system="finance"] :is(
+  .phase5-panel-head,
+  .workflow-card-header,
+  .executive-panel-head,
+  .crm-main-panel-head,
+  .realty-ws-card-head,
+  .vertical-card-head,
+  .documents-list-heading,
+  .connection-card-head,
+  .reports-section-head,
+  .ai-ops-section-header
+) :is(p, span, small) { color: var(--evolum-workspace-muted) !important; }
+
+/* Broker OS: resumen, captura, cartera, actividad, clientes y publicaciones
+   comparten la misma retícula de control, no un conjunto de páginas aisladas. */
+:root[data-design-system="finance"] .realty-workspace { gap: var(--evolum-workspace-gap) !important; }
+
+:root[data-design-system="finance"] .realty-workspace .realty-ws-hero {
+  grid-template-columns: minmax(0, 1.18fr) minmax(300px, .82fr) !important;
+  gap: 18px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+:root[data-design-system="finance"] .realty-workspace .realty-ws-intro {
+  min-height: 100%;
+  padding: clamp(20px, 2.4vw, 28px) !important;
+  border: 1px solid var(--evolum-workspace-line) !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(8, 169, 155, .11), transparent 36%),
+    linear-gradient(132deg, #ffffff, #f5f1fb) !important;
+  box-shadow: var(--evolum-workspace-shadow) !important;
+}
+
+:root[data-design-system="finance"] .realty-workspace .realty-ws-intro h2 {
+  max-width: 720px;
+  color: var(--evolum-workspace-ink) !important;
+  font-size: clamp(1.55rem, 2.45vw, 2.35rem) !important;
+}
+
+:root[data-design-system="finance"] .realty-workspace :is(.realty-ws-two-columns, .realty-ws-brokers-layout, .realty-ws-activity-layout, .realty-ws-portal-layout, .realty-ws-operation-layout, .realty-buyer-workspace) { gap: var(--evolum-workspace-gap) !important; }
+:root[data-design-system="finance"] .realty-workspace .realty-ws-card { padding: clamp(17px, 2vw, 22px) !important; }
+
+:root[data-design-system="finance"] .realty-workspace :is(.realty-ws-table, .realty-inventory-table, .realty-assignment-table, .realty-portal-table) {
+  overflow-x: auto;
+  border: 1px solid #e1ebea;
+  border-radius: 13px;
+  background: #ffffff;
+}
+
+:root[data-design-system="finance"] .realty-workspace :is(.realty-ws-row, .documents-row) { min-height: 58px; border-color: #e1ebea !important; background: transparent !important; }
+:root[data-design-system="finance"] .realty-workspace .realty-ws-row:not(.realty-ws-row-head):hover { background: #f5fbfa !important; }
+:root[data-design-system="finance"] .realty-workspace .realty-ws-row-head { min-height: 38px; color: #52616a !important; background: #eef5f3 !important; }
+
+/* Formularios compactos: una zona de ingreso delimitada y no controles
+   dispersos a lo largo de toda la página. */
+:root[data-design-system="finance"] :is(
+  .documents-upload-card,
+  .realty-property-form,
+  .realty-buyer-form,
+  .realty-broker-form,
+  .workflow-form,
+  .metadata-form,
+  .connection-form,
+  .connection-config-form,
+  .phase5-form
+) { gap: 12px !important; }
+
+:root[data-design-system="finance"] :is(
+  .documents-upload-card,
+  .realty-property-form,
+  .realty-buyer-form,
+  .realty-broker-form,
+  .workflow-form,
+  .metadata-form,
+  .connection-form,
+  .connection-config-form,
+  .phase5-form
+) label { gap: 6px; color: #52616a !important; font-size: .78rem; font-weight: 750; }
+
+:root[data-design-system="finance"] :is(
+  .documents-upload-card,
+  .realty-property-form,
+  .realty-buyer-form,
+  .realty-broker-form,
+  .workflow-form,
+  .metadata-form,
+  .connection-form,
+  .connection-config-form,
+  .phase5-form
+) :is(input, select, textarea) {
+  min-height: 42px;
+  padding: 10px 12px;
+  border-color: var(--evolum-workspace-line-strong) !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+}
+
+:root[data-design-system="finance"] :is(.documents-upload-card, .realty-property-form, .realty-buyer-form, .realty-broker-form, .workflow-form, .metadata-form, .connection-form, .connection-config-form, .phase5-form) textarea { min-height: 92px; }
+
+/* Listas y tablas reciben el patrón "cabecera + filas" de la maqueta. */
+:root[data-design-system="finance"] :is(
+  .documents-list,
+  .ai-ops-list,
+  .executive-list,
+  .connection-provider-list,
+  .workflow-list,
+  .realty-activity-list,
+  .realty-alert-list,
+  .broker-finance-list
+) { overflow: hidden; border: 1px solid #e1ebea; border-radius: 13px; background: #ffffff; }
+
+:root[data-design-system="finance"] :is(
+  .documents-row,
+  .ai-ops-list-row,
+  .executive-list > div,
+  .connection-provider-list > *,
+  .workflow-list-item,
+  .realty-activity-list article,
+  .realty-alert-list article,
+  .broker-finance-row
+) { border-color: #e1ebea !important; border-radius: 0 !important; background: transparent !important; }
+
+:root[data-design-system="finance"] :is(
+  .documents-row,
+  .ai-ops-list-row,
+  .executive-list > div,
+  .connection-provider-list > *,
+  .workflow-list-item,
+  .realty-activity-list article,
+  .realty-alert-list article,
+  .broker-finance-row
+):hover { background: #f6fbfa !important; }
+
+/* Grillas operativas de dos y tres columnas se alinean con el workspace y
+   bajan a una sola columna antes de perder legibilidad. */
+:root[data-design-system="finance"] :is(
+  .ai-ops-section.two-col,
+  .executive-main-grid,
+  .executive-bottom-grid,
+  .documents-layout,
+  .connections-layout,
+  .reports-summary-grid,
+  .workflow-grid,
+  .detail-grid,
+  .crm-main-grid
+) { gap: var(--evolum-workspace-gap) !important; }
+
+@media (max-width: 1180px) {
+  :root[data-design-system="finance"] :is(
+    .realty-workspace .realty-ws-hero,
+    .realty-workspace .realty-ws-brokers-layout,
+    .realty-workspace .realty-ws-activity-layout,
+    .realty-workspace .realty-ws-portal-layout,
+    .realty-workspace .realty-ws-operation-layout,
+    .realty-workspace .realty-buyer-workspace,
+    .documents-layout,
+    .connections-layout,
+    .executive-main-grid,
+    .executive-bottom-grid,
+    .workflow-grid,
+    .detail-grid
+  ) { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+@media (max-width: 760px) {
+  :root[data-design-system="finance"] :is(
+    .module-with-menu-shell > main,
+    .vertical-shell > main,
+    .executive-shell > main,
+    .pipeline-pro-shell > main,
+    .workflow-shell > main,
+    .inbox-unified-shell > .inbox-unified-workspace,
+    .crm-main > .crm-main-workspace
+  ) { gap: 14px; padding-bottom: 28px !important; }
+
+  :root[data-design-system="finance"] :is(
+    .module-app-header,
+    .agenda-app-header,
+    .documents-header,
+    .pipeline-pro-topbar,
+    .executive-topbar,
+    .workflow-hero,
+    .vertical-hero,
+    .crm-main-header,
+    .realty-hero
+  ) { padding: 17px !important; border-radius: 16px !important; }
+
+  :root[data-design-system="finance"] :is(
+    .module-app-actions,
+    .agenda-app-actions,
+    .pipeline-kpis,
+    .executive-top-actions,
+    .header-actions,
+    .metadata-header-actions,
+    .realty-hero-actions,
+    .crm-main-header .crm-main-search
+  ) { width: 100%; max-width: none; justify-content: flex-start; }
+
+  :root[data-design-system="finance"] :is(
+    .dashboard-grid,
+    .executive-kpi-grid,
+    .connection-summary-grid,
+    .workflow-overview,
+    .realty-ws-kpis,
+    .realty-kpi-grid,
+    .realty-ws-activity-summary,
+    .realty-ws-service-strip,
+    .crm-main-kpi-grid,
+    .finance-kpis,
+    .pipeline-month-summary
+  ) { grid-template-columns: minmax(0, 1fr) !important; }
+
+  :root[data-design-system="finance"] :is(
+    .realty-workspace .realty-ws-card,
+    .documents-upload-card,
+    .documents-list-card,
+    .phase5-panel,
+    .workflow-card,
+    .executive-panel,
+    .crm-main-panel,
+    .ai-ops-panel,
+    .ai-ops-work-card
+  ) { padding: 15px !important; border-radius: 15px !important; }
+}
+
+/* La composición nocturna conserva el negro, morado neón y azul corporativos.
+   Se redefinen todas las superficies anteriores para que ninguna vista herede
+   tarjetas blancas o texto oscuro al cambiar de modo. */
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) {
+  --evolum-workspace-panel: #15132b;
+  --evolum-workspace-line: rgba(184, 157, 255, .22);
+  --evolum-workspace-line-strong: rgba(184, 157, 255, .42);
+  --evolum-workspace-ink: #faf7ff;
+  --evolum-workspace-muted: #c4bdd6;
+  --evolum-workspace-shadow: 0 16px 36px rgba(0, 0, 0, .2);
+}
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header,
+  .realty-hero
+) {
+  border-color: var(--evolum-workspace-line) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(46, 139, 255, .16), transparent 34%),
+    linear-gradient(132deg, #17112e 0%, #18152f 57%, #0c1b31 100%) !important;
+  box-shadow: none !important;
+}
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .module-app-header,
+  .agenda-app-header,
+  .documents-header,
+  .pipeline-pro-topbar,
+  .executive-topbar,
+  .workflow-hero,
+  .vertical-hero,
+  .crm-main-header,
+  .realty-hero
+) :is(h1, h2),
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .dashboard-grid > *,
+  .executive-kpi-grid > *,
+  .connection-summary-grid > *,
+  .workflow-overview > *,
+  .realty-ws-kpis > *,
+  .realty-kpi-grid > *,
+  .realty-ws-activity-summary > *,
+  .realty-ws-service-strip > *,
+  .crm-main-kpi-grid > *,
+  .finance-kpis > *,
+  .pipeline-month-summary > *
+) :is(strong, b) { color: var(--evolum-workspace-ink) !important; }
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .dashboard-grid > *,
+  .executive-kpi-grid > *,
+  .connection-summary-grid > *,
+  .workflow-overview > *,
+  .realty-ws-kpis > *,
+  .realty-kpi-grid > *,
+  .realty-ws-activity-summary > *,
+  .realty-ws-service-strip > *,
+  .crm-main-kpi-grid > *,
+  .finance-kpis > *,
+  .pipeline-month-summary > *,
+  .phase5-panel,
+  .workflow-card,
+  .executive-panel,
+  .crm-main-panel,
+  .ai-ops-panel,
+  .ai-ops-work-card,
+  .connection-summary-card,
+  .connection-command-strip article,
+  .documents-upload-card,
+  .documents-list-card,
+  .realty-ws-card,
+  .realty-dashboard-section,
+  .realty-workspace .vertical-card,
+  .realty-buyer-form,
+  .realty-buyer-results,
+  .realty-match-panel,
+  .realty-property-match,
+  .property-portal-card,
+  .broker-profile-card,
+  .pipeline-column,
+  .pipeline-insights-panel article,
+  .reports-section,
+  .connection-provider-card,
+  .connection-detail-card,
+  .metadata-card,
+  .module-help-card,
+  .vertical-card,
+  .vertical-list
+) { border-color: var(--evolum-workspace-line) !important; background: linear-gradient(145deg, #19152f, #111a2e) !important; box-shadow: none !important; }
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .realty-workspace .realty-ws-intro,
+  .documents-list,
+  .ai-ops-list,
+  .executive-list,
+  .connection-provider-list,
+  .workflow-list,
+  .realty-activity-list,
+  .realty-alert-list,
+  .broker-finance-list,
+  .realty-workspace :is(.realty-ws-table, .realty-inventory-table, .realty-assignment-table, .realty-portal-table)
+) { border-color: var(--evolum-workspace-line) !important; background: #141126 !important; }
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) .realty-workspace .realty-ws-intro {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(46, 139, 255, .18), transparent 36%),
+    linear-gradient(132deg, #1b1533, #101b31) !important;
+}
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .realty-ws-row,
+  .documents-row,
+  .ai-ops-list-row,
+  .executive-list > div,
+  .connection-provider-list > *,
+  .workflow-list-item,
+  .realty-activity-list article,
+  .realty-alert-list article,
+  .broker-finance-row
+) { border-color: rgba(184, 157, 255, .16) !important; background: transparent !important; }
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .realty-ws-row:not(.realty-ws-row-head):hover,
+  .documents-row:hover,
+  .ai-ops-list-row:hover,
+  .executive-list > div:hover,
+  .connection-provider-list > *:hover,
+  .workflow-list-item:hover,
+  .realty-activity-list article:hover,
+  .realty-alert-list article:hover,
+  .broker-finance-row:hover
+) { background: rgba(138, 46, 255, .12) !important; }
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(.realty-ws-row-head, .realty-workspace .realty-ws-row-head) { color: #d9d0ee !important; background: rgba(138, 46, 255, .14) !important; }
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .documents-upload-card,
+  .realty-property-form,
+  .realty-buyer-form,
+  .realty-broker-form,
+  .workflow-form,
+  .metadata-form,
+  .connection-form,
+  .connection-config-form,
+  .phase5-form
+) :is(input, select, textarea) {
+  border-color: var(--evolum-workspace-line-strong) !important;
+  color: #fbf9ff !important;
+  background: rgba(7, 8, 20, .72) !important;
+}
+
+/* Broker OS · los expedientes, operaciones y centros de control usan ahora
+   la misma jerarquía visual de la portada aprobada, no variantes heredadas
+   por cada submódulo. */
+:root[data-design-system="finance"] :is(
+  .broker-os-workspace,
+  .broker-commercial-hub,
+  .broker-finance-workspace,
+  .broker-financing-workspace,
+  .broker-monthly-administration,
+  .broker-governance-grid,
+  .broker-training-grid,
+  .broker-expedient-controls,
+  .broker-case-grid
+) {
+  gap: var(--evolum-workspace-gap) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-os-header,
+  .broker-commercial-header,
+  .broker-tracker-header,
+  .broker-monthly-header,
+  .broker-financing-workspace > header
+) {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: clamp(19px, 2.2vw, 27px) !important;
+  border: 1px solid var(--evolum-workspace-line) !important;
+  border-radius: 20px !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(61, 130, 202, .12), transparent 34%),
+    linear-gradient(132deg, #ffffff, #f7fbfb 56%, #f5f1fb) !important;
+  box-shadow: var(--evolum-workspace-shadow) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-os-header,
+  .broker-commercial-header,
+  .broker-tracker-header,
+  .broker-monthly-header,
+  .broker-financing-workspace > header
+) :is(h1, h2) {
+  margin: 3px 0 6px !important;
+  color: var(--evolum-workspace-ink) !important;
+  font-size: clamp(1.42rem, 2.1vw, 2.05rem) !important;
+  letter-spacing: -.037em;
+}
+
+:root[data-design-system="finance"] .broker-os-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 !important;
+  padding: 8px !important;
+  border: 1px solid var(--evolum-workspace-line) !important;
+  border-radius: 14px !important;
+  background: var(--evolum-workspace-panel) !important;
+  box-shadow: 0 7px 18px rgba(24, 51, 57, .035);
+}
+
+:root[data-design-system="finance"] .broker-os-tabs :is(button, a) {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  color: #596a73 !important;
+  background: transparent !important;
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+:root[data-design-system="finance"] .broker-os-tabs :is(button, a):hover,
+:root[data-design-system="finance"] .broker-os-tabs :is(button, a).active,
+:root[data-design-system="finance"] .broker-os-tabs :is(button, a)[aria-current="page"] {
+  color: #ffffff !important;
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #08a99b, #087f98) !important;
+  box-shadow: 0 7px 15px rgba(8, 169, 155, .17);
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-kpis,
+  .broker-commercial-kpis,
+  .broker-tracker-summary,
+  .broker-operational-center-grid,
+  .broker-onboarding > div:last-child,
+  .broker-tracker-context
+) {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)) !important;
+  gap: 12px !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-kpis > *,
+  .broker-commercial-kpis > *,
+  .broker-tracker-summary > *,
+  .broker-operational-center-grid > *,
+  .broker-onboarding > div:last-child > *,
+  .broker-tracker-context > *
+) {
+  min-height: 112px;
+  padding: 15px !important;
+  border: 1px solid var(--evolum-workspace-line) !important;
+  border-radius: 15px !important;
+  color: var(--evolum-workspace-ink) !important;
+  background: linear-gradient(145deg, #ffffff, #f8fbfa) !important;
+  box-shadow: 0 7px 18px rgba(24, 51, 57, .04) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-operational-summary,
+  .broker-onboarding,
+  .broker-operational-center,
+  .broker-operational-activity,
+  .broker-sale-case-panel,
+  .broker-commercial-panel,
+  .broker-finance-queue,
+  .broker-finance-reports,
+  .broker-financing-card,
+  .broker-monthly-card,
+  .broker-governance-panel,
+  .broker-training-panel,
+  .broker-expedient-panel,
+  .broker-access-card,
+  .broker-agent-card,
+  .broker-case-grid article,
+  .broker-tracker-current,
+  .broker-tracker-actor,
+  .broker-tracker-timeline
+) {
+  min-width: 0;
+  padding: clamp(16px, 1.85vw, 22px) !important;
+  border: 1px solid var(--evolum-workspace-line) !important;
+  border-radius: 18px !important;
+  color: var(--evolum-workspace-ink) !important;
+  background: var(--evolum-workspace-panel) !important;
+  box-shadow: 0 9px 24px rgba(24, 51, 57, .045) !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-operational-summary > header,
+  .broker-sale-case-panel > header,
+  .broker-monthly-card > header,
+  .broker-financing-card > header,
+  .broker-governance-panel > header,
+  .broker-training-panel > header,
+  .broker-expedient-panel > header,
+  .broker-finance-queue > header,
+  .broker-finance-reports > header,
+  .broker-commercial-panel > .broker-list-heading
+) {
+  margin-bottom: 14px !important;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--evolum-workspace-line);
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-operation-card,
+  .broker-record-card,
+  .broker-commercial-list > article,
+  .broker-finance-row,
+  .broker-monthly-list > article,
+  .broker-financing-list > article,
+  .broker-governance-activity > article,
+  .broker-expedient-timeline > article,
+  .broker-maintenance-quote-list > article
+) {
+  min-width: 0;
+  padding: 14px 0 !important;
+  border-color: #e1ebea !important;
+  background: transparent !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-operation-card,
+  .broker-record-card,
+  .broker-commercial-list > article,
+  .broker-finance-row,
+  .broker-monthly-list > article,
+  .broker-financing-list > article,
+  .broker-governance-activity > article,
+  .broker-expedient-timeline > article,
+  .broker-maintenance-quote-list > article
+):hover {
+  background: #f6fbfa !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-os-form,
+  .broker-sale-case-form,
+  .broker-commercial-form,
+  .broker-monthly-form,
+  .broker-financing-create,
+  .broker-policy-form,
+  .broker-quote-form,
+  .broker-operation-event-form,
+  .broker-operation-reassignment,
+  .broker-commercial-actions,
+  .broker-finance-actions,
+  .broker-tracker-complete
+) {
+  border-color: var(--evolum-workspace-line) !important;
+  border-radius: 13px !important;
+  background: #f8fbfa !important;
+}
+
+:root[data-design-system="finance"] :is(
+  .broker-os-form,
+  .broker-sale-case-form,
+  .broker-commercial-form,
+  .broker-monthly-form,
+  .broker-financing-create,
+  .broker-policy-form,
+  .broker-quote-form,
+  .broker-operation-event-form,
+  .broker-operation-reassignment,
+  .broker-commercial-actions,
+  .broker-finance-actions,
+  .broker-tracker-complete
+) :is(input, select, textarea) {
+  min-height: 40px;
+  border-color: var(--evolum-workspace-line-strong) !important;
+  color: var(--evolum-workspace-ink) !important;
+  background: #ffffff !important;
+}
+
+/* Cualquier control que todavía venga desde una vista histórica se adapta en
+   oscuro dentro de las áreas operativas, no solo dentro de formularios nuevos. */
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .module-with-menu-shell,
+  .vertical-shell,
+  .executive-shell,
+  .pipeline-pro-shell,
+  .workflow-shell,
+  .inbox-unified-shell,
+  .crm-main
+) :is(input, select, textarea) {
+  color: #fbf9ff !important;
+  border-color: rgba(184, 157, 255, .42) !important;
+  background: rgba(7, 8, 20, .72) !important;
+}
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .broker-os-header,
+  .broker-commercial-header,
+  .broker-tracker-header,
+  .broker-monthly-header,
+  .broker-financing-workspace > header
+) {
+  border-color: var(--evolum-workspace-line) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(46, 139, 255, .16), transparent 34%),
+    linear-gradient(132deg, #17112e, #101b31) !important;
+  box-shadow: none !important;
+}
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .broker-kpis > *,
+  .broker-commercial-kpis > *,
+  .broker-tracker-summary > *,
+  .broker-operational-center-grid > *,
+  .broker-onboarding > div:last-child > *,
+  .broker-tracker-context > *,
+  .broker-operational-summary,
+  .broker-onboarding,
+  .broker-operational-center,
+  .broker-operational-activity,
+  .broker-sale-case-panel,
+  .broker-commercial-panel,
+  .broker-finance-queue,
+  .broker-finance-reports,
+  .broker-financing-card,
+  .broker-monthly-card,
+  .broker-governance-panel,
+  .broker-training-panel,
+  .broker-expedient-panel,
+  .broker-access-card,
+  .broker-agent-card,
+  .broker-case-grid article,
+  .broker-tracker-current,
+  .broker-tracker-actor,
+  .broker-tracker-timeline,
+  .broker-os-tabs
+) {
+  border-color: var(--evolum-workspace-line) !important;
+  color: var(--evolum-workspace-ink) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .broker-operation-card,
+  .broker-record-card,
+  .broker-commercial-list > article,
+  .broker-finance-row,
+  .broker-monthly-list > article,
+  .broker-financing-list > article,
+  .broker-governance-activity > article,
+  .broker-expedient-timeline > article,
+  .broker-maintenance-quote-list > article
+) { border-color: rgba(184, 157, 255, .16) !important; background: transparent !important; }
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .broker-operation-card,
+  .broker-record-card,
+  .broker-commercial-list > article,
+  .broker-finance-row,
+  .broker-monthly-list > article,
+  .broker-financing-list > article,
+  .broker-governance-activity > article,
+  .broker-expedient-timeline > article,
+  .broker-maintenance-quote-list > article
+):hover { background: rgba(138, 46, 255, .12) !important; }
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .broker-os-form,
+  .broker-sale-case-form,
+  .broker-commercial-form,
+  .broker-monthly-form,
+  .broker-financing-create,
+  .broker-policy-form,
+  .broker-quote-form,
+  .broker-operation-event-form,
+  .broker-operation-reassignment,
+  .broker-commercial-actions,
+  .broker-finance-actions,
+  .broker-tracker-complete
+) { border-color: var(--evolum-workspace-line) !important; background: #141126 !important; }
+
+/* Los controles oscuros son opacos a propósito: algunas vistas históricas
+   conservaban fondos claros debajo de ellos y el alfa los volvía grises. */
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .module-with-menu-shell,
+  .vertical-shell,
+  .executive-shell,
+  .pipeline-pro-shell,
+  .workflow-shell,
+  .inbox-unified-shell,
+  .crm-main
+) :is(input, select, textarea) {
+  color-scheme: dark;
+  border-color: #4b456b !important;
+  color: #fbf9ff !important;
+  background: #0a0b18 !important;
+}
+
+:root:is([data-theme="dark"], [data-design-system="dark"], [data-design-system="neon"]) :is(
+  .module-with-menu-shell,
+  .vertical-shell,
+  .executive-shell,
+  .pipeline-pro-shell,
+  .workflow-shell,
+  .inbox-unified-shell,
+  .crm-main
+) :is(input, textarea):-webkit-autofill {
+  -webkit-text-fill-color: #fbf9ff;
+  box-shadow: 0 0 0 1000px #0a0b18 inset;
+}
+
+/* El selector histórico del modo nocturno utiliza "purple" como valor de
+   tema. Se mantiene como modo oscuro corporativo, no como modo claro morado. */
+:root[data-theme="purple"] :is(
+  .module-with-menu-shell,
+  .vertical-shell,
+  .executive-shell,
+  .pipeline-pro-shell,
+  .workflow-shell,
+  .inbox-unified-shell,
+  .crm-main
+) :is(input, select, textarea) {
+  color-scheme: dark;
+  border-color: #4b456b !important;
+  color: #fbf9ff !important;
+  background: #0a0b18 !important;
+}
+
+:root[data-theme="purple"] :is(
+  .module-with-menu-shell,
+  .vertical-shell,
+  .executive-shell,
+  .pipeline-pro-shell,
+  .workflow-shell,
+  .inbox-unified-shell,
+  .crm-main
+) :is(input, textarea):-webkit-autofill {
+  -webkit-text-fill-color: #fbf9ff;
+  box-shadow: 0 0 0 1000px #0a0b18 inset;
+}
+
+/* Compatibilidad con el identificador de modo oscuro histórico (purple).
+   Algunas pantallas antiguas aplicaban superficies claras de forma explícita,
+   por lo que no bastaba con cambiar las variables globales del tema. */
+:root[data-theme="purple"] {
+  --evolum-workspace-panel: #15132b;
+  --evolum-workspace-line: rgba(184, 157, 255, .22);
+  --evolum-workspace-line-strong: rgba(184, 157, 255, .42);
+  --evolum-workspace-ink: #faf7ff;
+  --evolum-workspace-muted: #c4bdd6;
+  --evolum-workspace-shadow: 0 16px 36px rgba(0, 0, 0, .2);
+}
+
+:root[data-theme="purple"] :is(
+  .module-app-header, .agenda-app-header, .documents-header, .pipeline-pro-topbar,
+  .executive-topbar, .workflow-hero, .vertical-hero, .crm-main-header, .realty-hero,
+  .broker-os-header, .broker-commercial-header, .broker-tracker-header,
+  .broker-monthly-header, .broker-financing-workspace > header
+) {
+  border-color: var(--evolum-workspace-line) !important;
+  color: var(--evolum-workspace-ink) !important;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(46, 139, 255, .16), transparent 34%),
+    linear-gradient(132deg, #17112e 0%, #18152f 57%, #0c1b31 100%) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="purple"] :is(
+  .dashboard-grid > *, .executive-kpi-grid > *, .connection-summary-grid > *,
+  .workflow-overview > *, .realty-ws-kpis > *, .realty-kpi-grid > *,
+  .realty-ws-activity-summary > *, .realty-ws-service-strip > *,
+  .crm-main-kpi-grid > *, .finance-kpis > *, .pipeline-month-summary > *,
+  .phase5-panel, .workflow-card, .executive-panel, .crm-main-panel, .ai-ops-panel,
+  .ai-ops-work-card, .connection-summary-card, .connection-command-strip article,
+  .documents-upload-card, .documents-list-card, .realty-ws-card,
+  .realty-dashboard-section, .realty-workspace .vertical-card, .realty-buyer-form,
+  .realty-buyer-results, .realty-match-panel, .realty-property-match,
+  .property-portal-card, .broker-profile-card, .pipeline-column,
+  .pipeline-insights-panel article, .reports-section, .connection-provider-card,
+  .connection-detail-card, .metadata-card, .module-help-card, .vertical-card,
+  .vertical-list, .broker-operational-summary, .broker-onboarding,
+  .broker-operational-center, .broker-operational-activity, .broker-sale-case-panel,
+  .broker-commercial-panel, .broker-finance-queue, .broker-finance-reports,
+  .broker-financing-card, .broker-monthly-card, .broker-governance-panel,
+  .broker-training-panel, .broker-expedient-panel, .broker-access-card,
+  .broker-agent-card, .broker-case-grid article, .broker-tracker-current,
+  .broker-tracker-actor, .broker-tracker-timeline
+) {
+  border-color: var(--evolum-workspace-line) !important;
+  color: var(--evolum-workspace-ink) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="purple"] :is(
+  .realty-workspace .realty-ws-intro, .documents-list, .ai-ops-list,
+  .executive-list, .connection-provider-list, .workflow-list,
+  .realty-activity-list, .realty-alert-list, .broker-finance-list,
+  .realty-workspace :is(.realty-ws-table, .realty-inventory-table,
+    .realty-assignment-table, .realty-portal-table),
+  .broker-os-form, .broker-sale-case-form, .broker-commercial-form,
+  .broker-monthly-form, .broker-financing-create, .broker-policy-form,
+  .broker-quote-form, .broker-operation-event-form, .broker-operation-reassignment,
+  .broker-commercial-actions, .broker-finance-actions, .broker-tracker-complete
+) {
+  border-color: var(--evolum-workspace-line) !important;
+  color: var(--evolum-workspace-ink) !important;
+  background: #141126 !important;
+}
+
+/* Componentes CSS Modules de captación: conservan el flujo funcional, pero
+   adoptan paneles, lista lateral y ficha principal del workspace ejecutivo. */
+:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="panel"],
+:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="metrics"] > div,
+:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="funnel"] > button {
+  border-color: var(--evolum-workspace-line) !important;
+  color: var(--evolum-workspace-ink) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="item"] {
+  border-color: rgba(184, 157, 255, .18) !important;
+  color: var(--evolum-workspace-ink) !important;
+  background: transparent !important;
+}
+
+:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="item"]:hover,
+:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="selected"] {
+  border-color: rgba(82, 210, 199, .7) !important;
+  background: rgba(31, 155, 157, .13) !important;
+}
