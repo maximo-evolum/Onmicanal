@@ -26,3 +26,24 @@
 :global(.broker-operation-card):has(.handoff) > .summary { width: 100%; box-sizing: border-box; }
 :global(.broker-operation-card):has(.handoff) > :global(.broker-operation-actions) { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: .6rem; }
 @media (max-width: 640px) { .filters { display:grid; }.filters span { margin-left:0; }.bottlenecks { display:grid; }.board { grid-auto-columns:minmax(250px,88vw); } }
+
+/* Tablero y expedientes: columnas, fichas y controles siguen la jerarquía
+   del workspace ejecutivo sin cambiar las transiciones de operación. */
+.panel { margin-top: 0; padding: 20px; border-color: var(--evolum-workspace-line, #d9e6e4); border-radius: 18px; background: var(--evolum-workspace-panel, #fff); box-shadow: var(--evolum-workspace-shadow, 0 10px 28px rgba(23, 45, 55, .045)); }
+.panel header { padding-bottom: 13px; border-bottom: 1px solid var(--evolum-workspace-line, #e5eeee); }
+.panel h2 { font-size: 1.35rem; letter-spacing: -.025em; }
+.filters { margin: 13px 0; padding: 12px; border-color: var(--evolum-workspace-line, #dbe6e5); border-radius: 13px; background: #f8fbfa; }
+.filters select { border-color: var(--evolum-workspace-line-strong, #cbdcda); color: var(--evolum-workspace-ink, #263944); background: #fff; }
+.board { gap: 11px; padding: 4px 0 12px; }
+.column { min-height: 330px; padding: 12px; border-color: var(--evolum-workspace-line, #dbe6e5); border-radius: 14px; background: #f8fbfa; }
+.card { margin: 9px 0; padding: 13px; border-color: var(--evolum-workspace-line, #dbe6e5); border-radius: 12px; color: var(--evolum-workspace-ink, #263944); background: #fff; box-shadow: 0 5px 14px rgba(30, 55, 62, .04); }
+.card:hover { border-color: #54c9c1; transform: translateY(-1px); }
+.handoff { border-color: var(--evolum-workspace-line, #dbe6e5); background: #f8fbfa; }
+.readModel { border-color: #14aaa3; background: #ecfaf8; color: #216366; }
+
+:global(:root[data-design-system="dark"]) .panel { border-color: rgba(184,157,255,.24); color: #faf7ff; background: linear-gradient(145deg,#19152f,#111a2e); box-shadow: none; }
+:global(:root[data-design-system="dark"]) .panel header { border-color: rgba(184,157,255,.16); }
+:global(:root[data-design-system="dark"]) .filters,:global(:root[data-design-system="dark"]) .column,:global(:root[data-design-system="dark"]) .handoff { border-color: rgba(184,157,255,.18); color: #eeeaff; background: #141126; }
+:global(:root[data-design-system="dark"]) .filters select { border-color: #4b456b; color: #f4f0ff; background: #0a0b18; }
+:global(:root[data-design-system="dark"]) .card { border-color: rgba(184,157,255,.2); color: #f7f4ff; background: #211b3c; box-shadow: none; }
+:global(:root[data-design-system="dark"]) .readModel { border-color: rgba(79,210,220,.35); color: #c8f6f6; background: rgba(79,210,220,.1); }

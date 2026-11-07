@@ -37,3 +37,12 @@
 :global(:root[data-theme="dark"]) .history article p, :global(:root[data-design-system="dark"]) .history article p, :global(:root[data-theme="dark"]) .history article small, :global(:root[data-design-system="dark"]) .history article small, :global(:root[data-theme="dark"]) .inventoryAlerts p, :global(:root[data-design-system="dark"]) .inventoryAlerts p, :global(:root[data-theme="dark"]) .inventoryAlert span, :global(:root[data-design-system="dark"]) .inventoryAlert span, :global(:root[data-theme="dark"]) .inventoryAlert small, :global(:root[data-design-system="dark"]) .inventoryAlert small { color: #cbc3df; }
 
 @media (max-width: 700px) { .actions { display: grid; grid-template-columns: 1fr; } .actions button { width: 100%; } .inventoryAlerts header { display: grid; } }
+
+/* El modo oscuro se identifica por el sistema de diseño activo. */
+:global(:root[data-design-system="dark"]) .tag { background:#143a3a; color:#9cf0e7; }
+:global(:root[data-design-system="dark"]) .actions button { border-color:#4b456b; background:#17142b; color:#9cf0e7; }
+:global(:root[data-design-system="dark"]) .discardPanel,:global(:root[data-design-system="dark"]) .inventoryAlert { border-color:#68547b; background:#211c39; }
+:global(:root[data-design-system="dark"]) .discardPanel textarea { border-color:#4b456b; background:#0a0b18; color:#f3eeff; }
+:global(:root[data-design-system="dark"]) :is(.history h4,.history article b,.inventoryAlerts h2,.inventoryAlert b){color:#fff}
+:global(:root[data-design-system="dark"]) .history article { border-color:#68547b; background:#211c39; }
+:global(:root[data-design-system="dark"]) :is(.history article p,.history article small,.inventoryAlerts p,.inventoryAlert span,.inventoryAlert small){color:#cbc3df}

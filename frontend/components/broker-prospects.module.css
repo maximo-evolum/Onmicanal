@@ -50,3 +50,55 @@
   .metrics,.funnel { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .panel { padding:14px; }
 }
+
+/* Modelo A: la captación se comporta como un workspace operativo. La lógica,
+   los campos y las acciones se conservan; solo se ordena su lectura. */
+.root { gap: 16px; width: min(100%, 1480px); margin: 0 auto; }
+.header { align-items: flex-start; padding: 2px 0 1px; }
+.header > div { max-width: 720px; }
+.header h2 { margin: 0 0 5px; font-size: clamp(23px, 2.2vw, 30px); letter-spacing: -.035em; }
+.header p { max-width: 680px; margin: 0; color: var(--evolum-workspace-muted, #64748b); font-size: .88rem; }
+.header > .primary-btn { min-height: 40px; padding-inline: 15px; }
+.panel { border-color: var(--evolum-workspace-line, #dbe6e5); border-radius: 18px; background: var(--evolum-workspace-panel, #fff); box-shadow: var(--evolum-workspace-shadow, 0 10px 28px rgba(23, 45, 55, .045)); }
+.metrics { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.metrics > div { min-height: 94px; padding: 14px; border-color: var(--evolum-workspace-line, #dbe6e5); border-radius: 14px; background: linear-gradient(145deg, #fff, #f7fbfa); }
+.metrics strong { color: var(--evolum-workspace-ink, #1f2937); font-size: 1.52rem; letter-spacing: -.04em; }
+.metrics span { margin-top: 5px; color: var(--evolum-workspace-muted, #64748b); font-size: .75rem; font-weight: 750; }
+.funnel { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.funnel > button { min-height: 88px; padding: 13px; border-color: var(--evolum-workspace-line, #dbe6e5); border-radius: 13px; color: var(--evolum-workspace-ink, #1f2937); background: #fbfdfd; text-align: left; font-size: .79rem; font-weight: 800; }
+.funnel > button:hover, .funnel > button[aria-pressed=true] { border-color: #10a7a2; background: #eefaf8; }
+.layout { grid-template-columns: minmax(292px, .62fr) minmax(0, 1.38fr); gap: 14px; }
+.layout > aside { position: sticky; top: 90px; max-height: calc(100dvh - 116px); padding: 16px; }
+.layout > article { min-height: 500px; padding: 20px; }
+.layout > article > h3 { margin-bottom: 5px; font-size: 1.2rem; }
+.layout > article > p { margin: 5px 0; color: var(--evolum-workspace-muted, #64748b); font-size: .86rem; }
+.layout > aside > label:first-child { margin-top: 0; }
+.layout > aside .item { margin: 0; padding: 12px 0; border: 0; border-top: 1px solid var(--evolum-workspace-line, #e5eeee); border-radius: 0; background: transparent; }
+.layout > aside .item:first-of-type { margin-top: 8px; }
+.layout > aside .item:hover, .layout > aside .item[aria-pressed=true] { padding-inline: 9px; border-radius: 10px; background: #eefaf8; }
+.layout > aside .item strong { color: var(--evolum-workspace-ink, #24313a); }
+.layout > aside .item span, .layout > aside .item small { color: var(--evolum-workspace-muted, #64748b); }
+.grid { gap: 11px; }
+.root label { color: var(--evolum-workspace-muted, #526273); font-size: .76rem; font-weight: 800; }
+.root input:not([type=checkbox]), .root select, .root textarea { min-height: 40px; border-color: var(--evolum-workspace-line-strong, #cbdcda); border-radius: 9px; color: var(--evolum-workspace-ink, #263944); background: #fff; font-size: .84rem; }
+.root textarea { min-height: 78px; }
+.root button:not([class*="primary-btn"]) { border-color: var(--evolum-workspace-line-strong, #cbdcda); color: #27616a; background: #fff; font-size: .8rem; font-weight: 800; }
+.subpanel { padding: 17px 0; border-top-color: var(--evolum-workspace-line, #e5eeee); }
+.subpanel h4 { margin: 0 0 6px; color: var(--evolum-workspace-ink, #24313a); }
+.notice { border: 1px solid #a9ddd7; border-left-width: 4px; border-radius: 12px; color: #216366; background: #ecfaf7; }
+.documentList li { border-color: var(--evolum-workspace-line, #dfeae8); border-radius: 11px; background: #f8fcfb; }
+.history { max-height: 480px; padding: 0; list-style-position: inside; }
+.history li { padding: 12px 0; border-bottom-color: var(--evolum-workspace-line, #e5eeee); }
+
+:global(:root[data-design-system="dark"]) .root { color: #f9f7ff; }
+:global(:root[data-design-system="dark"]) .panel, :global(:root[data-design-system="dark"]) .metrics > div, :global(:root[data-design-system="dark"]) .funnel > button { border-color: rgba(184, 157, 255, .24); color: #faf7ff; background: linear-gradient(145deg, #19152f, #111a2e); box-shadow: none; }
+:global(:root[data-design-system="dark"]) .header p, :global(:root[data-design-system="dark"]) .layout > article > p, :global(:root[data-design-system="dark"]) .layout > aside .item span, :global(:root[data-design-system="dark"]) .layout > aside .item small, :global(:root[data-design-system="dark"]) .metrics span { color: #c8c0dc; }
+:global(:root[data-design-system="dark"]) .header h2, :global(:root[data-design-system="dark"]) .metrics strong, :global(:root[data-design-system="dark"]) .layout > article > h3, :global(:root[data-design-system="dark"]) .layout > aside .item strong, :global(:root[data-design-system="dark"]) .subpanel h4 { color: #faf7ff; }
+:global(:root[data-design-system="dark"]) .funnel > button:hover, :global(:root[data-design-system="dark"]) .funnel > button[aria-pressed=true], :global(:root[data-design-system="dark"]) .layout > aside .item:hover, :global(:root[data-design-system="dark"]) .layout > aside .item[aria-pressed=true] { background: rgba(138, 46, 255, .16); }
+:global(:root[data-design-system="dark"]) .root input:not([type=checkbox]), :global(:root[data-design-system="dark"]) .root select, :global(:root[data-design-system="dark"]) .root textarea { border-color: #4b456b; color: #fbf9ff; background: #0a0b18; }
+:global(:root[data-design-system="dark"]) .root button:not([class*="primary-btn"]) { border-color: #4b456b; color: #d9f9f4; background: #17142b; }
+:global(:root[data-design-system="dark"]) .notice { border-color: rgba(79, 210, 220, .3); color: #c8f6f6; background: rgba(79, 210, 220, .1); }
+:global(:root[data-design-system="dark"]) .documentList li { border-color: rgba(184, 157, 255, .18); background: #141126; }
+
+@media(max-width:1120px) { .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); } .funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .layout { grid-template-columns: minmax(266px, .72fr) minmax(0, 1.28fr); } }
+@media(max-width:860px) { .header { display: grid; } .layout { grid-template-columns: 1fr; } .layout > aside { position: static; max-height: 320px; } .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

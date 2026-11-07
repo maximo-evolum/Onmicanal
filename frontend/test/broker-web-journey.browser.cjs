@@ -141,6 +141,11 @@ const frontendUrl=(process.env.BROKER_WEB_URL||'http://localhost:3001').replace(
         }
         role='LECTURA';
         await page.goto(`${frontendUrl}/realty?view=broker_os&tab=operations`);
+        const brokerAreas = page.locator('nav.broker-os-tabs');
+        await brokerAreas.waitFor();
+        assert.equal(await brokerAreas.count(), 1, 'El centro operativo debe conservar una única navegación de áreas.');
+        assert.equal(await brokerAreas.getAttribute('aria-label'), 'Áreas de Broker OS');
+        await page.screenshot({path:path.join(output,`${destination}-broker-operaciones.png`)});
         await receipt.waitFor();
         const advance=page.getByRole('button',{name:/^Avanzar a /}).first();assert.equal(await advance.isDisabled(),true);
         if(destination!=='ADMINISTRACION') {
@@ -158,7 +163,23 @@ const frontendUrl=(process.env.BROKER_WEB_URL||'http://localhost:3001').replace(
         await root.scrollIntoViewIfNeeded();
         assert.equal(await root.evaluate(el=>el.scrollWidth<=el.clientWidth+2&&el.getBoundingClientRect().right<=innerWidth+1),true);
         await page.screenshot({path:path.join(output,`${destination}-movil.png`)});
-        await page.evaluate(()=>{document.documentElement.dataset.theme='purple';document.documentElement.dataset.designSystem='dark';});
+        await page.evaluate(() => {
+          window.localStorage.setItem('evolum_color_mode', 'dark');
+          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.dataset.designSystem = 'dark';
+        });
+        await page.waitForFunction(() => document.documentElement.dataset.designSystem === 'dark');
+        await page.waitForTimeout(350);
+        // El modo oscuro no puede dejar controles claros dentro de la ficha.
+        // Esta comprobación evita que una paleta de acento se confunda con el
+        // estado visual real y vuelva a introducir superficies blancas.
+        const darkInput = root.locator('input').first();
+        const darkInputStyle = await darkInput.evaluate((element) => {
+          const style = getComputedStyle(element);
+          return { backgroundColor: style.backgroundColor, color: style.color, designSystem: document.documentElement.dataset.designSystem };
+        });
+        assert.equal(darkInputStyle.designSystem, 'dark', 'La preferencia oscura debe mantenerse después de hidratar la vista.');
+        assert.equal(darkInputStyle.backgroundColor, 'rgb(10, 11, 24)', 'El modo oscuro debe conservar controles opacos y oscuros.');
         await page.screenshot({path:path.join(output,`${destination}-oscuro.png`)});
         assert.ok(await root.locator('aside').evaluate(el=>el.getBoundingClientRect().height<=321),'El listado móvil no debe desplazar indefinidamente la ficha');
         const detail=root.locator('article').first(); await detail.scrollIntoViewIfNeeded();

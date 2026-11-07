@@ -4,9 +4,16 @@
 import { useEffect, useState } from "react";
 
 const COLOR_MODE_KEY = "evolum_color_mode";
+const THEME_KEY = "evolum_theme";
+const THEMES = new Set(["purple", "cyan", "ember", "emerald", "sapphire", "executive"]);
 
 function applyColorMode(isDark: boolean) {
   if (typeof document === "undefined") return;
+  const savedAccent = window.localStorage.getItem(THEME_KEY);
+  const accentTheme = THEMES.has(savedAccent || "") ? savedAccent || "purple" : "purple";
+  // Mantiene sincronizadas las pantallas nuevas y las vistas heredadas.
+  // Al volver a claro se restaura el acento seleccionado por la persona.
+  document.documentElement.dataset.theme = isDark ? "dark" : accentTheme;
   document.documentElement.dataset.designSystem = isDark ? "dark" : "finance";
 }
 

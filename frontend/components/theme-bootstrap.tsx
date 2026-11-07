@@ -15,11 +15,16 @@ export function ThemeBootstrap() {
     const background = window.localStorage.getItem(BACKGROUND_THEME_KEY);
     const colorMode = window.localStorage.getItem(COLOR_MODE_KEY);
 
-    document.documentElement.dataset.theme = THEMES.has(theme || "") ? theme || "purple" : "purple";
+    const accentTheme = THEMES.has(theme || "") ? theme || "purple" : "purple";
+    const isDark = colorMode === "dark";
+    // Las vistas históricas usan data-theme="dark" y las nuevas usan
+    // data-design-system="dark". Ambos valores deben cambiar juntos para
+    // evitar superficies claras dentro de un modo oscuro real.
+    document.documentElement.dataset.theme = isDark ? "dark" : accentTheme;
     document.documentElement.dataset.bgTheme = BACKGROUNDS.has(background || "") ? background || "nocturne" : "nocturne";
     // EVOLUM OS usa una única base visual clara y operacional. Las paletas
     // guardadas continúan definiendo los acentos, sin cambiar la legibilidad.
-    document.documentElement.dataset.designSystem = colorMode === "dark" ? "dark" : "finance";
+    document.documentElement.dataset.designSystem = isDark ? "dark" : "finance";
   }, []);
 
   return null;

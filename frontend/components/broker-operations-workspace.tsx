@@ -148,6 +148,40 @@ const AREA_CONFIG: Record<BrokerRecordArea, { label: string; description: string
   financing: { label: "Financiamiento", description: "Solicitudes de financiamiento y gastos asociados a cada operacion." }
 };
 
+/**
+ * La navegación interna agrupa las áreas del mismo workspace en vez de
+ * presentar una fila interminable de pestañas. Los identificadores y las
+ * acciones no cambian: solo se explicita la jerarquía visual del Modelo A.
+ */
+const BROKER_TAB_GROUPS: ReadonlyArray<{ label: string; tabs: ReadonlyArray<readonly [Tab, string]> }> = [
+  {
+    label: "Operación",
+    tabs: [["operations", "Operaciones"], ["executive_dashboard", "Dashboard Ejecutivo"], ["operation_tracker", "Operation Tracker"]]
+  },
+  {
+    label: "Comercial y expediente",
+    tabs: [
+      ["commercial", "Comercial y cierre"], ["rentals", "Arriendos y administración"], ["documents", "Expediente y documentos"],
+      ["financing", "Financiamiento"], ["post_sale", "Postventa y garantías"]
+    ]
+  },
+  {
+    label: "Activos y proyectos",
+    tabs: [["maintenance", "Mantención y proveedores"], ["projects", "Proyectos y publicación"]]
+  },
+  {
+    label: "Gestión y finanzas",
+    tabs: [["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["financial_operations", "Finanzas operativas"], ["commercial_hub", "Marketing, agenda y chats"]]
+  },
+  {
+    label: "Inteligencia y gobierno",
+    tabs: [
+      ["ai_ops", "AI Ops"], ["ai_governance", "Gobierno IA"], ["case_management", "Case Management"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
+      ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["account", "Cuenta y equipo"], ["governance", "Gobierno y alertas"], ["compliance", "Cumplimiento"], ["guides", "Guías operativas"]
+    ]
+  }
+];
+
 const FIELD_CONFIG: Record<string, FieldConfig> = {
   propertyId: { label: "Propiedad asociada" },
   ownerName: { label: "Propietario o mandante", placeholder: "Nombre o razon social" },
@@ -1342,12 +1376,17 @@ export function BrokerOperationsPageContent() {
       </div>
     </header>
 
-    <nav className="broker-os-tabs" aria-label="Areas de Broker OS">
-      {([
-        ["operations", "Operaciones"], ["executive_dashboard", "Dashboard Ejecutivo"], ["operation_tracker", "Operation Tracker"], ["ai_ops", "AI Ops"], ["ai_governance", "Gobierno IA"], ["case_management", "Case Management"], ...Object.entries(AREA_CONFIG).map(([key, value]) => [key, value.label]),
-        ["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["financial_operations", "Finanzas operativas"], ["commercial_hub", "Marketing, agenda y chats"], ["guides", "Guías operativas"],
-        ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["account", "Cuenta y equipo"], ["governance", "Gobierno y alertas"], ["compliance", "Cumplimiento"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
-      ]).filter(([key]) => canBrokerTab(access, key)).map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key as Tab)}>{label}</button>)}
+    <nav className="broker-os-tabs" aria-label="Áreas de Broker OS">
+      {BROKER_TAB_GROUPS.map((group) => {
+        const enabledTabs = group.tabs.filter(([key]) => canBrokerTab(access, key));
+        if (!enabledTabs.length) return null;
+        return <section className="broker-os-tab-group" key={group.label} aria-label={group.label}>
+          <span>{group.label}</span>
+          <div>
+            {enabledTabs.map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}
+          </div>
+        </section>;
+      })}
     </nav>
     {notice ? <p className="broker-os-notice" role="status">{notice}</p> : null}
     {access && !canWriteTab ? <p className="broker-human-note">Vista de consulta. Las modificaciones dependen de los permisos de tu perfil.</p> : null}

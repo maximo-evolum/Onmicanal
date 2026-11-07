@@ -20100,9 +20100,10 @@ body {
   box-shadow: 0 0 0 1000px #0a0b18 inset;
 }
 
-/* El selector histórico del modo nocturno utiliza "purple" como valor de
-   tema. Se mantiene como modo oscuro corporativo, no como modo claro morado. */
-:root[data-theme="purple"] :is(
+/* El modo nocturno se identifica por el sistema de diseño activo. La paleta
+   purple es un acento válido también en modo claro, por lo que no debe usarse
+   como señal para oscurecer controles. */
+:root[data-design-system="dark"] :is(
   .module-with-menu-shell,
   .vertical-shell,
   .executive-shell,
@@ -20117,7 +20118,7 @@ body {
   background: #0a0b18 !important;
 }
 
-:root[data-theme="purple"] :is(
+:root[data-design-system="dark"] :is(
   .module-with-menu-shell,
   .vertical-shell,
   .executive-shell,
@@ -20130,10 +20131,9 @@ body {
   box-shadow: 0 0 0 1000px #0a0b18 inset;
 }
 
-/* Compatibilidad con el identificador de modo oscuro histórico (purple).
-   Algunas pantallas antiguas aplicaban superficies claras de forma explícita,
-   por lo que no bastaba con cambiar las variables globales del tema. */
-:root[data-theme="purple"] {
+/* Algunas pantallas antiguas aplicaban superficies claras de forma explícita,
+   por lo que el modo oscuro necesita reforzar sus variables globales. */
+:root[data-design-system="dark"] {
   --evolum-workspace-panel: #15132b;
   --evolum-workspace-line: rgba(184, 157, 255, .22);
   --evolum-workspace-line-strong: rgba(184, 157, 255, .42);
@@ -20142,7 +20142,7 @@ body {
   --evolum-workspace-shadow: 0 16px 36px rgba(0, 0, 0, .2);
 }
 
-:root[data-theme="purple"] :is(
+:root[data-design-system="dark"] :is(
   .module-app-header, .agenda-app-header, .documents-header, .pipeline-pro-topbar,
   .executive-topbar, .workflow-hero, .vertical-hero, .crm-main-header, .realty-hero,
   .broker-os-header, .broker-commercial-header, .broker-tracker-header,
@@ -20156,7 +20156,7 @@ body {
   box-shadow: none !important;
 }
 
-:root[data-theme="purple"] :is(
+:root[data-design-system="dark"] :is(
   .dashboard-grid > *, .executive-kpi-grid > *, .connection-summary-grid > *,
   .workflow-overview > *, .realty-ws-kpis > *, .realty-kpi-grid > *,
   .realty-ws-activity-summary > *, .realty-ws-service-strip > *,
@@ -20183,7 +20183,7 @@ body {
   box-shadow: none !important;
 }
 
-:root[data-theme="purple"] :is(
+:root[data-design-system="dark"] :is(
   .realty-workspace .realty-ws-intro, .documents-list, .ai-ops-list,
   .executive-list, .connection-provider-list, .workflow-list,
   .realty-activity-list, .realty-alert-list, .broker-finance-list,
@@ -20201,23 +20201,104 @@ body {
 
 /* Componentes CSS Modules de captación: conservan el flujo funcional, pero
    adoptan paneles, lista lateral y ficha principal del workspace ejecutivo. */
-:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="panel"],
-:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="metrics"] > div,
-:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="funnel"] > button {
+:root[data-design-system="dark"] .realty-workspace [class*="broker-prospects-module__"][class*="panel"],
+:root[data-design-system="dark"] .realty-workspace [class*="broker-prospects-module__"][class*="metrics"] > div,
+:root[data-design-system="dark"] .realty-workspace [class*="broker-prospects-module__"][class*="funnel"] > button {
   border-color: var(--evolum-workspace-line) !important;
   color: var(--evolum-workspace-ink) !important;
   background: linear-gradient(145deg, #19152f, #111a2e) !important;
   box-shadow: none !important;
 }
 
-:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="item"] {
+:root[data-design-system="dark"] .realty-workspace [class*="broker-prospects-module__"][class*="item"] {
   border-color: rgba(184, 157, 255, .18) !important;
   color: var(--evolum-workspace-ink) !important;
   background: transparent !important;
 }
 
-:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="item"]:hover,
-:root[data-theme="purple"] .realty-workspace [class*="broker-prospects-module__"][class*="selected"] {
+:root[data-design-system="dark"] .realty-workspace [class*="broker-prospects-module__"][class*="item"]:hover,
+:root[data-design-system="dark"] .realty-workspace [class*="broker-prospects-module__"][class*="selected"] {
   border-color: rgba(82, 210, 199, .7) !important;
   background: rgba(31, 155, 157, .13) !important;
+}
+
+/* Navegación interna del centro operativo: concentra las áreas relacionadas
+   en grupos legibles, sin esconder ni alterar ninguna capacidad autorizada. */
+.broker-os-tabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  padding: 0;
+}
+
+.broker-os-tab-group {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--evolum-workspace-line, #dbe6e5);
+  border-radius: 14px;
+  background: var(--evolum-workspace-panel, #fff);
+  box-shadow: var(--evolum-workspace-shadow, 0 8px 20px rgba(23, 45, 55, .035));
+}
+
+.broker-os-tab-group > span {
+  color: #168d90;
+  font-size: .67rem;
+  font-weight: 900;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.broker-os-tab-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.broker-os-tab-group .broker-os-tabs button,
+.broker-os-tab-group button {
+  min-height: 34px;
+  padding: 7px 10px;
+  border-color: var(--evolum-workspace-line-strong, #cbdcda);
+  border-radius: 9px;
+  color: #47616a;
+  background: #fbfdfd;
+  font-size: .75rem;
+  line-height: 1.2;
+}
+
+.broker-os-tab-group button:hover,
+.broker-os-tab-group button.active {
+  color: #fff;
+  border-color: #0b9f9e;
+  background: linear-gradient(112deg, #079e9c, #4e73df);
+  box-shadow: 0 7px 15px rgba(8, 145, 149, .15);
+}
+
+:root[data-design-system="dark"] .broker-os-tab-group {
+  border-color: rgba(184, 157, 255, .22);
+  background: #15132b;
+  box-shadow: none;
+}
+
+:root[data-design-system="dark"] .broker-os-tab-group > span { color: #7debe1; }
+
+:root[data-design-system="dark"] .broker-os-tab-group button {
+  border-color: rgba(184, 157, 255, .28);
+  color: #e5dff6;
+  background: #211b3c;
+}
+
+:root[data-design-system="dark"] .broker-os-tab-group button:hover,
+:root[data-design-system="dark"] .broker-os-tab-group button.active {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(112deg, #108f95, #604caa);
+}
+
+@media (max-width: 700px) {
+  .broker-os-tabs { grid-template-columns: 1fr; }
+  .broker-os-tab-group { padding: 10px; }
 }
