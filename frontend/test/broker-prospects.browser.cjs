@@ -81,6 +81,9 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     await page.goto(`${frontendUrl}/realty?view=operations`);
     if(process.env.QA_DEBUG) { await page.waitForTimeout(2500); console.log((await page.locator('body').innerText()).slice(0,4000),errors); await page.screenshot({path:path.join(out,'diagnostico.png')}); }
     const root=page.getByRole('region',{name:'Captación de propietarios'});
+    const legacyInventory = page.locator('details.realty-inventory-details');
+    await legacyInventory.waitFor();
+    assert.equal(await legacyInventory.evaluate((element) => element.open), false, 'La ficha extensa existente debe iniciar plegada para priorizar la captación.');
     await root.getByRole('button',{name:'Nuevo prospecto',exact:true}).click();
     for(const [label,value] of [['Nombre del propietario','Ana Pérez'],['Teléfono','56912345678'],['Nombre del inmueble','Casa de prueba'],['Dirección','Los Alerces 120'],['Comuna','Providencia'],['Expectativa de precio','120000000']])await root.getByLabel(label,{exact:true}).fill(value);
     await root.getByLabel(/^Origen \(obligatorio\)/).selectOption('Formulario web');
@@ -154,6 +157,10 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
       await page.screenshot({path:path.join(out,'propiedades-diagnostico.png')});
     }
     const cardImage=page.locator('.property-portal-card img').first();
+    const inventorySummary = page.getByRole('region', { name: 'Resumen del inventario' });
+    await inventorySummary.waitFor();
+    assert.match(await inventorySummary.innerText(), /Inventario activo/, 'El inventario debe exponer un resumen ejecutivo antes de las fichas.');
+    await page.screenshot({path:path.join(out,'propiedades-modelo-a.png')});
     await cardImage.waitFor();
     assert.equal(await cardImage.getAttribute('src'),sourcePhoto,'La tarjeta debe conservar exactamente la imagen de origen');
     assert.equal(await cardImage.evaluate(image=>image.complete&&image.naturalWidth>0),true,'La imagen de origen debe cargar en la tarjeta');

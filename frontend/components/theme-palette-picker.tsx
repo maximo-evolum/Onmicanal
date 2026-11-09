@@ -15,6 +15,7 @@ function applyColorMode(isDark: boolean) {
   // Al volver a claro se restaura el acento seleccionado por la persona.
   document.documentElement.dataset.theme = isDark ? "dark" : accentTheme;
   document.documentElement.dataset.designSystem = isDark ? "dark" : "finance";
+  document.documentElement.dataset.uiLayout = "model-a";
 }
 
 export function ThemePalettePicker() {

@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" data-design-system="finance">
+    <html lang="es" data-design-system="finance" data-ui-layout="model-a">
       <body>
         <ThemeBootstrap />
         {children}

@@ -539,7 +539,7 @@ export function RealtyShell({
           onToggle={() => setSidebarOpen((value) => !value)}
         />
         <main className="vertical-main realty-page realty-workspace">
-          {children}
+          <div className="realty-workspace-canvas">{children}</div>
         </main>
       </div>
     </ModuleGate>
@@ -653,7 +653,7 @@ export function RealtyHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <header className="vertical-hero realty-hero">
+    <header className="vertical-hero realty-hero model-a-page-header">
       <div>
         <span>{eyebrow}</span>
         <h1>{title}</h1>
@@ -1210,8 +1210,14 @@ export function RealtyLoadsPageContent() {
       {message ? <div className="module-toast">{message}</div> : null}
       {error ? <div className="sales-queue-error">{error}</div> : null}
 
-      <BrokerProspects access={access} brokers={data.brokers} onConverted={reload} />
-      <details><summary>Fichas del inventario existente e importación CSV</summary>
+      <section className="realty-capture-zone">
+        <BrokerProspects access={access} brokers={data.brokers} onConverted={reload} />
+      </section>
+      <details className="realty-inventory-details">
+        <summary>
+          <span>Inventario existente e importación</span>
+          <small>Completa fichas ya creadas, importa CSV y distribuye la cartera.</small>
+        </summary>
       <section className="realty-ws-operation-layout">
         <form className="realty-ws-card realty-property-form" onSubmit={createProperty}>
           <div className="realty-ws-card-head"><div><span>Inventario existente</span><h2>Completar ficha de propiedad</h2><p>Las captaciones nuevas se registran en el embudo superior. Esta sección conserva las fichas ya incorporadas al inventario.</p></div></div>
@@ -1345,6 +1351,13 @@ export function RealtyPropertiesPageContent() {
       || operation === filter;
     return matchesQuery && matchesFilter;
   });
+  const assignedProperties = data.properties.filter((property) => text(asData(property).assignedBrokerId || property.assignedToId)).length;
+  const visitedProperties = data.properties.filter((property) => data.visits.some((visit) => text(asData(visit).propertyId) === property.id)).length;
+  const staleProperties = data.properties.filter((property) => {
+    const hasVisit = data.visits.some((visit) => text(asData(visit).propertyId) === property.id);
+    const hasFollowup = data.followups.some((followup) => text(asData(followup).propertyId) === property.id);
+    return !hasVisit && !hasFollowup;
+  }).length;
 
   async function updateBroker(property: IndustryRecord, brokerId: string) {
     const broker = data.brokers.find((item) => item.id === brokerId);
@@ -1395,6 +1408,12 @@ export function RealtyPropertiesPageContent() {
       />
       {error ? <div className="sales-queue-error">{error}</div> : null}
       {message ? <div className="module-toast">{message}</div> : null}
+      <section className="realty-inventory-summary" aria-label="Resumen del inventario">
+        <article><span>Inventario activo</span><strong>{data.properties.length}</strong><small>propiedades registradas</small></article>
+        <article><span>Con responsable</span><strong>{assignedProperties}</strong><small>{Math.max(data.properties.length - assignedProperties, 0)} sin asignar</small></article>
+        <article><span>Con visita</span><strong>{visitedProperties}</strong><small>actividad comercial registrada</small></article>
+        <article><span>Sin movimiento</span><strong>{staleProperties}</strong><small>requieren siguiente acción</small></article>
+      </section>
       {inventoryAlerts.length ? <section className={`realty-ws-card ${matchingStyles.inventoryAlerts}`}>
         <header><div><span>Alertas de inventario</span><h2>Prioridades para revisar</h2><p>Se calculan desde las fichas y mandatos actuales; no generan tareas ni mensajes automáticos.</p></div><strong>{inventoryAlerts.length} pendiente(s)</strong></header>
         <div className={matchingStyles.inventoryAlertList}>{inventoryAlerts.slice(0, 12).map((alert) => <article className={`${matchingStyles.inventoryAlert} ${alert.priority === "HIGH" ? matchingStyles.high : ""}`} key={alert.id}>

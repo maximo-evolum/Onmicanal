@@ -25,6 +25,10 @@ export function ThemeBootstrap() {
     // EVOLUM OS usa una única base visual clara y operacional. Las paletas
     // guardadas continúan definiendo los acentos, sin cambiar la legibilidad.
     document.documentElement.dataset.designSystem = isDark ? "dark" : "finance";
+    // El formato ejecutivo aprobado es independiente del acento o del modo
+    // claro/oscuro. Esta marca permite que las vistas históricas adopten el
+    // mismo lienzo sin alterar su lógica ni la paleta elegida por la cuenta.
+    document.documentElement.dataset.uiLayout = "model-a";
   }, []);
 
   return null;
