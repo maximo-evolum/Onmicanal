@@ -298,35 +298,33 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
   const [industry, setIndustry] = useState<string | null>(null);
   const [menuReady, setMenuReady] = useState(false);
   const [brokerAccess, setBrokerAccess] = useState<BrokerAccessProfile | null>(null);
-  const mobileDefaultAppliedRef = useRef(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Cada módulo monta el mismo menú EV, pero históricamente solo algunas
-  // vistas cerraban la barra al abrirse en un teléfono. Se pliega una vez por
-  // cambio a móvil, sin impedir que la persona la vuelva a abrir manualmente.
+  // En teléfono el menú no puede participar en el flujo de la página: si lo
+  // hiciera, desplaza el módulo completo bajo la barra superior. La visibilidad
+  // móvil se administra localmente y el estado del shell se conserva para la
+  // navegación de escritorio y tablet.
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
     const mobileViewport = window.matchMedia("(max-width: 980px)");
-    const applyMobileDefault = () => {
-      if (!mobileViewport.matches) {
-        mobileDefaultAppliedRef.current = false;
-        return;
-      }
-      if (mobileDefaultAppliedRef.current) return;
-      mobileDefaultAppliedRef.current = true;
-      if (isOpen) onToggle();
+    const syncViewport = () => {
+      const isMobile = mobileViewport.matches;
+      setIsMobileViewport(isMobile);
+      if (!isMobile) setMobileMenuOpen(false);
     };
 
-    applyMobileDefault();
-    mobileViewport.addEventListener("change", applyMobileDefault);
+    syncViewport();
+    mobileViewport.addEventListener("change", syncViewport);
     // Algunos navegadores embebidos no notifican el cambio de media query al
-    // rotar o redimensionar una pestaña ya abierta. El evento resize es un
-    // respaldo para que el menú nunca cubra el módulo al pasar a móvil.
-    window.addEventListener("resize", applyMobileDefault);
+    // rotar o redimensionar una pestaña ya abierta. El evento resize mantiene
+    // el panel cerrado al cambiar entre escritorio y móvil.
+    window.addEventListener("resize", syncViewport);
     return () => {
-      mobileViewport.removeEventListener("change", applyMobileDefault);
-      window.removeEventListener("resize", applyMobileDefault);
+      mobileViewport.removeEventListener("change", syncViewport);
+      window.removeEventListener("resize", syncViewport);
     };
-  }, [isOpen, onToggle]);
+  }, []);
 
   useEffect(() => {
     if (!isRealtyIndustry(industry)) { setBrokerAccess(null); return; }
@@ -528,21 +526,31 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
     const pageY = typeof window === "undefined" ? 0 : window.scrollY;
     const pageX = typeof window === "undefined" ? 0 : window.scrollX;
     saveMenuPosition();
-    onToggle();
+    if (isMobileViewport) {
+      const nextOpen = !mobileMenuOpen;
+      // Mantenemos el shell y el panel sincronizados sin depender de un rail
+      // lateral inexistente en teléfonos.
+      if (nextOpen !== isOpen) onToggle();
+      setMobileMenuOpen(nextOpen);
+    } else {
+      onToggle();
+    }
     if (typeof window !== "undefined") {
       window.requestAnimationFrame(() => window.scrollTo(pageX, pageY));
     }
   }
 
+  const navigationOpen = isMobileViewport ? mobileMenuOpen : isOpen;
+
   const workspaceChrome = <EvolumWorkspaceChrome
     activeLabel={active}
     workspaceLabel={brandLabel}
-    menuOpen={isOpen}
+    menuOpen={navigationOpen}
     onToggleMenu={toggleMenu}
     shortcuts={workspaceShortcuts}
   />;
 
-  if (!isOpen) {
+  if (!navigationOpen) {
     return (
       <>
         {workspaceChrome}

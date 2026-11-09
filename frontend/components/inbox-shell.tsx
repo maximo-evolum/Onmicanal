@@ -33,6 +33,8 @@ export function InboxShell() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [channelFilter, setChannelFilter] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileConversationOpen, setMobileConversationOpen] = useState(false);
+  const [mobileActionsOpen, setMobileActionsOpen] = useState(false);
 
   function getInboxCacheKey() {
     return `inbox_conversations_${agent?.tenantId || agent?.id || "global"}`;
@@ -151,6 +153,14 @@ export function InboxShell() {
   }, [selectedId]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hasConversationInUrl = Boolean(new URLSearchParams(window.location.search).get("conversation"));
+    if (hasConversationInUrl && window.matchMedia("(max-width: 760px)").matches) {
+      setMobileConversationOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
     socket.connect();
     if (agent?.tenantId) {
       socket.emit("join:tenant", agent.tenantId);
@@ -250,6 +260,8 @@ export function InboxShell() {
     if (selectedId === selectedConversation.id) {
       setSelectedId(null);
       setMessages([]);
+      setMobileConversationOpen(false);
+      setMobileActionsOpen(false);
     }
   }
 
@@ -261,6 +273,19 @@ export function InboxShell() {
     );
     setSelectedId(null);
     setMessages([]);
+    setMobileConversationOpen(false);
+    setMobileActionsOpen(false);
+  }
+
+  function selectConversation(conversationId: string) {
+    setSelectedId(conversationId);
+    setMobileActionsOpen(false);
+    setMobileConversationOpen(true);
+  }
+
+  function returnToConversationList() {
+    setMobileConversationOpen(false);
+    setMobileActionsOpen(false);
   }
 
   async function handleSend(content: string) {
@@ -287,7 +312,7 @@ export function InboxShell() {
   }
 
   return (
-    <div className={`inbox-unified-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
+    <div className={`inbox-unified-shell ${sidebarOpen ? "" : "nav-collapsed"} ${mobileConversationOpen ? "inbox-mobile-thread-open" : ""}`}>
       <EvolumSidebar
         active="Inbox Omnicanal"
         isDeveloper={agent?.role === "SUPER_ADMIN"}
@@ -316,10 +341,20 @@ export function InboxShell() {
             conversations={filteredConversations}
             selectedId={selectedId}
             loading={loading}
-            onSelect={setSelectedId}
+            onSelect={selectConversation}
           />
 
           <main className="main inbox-chat-stage">
+            <MobileConversationToolbar
+              conversation={selectedConversation}
+              actionsOpen={mobileActionsOpen}
+              onBack={returnToConversationList}
+              onToggleActions={() => setMobileActionsOpen((current) => !current)}
+              onTake={handleTake}
+              onRelease={handleRelease}
+              onResolve={handleResolve}
+              onDelete={handleDelete}
+            />
             <ChatPanel
               conversation={selectedConversation}
               messages={messages}
@@ -381,6 +416,56 @@ function InboxChannelTabs({
           <b>{value}</b>
         </button>
       ))}
+    </div>
+  );
+}
+
+function MobileConversationToolbar({
+  conversation,
+  actionsOpen,
+  onBack,
+  onToggleActions,
+  onTake,
+  onRelease,
+  onResolve,
+  onDelete,
+}: {
+  conversation: Conversation | null;
+  actionsOpen: boolean;
+  onBack: () => void;
+  onToggleActions: () => void;
+  onTake: () => Promise<void>;
+  onRelease: () => Promise<void>;
+  onResolve: () => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  if (!conversation) return null;
+  const name = chatContactName(conversation);
+
+  return (
+    <div className="inbox-mobile-thread-toolbar">
+      <button type="button" className="ghost-btn" onClick={onBack}>‹ Volver a chats</button>
+      <div>
+        <span>{conversation.contact.channel || "Chat"}</span>
+        <strong>{name}</strong>
+      </div>
+      <button
+        type="button"
+        className="ghost-btn inbox-mobile-thread-actions-toggle"
+        onClick={onToggleActions}
+        aria-expanded={actionsOpen}
+        aria-controls="inbox-mobile-thread-actions"
+      >
+        Acciones
+      </button>
+      {actionsOpen ? (
+        <div id="inbox-mobile-thread-actions" className="inbox-mobile-thread-actions" role="group" aria-label={`Acciones para ${name}`}>
+          <button className="secondary-btn" type="button" onClick={() => void onTake()}>Tomar conversación</button>
+          <button className="secondary-btn" type="button" onClick={() => void onRelease()}>Devolver al bot</button>
+          <button className="success-btn" type="button" onClick={() => void onResolve()}>Marcar resuelta</button>
+          <button className="danger-btn" type="button" onClick={() => void onDelete()}>Eliminar chat</button>
+        </div>
+      ) : null}
     </div>
   );
 }

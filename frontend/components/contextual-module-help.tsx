@@ -46,11 +46,27 @@ function findHelp(pathname: string): HelpContent | null {
 export function ContextualModuleHelp() {
   const pathname = usePathname();
   const help = useMemo(() => findHelp(pathname), [pathname]);
-  const [isOpen, setIsOpen] = useState(true);
+  // En teléfonos la guía no debe cubrir el contenido al entrar al módulo.
+  // En escritorio conservamos la apertura inicial para acompañar el primer
+  // recorrido, salvo que la persona ya haya elegido minimizarla.
+  const [isOpen, setIsOpen] = useState(false);
+  const helpId = `evolum-module-help-${pathname.replace(/[^a-z0-9]+/gi, "-")}`;
 
   useEffect(() => {
-    if (!help) return;
-    setIsOpen(window.sessionStorage.getItem(`evolum-module-help:${pathname}`) !== "minimized");
+    if (!help) {
+      setIsOpen(false);
+      return;
+    }
+    const savedState = window.sessionStorage.getItem(`evolum-module-help:${pathname}`);
+    if (savedState === "expanded") {
+      setIsOpen(true);
+      return;
+    }
+    if (savedState === "minimized") {
+      setIsOpen(false);
+      return;
+    }
+    setIsOpen(!window.matchMedia("(max-width: 760px)").matches);
   }, [help, pathname]);
 
   if (!help) return null;
@@ -61,14 +77,14 @@ export function ContextualModuleHelp() {
   }
 
   function open() {
-    window.sessionStorage.removeItem(`evolum-module-help:${pathname}`);
+    window.sessionStorage.setItem(`evolum-module-help:${pathname}`, "expanded");
     setIsOpen(true);
   }
 
-  if (!isOpen) return <button type="button" className="context-help-icon" onClick={open} aria-label={`Ver ayuda de ${help.title}`} title={`¿Para qué sirve ${help.title}?`}>?</button>;
+  if (!isOpen) return <button type="button" className="context-help-icon" onClick={open} aria-controls={helpId} aria-expanded="false" aria-label={`Ver ayuda de ${help.title}`} title={`¿Para qué sirve ${help.title}?`}>?</button>;
 
   return (
-    <aside className="context-help-card" aria-label={`Ayuda sobre ${help.title}`}>
+    <aside id={helpId} className="context-help-card" aria-label={`Ayuda sobre ${help.title}`}>
       <div className="context-help-heading"><span aria-hidden="true">?</span><div><p>GUÍA RÁPIDA</p><h2>¿Para qué sirve {help.title}?</h2></div><button type="button" onClick={minimize} aria-label="Minimizar ayuda" title="Minimizar ayuda">−</button></div>
       <p><strong>{help.title}:</strong> {help.description}</p>
       <ol>{help.steps.map((step) => <li key={step}>{step}</li>)}</ol>
