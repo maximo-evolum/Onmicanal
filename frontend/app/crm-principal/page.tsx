@@ -349,9 +349,27 @@ export default function CrmPrincipalPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const isDeveloper = state.session?.role === "SUPER_ADMIN";
+  const accessIndustry = state.tenant?.industry || state.onboarding?.profile?.industry || state.onboarding?.tenant?.industry || null;
+  // Los accesos destacados del inicio deben respetar el mismo permiso que su
+  // pantalla de destino. Sin esto una tarjeta podía enviar a una persona a un
+  // módulo bloqueado, especialmente cuando solo tenía habilitado Pagos.
+  const canConfigureAgent = state.modulesLoaded && moduleAllowed(
+    "onboarding",
+    state.modules,
+    state.session?.role,
+    state.session?.jobTitle,
+    accessIndustry,
+  );
+  const canManageConnections = state.modulesLoaded && moduleAllowed(
+    "integrations",
+    state.modules,
+    state.session?.role,
+    state.session?.jobTitle,
+    accessIndustry,
+  );
   const visibleNav = (isDeveloper ? [...navItems, ...developerOnlyItems] : navItems).filter((item) => {
     if (!item.moduleKey || !state.modulesLoaded) return true;
-    return moduleAllowed(item.moduleKey, state.modules, state.session?.role);
+    return moduleAllowed(item.moduleKey, state.modules, state.session?.role, state.session?.jobTitle, accessIndustry);
   });
 
   async function load() {
@@ -516,11 +534,11 @@ export default function CrmPrincipalPage() {
     value: module.value(state, { openConversations, totalLeads, agentCount })
   })).filter((item) => {
     if (!item.moduleKey || !state.modulesLoaded) return true;
-    return moduleAllowed(item.moduleKey, state.modules, state.session?.role);
+    return moduleAllowed(item.moduleKey, state.modules, state.session?.role, state.session?.jobTitle, accessIndustry);
   });
   const integrationAccessItems = integrationAccessCatalog.filter((item) => {
-    if (!item.moduleKey || !state.modulesLoaded) return true;
-    return moduleAllowed(item.moduleKey, state.modules, state.session?.role);
+    if (!canManageConnections || !item.moduleKey) return false;
+    return moduleAllowed(item.moduleKey, state.modules, state.session?.role, state.session?.jobTitle, accessIndustry);
   });
   const latestImport = Array.isArray(state.onboarding?.imports) ? state.onboarding.imports[0] : null;
   const latestImportStatus = String(latestImport?.status || "").toUpperCase();
@@ -572,12 +590,12 @@ export default function CrmPrincipalPage() {
       description: `${item.status}. ${item.description}`,
       group: "Integraciones"
     })),
-    ...onboardingRows.map((row) => ({
+    ...(canConfigureAgent ? onboardingRows.map((row) => ({
       label: row.title,
       href: "/onboarding",
       description: `${row.type}. ${row.label}`,
       group: "Configuracion"
-    }))
+    })) : [])
   ];
   const searchResults = normalizedSearch
     ? searchIndex.filter((item) => item.label.trim().toLowerCase().startsWith(normalizedSearch)).slice(0, 8)
@@ -746,13 +764,13 @@ export default function CrmPrincipalPage() {
             ))}
           </aside>
 
-          <section className="crm-main-panel crm-main-connections">
+          {canManageConnections && integrationAccessItems.length ? <section className="crm-main-panel crm-main-connections">
             <div className="crm-main-panel-head">
               <div>
                 <span>Conexiones</span>
                 <h2>Integraciones y medios de pago</h2>
               </div>
-              <Link className="crm-main-action-link" href="/onboarding">Configurar</Link>
+              <Link className="crm-main-action-link" href="/connections">Gestionar conexiones</Link>
             </div>
             <div className="crm-main-connection-grid">
               {integrationAccessItems.map((item) => (
@@ -766,7 +784,7 @@ export default function CrmPrincipalPage() {
                 </Link>
               ))}
             </div>
-          </section>
+          </section> : null}
 
           <section className="crm-main-panel crm-main-agents" id="agents">
             <div className="crm-main-panel-head">
@@ -850,7 +868,7 @@ export default function CrmPrincipalPage() {
             </section>
           ) : null}
 
-          <section className="crm-main-panel crm-main-knowledge">
+          {canConfigureAgent ? <section className="crm-main-panel crm-main-knowledge">
             <div className="crm-main-panel-head">
               <div>
                 <span>Configuracion de Agente</span>
@@ -867,7 +885,7 @@ export default function CrmPrincipalPage() {
                 <small className={`crm-main-status ${row.status}`}><i />{row.label}</small>
               </article>
             ))}
-          </section>
+          </section> : null}
         </div>
       </section>
     </main>

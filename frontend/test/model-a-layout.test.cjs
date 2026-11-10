@@ -30,3 +30,12 @@ test("Modelo A ordena contexto, captura, registros e Inbox en tema claro y oscur
   assert.match(css, /\[data-ui-layout="model-a"\]\[data-design-system="dark"\]/);
   assert.match(css, /@media \(max-width: 700px\)/);
 });
+
+test("el inicio no ofrece accesos de configuración que la cuenta no puede abrir", () => {
+  const crm = source("app/crm-principal/page.tsx");
+  assert.match(crm, /const canConfigureAgent = state\.modulesLoaded && moduleAllowed\(/);
+  assert.match(crm, /const canManageConnections = state\.modulesLoaded && moduleAllowed\(/);
+  assert.match(crm, /canManageConnections && integrationAccessItems\.length \? <section className="crm-main-panel crm-main-connections"/);
+  assert.match(crm, /href="\/connections">Gestionar conexiones<\/Link>/);
+  assert.match(crm, /canConfigureAgent \? <section className="crm-main-panel crm-main-knowledge"/);
+});

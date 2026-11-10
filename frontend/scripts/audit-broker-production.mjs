@@ -58,7 +58,11 @@ try {
   for (const tab of tabs) {
     const tabQuery = recordAreas.has(tab) ? `area=${encodeURIComponent(tab)}` : `tab=${encodeURIComponent(tab)}`;
     const response = await page.goto(`${baseUrl}/realty?view=broker_os&${tabQuery}`, { waitUntil: "networkidle" });
-    await page.waitForTimeout(700);
+    // La navegación llega antes que algunos datos que se hidratan en cliente.
+    // Esperar el control activo evita clasificar una carga todavía en curso como
+    // un error de navegación o de permisos.
+    await page.locator(".broker-os-tabs button.active").first().waitFor({ state: "visible", timeout: 20_000 });
+    await page.waitForTimeout(350);
     const visibleText = (await page.locator("body").innerText()).replace(/\s+/g, " ").trim();
     const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
     const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
@@ -110,6 +114,7 @@ try {
   for (const tab of darkTabs) {
     const tabQuery = recordAreas.has(tab) ? `area=${encodeURIComponent(tab)}` : `tab=${encodeURIComponent(tab)}`;
     await page.goto(`${baseUrl}/realty?view=broker_os&${tabQuery}`, { waitUntil: "networkidle" });
+    await page.locator(".broker-os-tabs button.active").first().waitFor({ state: "visible", timeout: 20_000 });
     await page.evaluate(() => {
       localStorage.setItem("evolum_theme", "purple");
       localStorage.setItem("evolum_background_theme", "nocturne");
