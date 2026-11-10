@@ -20904,3 +20904,354 @@ body {
 @media (min-width: 761px) {
   .inbox-mobile-thread-toolbar { display: none; }
 }
+
+/* -------------------------------------------------------------------------
+   PRIORIDAD ALTA · FORMATO MODELO A
+
+   Extiende el formato ejecutivo acordado a las pantallas que mantenían una
+   composición propia: Finanzas, Configuración de Agente, Turnos, Inbox y las
+   vistas de gestión de datos. No cambia rutas, permisos, datos ni acciones;
+   solamente unifica contexto, indicadores, captura y lectura de información.
+   ------------------------------------------------------------------------- */
+:root[data-ui-layout="model-a"] .model-a-page-header {
+  min-width: 0;
+  border: 1px solid var(--model-a-line) !important;
+  border-radius: 20px !important;
+  color: var(--model-a-ink);
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--theme-primary-2) 12%, transparent), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, .98), rgba(245, 250, 249, .98)) !important;
+  box-shadow: var(--model-a-shadow) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-header :is(h1, h2, h3, strong, b) {
+  color: var(--model-a-ink) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-header :is(p, small) {
+  color: var(--model-a-muted) !important;
+}
+
+/* Finanzas conserva su encabezado fijo, pero deja de usar una barra a todo
+   lo ancho distinta al resto de los workspaces ejecutivos. */
+:root[data-ui-layout="model-a"] .finance-product-workspace .finance-header.model-a-page-header {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: clamp(18px, 2vw, 26px) !important;
+  border-bottom: 1px solid var(--model-a-line) !important;
+}
+
+:root[data-ui-layout="model-a"] .finance-product-workspace .finance-context-panel {
+  display: grid;
+  gap: 14px;
+  padding: clamp(15px, 1.7vw, 20px) !important;
+  border: 1px solid var(--model-a-line) !important;
+  border-radius: var(--model-a-radius) !important;
+  background: var(--model-a-panel) !important;
+  box-shadow: 0 8px 22px rgba(23, 46, 53, .04) !important;
+}
+
+:root[data-ui-layout="model-a"] .finance-product-workspace .finance-context-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.45fr) repeat(3, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+:root[data-ui-layout="model-a"] .finance-product-workspace .finance-context-controls > :is(label, div) {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--model-a-line) !important;
+  border-radius: 12px;
+  background: var(--model-a-panel-soft) !important;
+}
+
+:root[data-ui-layout="model-a"] .finance-product-workspace .finance-context-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--model-a-muted);
+  font-size: .72rem;
+  font-weight: 800;
+}
+
+:root[data-ui-layout="model-a"] .finance-product-workspace .finance-context-controls :is(input, select) {
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--model-a-line-strong) !important;
+  border-radius: 9px;
+  color: var(--model-a-ink) !important;
+  background: var(--model-a-panel) !important;
+}
+
+/* Configuración de Agente ordena los datos de contexto antes de los flujos
+   de configuración y reduce el contraste de las tarjetas heredadas. */
+:root[data-ui-layout="model-a"] .onboarding-pro-hero.model-a-page-header {
+  margin-bottom: 0;
+  padding: clamp(20px, 2.4vw, 30px) !important;
+}
+
+:root[data-ui-layout="model-a"] .onboarding-status-panel.model-a-executive-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+:root[data-ui-layout="model-a"] .onboarding-status-panel.model-a-executive-kpis article {
+  min-height: 118px;
+  display: grid;
+  align-content: space-between;
+  gap: 10px;
+  padding: 16px !important;
+  border: 1px solid var(--model-a-line) !important;
+  border-radius: 16px !important;
+  background: linear-gradient(145deg, var(--model-a-panel), var(--model-a-panel-soft)) !important;
+  box-shadow: 0 8px 20px rgba(23, 46, 53, .04) !important;
+}
+
+:root[data-ui-layout="model-a"] .onboarding-status-panel.model-a-executive-kpis article::before {
+  width: 38px;
+  margin-bottom: 0;
+}
+
+:root[data-ui-layout="model-a"] .onboarding-core-panel.model-a-workspace-panel,
+:root[data-ui-layout="model-a"] :is(.onboarding-main-card, .onboarding-side-card, .onboarding-review-card) {
+  border: 1px solid var(--model-a-line) !important;
+  border-radius: var(--model-a-radius) !important;
+  background: var(--model-a-panel) !important;
+  box-shadow: var(--model-a-shadow) !important;
+}
+
+:root[data-ui-layout="model-a"] .onboarding-core-panel.model-a-workspace-panel {
+  padding: clamp(18px, 2.2vw, 26px) !important;
+}
+
+:root[data-ui-layout="model-a"] .onboarding-core-card {
+  border-color: var(--model-a-line) !important;
+  background: var(--model-a-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+/* Turnos y los módulos que administran datos comparten una captura breve y
+   una tabla de registros dominante, para que el formulario no ocupe toda la
+   pantalla. */
+:root[data-ui-layout="model-a"] .shifts-hero.model-a-page-header {
+  margin-bottom: 0;
+  padding: clamp(19px, 2.2vw, 27px) !important;
+}
+
+:root[data-ui-layout="model-a"] .shifts-hero-metric {
+  min-width: 172px;
+  border-color: var(--model-a-line) !important;
+  background: var(--model-a-panel-soft) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-data-workspace {
+  gap: var(--model-a-gap) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-data-workspace :is(.data-entry-panel, .data-records-panel, .data-record-detail, .data-workspace-support) {
+  border-color: var(--model-a-line) !important;
+  border-radius: var(--model-a-radius) !important;
+  background: var(--model-a-panel) !important;
+  box-shadow: var(--model-a-shadow) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-data-workspace .data-entry-panel {
+  padding: clamp(16px, 1.8vw, 21px) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-data-workspace .data-entry-panel-head,
+:root[data-ui-layout="model-a"] .model-a-data-workspace .data-records-head {
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--model-a-line);
+}
+
+:root[data-ui-layout="model-a"] .model-a-data-workspace :is(.data-entry-primary, .data-entry-advanced) {
+  gap: 10px;
+  margin-top: 13px;
+}
+
+:root[data-ui-layout="model-a"] .model-a-data-workspace :is(.data-entry-primary, .data-entry-advanced) :is(input, select, textarea) {
+  border-color: var(--model-a-line-strong) !important;
+  color: var(--model-a-ink) !important;
+  background: var(--model-a-panel) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-data-workspace .data-records-panel {
+  min-height: 340px;
+}
+
+:root[data-ui-layout="model-a"] .model-a-data-workspace .data-record-table {
+  border-color: var(--model-a-line) !important;
+  border-radius: 13px;
+}
+
+/* Inbox conserva sus tres áreas funcionales, pero el encabezado, los filtros
+   y los paneles pasan a la misma lectura de contexto → lista → detalle. */
+:root[data-ui-layout="model-a"] .inbox-unified-workspace {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: var(--model-a-gap) !important;
+}
+
+:root[data-ui-layout="model-a"] .inbox-app-header.model-a-page-header {
+  min-height: 86px;
+  height: auto;
+  padding: 16px 18px !important;
+}
+
+:root[data-ui-layout="model-a"] .inbox-app-header .inbox-account-box strong { color: #ffffff !important; }
+
+:root[data-ui-layout="model-a"] .inbox-channel-tabs {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid var(--model-a-line);
+  border-radius: 14px;
+  background: var(--model-a-panel);
+  box-shadow: 0 7px 18px rgba(23, 46, 53, .035);
+}
+
+:root[data-ui-layout="model-a"] .inbox-channel-tabs button {
+  border-color: var(--model-a-line-strong) !important;
+  color: #4b3570 !important;
+  background: #f7f3fb !important;
+}
+
+:root[data-ui-layout="model-a"] .inbox-channel-tabs button.active,
+:root[data-ui-layout="model-a"] .inbox-channel-tabs button:hover {
+  color: #ffffff !important;
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #4b3570, #078f98) !important;
+}
+
+:root[data-ui-layout="model-a"] .inbox-channel-tabs button :is(b, span) { color: inherit !important; }
+
+:root[data-ui-layout="model-a"] :is(.inbox-chat-feed-panel, .inbox-chat-stage, .inbox-contact-panel) {
+  border-color: var(--model-a-line) !important;
+  border-radius: var(--model-a-radius) !important;
+  background: var(--model-a-panel) !important;
+  box-shadow: var(--model-a-shadow) !important;
+}
+
+:root[data-ui-layout="model-a"] .inbox-chat-feed-head,
+:root[data-ui-layout="model-a"] .inbox-chat-stage .chat-header,
+:root[data-ui-layout="model-a"] .inbox-chat-stage .composer {
+  border-color: var(--model-a-line) !important;
+  background: var(--model-a-panel-soft) !important;
+}
+
+:root[data-ui-layout="model-a"] .inbox-chat-feed-item {
+  border-color: var(--model-a-line) !important;
+  border-radius: 12px !important;
+  background: var(--model-a-panel) !important;
+}
+
+:root[data-ui-layout="model-a"] .inbox-chat-feed-item.active,
+:root[data-ui-layout="model-a"] .inbox-chat-feed-item:hover {
+  border-color: color-mix(in srgb, var(--theme-primary-2) 48%, var(--model-a-line)) !important;
+  background: #f3faf8 !important;
+}
+
+:root[data-ui-layout="model-a"] .inbox-contact-panel .active-conversation-panel,
+:root[data-ui-layout="model-a"] .active-conversation-signal {
+  background: var(--model-a-panel-soft) !important;
+}
+
+:root[data-ui-layout="model-a"] .active-conversation-signal {
+  border-color: var(--model-a-line) !important;
+  border-radius: 13px;
+}
+
+/* El modo nocturno usa la misma jerarquía, sin superficies claras heredadas. */
+:root[data-ui-layout="model-a"][data-design-system="dark"] :is(
+  .model-a-page-header,
+  .finance-product-workspace .finance-context-panel,
+  .onboarding-core-panel.model-a-workspace-panel,
+  .onboarding-main-card,
+  .onboarding-side-card,
+  .onboarding-review-card,
+  .model-a-data-workspace :is(.data-entry-panel, .data-records-panel, .data-record-detail, .data-workspace-support),
+  .inbox-channel-tabs,
+  .inbox-chat-feed-panel,
+  .inbox-chat-stage,
+  .inbox-contact-panel
+) {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] :is(
+  .finance-product-workspace .finance-context-controls > :is(label, div),
+  .onboarding-status-panel.model-a-executive-kpis article,
+  .onboarding-core-card,
+  .shifts-hero-metric,
+  .inbox-chat-feed-head,
+  .inbox-chat-stage .chat-header,
+  .inbox-chat-stage .composer,
+  .inbox-contact-panel .active-conversation-panel,
+  .active-conversation-signal
+) {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink) !important;
+  background: var(--model-a-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] :is(
+  .finance-product-workspace .finance-context-controls :is(input, select),
+  .model-a-data-workspace :is(.data-entry-primary, .data-entry-advanced) :is(input, select, textarea)
+) {
+  border-color: var(--model-a-line-strong) !important;
+  color: var(--model-a-ink) !important;
+  background: #0a0b18 !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .inbox-channel-tabs button {
+  border-color: var(--model-a-line-strong) !important;
+  color: #e9e3f8 !important;
+  background: #211b3c !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .inbox-chat-feed-item {
+  border-color: rgba(184, 157, 255, .18) !important;
+  color: var(--model-a-ink) !important;
+  background: transparent !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .inbox-chat-feed-item.active,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .inbox-chat-feed-item:hover {
+  border-color: rgba(82, 210, 199, .68) !important;
+  background: rgba(31, 155, 157, .13) !important;
+}
+
+@media (max-width: 980px) {
+  :root[data-ui-layout="model-a"] .finance-product-workspace .finance-header.model-a-page-header {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  :root[data-ui-layout="model-a"] .finance-product-workspace .finance-context-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  :root[data-ui-layout="model-a"] :is(.model-a-page-header, .onboarding-pro-hero.model-a-page-header, .shifts-hero.model-a-page-header) {
+    padding: 17px !important;
+    border-radius: 16px !important;
+  }
+
+  :root[data-ui-layout="model-a"] .finance-product-workspace .finance-context-controls,
+  :root[data-ui-layout="model-a"] .onboarding-status-panel.model-a-executive-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :root[data-ui-layout="model-a"] .onboarding-status-panel.model-a-executive-kpis article { min-height: 96px; }
+  :root[data-ui-layout="model-a"] .model-a-data-workspace .data-records-panel { min-height: 0; }
+  :root[data-ui-layout="model-a"] .inbox-app-header.model-a-page-header { min-height: 0; padding: 13px 14px !important; }
+}

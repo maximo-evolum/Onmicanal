@@ -1121,7 +1121,7 @@ function FinanceWorkspace() {
         <main className="finance-workspace">
           {editingCase ? <FinanceCaseEditor key={`${contextTenant}:${editingCase.id}`} record={editingCase} canReopen={canManageFinance} onClose={() => setEditingCase(null)} onSaved={async () => { await load(); setMessage("Cambio guardado con motivo y auditoría. No se enviaron mensajes ni se modificaron pagos."); }} /> : null}
           {manualPayment ? <FinanceManualPayment key={`${contextTenant}:${manualPayment.id}:${manualPayment.kind}`} target={manualPayment} onBusy={setSaving} onClose={() => setManualPayment(null)} onSaved={() => { setManualPayment(null); setManualSettlementRevision((r) => r + 1); setMessage("Registro confirmado con su fecha efectiva y auditoría. No se efectuó ninguna transferencia ni cambio en el ERP."); void load(); }} /> : null}
-          <header className="finance-header">
+          <header className="finance-header model-a-page-header">
             <div className="finance-title"><span>EVOLUM FINANZAS</span><h1>{activeTab === "resumen" ? `Hola, ${agent?.name?.split(" ")[0] || "equipo"}` : active.label}</h1><p>{activeTab === "resumen" ? "Esto es lo que necesita tu atencion financiera hoy." : active.detail}</p></div>
             <div className="finance-header-actions"><label className="finance-search"><svg className="finance-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg><input aria-label="Buscar en Finanzas" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar facturas, clientes o movimientos" /></label><AccountPill fallbackName={agent?.name || "Usuario"} /></div>
           </header>

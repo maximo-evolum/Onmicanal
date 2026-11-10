@@ -413,7 +413,7 @@ export default function OnboardingPage() {
         showNotificationCenter={false}
       />
     <main className="onboarding-page onboarding-pro-page">
-      <section className="onboarding-pro-hero">
+      <section className="onboarding-pro-hero model-a-page-header">
         <div>
           <span className="badge accent">Configuracion de Agente</span>
           <h1>Configuracion de Agente</h1>
@@ -424,7 +424,7 @@ export default function OnboardingPage() {
         <AccountPill fallbackName={agent?.name || "Usuario"} />
       </section>
 
-      <section className="onboarding-status-panel">
+      <section className="onboarding-status-panel model-a-executive-kpis">
         <article><strong>{existing?.tenant?.name || form.businessName || "Cliente"}</strong><span>Tenant actual</span></article>
         <article><strong>{existing?.tenant?.onboardingCompleted ? "Completo" : "Pendiente"}</strong><span>Estado onboarding</span></article>
         <article><strong>{stats.existingProducts}</strong><span>Productos/servicios cargados</span></article>
@@ -432,7 +432,7 @@ export default function OnboardingPage() {
         <article><strong>{stats.imports}</strong><span>Importaciones recientes</span></article>
       </section>
 
-      <section className="onboarding-core-panel">
+      <section className="onboarding-core-panel model-a-workspace-panel">
         <div className="section-heading-row">
           <div>
             <p className="eyebrow">Core conectado</p>

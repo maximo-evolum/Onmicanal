@@ -71,7 +71,7 @@ export default function ShiftsPage() {
     <EvolumSidebar active="Turnos" isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
     <main className="vertical-main shifts-page">
       <ModuleGate moduleKey="shift_management">
-        <section className="shifts-hero">
+        <section className="shifts-hero model-a-page-header">
           <div><span>{copy.eyebrow}</span><h1>{copy.title}</h1><p>Organiza la cobertura de {copy.workers}. Los turnos se mantienen separados por rubro y complementan la Agenda de EVOLUM.</p></div>
           <div className="shifts-hero-metric"><b>{records.filter((item) => shiftData(item, "date") === form.date).length}</b><small>turnos para esta fecha</small></div>
         </section>

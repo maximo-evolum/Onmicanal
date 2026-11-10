@@ -39,7 +39,7 @@ export function DataManagementWorkspace({
   const hasAdvancedFields = Boolean(advancedFields);
 
   return (
-    <section className={`data-management-workspace ${className}`.trim()}>
+    <section className={`data-management-workspace model-a-data-workspace ${className}`.trim()}>
       <form className="data-entry-panel" onSubmit={onSubmit}>
         <div className="data-entry-panel-head">
           <div>

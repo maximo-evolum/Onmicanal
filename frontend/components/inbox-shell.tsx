@@ -505,7 +505,7 @@ function InboxAppHeader({
   error: string | null;
 }) {
   return (
-    <header className="inbox-app-header">
+    <header className="inbox-app-header model-a-page-header">
       <div className="inbox-app-header-top">
         <div>
           <span className="eyebrow">Inbox IA</span>
