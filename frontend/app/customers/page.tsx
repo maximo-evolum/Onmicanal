@@ -442,7 +442,7 @@ export default function CustomersPage() {
       <div className={`executive-shell vertical-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active="Clientes" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
         <main className={`vertical-page industry-service-page ${mode === "REAL_ESTATE" ? "realty-page realty-workspace" : ""}`}>
-          <header className="vertical-hero service-hero">
+          <header className="vertical-hero service-hero model-a-page-header">
             <div>
               <span>{config.eyebrow}</span>
               <h1>{config.title}</h1>

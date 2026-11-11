@@ -9761,8 +9761,6 @@ body {
 .evolum-workspace-search-results a > span,
 .evolum-workspace-search-empty { color: var(--text-muted); font-size: 11px; line-height: 1.35; }
 
-.evolum-workspace-module-select { display: none; min-width: 0; }
-
 .evolum-workspace-actions {
   display: flex;
   align-items: center;
@@ -9860,18 +9858,14 @@ body {
 
 /* Los controles nativos traían el fondo claro de otros módulos. Esta regla
    mantiene íntegro el modo oscuro existente, también en la barra nueva. */
-:root[data-theme="dark"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .evolum-workspace-module-select select, .notification-center-trigger),
-:root[data-design-system="dark"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .evolum-workspace-module-select select, .notification-center-trigger),
-:root[data-design-system="neon"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .evolum-workspace-module-select select, .notification-center-trigger) {
+:root[data-theme="dark"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .notification-center-trigger),
+:root[data-design-system="dark"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .notification-center-trigger),
+:root[data-design-system="neon"] .evolum-workspace-chrome :is(.evolum-workspace-menu-toggle, .notification-center-trigger) {
   border-color: rgba(183, 153, 255, .36) !important;
   color: #eeeaff !important;
   background: #17132a !important;
   box-shadow: none !important;
 }
-
-:root[data-theme="dark"] .evolum-workspace-module-select select,
-:root[data-design-system="dark"] .evolum-workspace-module-select select,
-:root[data-design-system="neon"] .evolum-workspace-module-select select { color-scheme: dark; }
 
 @media (max-width: 980px) {
   .evolum-workspace-chrome,
@@ -9889,14 +9883,11 @@ body {
     grid-template-rows: 62px;
   }
   .evolum-workspace-chrome-main { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 0 14px; }
-  /* En un teléfono el selector ya expresa el módulo activo. Ocultar la
-     miga evita que notificaciones o cierre de sesión salten a una segunda
-     fila y queden encima del contenido. */
+  /* En un teléfono la navegación sigue viviendo en el menú EV. Ocultar la
+     miga y la búsqueda evita que la barra superior compita con el contenido. */
   .evolum-workspace-location { display: none; }
   .evolum-workspace-menu-toggle { grid-column: 1; }
   .evolum-workspace-search { display: none; }
-  .evolum-workspace-module-select { display: block; grid-column: 2; min-width: 0; }
-  .evolum-workspace-module-select select { min-width: 0; height: 34px; padding: 0 28px 0 9px; border-radius: 9px; font-size: 11px; }
   .evolum-workspace-actions { grid-column: 3; }
   /* El encabezado reemplaza los controles flotantes de la barra contraída.
      Así los accesos no se montan sobre la zona segura del teléfono. */
@@ -21254,4 +21245,654 @@ body {
   :root[data-ui-layout="model-a"] .onboarding-status-panel.model-a-executive-kpis article { min-height: 96px; }
   :root[data-ui-layout="model-a"] .model-a-data-workspace .data-records-panel { min-height: 0; }
   :root[data-ui-layout="model-a"] .inbox-app-header.model-a-page-header { min-height: 0; padding: 13px 14px !important; }
+}
+
+/* -------------------------------------------------------------------------
+   MODELO A · corrección estructural de navegación y Broker OS
+
+   El menú EV es la única navegación de módulos. Cuando se contrae, la barra
+   superior conserva su botón de apertura y el contenido recupera el ancho que
+   antes se reservaba para la burbuja flotante eliminada.
+   ------------------------------------------------------------------------- */
+:root[data-ui-layout="model-a"] .evolum-workspace-chrome {
+  /* Al retirar las pestañas contextuales, el encabezado deja de reservar una
+     segunda fila vacía que desplazaba todas las vistas hacia abajo. */
+  --evolum-chrome-height: 59px;
+  grid-template-rows: 59px;
+}
+
+/* La navegación contraída ya no utiliza controles flotantes. Se conserva esta
+   guarda para que una vista histórica no pueda reintroducir la burbuja ni el
+   rail visual por accidente: el único acceso al menú vive en la barra superior. */
+:root[data-ui-layout="model-a"] :is(.evolum-menu-bubble, .evolum-menu-rail-actions) {
+  display: none !important;
+}
+
+@media (min-width: 981px) {
+  /* Ningún workspace conserva una franja para la burbuja retirada. El mismo
+     encabezado sirve a CRM, Core, Broker, Finanzas y las páginas verticales. */
+  :root[data-ui-layout="model-a"] .evolum-workspace-chrome.is-menu-collapsed {
+    left: 0 !important;
+  }
+
+  :root[data-ui-layout="model-a"] :is(
+    .module-with-menu-shell,
+    .executive-shell,
+    .pipeline-pro-shell,
+    .inbox-unified-shell
+  ).nav-collapsed > main,
+  :root[data-ui-layout="model-a"] .vertical-shell.nav-collapsed > main {
+    grid-column: 1 !important;
+    padding-left: clamp(22px, 2.25vw, 34px) !important;
+    padding-right: clamp(22px, 2.25vw, 34px) !important;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main.nav-collapsed .crm-main-workspace,
+  :root[data-ui-layout="model-a"] .workflow-shell.nav-collapsed .workflow-page,
+  :root[data-ui-layout="model-a"] .inbox-unified-shell.nav-collapsed .inbox-unified-main,
+  :root[data-ui-layout="model-a"] .inbox-unified-shell.nav-collapsed .inbox-unified-workspace {
+    grid-column: 1 !important;
+    padding-left: clamp(22px, 2.25vw, 34px) !important;
+    padding-right: clamp(22px, 2.25vw, 34px) !important;
+  }
+}
+
+:root[data-ui-layout="model-a"] .vertical-shell.realty-product-workspace > main.realty-page.realty-workspace {
+  background: var(--model-a-canvas) !important;
+}
+
+:root[data-ui-layout="model-a"] .broker-os-workspace {
+  width: min(100%, 1480px);
+  gap: var(--model-a-gap);
+  padding: 0;
+}
+
+:root[data-ui-layout="model-a"] .broker-os-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  align-items: center;
+  gap: clamp(16px, 2vw, 28px);
+  margin: 0;
+  padding: clamp(20px, 2.2vw, 30px);
+}
+
+:root[data-ui-layout="model-a"] .broker-os-header h1 {
+  font-size: clamp(1.65rem, 2.4vw, 2.35rem);
+}
+
+:root[data-ui-layout="model-a"] .broker-os-header > div:first-child > span,
+:root[data-ui-layout="model-a"] .broker-list-heading > span {
+  color: #087f85;
+}
+
+:root[data-ui-layout="model-a"] .broker-access-summary {
+  min-width: 0;
+  padding: 15px 16px;
+  border-color: var(--model-a-line);
+  background: var(--model-a-panel-soft);
+  box-shadow: none;
+}
+
+:root[data-ui-layout="model-a"] .broker-kpis.model-a-executive-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+}
+
+:root[data-ui-layout="model-a"] .broker-kpis.model-a-executive-kpis > article {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  min-height: 104px;
+  padding: 16px;
+  border: 1px solid var(--model-a-line);
+  border-radius: 15px;
+  background: linear-gradient(145deg, #ffffff, #f6fbfa);
+  box-shadow: 0 8px 20px rgba(27, 55, 59, .04);
+}
+
+:root[data-ui-layout="model-a"] .broker-kpis.model-a-executive-kpis b {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--model-a-ink);
+  background: transparent;
+  font-size: clamp(1.5rem, 2.25vw, 2rem);
+  line-height: 1;
+}
+
+:root[data-ui-layout="model-a"] .broker-kpis.model-a-executive-kpis small {
+  margin: 0;
+  color: var(--model-a-muted);
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+:root[data-ui-layout="model-a"] .broker-kpis.model-a-executive-kpis em {
+  color: #0d8e88;
+  font-size: .68rem;
+  font-style: normal;
+  font-weight: 760;
+}
+
+/* Centro operativo: una composición de cola + contexto accionable, como en
+   la maqueta Modelo A, en vez de encadenar bloques de tarjetas repetidas. */
+:root[data-ui-layout="model-a"] .broker-command-center {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, .85fr);
+  align-items: start;
+  gap: var(--model-a-gap);
+  min-width: 0;
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue,
+:root[data-ui-layout="model-a"] .broker-command-next,
+:root[data-ui-layout="model-a"] .broker-command-rules {
+  min-width: 0;
+  border: 1px solid var(--model-a-line);
+  border-radius: var(--model-a-radius);
+  background: var(--model-a-panel);
+  box-shadow: var(--model-a-shadow);
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 15px;
+  border-bottom: 1px solid var(--model-a-line);
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue :is(span, h2, p),
+:root[data-ui-layout="model-a"] .broker-command-aside :is(span, h3, p) { margin: 0; }
+
+:root[data-ui-layout="model-a"] .broker-command-queue > header span,
+:root[data-ui-layout="model-a"] .broker-command-aside > section > span {
+  display: block;
+  margin-bottom: 7px;
+  color: #087f85;
+  font-size: .67rem;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue > header h2,
+:root[data-ui-layout="model-a"] .broker-command-aside h3 {
+  color: var(--model-a-ink);
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue > header p,
+:root[data-ui-layout="model-a"] .broker-command-aside p {
+  margin-top: 6px;
+  color: var(--model-a-muted);
+  font-size: .8rem;
+  line-height: 1.5;
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue > header .secondary-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue-list {
+  display: grid;
+  padding: 2px 14px 12px;
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue-item {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+  padding: 13px 8px;
+  border-bottom: 1px solid var(--model-a-line);
+  color: inherit;
+  text-decoration: none;
+}
+
+:root[data-ui-layout="model-a"] .broker-command-queue-item:last-child { border-bottom: 0; }
+:root[data-ui-layout="model-a"] .broker-command-queue-item:hover { background: #f3faf8; }
+:root[data-ui-layout="model-a"] .broker-command-queue-item time { color: #078b86; font-size: .72rem; font-weight: 900; }
+:root[data-ui-layout="model-a"] .broker-command-queue-item > div { display: grid; min-width: 0; gap: 3px; }
+:root[data-ui-layout="model-a"] .broker-command-queue-item b { color: var(--model-a-ink); font-size: .82rem; }
+:root[data-ui-layout="model-a"] .broker-command-queue-item span { overflow: hidden; color: var(--model-a-muted); font-size: .73rem; text-overflow: ellipsis; white-space: nowrap; }
+:root[data-ui-layout="model-a"] .broker-command-queue-item small { color: var(--model-a-muted); font-size: .67rem; font-weight: 750; text-align: right; }
+:root[data-ui-layout="model-a"] .broker-command-queue-item.high time { color: #d95046; }
+:root[data-ui-layout="model-a"] .broker-command-queue-item.medium time { color: #b67c13; }
+
+:root[data-ui-layout="model-a"] .broker-command-aside { display: grid; gap: var(--model-a-gap); }
+:root[data-ui-layout="model-a"] .broker-command-next,
+:root[data-ui-layout="model-a"] .broker-command-rules { padding: 19px; }
+:root[data-ui-layout="model-a"] .broker-command-next .primary-btn { display: inline-flex; width: fit-content; margin-top: 16px; text-decoration: none; }
+:root[data-ui-layout="model-a"] .broker-command-rules ul { display: grid; margin: 13px 0 0; padding: 0; list-style: none; }
+:root[data-ui-layout="model-a"] .broker-command-rules li { display: grid; gap: 3px; padding: 11px 0; border-top: 1px solid var(--model-a-line); }
+:root[data-ui-layout="model-a"] .broker-command-rules b { color: var(--model-a-ink); font-size: .78rem; }
+:root[data-ui-layout="model-a"] .broker-command-rules small { color: var(--model-a-muted); font-size: .72rem; }
+
+:root[data-ui-layout="model-a"] .broker-os-workspace :is(
+  .broker-recommendations,
+  .broker-expedient-panel,
+  .broker-os-form,
+  .broker-os-list,
+  .broker-reporting,
+  .broker-training-panel,
+  .broker-governance-panel,
+  .broker-finance-workspace,
+  .broker-financing-workspace,
+  .broker-commercial-hub,
+  .broker-monthly-administration,
+  .broker-document-index
+) {
+  border-color: var(--model-a-line) !important;
+  background: var(--model-a-panel) !important;
+  box-shadow: var(--model-a-shadow) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .vertical-shell.realty-product-workspace > main.realty-page.realty-workspace {
+  background: var(--model-a-canvas) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-access-summary,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-kpis.model-a-executive-kpis > article {
+  border-color: var(--model-a-line) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-kpis.model-a-executive-kpis b {
+  color: var(--model-a-ink) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-command-queue,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-command-next,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-command-rules {
+  border-color: var(--model-a-line);
+  background: var(--model-a-panel);
+  box-shadow: none;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-command-queue-item:hover { background: rgba(82, 210, 199, .08); }
+
+@media (max-width: 980px) {
+  :root[data-ui-layout="model-a"] .evolum-workspace-chrome {
+    --evolum-chrome-height: 62px;
+    grid-template-rows: 62px;
+  }
+
+  :root[data-ui-layout="model-a"] .evolum-workspace-chrome.is-menu-collapsed {
+    left: 0 !important;
+  }
+
+  :root[data-ui-layout="model-a"] :is(
+    .module-with-menu-shell,
+    .executive-shell,
+    .pipeline-pro-shell,
+    .inbox-unified-shell
+  ).nav-collapsed > main,
+  :root[data-ui-layout="model-a"] .vertical-shell.nav-collapsed > main {
+    padding-left: max(16px, env(safe-area-inset-left)) !important;
+    padding-right: max(16px, env(safe-area-inset-right)) !important;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main.nav-collapsed .crm-main-workspace,
+  :root[data-ui-layout="model-a"] .workflow-shell.nav-collapsed .workflow-page,
+  :root[data-ui-layout="model-a"] .inbox-unified-shell.nav-collapsed .inbox-unified-main,
+  :root[data-ui-layout="model-a"] .inbox-unified-shell.nav-collapsed .inbox-unified-workspace {
+    padding-left: max(16px, env(safe-area-inset-left)) !important;
+    padding-right: max(16px, env(safe-area-inset-right)) !important;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-os-header {
+    grid-template-columns: 1fr;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-kpis.model-a-executive-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  :root[data-ui-layout="model-a"] .broker-command-center {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  :root[data-ui-layout="model-a"] .broker-os-header,
+  :root[data-ui-layout="model-a"] .broker-kpis.model-a-executive-kpis > article {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-kpis.model-a-executive-kpis {
+    grid-template-columns: 1fr;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-command-queue > header {
+    display: grid;
+    padding: 17px;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-command-queue-item {
+    grid-template-columns: 1fr auto;
+    gap: 5px 10px;
+    padding: 13px 3px;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-command-queue-item > div { grid-column: 1 / -1; grid-row: 1; padding-right: 2px; }
+  :root[data-ui-layout="model-a"] .broker-command-queue-item time { grid-column: 1; grid-row: 2; }
+  :root[data-ui-layout="model-a"] .broker-command-queue-item small { grid-column: 2; grid-row: 2; }
+}
+
+/* -------------------------------------------------------------------------
+   MODELO A · consolidación final del centro operativo Broker
+
+   El centro de control muestra primero prioridades, contexto y cartera. Los
+   formularios de alta solo se despliegan por decisión explícita de la persona;
+   así no compiten visualmente con la operación diaria ni repiten navegación.
+   ------------------------------------------------------------------------- */
+@media (min-width: 981px) {
+  :root[data-ui-layout="model-a"] .vertical-shell.realty-product-workspace > main.realty-page.realty-workspace {
+    grid-column: 2 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+  }
+
+  :root[data-ui-layout="model-a"] .vertical-shell.realty-product-workspace.nav-collapsed {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :root[data-ui-layout="model-a"] .vertical-shell.realty-product-workspace.nav-collapsed > main.realty-page.realty-workspace {
+    grid-column: 1 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding-left: clamp(22px, 2.25vw, 34px) !important;
+    padding-right: clamp(22px, 2.25vw, 34px) !important;
+  }
+}
+
+:root[data-ui-layout="model-a"] .broker-os-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 310px) !important;
+  align-items: center !important;
+  justify-content: normal !important;
+  flex-wrap: nowrap !important;
+  min-height: 0 !important;
+}
+
+:root[data-ui-layout="model-a"] .broker-os-header-side {
+  display: grid;
+  align-self: center;
+  justify-items: end;
+  gap: 11px;
+  min-width: 0;
+}
+
+:root[data-ui-layout="model-a"] .broker-os-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+:root[data-ui-layout="model-a"] .broker-os-header-actions :is(.primary-btn, .secondary-btn) {
+  min-height: 38px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+:root[data-ui-layout="model-a"] .broker-operations-support {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, .85fr);
+  align-items: start;
+  gap: var(--model-a-gap);
+}
+
+:root[data-ui-layout="model-a"] .broker-operations-support > .broker-expedient-panel,
+:root[data-ui-layout="model-a"] .broker-operations-support > .broker-reporting {
+  min-width: 0;
+  margin: 0;
+}
+
+:root[data-ui-layout="model-a"] .broker-operations-support > .broker-reporting {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"] .broker-operations-support > .broker-reporting > article {
+  min-width: 0;
+  min-height: 104px;
+  padding: 15px;
+  border: 1px solid var(--model-a-line);
+  border-radius: 15px;
+  background: var(--model-a-panel);
+  box-shadow: var(--model-a-shadow);
+}
+
+:root[data-ui-layout="model-a"] .broker-operation-capture {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--model-a-line);
+  border-radius: var(--model-a-radius);
+  background: var(--model-a-panel-soft);
+}
+
+:root[data-ui-layout="model-a"] .broker-operation-capture > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+:root[data-ui-layout="model-a"] .broker-operation-capture :is(h2, p, span) { margin: 0; }
+:root[data-ui-layout="model-a"] .broker-operation-capture header > div > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #087f85;
+  font-size: .67rem;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+:root[data-ui-layout="model-a"] .broker-operation-capture h2 { color: var(--model-a-ink); font-size: 1rem; }
+:root[data-ui-layout="model-a"] .broker-operation-capture p { margin-top: 5px; color: var(--model-a-muted); font-size: .79rem; line-height: 1.45; }
+:root[data-ui-layout="model-a"] .broker-operation-capture-hint { padding: 2px 0; }
+
+:root[data-ui-layout="model-a"] .broker-operation-create-form {
+  position: static !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: none;
+  padding: 18px !important;
+  border-radius: 15px;
+}
+
+:root[data-ui-layout="model-a"] .broker-operation-create-form > :is(span, h2, p, .broker-type-picker, button) { grid-column: 1 / -1; }
+
+:root[data-ui-layout="model-a"] .broker-operation-create-form > button.primary-btn {
+  width: fit-content;
+  min-width: min(100%, 330px);
+}
+
+:root[data-ui-layout="model-a"] .broker-operation-list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 20px;
+}
+
+:root[data-ui-layout="model-a"] .broker-operation-list > .broker-operation-card {
+  border-color: var(--model-a-line);
+  box-shadow: none;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] :is(
+  .broker-operation-capture,
+  .broker-operations-support > .broker-reporting > article
+) {
+  border-color: var(--model-a-line) !important;
+  background: var(--model-a-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 980px) {
+  :root[data-ui-layout="model-a"] .broker-os-header-side {
+    justify-items: start;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-os-header-actions {
+    justify-content: flex-start;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-operations-support {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  :root[data-ui-layout="model-a"] .broker-operation-capture,
+  :root[data-ui-layout="model-a"] .broker-operation-list {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-operation-capture > header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-operation-create-form {
+    grid-template-columns: 1fr;
+    padding: 14px !important;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-operation-create-form > :is(span, h2, p, .broker-type-picker, button) { grid-column: auto; }
+
+  :root[data-ui-layout="model-a"] .broker-operation-create-form > button.primary-btn,
+  :root[data-ui-layout="model-a"] .broker-os-header-actions :is(.primary-btn, .secondary-btn) {
+    width: 100%;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-os-header-actions {
+    width: 100%;
+  }
+}
+
+/* -------------------------------------------------------------------------
+   MODELO A · aplicación transversal a CRM, Core y módulos operativos
+
+   Las páginas existentes no necesitan una segunda navegación propia para
+   adoptar el formato. Esta capa convierte sus encabezados, indicadores y
+   paneles principales en la misma jerarquía visual del centro operativo:
+   contexto breve → indicadores → área de trabajo. Conserva cada color de
+   producto y no modifica formularios, permisos ni datos.
+   ------------------------------------------------------------------------- */
+:root[data-ui-layout="model-a"] :is(
+  .executive-topbar.model-a-page-header,
+  .crm-main-header.model-a-page-header,
+  .pipeline-pro-topbar.model-a-page-header,
+  .vertical-hero.model-a-page-header,
+  .module-app-header.model-a-page-header,
+  .agenda-app-header.model-a-page-header,
+  .documents-header.model-a-page-header,
+  .workflow-hero.model-a-page-header
+) {
+  margin-bottom: 0 !important;
+  padding: clamp(18px, 2vw, 28px) !important;
+}
+
+:root[data-ui-layout="model-a"] :is(
+  .executive-kpi-grid.model-a-executive-kpis,
+  .pipeline-month-summary.model-a-executive-kpis,
+  .vertical-hero-stats.model-a-executive-kpis
+) {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr)) !important;
+  gap: 12px !important;
+  min-width: 0;
+}
+
+:root[data-ui-layout="model-a"] :is(
+  .executive-kpi-grid.model-a-executive-kpis,
+  .pipeline-month-summary.model-a-executive-kpis,
+  .vertical-hero-stats.model-a-executive-kpis
+) > :is(article, div) {
+  min-width: 0;
+  min-height: 104px;
+  padding: 15px !important;
+  border: 1px solid var(--model-a-line) !important;
+  border-radius: 15px !important;
+  color: var(--model-a-ink) !important;
+  background: linear-gradient(145deg, var(--model-a-panel), var(--model-a-panel-soft)) !important;
+  box-shadow: 0 8px 20px rgba(23, 46, 53, .04) !important;
+}
+
+:root[data-ui-layout="model-a"] :is(
+  .executive-kpi-grid.model-a-executive-kpis,
+  .pipeline-month-summary.model-a-executive-kpis,
+  .vertical-hero-stats.model-a-executive-kpis
+) :is(strong, b) { color: var(--model-a-ink) !important; }
+
+:root[data-ui-layout="model-a"] :is(
+  .executive-kpi-grid.model-a-executive-kpis,
+  .pipeline-month-summary.model-a-executive-kpis,
+  .vertical-hero-stats.model-a-executive-kpis
+) :is(span, small) { color: var(--model-a-muted) !important; }
+
+:root[data-ui-layout="model-a"] :is(
+  .executive-panel,
+  .crm-main-panel,
+  .pipeline-column,
+  .agenda-panel,
+  .module-content-card,
+  .documents-upload-card,
+  .documents-list-card,
+  .connections-panel,
+  .campaign-card
+) {
+  border-color: var(--model-a-line) !important;
+  box-shadow: var(--model-a-shadow) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] :is(
+  .executive-kpi-grid.model-a-executive-kpis,
+  .pipeline-month-summary.model-a-executive-kpis,
+  .vertical-hero-stats.model-a-executive-kpis
+) > :is(article, div) {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 700px) {
+  :root[data-ui-layout="model-a"] :is(
+    .executive-topbar.model-a-page-header,
+    .crm-main-header.model-a-page-header,
+    .pipeline-pro-topbar.model-a-page-header,
+    .vertical-hero.model-a-page-header,
+    .module-app-header.model-a-page-header,
+    .agenda-app-header.model-a-page-header,
+    .documents-header.model-a-page-header,
+    .workflow-hero.model-a-page-header
+  ) { padding: 16px !important; border-radius: 16px !important; }
+
+  :root[data-ui-layout="model-a"] :is(
+    .executive-kpi-grid.model-a-executive-kpis,
+    .pipeline-month-summary.model-a-executive-kpis,
+    .vertical-hero-stats.model-a-executive-kpis
+  ) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }

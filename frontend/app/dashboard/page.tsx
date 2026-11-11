@@ -114,7 +114,7 @@ export default function DashboardPage() {
       />
 
       <main className="executive-dashboard">
-        <header className="executive-topbar executive-dashboard-header">
+        <header className="executive-topbar executive-dashboard-header model-a-page-header">
           <div>
             <h1>Dashboard Ejecutivo</h1>
             <p>Bienvenido, {agent?.name || "Usuario"}. Resumen operativo en tiempo real.</p>
@@ -130,7 +130,7 @@ export default function DashboardPage() {
         {error ? <div className="sales-queue-error">{error}</div> : null}
         {!crm ? <div className="analytics-loading-strip">Cargando dashboard en tiempo real...</div> : null}
 
-        <section className="executive-kpi-grid">
+        <section className="executive-kpi-grid model-a-executive-kpis">
           {dashboardStats.map((stat) => (
             <article className={`executive-kpi-card ${stat.tone}`} key={stat.label}>
               <div className="executive-kpi-icon">{stat.icon}</div>

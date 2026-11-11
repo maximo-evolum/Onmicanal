@@ -461,7 +461,7 @@ export default function ConnectionsPage() {
           onToggle={() => setSidebarOpen((value) => !value)}
         />
         <main className="main dashboard-page connections-page">
-          <header className="module-app-header connections-header">
+          <header className="module-app-header connections-header model-a-page-header">
             <div>
               <span className="eyebrow">Centro de Conexiones</span>
               <h1>Correo, archivos, pagos y continuidad</h1>

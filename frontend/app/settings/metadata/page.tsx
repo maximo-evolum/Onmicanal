@@ -284,7 +284,7 @@ export default function MetadataSettingsPage() {
     <div className={`module-with-menu-shell metadata-settings-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar active="Datos y formularios" isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
       <main className="main dashboard-page metadata-settings-main">
-        <header className="module-app-header metadata-header">
+        <header className="module-app-header metadata-header model-a-page-header">
           <div>
             <span className="eyebrow">DATOS Y FORMULARIOS</span>
             <h1>Organiza los formularios de tu equipo</h1>

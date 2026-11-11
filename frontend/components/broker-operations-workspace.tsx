@@ -2,9 +2,9 @@
 "use client";
 import { canBroker, canBrokerCommercialHub, canBrokerFinance, canBrokerTab, brokerTabArea } from "@/lib/broker-access";
 
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { BrokerJourneySummary } from "./broker-journey";
-import { BrokerOperationalSummary } from "./broker-operational-summary";
 import { BrokerDocumentIndexPanel } from "./broker-document-index";
 import { BrokerExecutiveDashboardPanel } from "./broker-executive-dashboard";
 import { BrokerOperationTrackerPanel } from "./broker-operation-tracker";
@@ -77,6 +77,7 @@ import {
   type BrokerDocumentIndex,
   type BrokerDocumentIndexFilters,
   type BrokerAiScenario,
+  type BrokerRecommendation,
   type BrokerOperation,
   type BrokerOperationType,
   type BrokerSaleWorkspace,
@@ -147,40 +148,6 @@ const AREA_CONFIG: Record<BrokerRecordArea, { label: string; description: string
   documents: { label: "Expediente y documentos", description: "Documentos de la propiedad, antecedentes legales y firmas digitales." },
   financing: { label: "Financiamiento", description: "Solicitudes de financiamiento y gastos asociados a cada operacion." }
 };
-
-/**
- * La navegación interna agrupa las áreas del mismo workspace en vez de
- * presentar una fila interminable de pestañas. Los identificadores y las
- * acciones no cambian: solo se explicita la jerarquía visual del Modelo A.
- */
-const BROKER_TAB_GROUPS: ReadonlyArray<{ label: string; tabs: ReadonlyArray<readonly [Tab, string]> }> = [
-  {
-    label: "Operación",
-    tabs: [["operations", "Operaciones"], ["executive_dashboard", "Dashboard Ejecutivo"], ["operation_tracker", "Operation Tracker"]]
-  },
-  {
-    label: "Comercial y expediente",
-    tabs: [
-      ["commercial", "Comercial y cierre"], ["rentals", "Arriendos y administración"], ["documents", "Expediente y documentos"],
-      ["financing", "Financiamiento"], ["post_sale", "Postventa y garantías"]
-    ]
-  },
-  {
-    label: "Activos y proyectos",
-    tabs: [["maintenance", "Mantención y proveedores"], ["projects", "Proyectos y publicación"]]
-  },
-  {
-    label: "Gestión y finanzas",
-    tabs: [["commissions", "Comisiones"], ["administration_preview", "Liquidación mensual"], ["financial_operations", "Finanzas operativas"], ["commercial_hub", "Marketing, agenda y chats"]]
-  },
-  {
-    label: "Inteligencia y gobierno",
-    tabs: [
-      ["ai_ops", "AI Ops"], ["ai_governance", "Gobierno IA"], ["case_management", "Case Management"], ["agents", "Agentes IA"], ["training", "Entrenamiento IA"],
-      ["configuration", "Parámetros"], ["access", "Roles y accesos"], ["account", "Cuenta y equipo"], ["governance", "Gobierno y alertas"], ["compliance", "Cumplimiento"], ["guides", "Guías operativas"]
-    ]
-  }
-];
 
 const FIELD_CONFIG: Record<string, FieldConfig> = {
   propertyId: { label: "Propiedad asociada" },
@@ -389,6 +356,28 @@ function recordOwnerLabel(record: IndustryRecord) {
   return record.assignedTo?.name || record.assignedTo?.email || "Sin responsable asignado";
 }
 
+function brokerRecommendationHref(recommendation: BrokerRecommendation) {
+  const query = new URLSearchParams({ view: "broker_os" });
+  if (recommendation.operationId) {
+    query.set("tab", "operation_tracker");
+    query.set("operationId", recommendation.operationId);
+  } else if (recommendation.area === "ai") {
+    query.set("tab", "training");
+  } else if (recommendation.area === "overview" || recommendation.area === "operations") {
+    query.set("tab", "operations");
+  } else {
+    query.set("area", recommendation.area);
+  }
+  if (recommendation.propertyId && !query.has("propertyId")) query.set("propertyId", recommendation.propertyId);
+  return `/realty?${query.toString()}`;
+}
+
+function brokerPriorityLabel(priority: BrokerRecommendation["priority"]) {
+  if (priority === "HIGH") return "Prioridad alta";
+  if (priority === "MEDIUM") return "Prioridad media";
+  return "Informativa";
+}
+
 export function BrokerOperationsPageContent() {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>("operations");
@@ -418,6 +407,7 @@ export function BrokerOperationsPageContent() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [operationType, setOperationType] = useState<BrokerOperationType>("SALE");
+  const [operationCaptureOpen, setOperationCaptureOpen] = useState(false);
   const [recordType, setRecordType] = useState("");
   const [selectedScenarioKey, setSelectedScenarioKey] = useState("");
   const [evaluationNote, setEvaluationNote] = useState("");
@@ -581,6 +571,36 @@ export function BrokerOperationsPageContent() {
   }, [overview]);
   const readModel = overview?.readModel;
   const recommendations = readModel?.priorities || overview?.recommendations || [];
+  const highPriorityCount = recommendations.filter((item) => item.priority === "HIGH").length;
+  const unassignedOperations = operations.filter((item) => !item.assignedToId).length;
+  const operationalCenter = readModel?.operationalCenter;
+  const commandMetrics = [
+    { label: "pendientes abiertos", value: recommendations.length, detail: highPriorityCount ? `${highPriorityCount} de prioridad alta` : "sin prioridad alta" },
+    { label: "sin responsable", value: unassignedOperations, detail: unassignedOperations ? "requieren asignación" : "cartera distribuida" },
+    { label: "plazos controlados", value: operationalCenter?.deadlines ?? 0, detail: "seguimiento operativo" },
+    { label: "bloqueos activos", value: (operationalCenter?.risks ?? 0) + highPriorityCount, detail: "riesgos o revisión humana" }
+  ];
+  const primaryRecommendation = recommendations[0] || null;
+  const pageContext = (() => {
+    if (isBrokerRecordArea(tab)) return { eyebrow: "Broker OS · operación", title: AREA_CONFIG[tab].label, description: AREA_CONFIG[tab].description };
+    if (tab === "executive_dashboard") return { eyebrow: "Broker OS · inteligencia", title: "Dashboard ejecutivo", description: "Indicadores, forecast y riesgos calculados desde las operaciones autorizadas." };
+    if (tab === "operation_tracker") return { eyebrow: "Broker OS · operación", title: "Tracker de operación", description: "Revisa la misma línea de tiempo, responsables, documentos y controles antes de avanzar." };
+    if (tab === "ai_ops") return { eyebrow: "Broker OS · inteligencia", title: "AI Ops", description: "Sugerencias explicables para revisión humana, sin ejecutar acciones externas." };
+    if (tab === "ai_governance") return { eyebrow: "Broker OS · inteligencia", title: "Gobierno de IA", description: "Escenarios, límites y trazabilidad de los asistentes del Broker." };
+    if (tab === "case_management") return { eyebrow: "Broker OS · operación", title: "Gestión de casos", description: "Centraliza pendientes y decisiones internas con su evidencia de origen." };
+    if (tab === "commercial_hub") return { eyebrow: "Broker OS · comercial", title: "Centro comercial", description: "Marketing, agenda y conversaciones vinculadas a la cartera autorizada." };
+    if (tab === "financial_operations") return { eyebrow: "Broker OS · finanzas", title: "Operaciones financieras", description: "Cobros, pagos y controles internos vinculados a la operación inmobiliaria." };
+    if (tab === "administration_preview") return { eyebrow: "Broker OS · administración", title: "Administración mensual", description: "Prepara y revisa liquidaciones de arriendo con trazabilidad." };
+    if (tab === "commissions") return { eyebrow: "Broker OS · finanzas", title: "Comisiones", description: "Simula y documenta la distribución de comisiones sin ejecutar pagos." };
+    if (tab === "agents") return { eyebrow: "Broker OS · inteligencia", title: "Agentes de IA", description: "Conoce los asistentes disponibles y los límites de cada recomendación." };
+    if (tab === "training") return { eyebrow: "Broker OS · inteligencia", title: "Entrenamiento supervisado", description: "Evalúa escenarios y registra criterios humanos para mejorar las reglas internas." };
+    if (tab === "configuration") return { eyebrow: "Broker OS · configuración", title: "Parámetros operativos", description: "Define políticas internas, SLA y controles de la empresa." };
+    if (tab === "access" || tab === "account") return { eyebrow: "Broker OS · configuración", title: "Cuenta y equipo", description: "Administra perfiles, alcances y distribución de cartera con trazabilidad." };
+    if (tab === "governance") return { eyebrow: "Broker OS · configuración", title: "Gobierno operativo", description: "Consulta alertas y actividad auditada de la empresa." };
+    if (tab === "compliance") return { eyebrow: "Broker OS · configuración", title: "Cumplimiento y preparación", description: "Organiza dependencias, consentimientos y evidencia sin activar servicios externos." };
+    if (tab === "guides") return { eyebrow: "Broker OS · ayuda", title: "Guías de operación", description: "Consulta los recorridos sugeridos para cada proceso del Broker." };
+    return { eyebrow: "Broker OS · vertical activa", title: "Centro operativo", description: "Una cola de trabajo para resolver decisiones, tareas, documentación y riesgos sin duplicar navegación." };
+  })();
   const currentArea = isBrokerRecordArea(tab) ? tab : null;
   useEffect(() => {
     if (!requestedRecordId || !currentArea || !records.some((record) => record.id === requestedRecordId)) return;
@@ -652,6 +672,7 @@ export function BrokerOperationsPageContent() {
       });
       event.currentTarget.reset();
       await load();
+      setOperationCaptureOpen(false);
       setNotice("Operacion creada. La primera etapa quedo registrada en su linea de tiempo.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "No se pudo crear la operacion.");
@@ -1362,32 +1383,28 @@ export function BrokerOperationsPageContent() {
   return <main className="broker-os-workspace" onSubmitCapture={event => {
     if (!canWriteTab) { event.preventDefault(); event.stopPropagation(); setNotice("Tu perfil no permite modificar esta área. Solicita acceso al administrador."); }
   }}>
-    <header className="broker-os-header">
-      <div>
-        <span>Broker OS</span><h1>Centro operativo inmobiliario</h1>
-        <p>Controla venta, arriendo, administracion, documentos, mantenciones y postventa desde expedientes separados por propiedad.</p>
+    <header className="broker-os-header model-a-page-header">
+      <div className="broker-os-header-copy">
+        <span>{pageContext.eyebrow}</span><h1>{pageContext.title}</h1>
+        <p>{pageContext.description}</p>
       </div>
-      {access ? <aside className="broker-access-summary" aria-label="Alcance de tu acceso"><span>Tu acceso</span><b>{access.profileLabel}</b><p>{access.scopeDescription}</p></aside> : null}
-      <div className="broker-kpis">
-        <b>{summary.properties}<small>propiedades</small></b>
-        <b>{summary.activeOperations}<small>operaciones activas</small></b>
-        <b>{summary.activeRentals}<small>arriendos vigentes</small></b>
-        <b>{summary.activeFinancing}<small>financiamientos</small></b>
+      <div className="broker-os-header-side">
+        {tab === "operations" ? <div className="broker-os-header-actions" aria-label="Acciones del centro operativo">
+          {!operationCaptureOpen ? <button type="button" className="primary-btn" disabled={busy || !canWriteTab} onClick={() => setOperationCaptureOpen(true)}>Nueva operación</button> : null}
+          <Link className="secondary-btn" href="/realty?view=broker_os&tab=operation_tracker">Abrir tracker</Link>
+        </div> : null}
+        {access ? <aside className="broker-access-summary" aria-label="Alcance de tu acceso"><span>Tu acceso</span><b>{access.profileLabel}</b><p>{access.scopeDescription}</p></aside> : null}
       </div>
     </header>
 
-    <nav className="broker-os-tabs" aria-label="Áreas de Broker OS">
-      {BROKER_TAB_GROUPS.map((group) => {
-        const enabledTabs = group.tabs.filter(([key]) => canBrokerTab(access, key));
-        if (!enabledTabs.length) return null;
-        return <section className="broker-os-tab-group" key={group.label} aria-label={group.label}>
-          <span>{group.label}</span>
-          <div>
-            {enabledTabs.map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}
-          </div>
-        </section>;
-      })}
-    </nav>
+    <section className="broker-kpis model-a-executive-kpis" aria-label="Resumen de cartera">
+      {tab === "operations" ? commandMetrics.map((metric) => <article key={metric.label}><b>{metric.value}</b><small>{metric.label}</small><em>{metric.detail}</em></article>) : <>
+        <article><b>{summary.properties}</b><small>propiedades</small></article>
+        <article><b>{summary.activeOperations}</b><small>operaciones activas</small></article>
+        <article><b>{summary.activeRentals}</b><small>arriendos vigentes</small></article>
+        <article><b>{summary.activeFinancing}</b><small>financiamientos</small></article>
+      </>}
+    </section>
     {notice ? <p className="broker-os-notice" role="status">{notice}</p> : null}
     {access && !canWriteTab ? <p className="broker-human-note">Vista de consulta. Las modificaciones dependen de los permisos de tu perfil.</p> : null}
     {!canBrokerTab(access, tab) ? <p role="status">{access ? "Esta área no está habilitada para tu perfil. Selecciona una de las áreas disponibles." : "Consultando tus permisos…"}</p> : <>
@@ -1403,12 +1420,34 @@ export function BrokerOperationsPageContent() {
     {tab === "case_management" ? <BrokerCaseManagementPanel access={access} /> : null}
 
     {tab === "operations" ? <>
-      <BrokerOperationalSummary model={readModel} showPriorities={false} />
-      <section className="broker-recommendations" aria-label="Prioridades operativas">
-        <div className="broker-list-heading"><span>Centro operacional</span><h2>Qué revisar a continuación</h2><p>Son sugerencias internas de la misma lectura que alimenta el resumen, el pipeline y el expediente. EVOLUM no cambia estados, publica ni contacta personas por su cuenta.</p></div>
-        <div className="broker-list-heading"><button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={executeAutomationScan}>Revisar cartera y crear alertas internas</button><p>La revisión detecta pendientes y crea alertas internas; no publica, envía mensajes ni modifica operaciones.</p></div>
-        {recommendations.length ? <div className="broker-recommendation-grid">{recommendations.map((recommendation) => <article key={recommendation.id} className={`broker-recommendation ${recommendation.priority.toLowerCase()}`}><b>{recommendation.priority === "HIGH" ? "Prioridad alta" : recommendation.priority === "MEDIUM" ? "Prioridad media" : "Informativa"}</b><h3>{recommendation.title}</h3><p>{recommendation.detail}</p><button type="button" className="secondary-btn" onClick={() => setTab(recommendation.area === "ai" ? "training" : recommendation.area === "overview" ? "operations" : recommendation.area as Tab)}>{recommendation.requiresApproval ? "Revisar y confirmar" : "Completar ficha"}</button></article>)}</div> : <p className="broker-empty">La cartera no tiene prioridades pendientes por ahora.</p>}
+      <section className="broker-command-center" aria-label="Centro operativo Broker OS">
+        <section className="broker-command-queue" aria-label="Cola de trabajo priorizada">
+          <header>
+            <div><span>Cola de trabajo</span><h2>Priorizada por riesgo y vencimiento</h2><p>Cada elemento conserva su origen, responsable y siguiente acción. El sistema no ejecuta cambios ni contactos por su cuenta.</p></div>
+            <button type="button" className="secondary-btn" disabled={busy || !canWriteTab} onClick={executeAutomationScan}>Actualizar prioridades</button>
+          </header>
+          {recommendations.length ? <div className="broker-command-queue-list">{recommendations.slice(0, 6).map((recommendation) => <Link key={recommendation.id} href={brokerRecommendationHref(recommendation)} className={`broker-command-queue-item ${recommendation.priority.toLowerCase()}`}>
+            <time>{recommendation.dueAt ? new Date(recommendation.dueAt).toLocaleDateString("es-CL", { day: "2-digit", month: "short" }) : brokerPriorityLabel(recommendation.priority)}</time>
+            <div><b>{recommendation.title}</b><span>{recommendation.detail}</span></div>
+            <small>{recommendation.requiresApproval ? "Requiere confirmación" : "Abrir antecedente"}</small>
+          </Link>)}</div> : <p className="broker-empty">La cartera no tiene prioridades pendientes por ahora.</p>}
+        </section>
+        <aside className="broker-command-aside">
+          <section className="broker-command-next">
+            <span>Siguiente acción sugerida</span>
+            {primaryRecommendation ? <><h3>{primaryRecommendation.title}</h3><p>{primaryRecommendation.detail}</p><Link className="primary-btn" href={brokerRecommendationHref(primaryRecommendation)}>{primaryRecommendation.requiresApproval ? "Revisar y confirmar" : "Abrir operación"}</Link></> : <><h3>Sin bloqueos prioritarios</h3><p>La lectura operativa no detectó una acción inmediata dentro de tu alcance.</p></>}
+          </section>
+          <section className="broker-command-rules">
+            <span>Reglas internas</span><h3>Controles activos</h3>
+            <ul>
+              <li><b>Documentos por revisar</b><small>{operationalCenter?.documentsPending ?? 0} pendiente(s) en la cartera</small></li>
+              <li><b>Pagos o cobros por revisar</b><small>{operationalCenter?.collectionsPending ?? 0} pendiente(s) de validación</small></li>
+              <li><b>Revisiones IA pendientes</b><small>{operationalCenter?.aiApprovalsPending ?? 0} requiere(n) criterio humano</small></li>
+            </ul>
+          </section>
+        </aside>
       </section>
+      <section className="broker-operations-support" aria-label="Contexto de cartera">
       <section className="broker-expedient-panel" aria-label="Expediente por propiedad">
         <div className="broker-list-heading"><span>Expediente digital</span><h2>Revisa una propiedad completa</h2><p>Consulta documentos, contratos, mantenciones, postventa y antecedentes sin cambiar de pantalla.</p></div>
         <div className="broker-expedient-controls"><select value={selectedPropertyId} onChange={(event) => setSelectedPropertyId(event.target.value)}><option value="">Selecciona una propiedad</option>{properties.map((property) => <option key={property.id} value={property.id}>{property.title}</option>)}</select><button type="button" className="primary-btn" disabled={busy || !selectedPropertyId} onClick={openExpedient}>Abrir expediente</button></div>
@@ -1421,8 +1460,13 @@ export function BrokerOperationsPageContent() {
         <article><span>Salud de cartera</span><b>{reporting.portfolioHealth}%</b><small>{reporting.propertiesReady} propiedades listas para operar</small></article>
         <article><span>Aprendizajes IA</span><b>{reporting.aiEvaluations.confirmed}/{reporting.aiEvaluations.total}</b><small>Confirmados por el equipo</small></article>
       </section> : null}
-      <section className="broker-os-grid">
-      <form className="broker-os-form" onSubmit={createOperation}>
+      </section>
+      <section className="broker-operation-capture" aria-label="Crear nueva operación">
+        <header>
+          <div><span>Ingreso controlado</span><h2>Nueva operación</h2><p>Abre el formulario solo cuando corresponda iniciar una venta, arriendo o administración.</p></div>
+          {operationCaptureOpen ? <button type="button" className="secondary-btn" disabled={busy} onClick={() => setOperationCaptureOpen(false)}>Ocultar formulario</button> : null}
+        </header>
+        {operationCaptureOpen ? <form className="broker-os-form broker-operation-create-form" onSubmit={createOperation}>
         <span>Ingreso operativo</span><h2>Nueva operacion</h2><p>Selecciona el flujo correcto. EVOLUM no permite saltar etapas sensibles.</p>
         <div className="broker-type-picker">{(Object.keys(OPERATION_LABELS) as BrokerOperationType[]).map((type) => <button type="button" key={type} className={operationType === type ? "selected" : ""} onClick={() => setOperationType(type)}>{OPERATION_LABELS[type]}</button>)}</div>
         <label>Nombre de la operacion<input name="title" placeholder="Ej.: Venta departamento Providencia" required /></label>
@@ -1430,8 +1474,9 @@ export function BrokerOperationsPageContent() {
         <label>Cliente o contraparte<input name="clientName" placeholder="Nombre, empresa o interesado" /></label>
         <label>Nota inicial<textarea name="notes" placeholder="Antecedentes, objetivo o acuerdo inicial" rows={3} /></label>
         <button className="primary-btn" disabled={busy || !canWriteTab}>Crear operacion de {OPERATION_LABELS[operationType].toLowerCase()}</button>
-      </form>
-      <section className="broker-os-list"><div className="broker-list-heading"><span>Seguimiento</span><h2>Operaciones activas</h2><p>Avanza una etapa por vez y conserva una trazabilidad real.</p></div>
+        </form> : <p className="broker-operation-capture-hint">El ingreso queda separado del tablero para que la cartera y las prioridades mantengan una lectura clara.</p>}
+      </section>
+      <section className="broker-os-list broker-operation-list"><div className="broker-list-heading"><span>Seguimiento</span><h2>Operaciones activas</h2><p>Avanza una etapa por vez y conserva una trazabilidad real.</p></div>
         {propertyFilter ? <p role="status">Negocios de la propiedad seleccionada. <a href="/realty?view=broker_os&tab=operations">Ver todos los negocios</a></p> : null}
         {visibleOperations.length === 0 ? <p className="broker-empty">No hay operaciones en esta consulta. Crea la primera para iniciar el flujo comercial.</p> : visibleOperations.map((operation) => {
           const stages = catalog?.operationStages[operation.data.operationType] || [];
@@ -1451,7 +1496,6 @@ export function BrokerOperationsPageContent() {
             </form>
           </article>;
         })}
-      </section>
       </section>
       {saleWorkspace ? <section className="broker-sale-case-panel" aria-label="Expediente completo de venta">
         <BrokerJourneySummary operation={saleWorkspace.operation} catalog={catalog?.journey} tracker />

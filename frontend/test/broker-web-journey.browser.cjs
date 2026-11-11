@@ -141,11 +141,35 @@ const frontendUrl=(process.env.BROKER_WEB_URL||'http://localhost:3001').replace(
         }
         role='LECTURA';
         await page.goto(`${frontendUrl}/realty?view=broker_os&tab=operations`);
-        const brokerAreas = page.locator('nav.broker-os-tabs');
-        await brokerAreas.waitFor();
-        assert.equal(await brokerAreas.count(), 1, 'El centro operativo debe conservar una única navegación de áreas.');
-        assert.equal(await brokerAreas.getAttribute('aria-label'), 'Áreas de Broker OS');
+        assert.equal(await page.locator('nav.broker-os-tabs').count(), 0, 'Las áreas de Broker se navegan desde el menú EV y no se duplican dentro del workspace.');
+        const brokerMenuItem = page.locator('aside.evolum-unified-nav a[href="/realty?view=broker_os&tab=operations"]');
+        await brokerMenuItem.waitFor();
+        assert.equal(await brokerMenuItem.count(), 1, 'El centro operativo debe conservar una única entrada en el menú EV.');
+        const openWorkspaceLayout = await page.evaluate(() => {
+          const sidebar = document.querySelector('aside.evolum-unified-nav')?.getBoundingClientRect();
+          const workspace = document.querySelector('main.realty-page.realty-workspace')?.getBoundingClientRect();
+          return {
+            scrollX: window.scrollX,
+            sidebar: sidebar ? { left: sidebar.left, right: sidebar.right, width: sidebar.width } : null,
+            workspace: workspace ? { left: workspace.left, right: workspace.right, width: workspace.width } : null,
+            viewport: window.innerWidth
+          };
+        });
+        assert.equal(openWorkspaceLayout.scrollX, 0, 'El workspace no debe abrir con desplazamiento horizontal heredado.');
+        assert.ok(openWorkspaceLayout.sidebar && openWorkspaceLayout.sidebar.left <= 1 && openWorkspaceLayout.sidebar.width >= 280, 'El menú EV abierto debe permanecer completamente visible.');
+        assert.ok(openWorkspaceLayout.workspace && openWorkspaceLayout.workspace.left >= 280 && openWorkspaceLayout.workspace.right <= openWorkspaceLayout.viewport + 1, 'El contenido Broker debe ocupar únicamente el espacio disponible junto al menú EV.');
         await page.screenshot({path:path.join(output,`${destination}-broker-operaciones.png`)});
+        // Al contraer el menú no queda un rail para la antigua burbuja: el
+        // workspace debe recuperar el ancho completo en escritorio.
+        await page.getByRole('button',{name:'Contraer menú EVOLUM',exact:true}).click();
+        await page.waitForFunction(() => !document.querySelector('aside.evolum-unified-nav'));
+        assert.equal(await page.locator('.evolum-menu-bubble').count(), 0, 'La burbuja retirada no debe volver a renderizarse.');
+        const collapsedWorkspace = await page.locator('main.realty-page.realty-workspace').evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return { left: bounds.left, width: bounds.width, viewport: window.innerWidth };
+        });
+        assert.ok(collapsedWorkspace.left <= 1 && collapsedWorkspace.width >= collapsedWorkspace.viewport - 2, 'El menú contraído no debe reservar una columna lateral vacía.');
+        await page.screenshot({path:path.join(output,`${destination}-menu-contraido.png`)});
         await receipt.waitFor();
         const advance=page.getByRole('button',{name:/^Avanzar a /}).first();assert.equal(await advance.isDisabled(),true);
         if(destination!=='ADMINISTRACION') {

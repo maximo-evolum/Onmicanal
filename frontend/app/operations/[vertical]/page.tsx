@@ -164,7 +164,7 @@ export default function VerticalOperationsPage() {
     <EvolumSidebar active={profile.title} isDeveloper={session?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
     <main className="vertical-page industry-service-page operations-page">
       <ModuleGate moduleKey={profile.module}>
-        <header className="vertical-hero service-hero operations-hero"><div><span>{profile.eyebrow}</span><h1>{profile.title}</h1><p>{profile.summary}</p></div><div className="vertical-hero-stats"><article><strong>{totalRecords}</strong><span>registros operativos</span></article><article><strong>{entity?.fields.length || 0}</strong><span>datos por ficha</span></article></div></header>
+        <header className="vertical-hero service-hero operations-hero model-a-page-header"><div><span>{profile.eyebrow}</span><h1>{profile.title}</h1><p>{profile.summary}</p></div><div className="vertical-hero-stats model-a-executive-kpis"><article><strong>{totalRecords}</strong><span>registros operativos</span></article><article><strong>{entity?.fields.length || 0}</strong><span>datos por ficha</span></article></div></header>
         <DataManagementWorkspace
           className="operations-data-workspace"
           eyebrow="NUEVO REGISTRO"

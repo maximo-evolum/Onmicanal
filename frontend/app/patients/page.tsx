@@ -70,7 +70,7 @@ export default function PatientsPage() {
     <div className={`executive-shell vertical-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar active="Pacientes" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
       <main className="vertical-page industry-service-page">
-        <header className="vertical-hero service-hero"><div><span>{copy.eyebrow}</span><h1>{copy.title}</h1><p>{copy.subtitle}</p></div><div className="vertical-hero-stats"><article><strong>{active.length}</strong><span>Pacientes activos</span></article><article><strong>{active.filter((item) => item.status === "PENDING").length}</strong><span>Pendientes</span></article></div></header>
+        <header className="vertical-hero service-hero model-a-page-header"><div><span>{copy.eyebrow}</span><h1>{copy.title}</h1><p>{copy.subtitle}</p></div><div className="vertical-hero-stats model-a-executive-kpis"><article><strong>{active.length}</strong><span>Pacientes activos</span></article><article><strong>{active.filter((item) => item.status === "PENDING").length}</strong><span>Pendientes</span></article></div></header>
         {error ? <div className="sales-queue-error">{error}</div> : null}
         <DataManagementWorkspace
           eyebrow="NUEVA FICHA"

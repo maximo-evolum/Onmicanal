@@ -1123,7 +1123,7 @@ export default function AdminPage() {
       <EvolumSidebar active="Desarrollador" isDeveloper isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
       <main className="main dashboard-page admin-page">
 
-        <header className="module-app-header admin-module-header">
+        <header className="module-app-header admin-module-header model-a-page-header">
           <div>
             <span className="eyebrow">Control Center</span>
             <h1>Vista desarrollador</h1>

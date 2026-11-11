@@ -103,7 +103,7 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     await root.getByRole('button',{name:'Registrar nota',exact:true}).click();
     await root.getByRole('button',{name:'Avanzar a Negociación de mandato',exact:true}).click();
     await root.getByRole('heading',{name:'Tasación preliminar',exact:true}).scrollIntoViewIfNeeded();
-    assert.equal(await page.locator('.evolum-sidebar-context').count(),1,'El menú debe identificar el espacio activo sin duplicar la vertical');
+    assert.equal(await page.locator('.evolum-sidebar-context').count(),0,'El menú no debe repetir el contexto de la vertical dentro de su propia navegación.');
     await page.screenshot({path:path.join(out,'captacion-escritorio.png')});
     await root.getByRole('button',{name:'Registrar mandato firmado',exact:true}).click();
     await root.getByLabel('Fecha de firma',{exact:true}).fill('2026-01-01');

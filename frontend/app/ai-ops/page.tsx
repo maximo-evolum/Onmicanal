@@ -73,7 +73,7 @@ export default function AiOpsPage() {
         onToggle={() => setSidebarOpen((value) => !value)}
       />
       <main className="main ai-ops-page">
-        <header className="module-app-header">
+        <header className="module-app-header model-a-page-header">
           <div>
             <span className="eyebrow">AI Ops / Cierres IA</span>
             <h1>Centro de inteligencia comercial</h1>

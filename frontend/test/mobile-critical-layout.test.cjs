@@ -40,5 +40,6 @@ test("el menú EV inicia cerrado en móvil y se abre como panel sin alterar el l
   assert.match(sidebar, /const \[mobileMenuOpen, setMobileMenuOpen\] = useState\(false\)/);
   assert.match(sidebar, /const navigationOpen = isMobileViewport \? mobileMenuOpen : isOpen/);
   assert.match(sidebar, /if \(isMobileViewport\) \{/);
-  assert.match(sidebar, /if \(!navigationOpen\) \{/);
+  assert.match(sidebar, /if \(!navigationOpen\) return <>\{workspaceChrome\}<\/>/);
+  assert.doesNotMatch(sidebar, /className="evolum-menu-bubble"/);
 });

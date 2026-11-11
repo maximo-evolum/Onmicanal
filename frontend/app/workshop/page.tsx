@@ -223,7 +223,7 @@ export default function WorkshopPage() {
       <div className={`executive-shell vertical-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active="Dueños y vehículos" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
         <main className="vertical-page">
-          <header className="vertical-hero automotive">
+          <header className="vertical-hero automotive model-a-page-header">
             <div>
               <span>Rubro automotriz</span>
               <h1>Dueños, vehículos y taller</h1>

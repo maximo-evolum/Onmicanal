@@ -10,7 +10,6 @@ import { getStoredSession, LogoutButton } from "@/lib/auth";
 import { moduleAllowed, type ModuleAccessKey } from "@/lib/module-access";
 import { getVerticalProduct, type VerticalProductCode } from "@/lib/vertical-products";
 import { getStoredTenantAccess, storeTenantAccess } from "@/lib/session-access";
-import { NotificationCenter } from "@/components/notification-center";
 import { EvolumWorkspaceChrome, type EvolumWorkspaceShortcut } from "@/components/evolum-workspace-chrome";
 
 type EvolumSidebarProps = {
@@ -53,11 +52,12 @@ const baseItems: SidebarItem[] = [
   ["Dashboard", "/dashboard", "Metricas operativas", "DA", "dashboard"],
   ["AI Ops / Cierres IA", "/ai-ops", "Razonamiento, cierres y alertas IA", "AI", "ai_ops"],
   ["Control de IA", "/settings/ai", "Define qué puede hacer la IA y cuándo pedir ayuda", "GI", "ai_ops"],
-  // Inmobiliaria es un producto aislado, pero sus áreas se navegan desde el
-  // menú EV. Así no se duplican pestañas dentro del workspace ni se ocultan
-  // funciones importantes al corredor.
+  // Broker OS es un producto aislado. Sus áreas se navegan exclusivamente
+  // desde el menú EV: el workspace no replica esta lista como pestañas.
   ["Resumen Broker", "/realty", "Centro de control de la cartera", "RE", "properties"],
-  ["Operaciones Broker", "/realty?view=broker_os", "Ventas, arriendos, expedientes y postventa", "BO", "properties"],
+  ["Centro operativo", "/realty?view=broker_os&tab=operations", "Prioridades, expedientes y próximos pasos", "BO", "properties"],
+  ["Dashboard ejecutivo", "/realty?view=broker_os&tab=executive_dashboard", "Indicadores y decisiones de cartera", "BD", "properties"],
+  ["Tracker de operación", "/realty?view=broker_os&tab=operation_tracker", "Seguimiento de hitos y operaciones", "BT", "properties"],
   ["Captación e importación", "/realty?view=operations", "Carga manual e importación de propiedades", "RC", "realty_loads"],
   ["Propiedades", "/realty?view=properties", "Inventario, fichas y publicación", "RP", "properties"],
   ["Propietarios y cartera", "/realty?view=owners", "Cartera patrimonial, vencimientos y seguimiento interno", "PO", "properties"],
@@ -67,6 +67,28 @@ const baseItems: SidebarItem[] = [
   ["Publicador multicanal", "/realty?view=publications", "Borradores, aprobación y trazabilidad por portal", "PU", "broker_portal"],
   ["Compradores y matching", "/realty?view=buyers", "Perfiles compradores y compatibilidades", "RL", "realty_clients"],
   ["Equipo y formación", "/realty?view=training", "Formación y progreso comercial", "RT", "brokers"],
+  ["Comercial y cierre", "/realty?view=broker_os&area=commercial", "Tasaciones, mandatos, ofertas y cierres", "BC", "properties"],
+  ["Arriendos y administración", "/realty?view=broker_os&area=rentals", "Postulaciones, contratos, cobros y liquidaciones", "BR", "properties"],
+  ["Expediente y documentos", "/realty?view=broker_os&area=documents", "Antecedentes, vigencias y trazabilidad por propiedad", "BE", "properties"],
+  ["Financiamiento", "/realty?view=broker_os&area=financing", "Créditos, hitos y condiciones de cierre", "BF", "properties"],
+  ["Postventa y garantías", "/realty?view=broker_os&area=post_sale", "Entregas, incidencias y garantías", "BP", "properties"],
+  ["Mantención y proveedores", "/realty?view=broker_os&area=maintenance", "Tickets, cotizaciones, compras y proveedores", "BM", "properties"],
+  ["Proyectos y publicación", "/realty?view=broker_os&area=projects", "Remodelaciones, hitos y publicaciones", "BJ", "properties"],
+  ["Comisiones", "/realty?view=broker_os&tab=commissions", "Proyecciones, liquidaciones y controles", "CO", "properties"],
+  ["Liquidación mensual", "/realty?view=broker_os&tab=administration_preview", "Administración recurrente de arriendos", "LM", "properties"],
+  ["Finanzas operativas", "/realty?view=broker_os&tab=financial_operations", "Cobranza, pagos y saldo operacional", "FO", "properties"],
+  ["Marketing, agenda y chats", "/realty?view=broker_os&tab=commercial_hub", "Campañas, agenda y conversaciones comerciales", "MC", "properties"],
+  ["AI Ops", "/realty?view=broker_os&tab=ai_ops", "Prioridades y análisis asistido", "AI", "properties"],
+  ["Gobierno IA", "/realty?view=broker_os&tab=ai_governance", "Reglas, límites y simulaciones", "IG", "properties"],
+  ["Gestión de casos", "/realty?view=broker_os&tab=case_management", "Casos que requieren seguimiento humano", "GC", "properties"],
+  ["Agentes IA", "/realty?view=broker_os&tab=agents", "Capacidades, límites y responsables", "IA", "properties"],
+  ["Entrenamiento IA", "/realty?view=broker_os&tab=training", "Escenarios y aprendizajes del equipo", "TI", "properties"],
+  ["Parámetros", "/realty?view=broker_os&tab=configuration", "Reglas operativas de Broker OS", "PR", "properties"],
+  ["Roles y accesos", "/realty?view=broker_os&tab=access", "Perfiles, alcance y equipos", "AC", "properties"],
+  ["Cuenta y equipo", "/realty?view=broker_os&tab=account", "Datos de cuenta y configuración del equipo", "CE", "properties"],
+  ["Gobierno y alertas", "/realty?view=broker_os&tab=governance", "Alertas, bitácora y controles", "GA", "properties"],
+  ["Cumplimiento", "/realty?view=broker_os&tab=compliance", "Dependencias, consentimientos y preparación externa", "CU", "properties"],
+  ["Guías operativas", "/realty?view=broker_os&tab=guides", "Procedimientos y material de apoyo", "GU", "properties"],
   // Pacientes y exámenes son rutas de compatibilidad para datos antiguos.
   // Las nuevas fichas, órdenes y presupuestos se administran exclusivamente
   // dentro de Atención clínica, dental o veterinaria.
@@ -128,7 +150,8 @@ const financeGatewayModules: ModuleAccessKey[] = [
 const moduleSymbols: Record<string, string> = {
   IN: "⌂", CH: "◌", AG: "◷", PI: "↗", CA: "✦", PA: "▣", CX: "⌁",
   CG: "⚙", FW: "⇄", MD: "▤", PM: "◫", DA: "▥", AI: "✧", GI: "◈",
-  RE: "⌂", RC: "⇧", RP: "⌂", RB: "♙", RA: "◴", RO: "◈", PU: "◫", RL: "◌", RT: "✦",
+  RE: "⌂", BO: "▦", BD: "▥", BT: "◫", RC: "⇧", RP: "⌂", PO: "◒", RB: "♙", RA: "◴", RO: "◈", PU: "◫", RL: "◌", RT: "✦",
+  BC: "↗", BR: "⌂", BE: "▤", BF: "$", BP: "✓", BM: "⌁", BJ: "✦", CO: "%", LM: "▣", FO: "$", MC: "◌", IG: "◈", GC: "□", IA: "✧", TI: "✦", PR: "⚙", AC: "◫", CE: "◉", GA: "⚑", CU: "✓", GU: "?",
   DV: "▱", TU: "◷", DE: "▦", BL: "⚗"
 };
 
@@ -187,10 +210,13 @@ function currentVerticalLabel(industry?: string | null, product?: ReturnType<typ
 
 function brokerNavigationSection(item: SidebarItem) {
   const [, href] = item;
-  if (href === "/realty" || href.includes("view=properties") || href.includes("view=operations") || href.includes("view=buyers") || href.includes("view=owners")) return "Cartera";
-  if (href.includes("view=broker_os") || href.includes("view=activity")) return "Operación";
-  if (href.includes("view=portal") || href.includes("view=publications")) return "Comercial";
-  if (href.includes("view=brokers") || href.includes("view=training")) return "Equipo";
+  if (href === "/realty" || href.includes("view=properties") || href.includes("view=operations") || href.includes("view=buyers") || href.includes("view=owners")) return "Cartera y captación";
+  if (href.includes("tab=operations") || href.includes("tab=executive_dashboard") || href.includes("tab=operation_tracker") || href.includes("view=activity")) return "Centro operativo";
+  if (href.includes("area=commercial") || href.includes("area=rentals") || href.includes("area=documents") || href.includes("area=financing") || href.includes("area=post_sale")) return "Negocios y expediente";
+  if (href.includes("area=maintenance") || href.includes("area=projects") || href.includes("view=portal") || href.includes("view=publications")) return "Activos y publicación";
+  if (href.includes("tab=commissions") || href.includes("tab=administration_preview") || href.includes("tab=financial_operations") || href.includes("tab=commercial_hub")) return "Gestión y finanzas";
+  if (href.includes("tab=ai_") || href.includes("tab=case_management") || href.includes("tab=agents") || href.includes("tab=configuration") || href.includes("tab=access") || href.includes("tab=account") || href.includes("tab=governance") || href.includes("tab=compliance") || href.includes("tab=guides")) return "Inteligencia y gobierno";
+  if (href.includes("view=brokers") || href.includes("view=training") || href.includes("tab=training")) return "Equipo";
   return "Broker OS";
 }
 
@@ -198,16 +224,40 @@ function brokerNavigationOrder(item: SidebarItem) {
   const [, href] = item;
   const order = [
     "/realty",
-    "/realty?view=properties",
     "/realty?view=operations",
+    "/realty?view=properties",
     "/realty?view=owners",
     "/realty?view=buyers",
-    "/realty?view=broker_os",
+    "/realty?view=broker_os&tab=operations",
+    "/realty?view=broker_os&tab=executive_dashboard",
+    "/realty?view=broker_os&tab=operation_tracker",
     "/realty?view=activity",
+    "/realty?view=broker_os&area=commercial",
+    "/realty?view=broker_os&area=rentals",
+    "/realty?view=broker_os&area=documents",
+    "/realty?view=broker_os&area=financing",
+    "/realty?view=broker_os&area=post_sale",
+    "/realty?view=broker_os&area=maintenance",
+    "/realty?view=broker_os&area=projects",
     "/realty?view=portal",
     "/realty?view=publications",
+    "/realty?view=broker_os&tab=commissions",
+    "/realty?view=broker_os&tab=administration_preview",
+    "/realty?view=broker_os&tab=financial_operations",
+    "/realty?view=broker_os&tab=commercial_hub",
     "/realty?view=brokers",
-    "/realty?view=training"
+    "/realty?view=training",
+    "/realty?view=broker_os&tab=ai_ops",
+    "/realty?view=broker_os&tab=ai_governance",
+    "/realty?view=broker_os&tab=case_management",
+    "/realty?view=broker_os&tab=agents",
+    "/realty?view=broker_os&tab=training",
+    "/realty?view=broker_os&tab=configuration",
+    "/realty?view=broker_os&tab=access",
+    "/realty?view=broker_os&tab=account",
+    "/realty?view=broker_os&tab=governance",
+    "/realty?view=broker_os&tab=compliance",
+    "/realty?view=broker_os&tab=guides"
   ];
   const index = order.indexOf(href);
   return index === -1 ? order.length : index;
@@ -225,7 +275,11 @@ function itemIsActive(
     const [key, value = ""] = entry.split("=");
     return currentSearchParams.get(key) === value;
   });
-  if (targetPath === "/realty") return label === active;
+  if (targetPath === "/realty") {
+    return targetQuery
+      ? pathname === targetPath && queryMatches
+      : pathname === targetPath && !currentSearchParams.get("view");
+  }
   if (targetPath === "/finance") {
     return targetQuery
       ? pathname === targetPath && queryMatches
@@ -288,7 +342,7 @@ function itemBelongsToIndustry(item: SidebarItem, industry?: string | null) {
   return true;
 }
 
-export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotificationCenter = false }: EvolumSidebarProps) {
+export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumSidebarProps) {
   // No leer localStorage durante el primer render. El servidor no tiene
   // sesión, pero el navegador sí; usarla aquí generaba un menú distinto antes
   // de hidratar y disparaba el error minificado React #418.
@@ -550,20 +604,9 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
     shortcuts={workspaceShortcuts}
   />;
 
-  if (!navigationOpen) {
-    return (
-      <>
-        {workspaceChrome}
-        <div className="evolum-menu-rail-actions" aria-label="Controles del menú EVOLUM">
-          <button className="evolum-menu-bubble" type="button" onClick={toggleMenu} aria-label="Abrir menu EVOLUM">
-            <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt={brandLabel} />
-          </button>
-          {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
-          <LogoutButton compact />
-        </div>
-      </>
-    );
-  }
+  // La barra superior conserva el único control para abrir el menú. No se
+  // deja un rail ni una burbuja flotante que resten ancho al workspace.
+  if (!navigationOpen) return <>{workspaceChrome}</>;
 
   return (
     <>
@@ -574,17 +617,6 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper, showNotif
           <img className="evolum-brand-logo" src="/brand/evolum-logo.png" alt={brandLabel} />
           <strong className="evolum-sidebar-brand-label">{brandLabel}</strong>
         </div>
-        <div className="inbox-nav-head-actions">
-          {showNotificationCenter ? <NotificationCenter placement="sidebar" /> : null}
-        <button className="inbox-nav-toggle" type="button" onClick={toggleMenu} aria-label="Cerrar menu">
-          ×
-        </button>
-        </div>
-      </div>
-
-      <div className="evolum-sidebar-context" aria-label={`Espacio activo: ${brandLabel}`}>
-        <span>Espacio activo</span>
-        <strong>{brandLabel}</strong>
       </div>
 
       <nav className="inbox-unified-nav-list evolum-nav-groups" ref={navRef} onScroll={saveMenuPosition} aria-busy={!menuReady} aria-label="Navegación principal">

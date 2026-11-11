@@ -634,7 +634,7 @@ export default function CrmPrincipalPage() {
       />
 
       <section className="crm-main-workspace">
-        <header className="crm-main-header">
+        <header className="crm-main-header model-a-page-header">
           <div>
             <span className="crm-main-kicker">{isDeveloper ? "Desarrollador / EVOLUM OS" : "CRM principal / EVOLUM OS"}</span>
             <h1>Hola, {currentSession?.name || "Usuario"}</h1>

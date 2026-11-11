@@ -60,15 +60,10 @@ export function EvolumWorkspaceChrome({
   }, []);
 
   const normalizedQuery = query.trim().toLocaleLowerCase("es");
-  const activeShortcut = shortcuts.find((item) => item.active) || shortcuts.find((item) => item.label === activeLabel);
-  const activeGroup = activeShortcut?.group || shortcuts[0]?.group || "Módulos";
-  const contextItems = shortcuts.filter((item) => item.group === activeGroup).slice(0, 6);
   const matches = useMemo(() => {
     if (!normalizedQuery) return shortcuts.slice(0, 8);
     return shortcuts.filter((item) => `${item.label} ${item.description} ${item.group}`.toLocaleLowerCase("es").includes(normalizedQuery)).slice(0, 8);
   }, [normalizedQuery, shortcuts]);
-
-  const selectedHref = activeShortcut?.href || shortcuts[0]?.href || "";
 
   return (
     <header className={`evolum-workspace-chrome ${menuOpen ? "is-menu-open" : "is-menu-collapsed"}`} aria-label="Barra de trabajo EVOLUM">
@@ -125,13 +120,6 @@ export function EvolumWorkspaceChrome({
           ) : null}
         </label>
 
-        <label className="evolum-workspace-module-select">
-          <span className="sr-only">Cambiar módulo</span>
-          <select value={selectedHref} onChange={(event) => router.push(event.target.value)} aria-label="Cambiar módulo">
-            {shortcuts.map((item) => <option key={`${item.group}-${item.href}`} value={item.href}>{item.group} · {item.label}</option>)}
-          </select>
-        </label>
-
         <div className="evolum-workspace-actions">
           <NotificationCenter placement="header" />
           <span className="evolum-workspace-mobile-logout">
@@ -141,11 +129,6 @@ export function EvolumWorkspaceChrome({
         </div>
       </div>
 
-      {contextItems.length > 1 ? (
-        <nav className="evolum-workspace-context-tabs" aria-label={`Vistas de ${activeGroup}`}>
-          {contextItems.map((item) => <Link key={item.href} className={item.active ? "active" : ""} href={item.href}>{item.label}</Link>)}
-        </nav>
-      ) : null}
     </header>
   );
 }

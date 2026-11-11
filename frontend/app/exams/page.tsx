@@ -69,7 +69,7 @@ export default function ExamsPage() {
       <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active="Exámenes y presupuestos" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
         <main className="main dashboard-page exams-page">
-          <header className="module-app-header">
+          <header className="module-app-header model-a-page-header">
             <div>
               <span className="eyebrow">Atención clínica</span>
               <h1>Exámenes y presupuestos</h1>

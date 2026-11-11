@@ -42,7 +42,7 @@ const views = {
   publications: { label: "Publicador multicanal", module: "broker_portal", content: BrokerPublicationsPageContent },
   buyers: { label: "Compradores y matching", module: "realty_clients", content: RealtyBuyersPageContent },
   training: { label: "Equipo y formación", module: "brokers", content: BrokerTrainingPageContent },
-  broker_os: { label: "Operaciones Broker", module: "properties", content: BrokerOperationsPageContent }
+  broker_os: { label: "Centro operativo", module: "properties", content: BrokerOperationsPageContent }
 } as const;
 
 type RealtyView = keyof typeof views;

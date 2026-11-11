@@ -336,7 +336,7 @@ export default function CampaignsPage() {
         onToggle={() => setSidebarOpen((value) => !value)}
       />
       <main className="main">
-        <header className="module-app-header">
+        <header className="module-app-header model-a-page-header">
           <div>
             <span className="eyebrow">Marketing IA</span>
             <h1>Campañas IA</h1>

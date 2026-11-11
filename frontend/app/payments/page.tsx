@@ -108,7 +108,7 @@ export default function PaymentsPage() {
         onToggle={() => setSidebarOpen((value) => !value)}
       />
       <main className="main dashboard-page payments-page">
-        <header className="module-app-header">
+        <header className="module-app-header model-a-page-header">
           <div>
             <span className="eyebrow">Portal de pagos</span>
             <h1>Pagos, links y reservas</h1>

@@ -118,7 +118,7 @@ export default function PipelinePage() {
       />
 
       <main className="pipeline-pro-main">
-        <header className="pipeline-pro-topbar pipeline-pro-header-main">
+        <header className="pipeline-pro-topbar pipeline-pro-header-main model-a-page-header">
           <div>
             <span className="meta-line">CRM / Pipeline</span>
             <h1>Pipeline</h1>
@@ -135,7 +135,7 @@ export default function PipelinePage() {
 
         {error ? <div className="sales-queue-error">{error}</div> : null}
 
-        <section className="pipeline-month-summary">
+        <section className="pipeline-month-summary model-a-executive-kpis">
           <div>
             <span>Resumen del mes</span>
             <strong>{money(stats.totalValue)}</strong>

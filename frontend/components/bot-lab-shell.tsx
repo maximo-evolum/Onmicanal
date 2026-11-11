@@ -171,7 +171,7 @@ export function BotLabShell() {
         onToggle={() => setSidebarOpen((value) => !value)}
       />
       <main className="bot-lab-module-main">
-        <header className="module-app-header bot-lab-module-header">
+        <header className="module-app-header bot-lab-module-header model-a-page-header">
           <div>
             <p>BOT LAB</p>
             <h1>Laboratorio de agentes</h1>

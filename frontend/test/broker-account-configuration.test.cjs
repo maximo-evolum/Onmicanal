@@ -14,6 +14,7 @@ const { canBrokerTab } = compiled.exports;
 const api = fs.readFileSync(path.join(root, "lib", "api.ts"), "utf8");
 const panel = fs.readFileSync(path.join(root, "components", "broker-account-configuration.tsx"), "utf8");
 const workspace = fs.readFileSync(path.join(root, "components", "broker-operations-workspace.tsx"), "utf8");
+const sidebar = fs.readFileSync(path.join(root, "components", "evolum-sidebar.tsx"), "utf8");
 
 const admin = { technicalRole: "ADMIN", policy: { actions: { access: ["VIEW", "CONFIGURE"] } } };
 const broker = { technicalRole: "AGENT", policy: { actions: { operations: ["VIEW"], commercial: ["VIEW"] } } };
@@ -27,7 +28,7 @@ test("La interfaz usa rutas auditables para perfiles, carga y baja segura", () =
   for (const token of ["/broker/account", "/broker/access/workload", "/broker/access/profiles", "/broker/access/users/${encodeURIComponent(userId)}/status", "/broker/access/assignments/balanced"]) assert.match(api, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   for (const token of ["crear una configuración restrictiva", "Desactivar cuenta", "Asignar con carga balanceada", "Deshabilitar no borra", "externalReadiness"]) assert.match(panel, new RegExp(token, "i"));
   assert.match(workspace, /BrokerAccountConfigurationPanel/);
-  assert.match(workspace, /\["account", "Cuenta y equipo"\]/);
+  assert.match(sidebar, /\["Cuenta y equipo", "\/realty\?view=broker_os&tab=account"/);
 });
 
 test("Cuenta y equipo comunica carga, error recuperable y foco visible", () => {

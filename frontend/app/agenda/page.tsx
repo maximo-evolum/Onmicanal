@@ -398,7 +398,7 @@ export default function AgendaPage() {
         onToggle={() => setSidebarOpen((value) => !value)}
       />
       <main className="main dashboard-page">
-        <header className="agenda-app-header">
+        <header className="agenda-app-header model-a-page-header">
           <div>
             <h1>Agenda EVOLUM</h1>
             <div className="meta-line">{mode.note}</div>
