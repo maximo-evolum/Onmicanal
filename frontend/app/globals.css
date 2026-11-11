@@ -21269,6 +21269,21 @@ body {
 }
 
 @media (min-width: 981px) {
+  /* Todos los shells no verticales usan una barra lateral fija de 304px. Sin
+     este offset explícito CRM conservaba el valor histórico de 252px y el
+     botón de apertura quedaba parcialmente debajo del menú. */
+  :root[data-ui-layout="model-a"] :is(
+    .module-with-menu-shell,
+    .executive-shell,
+    .pipeline-pro-shell,
+    .workflow-shell,
+    .inbox-unified-shell,
+    .finance-shell,
+    .crm-main
+  ) > .evolum-workspace-chrome.is-menu-open {
+    left: 304px !important;
+  }
+
   /* Ningún workspace conserva una franja para la burbuja retirada. El mismo
      encabezado sirve a CRM, Core, Broker, Finanzas y las páginas verticales. */
   :root[data-ui-layout="model-a"] .evolum-workspace-chrome.is-menu-collapsed {

@@ -68,6 +68,7 @@ test("Broker usa un único menú EV y el rail cerrado no conserva la burbuja ant
   assert.match(css, /\.module-with-menu-shell,/);
   assert.match(css, /\.crm-main\.nav-collapsed \.crm-main-workspace/);
   assert.match(css, /\.evolum-workspace-chrome\.is-menu-collapsed/);
+  assert.match(css, /\.crm-main\s*\)\s*>\s*\.evolum-workspace-chrome\.is-menu-open/);
 });
 
 test("el inicio no ofrece accesos de configuración que la cuenta no puede abrir", () => {
