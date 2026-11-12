@@ -3756,6 +3756,8 @@ export type TenantNotification = {
   severity?: "info" | "success" | "warning" | "critical" | string;
   targetUrl?: string | null;
   metadata?: Record<string, unknown>;
+  /** Ámbito calculado por API: CORE o la vertical que originó el aviso. */
+  scope?: string | null;
   createdAt: string;
   updatedAt: string;
 };

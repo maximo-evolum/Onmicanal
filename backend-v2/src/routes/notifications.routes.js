@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
 import { recordAuditLog } from "../lib/audit.js";
-import { createTenantNotification } from "../lib/notifications.js";
+import { createTenantNotification, notificationScopeFor, notificationVisibleForIndustry } from "../lib/notifications.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 
 export const notificationsRouter = Router();
@@ -17,6 +17,7 @@ function serializeNotification(record) {
     severity: record.data?.severity || "info",
     targetUrl: record.data?.targetUrl || null,
     metadata: record.data || {},
+    scope: notificationScopeFor(record),
     createdAt: record.createdAt,
     updatedAt: record.updatedAt
   };
@@ -27,6 +28,9 @@ notificationsRouter.get("/notifications", async (req, res) => {
     const status = req.query.status ? String(req.query.status).trim().toUpperCase() : null;
     const limit = Math.min(Number(req.query.limit || 50), 150);
 
+    // Se solicitan registros extra antes de aplicar el alcance vertical: un
+    // tenant con avisos heredados de otra vertical no debe entregar menos de
+    // `limit` avisos válidos por efecto del filtro.
     const records = await prisma.industryRecord.findMany({
       where: {
         tenantId: req.tenantId,
@@ -34,10 +38,14 @@ notificationsRouter.get("/notifications", async (req, res) => {
         ...(status ? { status } : {})
       },
       orderBy: { createdAt: "desc" },
-      take: limit
+      take: Math.min(Math.max(limit * 5, 60), 300)
     });
 
-    res.json({ notifications: records.map(serializeNotification) });
+    const notifications = records
+      .filter((record) => notificationVisibleForIndustry(record, req.tenant?.industry))
+      .slice(0, limit)
+      .map(serializeNotification);
+    res.json({ notifications });
   } catch (error) {
     console.error("Notifications list error:", error);
     res.status(500).json({ error: "No se pudieron cargar las notificaciones" });
@@ -91,6 +99,16 @@ notificationsRouter.post("/mobile/push-devices/unregister", async (req, res) => 
 
 notificationsRouter.post("/notifications", requireRole(ROLE_GROUPS.MANAGERS), async (req, res) => {
   try {
+    const candidate = {
+      title: req.body?.title,
+      body: req.body?.body,
+      targetUrl: req.body?.targetUrl,
+      metadata: req.body?.metadata || {}
+    };
+    if (!notificationVisibleForIndustry(candidate, req.tenant?.industry)) {
+      return res.status(400).json({ error: "La notificación pertenece a otra vertical y no puede crearse en esta cuenta" });
+    }
+
     const notification = await createTenantNotification({
       tenantId: req.tenantId,
       title: req.body?.title,
@@ -123,7 +141,9 @@ notificationsRouter.patch("/notifications/:id/read", async (req, res) => {
       where: { id: req.params.id, tenantId: req.tenantId, recordType: "notification" }
     });
 
-    if (!current) return res.status(404).json({ error: "Notificacion no encontrada" });
+    if (!current || !notificationVisibleForIndustry(current, req.tenant?.industry)) {
+      return res.status(404).json({ error: "Notificacion no encontrada" });
+    }
 
     const notification = await prisma.industryRecord.update({
       where: { id: current.id },
@@ -147,10 +167,16 @@ notificationsRouter.patch("/notifications/:id/read", async (req, res) => {
 
 notificationsRouter.patch("/notifications/read-all", async (req, res) => {
   try {
-    const result = await prisma.industryRecord.updateMany({
+    const unread = await prisma.industryRecord.findMany({
       where: { tenantId: req.tenantId, recordType: "notification", status: "UNREAD" },
-      data: { status: "READ" }
+      select: { id: true, title: true, data: true }
     });
+    const visibleIds = unread
+      .filter((record) => notificationVisibleForIndustry(record, req.tenant?.industry))
+      .map((record) => record.id);
+    const result = visibleIds.length
+      ? await prisma.industryRecord.updateMany({ where: { id: { in: visibleIds } }, data: { status: "READ" } })
+      : { count: 0 };
 
     await recordAuditLog(req, "NOTIFICATIONS_READ_ALL", "notification", null, {
       count: result.count

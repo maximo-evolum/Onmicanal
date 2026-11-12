@@ -1386,7 +1386,15 @@ financePublicRouter.post("/finance/floid/webhook", async (req, res) => {
     const consent = await findFloidConsent(caseId);
     if (!consent) return res.status(404).json({ error: "Consentimiento no encontrado o ya procesado." });
     const result = await importFloidMovements({ tenantId: consent.tenantId, consent, payload: req.body || {} });
-    if (!result.replay && (result.imported || result.requiresReview)) await createTenantNotification({ tenantId: consent.tenantId, type: "OPEN_BANKING_SYNC_READY", title: "Movimientos bancarios disponibles", body: `${result.imported} movimiento(s) de banca abierta quedaron listos para conciliación${result.requiresReview ? ` y ${result.requiresReview} requieren revisión` : ""}.`, href: "/finance?tab=cartolas" }).catch(() => null);
+    if (!result.replay && (result.imported || result.requiresReview)) {
+      await createTenantNotification({
+        tenantId: consent.tenantId,
+        title: "Movimientos bancarios disponibles",
+        body: `${result.imported} movimiento(s) de banca abierta quedaron listos para conciliación${result.requiresReview ? ` y ${result.requiresReview} requieren revisión` : ""}.`,
+        targetUrl: "/finance?tab=cartolas",
+        metadata: { notificationType: "finance", notificationScope: "FINANCE", screen: "finance", provider: "floid" }
+      }).catch(() => null);
+    }
     res.status(202).json({ ok: true, imported: result.imported, duplicates: result.duplicates, requiresReview: result.requiresReview });
   } catch (error) {
     console.error("Floid webhook error:", error);

@@ -70,6 +70,8 @@ export type EvolumNotification = {
   status: string;
   severity?: string | null;
   targetUrl?: string | null;
+  /** Ámbito validado por el servidor (CORE o vertical de origen). */
+  scope?: string | null;
   createdAt: string;
   updatedAt?: string;
 };

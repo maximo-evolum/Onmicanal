@@ -4,6 +4,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { getNotifications, markAllNotificationsRead, markNotificationRead, type TenantNotification } from "@/lib/api";
+import { getStoredSession } from "@/lib/auth";
+import { getStoredTenantAccess } from "@/lib/session-access";
 
 type NotificationCenterProps = { placement?: "header" | "sidebar" };
 
@@ -34,6 +36,30 @@ function notificationDateTime(value?: string | null) {
   }).format(date);
 }
 
+function normalized(value?: string | null) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function currentIndustry() {
+  const session = getStoredSession();
+  return normalized(getStoredTenantAccess(session)?.industry);
+}
+
+// Defensa adicional de interfaz: el API es quien aplica el aislamiento real,
+// pero una respuesta heredada o almacenada nunca debe mostrar Nubox/Finanzas
+// durante el breve lapso antes de que se actualice la sesión de Broker OS.
+function visibleInCurrentVertical(item: TenantNotification) {
+  const metadata = item.metadata || {};
+  const explicitScope = normalized(item.scope || String(metadata.notificationScope || metadata.vertical || ""));
+  const target = String(item.targetUrl || metadata.targetUrl || "").toLowerCase();
+  const legacyFinance = /\b(nubox|finanza|cartola|conciliaci[oó]n|cobranza|sii|dte|floid|defontana|softland)\b/i
+    .test([item.title, item.body, metadata.provider, metadata.screen, metadata.notificationType].filter(Boolean).join(" "));
+  const scope = target.startsWith("/finance") || legacyFinance ? "FINANCE" : explicitScope;
+  const industry = currentIndustry();
+  if (!scope || scope === "CORE") return true;
+  return scope === industry;
+}
+
 export function NotificationCenter({ placement = "header" }: NotificationCenterProps) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<TenantNotification[]>([]);
@@ -44,7 +70,7 @@ export function NotificationCenter({ placement = "header" }: NotificationCenterP
     setLoading(true);
     try {
       const result = await getNotifications({ limit: 12 });
-      setNotifications(result.notifications || []);
+      setNotifications((result.notifications || []).filter(visibleInCurrentVertical));
     } catch {
       setNotifications([]);
     } finally {
