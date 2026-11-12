@@ -352,6 +352,7 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   const [industry, setIndustry] = useState<string | null>(null);
   const [menuReady, setMenuReady] = useState(false);
   const [brokerAccess, setBrokerAccess] = useState<BrokerAccessProfile | null>(null);
+  const [brokerSessionKey, setBrokerSessionKey] = useState<string | null>(null);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -381,15 +382,23 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
   }, []);
 
   useEffect(() => {
-    if (!isRealtyIndustry(industry)) { setBrokerAccess(null); return; }
+    if (!isRealtyIndustry(industry) || !brokerSessionKey) { setBrokerAccess(null); return; }
     let active = true;
-    const refresh = () => getBrokerAccess().then(value => { if (active) setBrokerAccess(value); }).catch(() => { if (active) setBrokerAccess(null); });
+    const expectedSessionKey = brokerSessionKey;
+    const refresh = () => getBrokerAccess()
+      .then((value) => {
+        if (active && menuSessionKeyRef.current === expectedSessionKey) setBrokerAccess(value);
+      })
+      .catch(() => {
+        if (active && menuSessionKeyRef.current === expectedSessionKey) setBrokerAccess(null);
+      });
     refresh();
     window.addEventListener("focus", refresh);
     return () => { active = false; window.removeEventListener("focus", refresh); };
-  }, [industry]);
+  }, [industry, brokerSessionKey]);
   const [openGroupId, setOpenGroupId] = useState<NavigationGroup["id"] | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
+  const menuSessionKeyRef = useRef<string | null>(null);
   const pathname = usePathname();
   const brandLabel = useMemo(() => {
     const product = getVerticalProduct(industry);
@@ -407,39 +416,97 @@ export function EvolumSidebar({ active, isOpen, onToggle, isDeveloper }: EvolumS
 
   useEffect(() => {
     let mounted = true;
-    const session = getStoredSession();
-    const storedAccess = getStoredTenantAccess(session);
-    setRole(session?.role || null);
-    setJobTitle(session?.jobTitle || null);
-    if (storedAccess) {
-      setEnabledModules(storedAccess.modules);
-      setRole(storedAccess.role || session?.role || null);
-      setJobTitle(storedAccess.jobTitle || session?.jobTitle || null);
-      setIndustry(storedAccess.industry || null);
-      setMenuReady(true);
-      return () => { mounted = false; };
-    }
-    getMe()
-      .then((data) => {
-        if (!mounted) return;
-        setIndustry(data.tenant?.industry || null);
-        setRole(data.user.role || session?.role || null);
-        setJobTitle(data.user.jobTitle || session?.jobTitle || null);
-        setEnabledModules(data.modules || []);
-        storeTenantAccess({
-          userId: data.user.id,
-          tenantId: data.user.tenantId || null,
-          role: data.user.role || session?.role || null,
-          jobTitle: data.user.jobTitle || session?.jobTitle || null,
-          industry: data.tenant?.industry || null,
-          modules: data.modules || []
-        });
-        setMenuReady(true);
-      })
-      .catch(() => { if (mounted) { setEnabledModules([]); setMenuReady(true); } });
+    let requestVersion = 0;
 
+    const sessionKey = (session: ReturnType<typeof getStoredSession>) => (
+      session?.id ? `${session.id}:${session.tenantId || "default"}` : null
+    );
+    const applyAccess = (
+      session: ReturnType<typeof getStoredSession>,
+      access: NonNullable<ReturnType<typeof getStoredTenantAccess>>,
+    ) => {
+      if (!mounted) return;
+      setEnabledModules(access.modules || []);
+      setRole(access.role || session?.role || null);
+      setJobTitle(access.jobTitle || session?.jobTitle || null);
+      setIndustry(access.industry || null);
+      setMenuReady(true);
+    };
+
+    const refreshMenuForCurrentSession = () => {
+      const version = ++requestVersion;
+      const session = getStoredSession();
+      const currentKey = sessionKey(session);
+      menuSessionKeyRef.current = currentKey;
+      setBrokerSessionKey(currentKey);
+
+      // Se limpia antes de consultar el snapshot nuevo. Esto evita que la
+      // cuenta recién seleccionada alcance a renderizar módulos de la anterior.
+      setMenuReady(false);
+      setEnabledModules(null);
+      setRole(session?.role || null);
+      setJobTitle(session?.jobTitle || null);
+      setIndustry(null);
+      setBrokerAccess(null);
+      setOpenGroupId(null);
+
+      if (!session) {
+        setMenuReady(true);
+        return;
+      }
+
+      const storedAccess = getStoredTenantAccess(session);
+      if (storedAccess) applyAccess(session, storedAccess);
+
+      // El snapshot hace que el cambio sea inmediato; /auth/me lo confirma en
+      // segundo plano para reflejar módulos modificados por Desarrollador.
+      getMe()
+        .then((data) => {
+          if (!mounted || version !== requestVersion) return;
+          const activeSession = getStoredSession();
+          if (sessionKey(activeSession) !== currentKey || data.user.id !== session.id || (data.user.tenantId || null) !== (session.tenantId || null)) return;
+          const nextAccess = {
+            userId: data.user.id,
+            tenantId: data.user.tenantId || null,
+            role: data.user.role || session.role || null,
+            jobTitle: data.user.jobTitle || session.jobTitle || null,
+            industry: data.tenant?.industry || null,
+            modules: data.modules || []
+          };
+          storeTenantAccess(nextAccess);
+          applyAccess(activeSession, nextAccess);
+        })
+        .catch(() => {
+          if (!mounted || version !== requestVersion || sessionKey(getStoredSession()) !== currentKey) return;
+          // Si había snapshot válido, se mantiene sin volver a mostrar datos
+          // antiguos; sin snapshot, se presenta un menú vacío recuperable.
+          if (!storedAccess) {
+            setEnabledModules([]);
+            setMenuReady(true);
+          }
+        });
+    };
+
+    const syncStoredAccess = () => {
+      const session = getStoredSession();
+      const currentKey = sessionKey(session);
+      if (currentKey !== menuSessionKeyRef.current) {
+        refreshMenuForCurrentSession();
+        return;
+      }
+      const storedAccess = getStoredTenantAccess(session);
+      if (session && storedAccess) applyAccess(session, storedAccess);
+    };
+
+    refreshMenuForCurrentSession();
+    window.addEventListener("storage", refreshMenuForCurrentSession);
+    window.addEventListener("evolum-session-updated", refreshMenuForCurrentSession);
+    window.addEventListener("evolum-module-access-updated", syncStoredAccess);
     return () => {
       mounted = false;
+      window.removeEventListener("storage", refreshMenuForCurrentSession);
+      window.removeEventListener("evolum-session-updated", refreshMenuForCurrentSession);
+      window.removeEventListener("evolum-module-access-updated", syncStoredAccess);
     };
   }, []);
 

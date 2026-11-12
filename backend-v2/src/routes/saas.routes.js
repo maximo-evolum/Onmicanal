@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../lib/db.js";
 import { resolveIndustryRole } from "../lib/industry-roles.js";
 import { requireRole } from "../middleware/tenant-access.js";
+import { ensureStandardBrokerAccessProfile } from "../services/broker-standard-access.service.js";
 import { runAutonomousSalesFollowUps } from "../services/autonomous-sales-followup.service.js";
 import { createAiEvaluation, evaluateAiUsageLimits, getAiGovernance } from "../services/ai-governance.service.js";
 import { runAiTool } from "../services/ai-tools.service.js";
@@ -197,7 +198,14 @@ saasRouter.post("/saas/team", requireRole("OWNER", "ADMIN"), async (req, res, ne
       select: { id: true, name: true, email: true, role: true, jobTitle: true, isActive: true, createdAt: true, updatedAt: true }
     });
 
-    await auditTenantAction({ tenantId: req.tenantId, actorUserId: req.user?.id, action: "TEAM_USER_CREATED", entity: "WorkspaceUser", entityId: user.id, metadata: { email: user.email, role: user.role, jobTitle: user.jobTitle, operationalRole: resolvedRole.operationalRole } }).catch(() => null);
+    const standardBrokerAccess = await ensureStandardBrokerAccessProfile(prisma, {
+      tenantId: req.tenantId,
+      industry: tenant?.industry,
+      user,
+      operationalRole: resolvedRole.operationalRole
+    }).catch(() => ({ created: false }));
+
+    await auditTenantAction({ tenantId: req.tenantId, actorUserId: req.user?.id, action: "TEAM_USER_CREATED", entity: "WorkspaceUser", entityId: user.id, metadata: { email: user.email, role: user.role, jobTitle: user.jobTitle, operationalRole: resolvedRole.operationalRole, standardBrokerAccess: Boolean(standardBrokerAccess.created) } }).catch(() => null);
     res.status(201).json({ user });
   } catch (error) {
     return handleTeamError(res, error, "No se pudo crear el usuario");

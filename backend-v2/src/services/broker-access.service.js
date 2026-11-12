@@ -1,4 +1,5 @@
 /** Archivo: Implementa reglas de negocio y procesos del dominio broker access. */
+import { ensureStandardBrokerAccessProfile } from "./broker-standard-access.service.js";
 export const BROKER_ACCESS_ACTIONS = Object.freeze(["VIEW", "CREATE", "EDIT", "DELETE", "IMPORT", "EXPORT", "APPROVE", "REJECT", "ASSIGN", "REASSIGN", "CONFIGURE"]);
 export const BROKER_ACCESS_SCOPES = Object.freeze(["ASSIGNED", "TEAM", "BRANCH", "COMPANY", "HOLDING"]);
 export const BROKER_BUSINESS_ROLES = Object.freeze([
@@ -189,8 +190,12 @@ export function profileRecordData(userId, input, user, customProfile = null) {
 
 function profileData(record) { return record?.data && typeof record.data === "object" && !Array.isArray(record.data) ? record.data : {}; }
 
-export async function loadBrokerAccessContext({ prisma, tenantId, user }) {
+export async function loadBrokerAccessContext({ prisma, tenantId, industry, user }) {
   if (!tenantId || !user?.id || user.isActive === false) throw new Error("Sesión Broker no válida.");
+  // Las cuentas antiguas de corredores funcionaban por inferencia. Al primer
+  // acceso Broker dejamos su perfil estándar persistido, sin reemplazar una
+  // configuración creada manualmente por una jefatura.
+  await ensureStandardBrokerAccessProfile(prisma, { tenantId, industry, user }).catch(() => null);
   const records = await prisma.industryRecord.findMany({ where: { tenantId, recordType: { in: ["broker_access_profile", BROKER_CUSTOM_PROFILE_TYPE] }, status: "ACTIVE" }, select: { id: true, title: true, recordType: true, data: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }] });
   const accessRecords = records.filter((record) => record.recordType !== BROKER_CUSTOM_PROFILE_TYPE);
   const customProfiles = new Map(records.filter((record) => record.recordType === BROKER_CUSTOM_PROFILE_TYPE).map((record) => [String(record.id), record]));

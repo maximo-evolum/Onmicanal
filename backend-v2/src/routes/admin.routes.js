@@ -39,6 +39,7 @@ import {
 } from "../services/industry-templates.service.js";
 import { ensureTenantSubscriptionAndModules, enableTenantModules, syncTenantIndustryModules, getTenantModules, setTenantModules } from "../services/tenant-modules.service.js";
 import { extractOnboardingKnowledge } from "../services/onboarding-intelligence.service.js";
+import { ensureStandardBrokerAccessProfile } from "../services/broker-standard-access.service.js";
 
 export const adminRouter = Router();
 
@@ -830,7 +831,7 @@ adminRouter.post("/admin/tenants/:tenantId/users", async (req, res) => {
     const existing = await prisma.workspaceUser.findUnique({ where: { email: normalizedEmail } });
     if (existing) return res.status(409).json({ error: "Ya existe un usuario con ese email" });
 
-    await prisma.workspaceUser.create({
+    const createdUser = await prisma.workspaceUser.create({
       data: {
         tenantId,
         name: userName,
@@ -841,6 +842,13 @@ adminRouter.post("/admin/tenants/:tenantId/users", async (req, res) => {
         passwordHash: password ? await hashPassword(password) : null
       }
     });
+
+    await ensureStandardBrokerAccessProfile(prisma, {
+      tenantId,
+      industry: tenantExists.industry,
+      user: createdUser,
+      operationalRole: industryRole.operationalRole
+    }).catch(() => null);
 
     const tenant = await getFullTenant(tenantId);
     res.status(201).json(tenant);
@@ -879,7 +887,19 @@ adminRouter.patch("/admin/users/:userId", async (req, res) => {
     if (isActive !== undefined) data.isActive = Boolean(isActive);
     if (password) data.passwordHash = await hashPassword(password);
 
-    const user = await prisma.workspaceUser.update({ where: { id: userId }, data });
+    const user = await prisma.workspaceUser.update({
+      where: { id: userId },
+      data,
+      include: { tenant: { select: { industry: true } } }
+    });
+    // Si una cuenta existente pasa a ser Corredor, queda lista al instante.
+    // La provisión nunca reemplaza el perfil manual que ya pudiera tener.
+    await ensureStandardBrokerAccessProfile(prisma, {
+      tenantId: user.tenantId,
+      industry: user.tenant?.industry,
+      user,
+      operationalRole
+    }).catch(() => null);
     const tenant = await getFullTenant(user.tenantId);
     res.json(tenant);
   } catch (error) {
@@ -951,6 +971,13 @@ adminRouter.post("/admin/team-users", async (req, res) => {
         isActive: true
       }
     });
+
+    await ensureStandardBrokerAccessProfile(prisma, {
+      tenantId,
+      industry: tenant.industry,
+      user,
+      operationalRole: industryRole.operationalRole
+    }).catch(() => null);
 
     res.json({ success: true, user });
   } catch (error) {

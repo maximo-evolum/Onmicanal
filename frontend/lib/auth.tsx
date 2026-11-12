@@ -30,7 +30,22 @@ function cookieSafeSession(session: AgentSession) {
   });
 }
 
+function sessionIdentity(session?: Pick<AgentSession, "id" | "tenantId"> | null) {
+  return session?.id ? `${session.id}:${session.tenantId || "default"}` : null;
+}
+
+function notifySessionUpdated() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("evolum-session-updated"));
+}
+
 function setStoredAuth(session: AgentSession) {
+  const previousSession = getStoredSession();
+  // Cada cuenta conserva un snapshot de acceso aislado. Al cambiar de persona
+  // o empresa se elimina el snapshot previo antes de escribir la nueva sesión,
+  // evitando que el menú EV alcance a mostrar módulos del usuario anterior.
+  if (sessionIdentity(previousSession) && sessionIdentity(previousSession) !== sessionIdentity(session)) {
+    clearStoredTenantAccess(previousSession);
+  }
   const serializedSession = JSON.stringify(session);
   setCookie(SESSION_COOKIE, cookieSafeSession(session));
   if (typeof window !== "undefined") {
@@ -70,6 +85,7 @@ function clearStoredAuth() {
     window.sessionStorage.removeItem("evolum_access_token");
   }
   clearStoredTenantAccess(currentSession);
+  notifySessionUpdated();
 }
 
 export function getStoredSession(): AgentSession | null {
@@ -89,7 +105,14 @@ export function getStoredSession(): AgentSession | null {
 export function useAgentSession() {
   const [session, setSession] = useState<AgentSession | null>(null);
   useEffect(() => {
-    setSession(getStoredSession());
+    const syncSession = () => setSession(getStoredSession());
+    syncSession();
+    window.addEventListener("storage", syncSession);
+    window.addEventListener("evolum-session-updated", syncSession);
+    return () => {
+      window.removeEventListener("storage", syncSession);
+      window.removeEventListener("evolum-session-updated", syncSession);
+    };
   }, []);
   return session;
 }
@@ -117,6 +140,9 @@ export function LoginPage() {
         industry: data.tenant?.industry || null,
         modules: data.modules || []
       });
+      // La barra lateral recibe este evento en la misma pestaña. El evento
+      // nativo `storage` no se dispara en el documento que escribió el valor.
+      notifySessionUpdated();
       // Cada producto vertical comienza en su propio workspace. Esto evita
       // que una cuenta de Inmobiliaria o Finanzas entre primero al CRM general.
       const product = getVerticalProduct(data.tenant?.industry);

@@ -1,7 +1,7 @@
 /** Archivo: Proporciona lógica cliente compartida para module access en la aplicación web. */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getMe, getMyModules } from "./api";
 import { getStoredSession } from "./auth";
 import { getStoredTenantAccess, storeTenantAccess } from "./session-access";
@@ -118,6 +118,9 @@ const moduleAliases: Record<ModuleAccessKey, string[]> = {
 // CRM y administración de cuenta son parte del Core EVOLUM.
 const alwaysAllowed = new Set<ModuleAccessKey>(["crm", "saas"]);
 
+// Perfil inicial para cuentas creadas como "Corredor inmobiliario". La
+// cuenta puede operar su cartera, clientes, visitas y expediente; no recibe
+// módulos de configuración, integraciones ni finanzas de la empresa.
 const brokerModuleAllowlist = new Set<ModuleAccessKey>([
   "crm",
   "inbox",
@@ -126,7 +129,11 @@ const brokerModuleAllowlist = new Set<ModuleAccessKey>([
   "pipeline",
   "ai_ops",
   "properties",
-  "broker_portal"
+  "realty_loads",
+  "realty_activity",
+  "broker_portal",
+  "realty_clients",
+  "documents"
 ]);
 
 type ModuleAccessCacheEntry = {
@@ -150,6 +157,12 @@ function normalizeModule(value: string) {
 
 function isDeveloperRole(role?: string | null) {
   return String(role || "").toUpperCase() === "SUPER_ADMIN";
+}
+
+function isStandardBrokerAccount(role?: string | null, jobTitle?: string | null, industry?: string | null) {
+  if (normalizeIndustry(industry) !== "REAL_ESTATE") return false;
+  if (String(role || "").toUpperCase() === "SELLER") return true;
+  return String(role || "").toUpperCase() === "AGENT" && /corredor/i.test(String(jobTitle || ""));
 }
 
 // Replica la frontera de verticales del backend para que una ruta abierta
@@ -188,10 +201,12 @@ function isModuleCompatibleWithIndustry(moduleKey: ModuleAccessKey, industry?: s
 export function moduleAllowed(moduleKey: ModuleAccessKey, modules: string[], role?: string | null, jobTitle?: string | null, industry?: string | null) {
   if (isDeveloperRole(role)) return true;
   if (!isModuleCompatibleWithIndustry(moduleKey, industry)) return false;
+  // Esta frontera se aplica antes de los módulos compartidos: "saas" es
+  // compartido a nivel de tenant, pero un corredor estándar no debe ver
+  // planes, usuarios ni configuración de la empresa.
+  if (isStandardBrokerAccount(role, jobTitle, industry) && !brokerModuleAllowlist.has(moduleKey)) return false;
   if (moduleKey === "metadata") return ["OWNER", "ADMIN"].includes(String(role || "").toUpperCase());
   if (alwaysAllowed.has(moduleKey)) return true;
-  const isBroker = String(role || "").toUpperCase() === "SELLER" && /corredor/i.test(String(jobTitle || ""));
-  if (isBroker && !brokerModuleAllowlist.has(moduleKey)) return false;
   const normalized = new Set(modules.map(normalizeModule));
   return moduleAliases[moduleKey].some((alias) => normalized.has(normalizeModule(alias)));
 }
@@ -207,11 +222,35 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const [loading, setLoading] = useState(Boolean(moduleKey));
   const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey));
   const [error, setError] = useState<string | null>(null);
+  const activeSessionKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setSession(getStoredSession());
-    setSessionReady(true);
-  }, []);
+    const syncSession = () => {
+      const nextSession = getStoredSession();
+      const nextKey = moduleAccessCacheKey(nextSession);
+      if (activeSessionKeyRef.current !== nextKey) {
+        // No conservar permisos ni mensajes de acceso de la cuenta anterior
+        // mientras llega la autorización de la nueva sesión.
+        activeSessionKeyRef.current = nextKey;
+        setModules(null);
+        setAuthoritativeRole(null);
+        setIndustry(null);
+        setError(null);
+        setLoading(Boolean(moduleKey));
+        setIdentityLoading(Boolean(moduleKey));
+      }
+      setSession(nextSession);
+      setSessionReady(true);
+    };
+
+    syncSession();
+    window.addEventListener("storage", syncSession);
+    window.addEventListener("evolum-session-updated", syncSession);
+    return () => {
+      window.removeEventListener("storage", syncSession);
+      window.removeEventListener("evolum-session-updated", syncSession);
+    };
+  }, [moduleKey]);
 
   const cacheKey = moduleAccessCacheKey(session);
 

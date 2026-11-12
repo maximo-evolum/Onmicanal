@@ -60,6 +60,7 @@ import { BROKER_CHAT_TARGET_TYPES, applyBrokerAgendaAction, buildBrokerCommercia
 import { BROKER_FORECAST_DEFAULT_ASSUMPTIONS, buildBrokerExecutiveDashboard, buildBrokerOperationTracker, trackerAdvanceReadiness, trackerChecklistUpdate, validateBrokerForecastAssumptions } from "../services/broker-executive-dashboard.service.js";
 import { buildBrokerAiOpsSnapshot } from "../services/broker-ai-ops.service.js";
 import { BROKER_AI_CUSTOM_RULE_TYPE, brokerAiCustomRulePayload, buildBrokerAiGovernanceSnapshot, normalizeBrokerAiCustomRule } from "../services/broker-ai-governance.service.js";
+import { ensureStandardBrokerAccessForTenant } from "../services/broker-standard-access.service.js";
 
 export const brokerRouter = Router();
 
@@ -72,7 +73,12 @@ brokerRouter.use("/broker", requireRole(ROLE_GROUPS.VIEWERS));
 brokerRouter.use(async (req, res, next) => {
   if (!/^\/broker\//i.test(req.path)) return next();
   try {
-    req.brokerAccess = await loadBrokerAccessContext({ prisma, tenantId: req.tenantId, user: req.user });
+    req.brokerAccess = await loadBrokerAccessContext({
+      prisma,
+      tenantId: req.tenantId,
+      industry: req.tenant?.industry,
+      user: req.user
+    });
     next();
   } catch (error) {
     next(error);
@@ -121,6 +127,13 @@ function latestBrokerProfiles(records = []) {
 }
 
 async function brokerTeamState(req) {
+  // Al abrir la administración de equipo también se regularizan cuentas de
+  // corredores creadas antes de esta plantilla. No se modifica ningún perfil
+  // manual: solo se agrega el estándar cuando no existe uno.
+  await ensureStandardBrokerAccessForTenant(prisma, {
+    tenantId: req.tenantId,
+    industry: req.tenant?.industry
+  }).catch(() => null);
   const [users, accessRecords, customRecords, records] = await Promise.all([
     prisma.workspaceUser.findMany({ where: { tenantId: req.tenantId }, select: { id: true, name: true, email: true, role: true, jobTitle: true, isActive: true }, orderBy: { name: "asc" } }),
     prisma.industryRecord.findMany({ where: { tenantId: req.tenantId, recordType: "broker_access_profile", status: "ACTIVE" }, select: { id: true, data: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }] }),
