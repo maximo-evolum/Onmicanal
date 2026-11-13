@@ -133,6 +133,12 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     assert.equal(await root.evaluate(el=>el.getBoundingClientRect().right<=innerWidth+1),true,'La ficha debe caber en el viewport móvil');
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2&&document.body.scrollWidth<=innerWidth+2),true,'La página móvil no debe conservar desbordes decorativos fuera del viewport');
     await page.evaluate(()=>{document.documentElement.dataset.theme='purple';document.documentElement.dataset.designSystem='dark';});
+    const darkStage = await page.locator('.broker-prospect-funnel > button').first().evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { backgroundImage: style.backgroundImage, color: style.color };
+    });
+    assert.match(darkStage.backgroundImage, /linear-gradient/, 'Las etapas de captación deben conservar una superficie oscura en modo oscuro.');
+    assert.equal(darkStage.color, 'rgb(251, 249, 255)', 'Las etapas de captación deben conservar texto legible en modo oscuro.');
     await page.screenshot({path:path.join(out,'captacion-movil-oscuro.png')});
     await page.setViewportSize({width:1440,height:1050});
     await page.goto(`${frontendUrl}/realty?view=broker_os&tab=operations&operationId=qa-op`);

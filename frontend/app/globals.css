@@ -22454,3 +22454,92 @@ body {
     .broker-agents-panel
   ) { border-radius: 16px !important; }
 }
+
+/* Captación Broker usa clases estables además de CSS Modules. Así el modo
+   oscuro no depende del nombre compilado de Next y no deja tarjetas claras
+   dentro de una operación en teléfono. */
+:root[data-ui-layout="model-a"] .broker-prospect-workspace :is(
+  .broker-prospect-panel,
+  .broker-prospect-metrics > div,
+  .broker-prospect-funnel > button
+) {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink) !important;
+  background: var(--model-a-panel) !important;
+  box-shadow: var(--model-a-shadow) !important;
+}
+
+:root[data-ui-layout="model-a"] .broker-prospect-workspace .broker-prospect-funnel > button[aria-pressed="true"] {
+  border-color: var(--theme-primary-2) !important;
+  background: color-mix(in srgb, var(--theme-primary-2) 10%, var(--model-a-panel)) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-prospect-workspace :is(
+  .broker-prospect-panel,
+  .broker-prospect-metrics > div,
+  .broker-prospect-funnel > button
+) {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+/* Gobierno Broker: los subpaneles se renderizan fuera del panel principal;
+   se declaran explícitamente para que no hereden el blanco histórico en
+   oscuro cuando la preferencia se expresa por data-design-system. */
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-governance-grid :is(
+  .broker-governance-alerts,
+  .broker-governance-activity
+) {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-governance-grid :is(
+  .broker-governance-alert,
+  .broker-governance-activity article
+) {
+  border-color: rgba(184, 157, 255, .2) !important;
+  color: var(--model-a-ink) !important;
+  background: #16132a !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-governance-grid .broker-governance-alert.high { background: #2d2037 !important; }
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-governance-grid .broker-governance-alert.resolved,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-governance-grid .broker-governance-resolution { background: #173740 !important; }
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-governance-grid :is(
+  h3, b, p, span, small, time
+) { color: var(--model-a-ink); }
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .broker-governance-grid :is(
+  .broker-governance-alert-heading time,
+  .broker-governance-alert small,
+  .broker-governance-alert > p,
+  .broker-governance-resolution p,
+  .broker-governance-activity header p,
+  .broker-governance-activity article :is(span, p, small)
+) { color: var(--model-a-muted) !important; }
+
+/* Este bloque va después del encabezado de escritorio para no volver a
+   comprimir el contenido en dos columnas cuando se navega desde un teléfono. */
+@media (max-width: 980px) {
+  :root[data-ui-layout="model-a"] .broker-os-header {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-os-header-side {
+    width: 100%;
+    justify-items: start;
+  }
+}
+
+@media (max-width: 640px) {
+  :root[data-ui-layout="model-a"] .broker-os-header-side :is(
+    .broker-access-summary,
+    .broker-os-header-actions
+  ) { width: 100%; }
+}

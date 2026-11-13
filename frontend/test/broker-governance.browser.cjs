@@ -87,12 +87,18 @@ function overview() {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => { document.documentElement.dataset.theme = "purple"; document.documentElement.dataset.designSystem = "dark"; });
     await page.getByRole("heading", { name: "Alertas, trazabilidad y control administrativo", exact: true }).scrollIntoViewIfNeeded();
+    const headerLayout = await page.locator(".broker-os-header").evaluate((element) => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length);
+    assert.equal(headerLayout, 1, "El encabezado Broker debe apilarse en una columna en teléfono.");
     const accessVisual = await page.locator(".broker-access-summary").evaluate((element) => {
       const styles = getComputedStyle(element);
       return { backgroundImage: styles.backgroundImage, color: styles.color };
     });
     assert.match(accessVisual.backgroundImage, /linear-gradient/, "El resumen de acceso debe conservar una superficie oscura en modo oscuro.");
     assert.equal(accessVisual.color, "rgb(247, 243, 255)", "El resumen de acceso debe conservar texto legible en modo oscuro.");
+    const governanceSurface = await page.locator(".broker-governance-alerts").evaluate((element) => getComputedStyle(element).backgroundColor);
+    const activitySurface = await page.locator(".broker-governance-activity").evaluate((element) => getComputedStyle(element).backgroundColor);
+    assert.notEqual(governanceSurface, "rgb(255, 255, 255)", "Las alertas de gobierno no pueden quedar blancas en modo oscuro.");
+    assert.notEqual(activitySurface, "rgb(255, 255, 255)", "La bitácora no puede quedar blanca en modo oscuro.");
     const mainBounds = await page.locator("main.realty-workspace").boundingBox();
     assert.ok(mainBounds && mainBounds.x <= 1 && mainBounds.width >= 389, "En móvil el workspace debe usar todo el ancho, sin reservar una columna oculta para el menú.");
     assert.equal(await page.locator(".broker-governance-panel").evaluate((element) => element.scrollWidth <= element.clientWidth + 2), true, "El panel de gobierno debe caber en móvil.");
