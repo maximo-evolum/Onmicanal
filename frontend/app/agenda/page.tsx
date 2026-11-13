@@ -397,7 +397,7 @@ export default function AgendaPage() {
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
       />
-      <main className="main dashboard-page">
+      <main className="main dashboard-page model-a-page-canvas">
         <header className="agenda-app-header model-a-page-header">
           <div>
             <h1>Agenda EVOLUM</h1>

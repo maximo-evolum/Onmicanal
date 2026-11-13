@@ -1380,7 +1380,7 @@ export function BrokerOperationsPageContent() {
     } finally { setBusy(false); }
   }
 
-  return <main className="broker-os-workspace" onSubmitCapture={event => {
+  return <main className="broker-os-workspace model-a-page-canvas" onSubmitCapture={event => {
     if (!canWriteTab) { event.preventDefault(); event.stopPropagation(); setNotice("Tu perfil no permite modificar esta área. Solicita acceso al administrador."); }
   }}>
     <header className="broker-os-header model-a-page-header">

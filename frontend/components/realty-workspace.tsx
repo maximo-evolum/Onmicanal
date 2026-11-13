@@ -539,7 +539,7 @@ export function RealtyShell({
           onToggle={() => setSidebarOpen((value) => !value)}
         />
         <main className="vertical-main realty-page realty-workspace">
-          <div className="realty-workspace-canvas">{children}</div>
+          <div className="realty-workspace-canvas model-a-page-canvas">{children}</div>
         </main>
       </div>
     </ModuleGate>

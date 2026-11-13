@@ -1118,7 +1118,7 @@ function FinanceWorkspace() {
     <ModuleGate moduleKey="finance_analytics">
       <div className={`module-with-menu-shell product-workspace finance-shell finance-product-workspace ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active={active.label} isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} showNotificationCenter={false} />
-        <main className="finance-workspace">
+        <main className="finance-workspace model-a-page-canvas">
           {editingCase ? <FinanceCaseEditor key={`${contextTenant}:${editingCase.id}`} record={editingCase} canReopen={canManageFinance} onClose={() => setEditingCase(null)} onSaved={async () => { await load(); setMessage("Cambio guardado con motivo y auditoría. No se enviaron mensajes ni se modificaron pagos."); }} /> : null}
           {manualPayment ? <FinanceManualPayment key={`${contextTenant}:${manualPayment.id}:${manualPayment.kind}`} target={manualPayment} onBusy={setSaving} onClose={() => setManualPayment(null)} onSaved={() => { setManualPayment(null); setManualSettlementRevision((r) => r + 1); setMessage("Registro confirmado con su fecha efectiva y auditoría. No se efectuó ninguna transferencia ni cambio en el ERP."); void load(); }} /> : null}
           <header className="finance-header model-a-page-header">

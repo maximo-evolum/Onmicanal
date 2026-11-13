@@ -198,7 +198,7 @@ export default function WorkflowsPage() {
     <ModuleGate moduleKey="workflows">
       <div className={`workflow-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active="Automatizaciones" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
-        <main className="workflow-page">
+        <main className="workflow-page model-a-page-canvas">
           <header className="workflow-hero model-a-page-header">
             <div>
               <p className="eyebrow">AUTOMATIZACIONES</p>

@@ -103,7 +103,7 @@ function RealtyDashboardContent() {
   }, []);
 
   if (!accessModule) {
-    return <main className="realty-access-status" aria-live="polite"><div><span>Inmobiliaria</span><h1>{status}</h1><p>El acceso se valida una vez al entrar a la vertical.</p></div></main>;
+    return <main className="realty-access-status model-a-page-canvas" aria-live="polite"><div><span>Inmobiliaria</span><h1>{status}</h1><p>El acceso se valida una vez al entrar a la vertical.</p></div></main>;
   }
 
   const requestedView = String(searchParams.get("view") || "summary") as RealtyView;
@@ -120,5 +120,5 @@ function RealtyDashboardContent() {
 }
 
 export default function RealtyDashboardPage() {
-  return <Suspense fallback={<main className="realty-access-status" aria-live="polite"><div><span>Inmobiliaria</span><h1>Abriendo workspace inmobiliario...</h1><p>Preparando tu cartera y módulos disponibles.</p></div></main>}><RealtyDashboardContent /></Suspense>;
+  return <Suspense fallback={<main className="realty-access-status model-a-page-canvas" aria-live="polite"><div><span>Inmobiliaria</span><h1>Abriendo workspace inmobiliario...</h1><p>Preparando tu cartera y módulos disponibles.</p></div></main>}><RealtyDashboardContent /></Suspense>;
 }

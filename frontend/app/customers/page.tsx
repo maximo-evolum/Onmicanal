@@ -230,7 +230,7 @@ function RealtyBuyerWorkspace() {
   const selectedBuyer = buyers.find((buyer) => buyer.id === selectedBuyerId) || null;
 
   return (
-    <section className="realty-buyer-workspace">
+    <section className="realty-buyer-workspace model-a-page-canvas">
       <form className="vertical-card vertical-form realty-buyer-form" onSubmit={saveBuyer}>
         <div>
           <span>Nuevo comprador</span>

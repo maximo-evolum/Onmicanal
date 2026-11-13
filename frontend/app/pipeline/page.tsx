@@ -117,7 +117,7 @@ export default function PipelinePage() {
         onToggle={() => setSidebarOpen((value) => !value)}
       />
 
-      <main className="pipeline-pro-main">
+      <main className="pipeline-pro-main model-a-page-canvas">
         <header className="pipeline-pro-topbar pipeline-pro-header-main model-a-page-header">
           <div>
             <span className="meta-line">CRM / Pipeline</span>

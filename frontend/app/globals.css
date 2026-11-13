@@ -21911,3 +21911,546 @@ body {
     .vertical-hero-stats.model-a-executive-kpis
   ) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }
+
+/* -------------------------------------------------------------------------
+   MODELO A · segunda pasada transversal
+
+   El primer despliegue del Modelo A resolvió la barra operativa y parte de
+   Broker OS. Esta capa termina de llevar la misma composición a las vistas
+   históricas del CRM, Core y verticales: un lienzo contenido, una jerarquía
+   de contexto → indicadores → trabajo y paneles de lectura consistentes.
+   No agrega un segundo menú ni altera rutas, permisos, procesos o datos.
+   ------------------------------------------------------------------------- */
+:root[data-ui-layout="model-a"] .evolum-menu-bubble {
+  display: none !important;
+}
+
+:root[data-ui-layout="model-a"] :is(
+  .module-with-menu-shell,
+  .executive-shell,
+  .pipeline-pro-shell,
+  .workflow-shell,
+  .crm-main,
+  .vertical-shell
+) {
+  background:
+    radial-gradient(circle at 96% 0%, color-mix(in srgb, var(--theme-primary-2) 10%, transparent), transparent 31rem),
+    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--theme-primary) 7%, transparent), transparent 27rem),
+    var(--model-a-canvas) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas {
+  min-width: 0;
+}
+
+:root[data-ui-layout="model-a"] :is(
+  main.model-a-page-canvas,
+  .crm-main-workspace.model-a-page-canvas,
+  .realty-workspace-canvas.model-a-page-canvas,
+  .broker-os-workspace.model-a-page-canvas,
+  .onboarding-page.model-a-page-canvas,
+  .workflow-page.model-a-page-canvas
+) {
+  width: min(100%, 1480px);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+:root[data-ui-layout="model-a"] :is(
+  main.model-a-page-canvas,
+  .crm-main-workspace.model-a-page-canvas,
+  .realty-workspace-canvas.model-a-page-canvas,
+  .broker-os-workspace.model-a-page-canvas,
+  .onboarding-page.model-a-page-canvas,
+  .workflow-page.model-a-page-canvas
+) {
+  align-content: start;
+  gap: var(--model-a-gap) !important;
+}
+
+:root[data-ui-layout="model-a"] main.model-a-page-canvas {
+  display: grid;
+}
+
+/* Finanzas e Inbox necesitan conservar su anchura completa porque contienen
+   tablas y paneles de tres columnas. El canvas igual les entrega la jerarquía
+   visual; no comprime información operativa ni chats. */
+:root[data-ui-layout="model-a"] :is(
+  .finance-workspace.model-a-page-canvas,
+  .inbox-unified-workspace.model-a-page-canvas
+) {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  .phase5-panel,
+  .phase5-card,
+  .vertical-card,
+  .metric-card,
+  .reports-summary-card,
+  .service-record-card,
+  .connection-summary-card,
+  .connection-card,
+  .connection-detail-panel,
+  .campaign-form-card,
+  .campaign-preview-panel,
+  .campaign-variants-section,
+  .campaign-job-panel,
+  .documents-upload-card,
+  .documents-list-card,
+  .workflow-card,
+  .builder-card,
+  .library-card,
+  .execution-card,
+  .dlq-card,
+  .metadata-step-card,
+  .metadata-live-preview,
+  .metadata-publish-card,
+  .realty-buyer-workspace > .vertical-card,
+  .broker-command-queue,
+  .broker-command-next,
+  .broker-command-rules,
+  .broker-expedient-panel,
+  .broker-operation-capture,
+  .broker-operation-list,
+  .broker-training-panel,
+  .broker-governance-panel,
+  .broker-agents-panel,
+  .broker-os-workspace .broker-operation-card,
+  .broker-os-workspace .broker-record-card,
+  .broker-os-workspace .broker-agent-card,
+  .broker-os-workspace .broker-access-card,
+  .broker-os-workspace .broker-financing-card,
+  .broker-os-workspace .broker-monthly-card,
+  .broker-os-workspace .broker-governance-alert,
+  .broker-os-workspace .broker-commercial-panel
+) {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink);
+  background: var(--model-a-panel) !important;
+  box-shadow: var(--model-a-shadow) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  .phase5-panel,
+  .phase5-card,
+  .vertical-card,
+  .metric-card,
+  .reports-summary-card,
+  .connection-summary-card,
+  .connection-card,
+  .connection-detail-panel,
+  .campaign-form-card,
+  .campaign-preview-panel,
+  .campaign-variants-section,
+  .documents-upload-card,
+  .documents-list-card,
+  .workflow-card,
+  .builder-card,
+  .library-card,
+  .execution-card,
+  .dlq-card,
+  .metadata-step-card,
+  .metadata-live-preview,
+  .metadata-publish-card,
+  .broker-command-queue,
+  .broker-command-next,
+  .broker-command-rules,
+  .broker-expedient-panel,
+  .broker-operation-capture,
+  .broker-operation-list,
+  .broker-training-panel,
+  .broker-governance-panel,
+  .broker-agents-panel
+) {
+  border-radius: var(--model-a-radius) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  .phase5-panel-head,
+  .vertical-card-head,
+  .workflow-card-header,
+  .metadata-header,
+  .documents-list-heading,
+  .connection-detail-head,
+  .campaign-preview-header,
+  .broker-list-heading,
+  .broker-command-queue > header,
+  .broker-expedient-panel > .broker-list-heading,
+  .broker-commercial-header,
+  .broker-monthly-header
+) {
+  min-width: 0;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--model-a-line);
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  .phase5-panel-head,
+  .vertical-card-head,
+  .workflow-card-header,
+  .metadata-header,
+  .documents-list-heading,
+  .connection-detail-head,
+  .campaign-preview-header,
+  .broker-list-heading,
+  .broker-command-queue > header,
+  .broker-expedient-panel > .broker-list-heading,
+  .broker-commercial-header,
+  .broker-monthly-header
+) :is(h2, h3, strong, b) {
+  color: var(--model-a-ink) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  .meta-line,
+  .module-note,
+  .muted-copy,
+  .vertical-card p,
+  .phase5-panel p,
+  .workflow-card p,
+  .connection-card p,
+  .connection-detail-panel p,
+  .campaign-form-card p,
+  .campaign-preview-panel p,
+  .broker-os-workspace :is(p, small, span)
+) {
+  color: var(--model-a-muted);
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+) {
+  border-color: var(--model-a-line-strong) !important;
+  color: var(--model-a-ink) !important;
+  background: var(--model-a-panel) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+):focus {
+  border-color: var(--theme-primary-2) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--theme-primary-2) 13%, transparent) !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  .phase5-list,
+  .phase5-table,
+  .service-record-list,
+  .vertical-record-list,
+  .workflow-list,
+  .workflow-dlq-list,
+  .metadata-schema-list,
+  .connection-provider-list,
+  .campaign-publish-results,
+  .broker-command-queue-list,
+  .broker-operation-list,
+  .broker-finance-list,
+  .broker-commercial-list,
+  .broker-maintenance-quote-list
+) {
+  overflow: auto;
+  border-color: var(--model-a-line) !important;
+  border-radius: 14px;
+  background: var(--model-a-panel-soft);
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  .phase5-list-row,
+  .phase5-table-row,
+  .service-record-card,
+  .vertical-record-row,
+  .workflow-list-item,
+  .workflow-dlq-list article,
+  .metadata-field-row,
+  .connection-provider-list > *,
+  .publish-result,
+  .broker-command-queue-item,
+  .broker-operation-card,
+  .broker-finance-row,
+  .broker-commercial-list > article,
+  .broker-maintenance-quote-list > article
+) {
+  border-color: var(--model-a-line) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+  .phase5-list-row,
+  .phase5-table-row,
+  .service-record-card,
+  .vertical-record-row,
+  .workflow-list-item,
+  .workflow-dlq-list article,
+  .metadata-field-row,
+  .connection-provider-list > *,
+  .broker-command-queue-item,
+  .broker-operation-card,
+  .broker-finance-row,
+  .broker-commercial-list > article,
+  .broker-maintenance-quote-list > article
+):hover {
+  background: color-mix(in srgb, var(--theme-primary-2) 7%, var(--model-a-panel)) !important;
+}
+
+/* Los contenedores de trabajo dejan una columna dominante para los datos y
+   una columna secundaria para captura, acción o contexto, tal como la
+   maqueta aprobada. */
+:root[data-ui-layout="model-a"] :is(
+  .agenda-layout,
+  .connections-layout,
+  .campaign-builder-v2,
+  .service-grid,
+  .realty-buyer-layout,
+  .broker-command-center,
+  .broker-operations-support,
+  .broker-governance-grid,
+  .broker-commercial-hub-grid,
+  .broker-finance-workspace,
+  .broker-financing-workspace
+) {
+  gap: var(--model-a-gap) !important;
+}
+
+:root[data-ui-layout="model-a"] .broker-os-workspace > .broker-kpis.model-a-executive-kpis {
+  margin: 0 !important;
+}
+
+:root[data-ui-layout="model-a"] .broker-os-workspace > .broker-os-notice {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--theme-primary-2) 36%, var(--model-a-line));
+  border-radius: 13px;
+  color: var(--model-a-ink);
+  background: color-mix(in srgb, var(--theme-primary-2) 8%, var(--model-a-panel));
+}
+
+:root[data-ui-layout="model-a"][data-theme="dark"] :is(
+  .module-with-menu-shell,
+  .executive-shell,
+  .pipeline-pro-shell,
+  .workflow-shell,
+  .crm-main,
+  .vertical-shell
+),
+:root[data-ui-layout="model-a"][data-design-system="dark"] :is(
+  .module-with-menu-shell,
+  .executive-shell,
+  .pipeline-pro-shell,
+  .workflow-shell,
+  .crm-main,
+  .vertical-shell
+) {
+  background:
+    radial-gradient(circle at 96% 0%, rgba(155, 109, 255, .15), transparent 31rem),
+    radial-gradient(circle at 8% 0%, rgba(79, 210, 220, .08), transparent 27rem),
+    var(--model-a-canvas) !important;
+}
+
+:root[data-ui-layout="model-a"][data-theme="dark"] .model-a-page-canvas :is(
+  .phase5-panel,
+  .phase5-card,
+  .vertical-card,
+  .metric-card,
+  .reports-summary-card,
+  .service-record-card,
+  .connection-summary-card,
+  .connection-card,
+  .connection-detail-panel,
+  .campaign-form-card,
+  .campaign-preview-panel,
+  .campaign-variants-section,
+  .campaign-job-panel,
+  .documents-upload-card,
+  .documents-list-card,
+  .workflow-card,
+  .builder-card,
+  .library-card,
+  .execution-card,
+  .dlq-card,
+  .metadata-step-card,
+  .metadata-live-preview,
+  .metadata-publish-card,
+  .realty-buyer-workspace > .vertical-card,
+  .broker-command-queue,
+  .broker-command-next,
+  .broker-command-rules,
+  .broker-expedient-panel,
+  .broker-operation-capture,
+  .broker-operation-list,
+  .broker-training-panel,
+  .broker-governance-panel,
+  .broker-agents-panel,
+  .broker-os-workspace .broker-operation-card,
+  .broker-os-workspace .broker-record-card,
+  .broker-os-workspace .broker-agent-card,
+  .broker-os-workspace .broker-access-card,
+  .broker-os-workspace .broker-financing-card,
+  .broker-os-workspace .broker-monthly-card,
+  .broker-os-workspace .broker-governance-alert,
+  .broker-os-workspace .broker-commercial-panel
+),
+:root[data-ui-layout="model-a"][data-design-system="dark"] .model-a-page-canvas :is(
+  .phase5-panel,
+  .phase5-card,
+  .vertical-card,
+  .metric-card,
+  .reports-summary-card,
+  .service-record-card,
+  .connection-summary-card,
+  .connection-card,
+  .connection-detail-panel,
+  .campaign-form-card,
+  .campaign-preview-panel,
+  .campaign-variants-section,
+  .campaign-job-panel,
+  .documents-upload-card,
+  .documents-list-card,
+  .workflow-card,
+  .builder-card,
+  .library-card,
+  .execution-card,
+  .dlq-card,
+  .metadata-step-card,
+  .metadata-live-preview,
+  .metadata-publish-card,
+  .realty-buyer-workspace > .vertical-card,
+  .broker-command-queue,
+  .broker-command-next,
+  .broker-command-rules,
+  .broker-expedient-panel,
+  .broker-operation-capture,
+  .broker-operation-list,
+  .broker-training-panel,
+  .broker-governance-panel,
+  .broker-agents-panel,
+  .broker-os-workspace .broker-operation-card,
+  .broker-os-workspace .broker-record-card,
+  .broker-os-workspace .broker-agent-card,
+  .broker-os-workspace .broker-access-card,
+  .broker-os-workspace .broker-financing-card,
+  .broker-os-workspace .broker-monthly-card,
+  .broker-os-workspace .broker-governance-alert,
+  .broker-os-workspace .broker-commercial-panel
+) {
+  color: var(--model-a-ink);
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"][data-theme="dark"] .model-a-page-canvas :is(
+  .phase5-list,
+  .phase5-table,
+  .service-record-list,
+  .vertical-record-list,
+  .workflow-list,
+  .workflow-dlq-list,
+  .metadata-schema-list,
+  .connection-provider-list,
+  .campaign-publish-results,
+  .broker-command-queue-list,
+  .broker-operation-list,
+  .broker-finance-list,
+  .broker-commercial-list,
+  .broker-maintenance-quote-list
+),
+:root[data-ui-layout="model-a"][data-design-system="dark"] .model-a-page-canvas :is(
+  .phase5-list,
+  .phase5-table,
+  .service-record-list,
+  .vertical-record-list,
+  .workflow-list,
+  .workflow-dlq-list,
+  .metadata-schema-list,
+  .connection-provider-list,
+  .campaign-publish-results,
+  .broker-command-queue-list,
+  .broker-operation-list,
+  .broker-finance-list,
+  .broker-commercial-list,
+  .broker-maintenance-quote-list
+) { background: var(--model-a-panel-soft); }
+
+:root[data-ui-layout="model-a"][data-theme="dark"] .model-a-page-canvas :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+),
+:root[data-ui-layout="model-a"][data-design-system="dark"] .model-a-page-canvas :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+) {
+  color: var(--model-a-ink) !important;
+  background: #0b0a18 !important;
+}
+
+@media (max-width: 980px) {
+  :root[data-ui-layout="model-a"] :is(
+    main.model-a-page-canvas,
+    .crm-main-workspace.model-a-page-canvas,
+    .realty-workspace-canvas.model-a-page-canvas,
+    .broker-os-workspace.model-a-page-canvas,
+    .onboarding-page.model-a-page-canvas,
+    .workflow-page.model-a-page-canvas
+  ) {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  :root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+    .agenda-layout,
+    .connections-layout,
+    .campaign-builder-v2,
+    .service-grid,
+    .realty-buyer-layout,
+    .broker-command-center,
+    .broker-operations-support,
+    .broker-governance-grid,
+    .broker-commercial-hub-grid,
+    .broker-finance-workspace,
+    .broker-financing-workspace
+  ) { grid-template-columns: minmax(0, 1fr) !important; }
+
+  :root[data-ui-layout="model-a"] .model-a-page-canvas :is(
+    .phase5-panel,
+    .phase5-card,
+    .vertical-card,
+    .metric-card,
+    .reports-summary-card,
+    .connection-summary-card,
+    .connection-card,
+    .connection-detail-panel,
+    .campaign-form-card,
+    .campaign-preview-panel,
+    .campaign-variants-section,
+    .documents-upload-card,
+    .documents-list-card,
+    .workflow-card,
+    .builder-card,
+    .library-card,
+    .execution-card,
+    .dlq-card,
+    .metadata-step-card,
+    .metadata-live-preview,
+    .metadata-publish-card,
+    .broker-command-queue,
+    .broker-command-next,
+    .broker-command-rules,
+    .broker-expedient-panel,
+    .broker-operation-capture,
+    .broker-operation-list,
+    .broker-training-panel,
+    .broker-governance-panel,
+    .broker-agents-panel
+  ) { border-radius: 16px !important; }
+}

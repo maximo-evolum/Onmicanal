@@ -117,7 +117,7 @@ export default function AiGovernancePage() {
 
   return <ModuleGate moduleKey="ai_ops"><div className={`workflow-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
     <EvolumSidebar active="Control de IA" isDeveloper={agent?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
-    <main className="workflow-page ai-governance-page">
+    <main className="workflow-page ai-governance-page model-a-page-canvas">
       <header className="workflow-hero model-a-page-header"><div><p className="eyebrow">CONTROL DE IA</p><h1>Decide cómo te ayuda la IA</h1><p>Indica qué tareas puede preparar sola, cuándo debe pedir aprobación y qué temas prefieres revisar antes de responder.</p></div><AccountPill fallbackName={agent?.name || "Usuario"} /></header>
       {error ? <div className="workflow-notice error">{error}</div> : null}{notice ? <div className="workflow-notice success">{notice}</div> : null}
       <section className="workflow-overview"><article><strong>{approvals.length}</strong><span>Tareas esperando tu visto bueno</span></article><article><strong>{maxActions}</strong><span>Tareas que puede preparar por conversación</span></article><article><strong>{blockedTerms.split(/\n|,/).filter(Boolean).length}</strong><span>Temas que requieren cuidado</span></article><article><strong>{evaluations.filter((item) => item.status === "PASSED").length}</strong><span>Respuestas revisadas correctamente</span></article></section>

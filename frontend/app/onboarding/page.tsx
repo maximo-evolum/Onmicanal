@@ -412,7 +412,7 @@ export default function OnboardingPage() {
         onToggle={() => setSidebarOpen((value) => !value)}
         showNotificationCenter={false}
       />
-    <main className="onboarding-page onboarding-pro-page">
+    <main className="onboarding-page onboarding-pro-page model-a-page-canvas">
       <section className="onboarding-pro-hero model-a-page-header">
         <div>
           <span className="badge accent">Configuracion de Agente</span>

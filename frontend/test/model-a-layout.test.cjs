@@ -45,6 +45,34 @@ test("Modelo A ordena contexto, captura, registros e Inbox en tema claro y oscur
   assert.match(css, /@media \(max-width: 700px\)/);
 });
 
+test("la segunda pasada de Modelo A cubre CRM, Core, Broker, Finanzas y verticales", () => {
+  const css = source("app/globals.css");
+  const crm = source("app/crm-principal/page.tsx");
+  const dashboard = source("app/dashboard/page.tsx");
+  const agenda = source("app/agenda/page.tsx");
+  const finance = source("app/finance/page.tsx");
+  const operations = source("app/operations/[vertical]/page.tsx");
+  const realtyRoute = source("app/realty/page.tsx");
+  const inbox = source("components/inbox-shell.tsx");
+  const realty = source("components/realty-workspace.tsx");
+  const broker = source("components/broker-operations-workspace.tsx");
+  const records = source("components/data-management-workspace.tsx");
+
+  assert.match(css, /MODELO A · segunda pasada transversal/);
+  assert.match(css, /\.evolum-menu-bubble\s*\{\s*display: none !important;/);
+  assert.match(css, /\[data-design-system="dark"\] \.model-a-page-canvas/);
+  assert.match(crm, /model-a-page-canvas/);
+  assert.match(dashboard, /model-a-page-canvas/);
+  assert.match(agenda, /model-a-page-canvas/);
+  assert.match(finance, /model-a-page-canvas/);
+  assert.match(operations, /model-a-page-canvas/);
+  assert.match(realtyRoute, /realty-access-status model-a-page-canvas/);
+  assert.match(inbox, /inbox-unified-workspace model-a-page-canvas/);
+  assert.match(realty, /realty-workspace-canvas model-a-page-canvas/);
+  assert.match(broker, /broker-os-workspace model-a-page-canvas/);
+  assert.match(records, /model-a-data-workspace model-a-page-canvas/);
+});
+
 test("Broker usa un único menú EV y el rail cerrado no conserva la burbuja antigua", () => {
   const sidebar = source("components/evolum-sidebar.tsx");
   const chrome = source("components/evolum-workspace-chrome.tsx");

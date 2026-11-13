@@ -162,7 +162,7 @@ export default function VerticalOperationsPage() {
 
   return <div className={`vertical-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
     <EvolumSidebar active={profile.title} isDeveloper={session?.role === "SUPER_ADMIN"} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
-    <main className="vertical-page industry-service-page operations-page">
+    <main className="vertical-page industry-service-page operations-page model-a-page-canvas">
       <ModuleGate moduleKey={profile.module}>
         <header className="vertical-hero service-hero operations-hero model-a-page-header"><div><span>{profile.eyebrow}</span><h1>{profile.title}</h1><p>{profile.summary}</p></div><div className="vertical-hero-stats model-a-executive-kpis"><article><strong>{totalRecords}</strong><span>registros operativos</span></article><article><strong>{entity?.fields.length || 0}</strong><span>datos por ficha</span></article></div></header>
         <DataManagementWorkspace

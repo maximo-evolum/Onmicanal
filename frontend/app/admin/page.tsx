@@ -1100,7 +1100,7 @@ export default function AdminPage() {
     return (
       <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active="Desarrollador" isDeveloper isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
-        <main className="main dashboard-page admin-page">
+        <main className="main dashboard-page admin-page model-a-page-canvas">
           <div className="empty-state">Cargando vista de desarrollador...</div>
         </main>
       </div>
@@ -1111,7 +1111,7 @@ export default function AdminPage() {
     return (
       <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
         <EvolumSidebar active="Desarrollador" isDeveloper={false} isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
-        <main className="main dashboard-page admin-page">
+        <main className="main dashboard-page admin-page model-a-page-canvas">
           <div className="empty-state">No tienes permiso para ver la vista de desarrollador.</div>
         </main>
       </div>
@@ -1121,7 +1121,7 @@ export default function AdminPage() {
   return (
     <div className={`module-with-menu-shell ${sidebarOpen ? "" : "nav-collapsed"}`}>
       <EvolumSidebar active="Desarrollador" isDeveloper isOpen={sidebarOpen} onToggle={() => setSidebarOpen((value) => !value)} />
-      <main className="main dashboard-page admin-page">
+      <main className="main dashboard-page admin-page model-a-page-canvas">
 
         <header className="module-app-header admin-module-header model-a-page-header">
           <div>

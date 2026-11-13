@@ -321,7 +321,7 @@ export function InboxShell() {
         showNotificationCenter={false}
       />
 
-      <section className="inbox-unified-workspace">
+      <section className="inbox-unified-workspace model-a-page-canvas">
         <InboxAppHeader
           agent={agent}
           loading={loading}

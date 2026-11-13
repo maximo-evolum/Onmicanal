@@ -113,7 +113,7 @@ export default function DashboardPage() {
         onToggle={() => setSidebarOpen((value) => !value)}
       />
 
-      <main className="executive-dashboard">
+      <main className="executive-dashboard model-a-page-canvas">
         <header className="executive-topbar executive-dashboard-header model-a-page-header">
           <div>
             <h1>Dashboard Ejecutivo</h1>

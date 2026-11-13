@@ -633,7 +633,7 @@ export default function CrmPrincipalPage() {
         showNotificationCenter={false}
       />
 
-      <section className="crm-main-workspace">
+      <section className="crm-main-workspace model-a-page-canvas model-a-crm-canvas">
         <header className="crm-main-header model-a-page-header">
           <div>
             <span className="crm-main-kicker">{isDeveloper ? "Desarrollador / EVOLUM OS" : "CRM principal / EVOLUM OS"}</span>

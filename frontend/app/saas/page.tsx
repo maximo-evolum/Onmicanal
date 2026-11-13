@@ -170,7 +170,7 @@ export default function SaasPage() {
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
       />
-      <main className="main dashboard-page phase5-page">
+      <main className="main dashboard-page phase5-page model-a-page-canvas">
         <header className="module-app-header model-a-page-header">
           <div>
             <span className="eyebrow">Planes y módulos</span>
