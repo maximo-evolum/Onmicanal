@@ -223,6 +223,10 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
   const [identityLoading, setIdentityLoading] = useState(Boolean(moduleKey));
   const [error, setError] = useState<string | null>(null);
   const activeSessionKeyRef = useRef<string | null>(null);
+  // Evita depender de un actualizador funcional de React al reconciliar la
+  // respuesta del catálogo. Ese actualizador se ejecuta durante el render y
+  // no debe disparar eventos que actualicen el menú lateral.
+  const modulesRef = useRef<string[] | null>(null);
 
   useEffect(() => {
     const syncSession = () => {
@@ -232,6 +236,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
         // No conservar permisos ni mensajes de acceso de la cuenta anterior
         // mientras llega la autorización de la nueva sesión.
         activeSessionKeyRef.current = nextKey;
+        modulesRef.current = null;
         setModules(null);
         setAuthoritativeRole(null);
         setIndustry(null);
@@ -262,6 +267,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
     const persistedAccess = getStoredTenantAccess(session);
     const currentAccess = currentCache || persistedAccess;
     if (currentAccess) {
+      modulesRef.current = currentAccess.modules;
       setModules(currentAccess.modules);
       setAuthoritativeRole(currentAccess.role || session?.role || null);
       setIndustry(currentAccess.industry || null);
@@ -282,6 +288,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
         // /auth/me ya entrega los módulos autorizados para esta sesión. Los
         // conservamos como respaldo cuando el catálogo tarda en sincronizar.
         if (data.modules?.length) {
+          modulesRef.current = data.modules;
           setModules(data.modules);
           const nextIndustry = data.tenant?.industry || null;
           setIndustry(nextIndustry);
@@ -302,24 +309,25 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
     getMyModules()
       .then((data) => {
         if (!active) return;
-        setModules((current) => {
-          const nextModules = data.modules?.length ? data.modules : (current?.length ? current : (data.modules || []));
-          const nextIndustry = data.industry || industry;
-          if (data.industry) setIndustry(data.industry);
-          if (cacheKey) {
-            const preservedRole = isDeveloperRole(session?.role) ? "SUPER_ADMIN" : (data.role || session?.role || null);
-            moduleAccessCache.set(cacheKey, { modules: nextModules, role: preservedRole, industry: nextIndustry });
-            if (session?.id) storeTenantAccess({
-              userId: session.id,
-              tenantId: session.tenantId || null,
-              role: preservedRole,
-              jobTitle: session.jobTitle || null,
-              industry: nextIndustry,
-              modules: nextModules
-            });
-          }
-          return nextModules;
-        });
+        const nextModules = data.modules?.length
+          ? data.modules
+          : (modulesRef.current?.length ? modulesRef.current : (data.modules || []));
+        const nextIndustry = data.industry || industry;
+        modulesRef.current = nextModules;
+        setModules(nextModules);
+        if (data.industry) setIndustry(data.industry);
+        if (cacheKey) {
+          const preservedRole = isDeveloperRole(session?.role) ? "SUPER_ADMIN" : (data.role || session?.role || null);
+          moduleAccessCache.set(cacheKey, { modules: nextModules, role: preservedRole, industry: nextIndustry });
+          if (session?.id) storeTenantAccess({
+            userId: session.id,
+            tenantId: session.tenantId || null,
+            role: preservedRole,
+            jobTitle: session.jobTitle || null,
+            industry: nextIndustry,
+            modules: nextModules
+          });
+        }
         // Si /auth/me ya resolvió el rol actual, no volver a pisarlo con
         // información local antigua. El rol del catálogo solo es respaldo.
         if (data.role) {
@@ -335,6 +343,7 @@ export function useModuleAccess(moduleKey?: ModuleAccessKey) {
         if (!active) return;
         // El backend mantiene la autorizacion real. No bloquear la interfaz
         // por una falla transitoria al consultar los modulos del tenant.
+        modulesRef.current = null;
         setModules(null);
         setError(err instanceof Error ? err.message : "No se pudieron cargar los módulos");
       })

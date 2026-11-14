@@ -150,6 +150,15 @@ const frontendUrl = (process.env.BROKER_WEB_URL || 'http://localhost:3001').repl
     assert.match(await handoff.innerText(),/Visita realizada y precio revisado/);
     await handoff.scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(out,'conversion-en-negocios.png')});
+    await page.setViewportSize({width:390,height:844});
+    await page.waitForTimeout(180);
+    const operationsHeader = page.locator('.broker-os-header');
+    await operationsHeader.scrollIntoViewIfNeeded();
+    const operationsHeaderHeight = await operationsHeader.evaluate((element) => Math.round(element.getBoundingClientRect().height));
+    await page.screenshot({path:path.join(out,'operaciones-broker-movil.png')});
+    assert.ok(operationsHeaderHeight < 380, `El encabezado de Operaciones Broker no debe reservar espacio vacío en teléfono (alto actual: ${operationsHeaderHeight}px).`);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), true, 'Operaciones Broker debe caber en el ancho del teléfono.');
+    await page.setViewportSize({width:1440,height:1050});
     await handoff.getByRole('link',{name:'Ver captación de origen'}).click();
     await page.getByRole('link',{name:'Abrir negocio',exact:true}).waitFor();
     await page.goto(`${frontendUrl}/realty?view=properties`);

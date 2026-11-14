@@ -99,6 +99,12 @@ test("Broker usa un único menú EV y el rail cerrado no conserva la burbuja ant
   assert.match(css, /\.crm-main\s*\)\s*>\s*\.evolum-workspace-chrome\.is-menu-open/);
 });
 
+test("Operaciones Broker no reserva un encabezado alto en teléfono", () => {
+  const css = source("app/globals.css");
+  assert.match(css, /\.broker-os-header\s*\{\s*display: flex !important;\s*flex-direction: column;/);
+  assert.match(css, /\.broker-os-header :is\(\s*\.broker-os-header-copy,/);
+});
+
 test("el inicio no ofrece accesos de configuración que la cuenta no puede abrir", () => {
   const crm = source("app/crm-principal/page.tsx");
   assert.match(crm, /const canConfigureAgent = state\.modulesLoaded && moduleAllowed\(/);

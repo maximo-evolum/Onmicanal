@@ -22542,4 +22542,25 @@ body {
     .broker-access-summary,
     .broker-os-header-actions
   ) { width: 100%; }
+
+  /* En teléfono el encabezado de operaciones no debe reservar una fila alta
+     entre el contexto y las acciones. Se apila de forma natural y conserva
+     el área útil para la cola de trabajo. */
+  :root[data-ui-layout="model-a"] .broker-os-header {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch !important;
+    align-content: start !important;
+    justify-content: flex-start !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+
+  :root[data-ui-layout="model-a"] .broker-os-header :is(
+    .broker-os-header-copy,
+    .broker-os-header-side
+  ) {
+    align-self: stretch !important;
+    min-height: 0 !important;
+  }
 }

@@ -29,3 +29,9 @@ test("un corredor estándar solo recibe módulos de operación Broker", () => {
   }
   assert.match(moduleAccess, /isStandardBrokerAccount\(role, jobTitle, industry\) && !brokerModuleAllowlist\.has\(moduleKey\)/);
 });
+
+test("la sincronización de permisos no actualiza el menú durante otro render", () => {
+  assert.match(moduleAccess, /const modulesRef = useRef<string\[\] \| null>\(null\)/);
+  assert.doesNotMatch(moduleAccess, /setModules\(\(current\) => \{[\s\S]*?storeTenantAccess/);
+  assert.match(moduleAccess, /modulesRef\.current = nextModules;\s*setModules\(nextModules\);[\s\S]*?storeTenantAccess/s);
+});
