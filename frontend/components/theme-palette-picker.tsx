@@ -16,6 +16,7 @@ function applyColorMode(isDark: boolean) {
   document.documentElement.dataset.theme = isDark ? "dark" : accentTheme;
   document.documentElement.dataset.designSystem = isDark ? "dark" : "finance";
   document.documentElement.dataset.uiLayout = "model-a";
+  document.documentElement.dataset.themeReady = "true";
 }
 
 export function ThemePalettePicker() {

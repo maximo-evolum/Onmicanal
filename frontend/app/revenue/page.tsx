@@ -11,5 +11,8 @@ export default function RevenueRedirectPage() {
     router.replace("/payments");
   }, [router]);
 
-  return <main className="main dashboard-page"><div className="empty-state">Redirigiendo a Pagos...</div></main>;
+  // Mantiene el mismo lienzo ejecutivo mientras la redirección de
+  // compatibilidad se hidrata. De esta forma un enlace antiguo no muestra la
+  // composición anterior ni deja una pantalla vacía si la navegación tarda.
+  return <main className="main dashboard-page model-a-page-canvas"><section className="module-app-header model-a-page-header"><div><span>INGRESOS</span><h1>Abriendo pagos</h1><p>Redirigiendo al módulo que concentra cobros, estados y enlaces de pago.</p></div></section></main>;
 }

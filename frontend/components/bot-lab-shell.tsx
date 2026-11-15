@@ -47,6 +47,7 @@ type LabMessage = {
 export function BotLabShell() {
   const agent = useAgentSession();
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const shouldFollowChatRef = useRef(false);
   const [channel, setChannel] = useState("whatsapp");
   const [tenantSlug, setTenantSlug] = useState("demo-parrilladas");
   const [message, setMessage] = useState(getScenarios("demo-parrilladas")[0].message);
@@ -69,8 +70,13 @@ export function BotLabShell() {
   const scenarios = getScenarios(tenantSlug);
 
   useEffect(() => {
+    // Abrir el laboratorio debe conservar el encabezado y el contexto de la
+    // vista. El seguimiento automático solo corresponde tras enviar una
+    // prueba, cuando aparecen mensajes nuevos que la persona necesita ver.
+    if (!shouldFollowChatRef.current) return;
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [chat.length, loading]);
+    if (!loading && !simulatingLead) shouldFollowChatRef.current = false;
+  }, [chat.length, loading, simulatingLead]);
 
   useEffect(() => {
     const nextScenarios = getScenarios(tenantSlug);
@@ -91,6 +97,7 @@ export function BotLabShell() {
     if (!customMessage.trim()) return;
 
     try {
+      shouldFollowChatRef.current = true;
       setLoading(true);
       setError(null);
       setChat((prev) => [
@@ -130,6 +137,7 @@ export function BotLabShell() {
     if (!message.trim()) return;
 
     try {
+      shouldFollowChatRef.current = true;
       setSimulatingLead(true);
       setError(null);
       setChat((prev) => [
@@ -170,7 +178,7 @@ export function BotLabShell() {
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((value) => !value)}
       />
-      <main className="bot-lab-module-main">
+      <main className="bot-lab-module-main model-a-page-canvas">
         <header className="module-app-header bot-lab-module-header model-a-page-header">
           <div>
             <p>BOT LAB</p>

@@ -29,6 +29,10 @@ export function ThemeBootstrap() {
     // claro/oscuro. Esta marca permite que las vistas históricas adopten el
     // mismo lienzo sin alterar su lógica ni la paleta elegida por la cuenta.
     document.documentElement.dataset.uiLayout = "model-a";
+    // Señal explícita de que la preferencia visual ya se aplicó en cliente.
+    // También evita que una prueba visual capture el HTML inicial antes de la
+    // hidratación, que puede conservar temporalmente la paleta del servidor.
+    document.documentElement.dataset.themeReady = "true";
   }, []);
 
   return null;

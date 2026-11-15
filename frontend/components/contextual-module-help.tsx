@@ -46,9 +46,9 @@ function findHelp(pathname: string): HelpContent | null {
 export function ContextualModuleHelp() {
   const pathname = usePathname();
   const help = useMemo(() => findHelp(pathname), [pathname]);
-  // En teléfonos la guía no debe cubrir el contenido al entrar al módulo.
-  // En escritorio conservamos la apertura inicial para acompañar el primer
-  // recorrido, salvo que la persona ya haya elegido minimizarla.
+  // La ayuda es una acción voluntaria: abrirla de forma automática sobre el
+  // trabajo podía ocultar formularios, calendarios o conversaciones. La
+  // elección explícita de expandirla se conserva durante la sesión.
   const [isOpen, setIsOpen] = useState(false);
   const helpId = `evolum-module-help-${pathname.replace(/[^a-z0-9]+/gi, "-")}`;
 
@@ -66,7 +66,7 @@ export function ContextualModuleHelp() {
       setIsOpen(false);
       return;
     }
-    setIsOpen(!window.matchMedia("(max-width: 760px)").matches);
+    setIsOpen(false);
   }, [help, pathname]);
 
   if (!help) return null;

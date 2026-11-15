@@ -20345,6 +20345,11 @@ body {
   .broker-financing-workspace > header
 ) {
   position: relative;
+  /* Los módulos se ejecutan dentro de un lienzo flex de alto controlado.
+     Evitamos que el encabezado se encoja cuando el contenido operativo excede
+     el alto de la pantalla: un título nunca debe quedar recortado. */
+  flex: 0 0 auto;
+  min-height: max-content !important;
   overflow: hidden;
   border: 1px solid var(--model-a-line) !important;
   border-radius: 20px !important;
@@ -21893,6 +21898,145 @@ body {
   box-shadow: none !important;
 }
 
+/* Inicio del CRM: la composición original pertenecía a una cabecera de
+   cinco columnas. En modo oscuro esa grilla heredada podía expandir el
+   buscador y dejar un panel vacío desproporcionado. Modelo A conserva las
+   mismas acciones, pero las organiza como contexto, búsqueda y respaldo.
+   El perfil ya está disponible en la barra superior global, por lo que no
+   se duplica dentro del contenido de la página. */
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px) auto !important;
+  align-items: center !important;
+  gap: 14px !important;
+  min-height: 0 !important;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header > :first-child {
+  min-width: 0;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search {
+  position: relative;
+  display: flex !important;
+  align-items: center;
+  min-width: 0;
+  min-height: 54px;
+  gap: 8px;
+  padding: 5px 6px 5px 13px;
+  border: 1px solid var(--model-a-line-strong) !important;
+  border-radius: 14px !important;
+  color: var(--model-a-muted) !important;
+  background: var(--model-a-panel-soft) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search-icon {
+  position: static;
+  z-index: auto;
+  display: grid;
+  flex: 0 0 19px;
+  width: 19px;
+  height: 19px;
+  color: var(--model-a-muted) !important;
+  pointer-events: none;
+  transform: none;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search-icon svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 !important;
+  border: 0 !important;
+  color: var(--model-a-ink) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search input::placeholder {
+  color: var(--model-a-muted);
+  opacity: 1;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search button {
+  position: static;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 84px;
+  height: 42px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)) !important;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search button::before,
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search button::after {
+  display: none;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-ops {
+  width: fit-content;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-profile {
+  display: none;
+}
+
+/* Agenda: el menú EV reduce el ancho útil de la página. Las tres agendas no
+   deben conservar un mínimo fijo que deje el último mes cortado; Modelo A las
+   reparte dentro del lienzo y, cuando corresponde, lleva el tercer mes a una
+   segunda fila en vez de ocultarlo tras un desplazamiento horizontal. */
+:root[data-ui-layout="model-a"] .chile-calendar-grid {
+  min-width: 0;
+  overflow-x: visible;
+}
+
+:root[data-ui-layout="model-a"] .chile-calendar-grid.month-count-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:root[data-ui-layout="model-a"] .chile-calendar-grid.month-count-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+:root[data-ui-layout="model-a"] .chile-calendar-grid.month-count-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1560px) {
+  :root[data-ui-layout="model-a"] .chile-calendar-grid.month-count-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  :root[data-ui-layout="model-a"] :is(
+    .chile-calendar-grid.month-count-2,
+    .chile-calendar-grid.month-count-3
+  ) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 700px) {
   :root[data-ui-layout="model-a"] :is(
     .executive-topbar.model-a-page-header,
@@ -21904,6 +22048,163 @@ body {
     .documents-header.model-a-page-header,
     .workflow-hero.model-a-page-header
   ) { padding: 16px !important; border-radius: 16px !important; }
+
+  /* Las cabeceras de módulos heredaban una fila horizontal en modo oscuro.
+     En un teléfono eso dividía artificialmente el título y las acciones en
+     columnas estrechas. Se prioriza la lectura: contexto completo y luego
+     acciones, sin perder ninguna de las funciones existentes. */
+  :root[data-ui-layout="model-a"] :is(
+    .module-app-header.model-a-page-header,
+    .agenda-app-header.model-a-page-header,
+    .documents-header.model-a-page-header,
+    .pipeline-pro-topbar.model-a-page-header,
+    .executive-topbar.model-a-page-header,
+    .workflow-hero.model-a-page-header,
+    .vertical-hero.model-a-page-header,
+    .connections-header.model-a-page-header
+  ) {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 14px !important;
+  }
+
+  /* Las vistas verticales históricas acumulaban tres indicadores en una
+     columna. En teléfono convertían el encabezado en casi media pantalla. El
+     resumen sigue visible, pero se presenta como una franja compacta de tres
+     indicadores antes del área de trabajo. */
+  :root[data-ui-layout="model-a"] .vertical-hero.model-a-page-header .vertical-hero-stats {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    width: 100%;
+    gap: 8px !important;
+    flex-direction: row !important;
+  }
+
+  :root[data-ui-layout="model-a"] .vertical-hero.model-a-page-header .vertical-hero-stats > article {
+    min-width: 0;
+    min-height: 82px;
+    padding: 10px !important;
+    border-radius: 12px !important;
+  }
+
+  :root[data-ui-layout="model-a"] .vertical-hero.model-a-page-header .vertical-hero-stats > article strong {
+    font-size: 20px;
+    line-height: 1.1;
+  }
+
+  :root[data-ui-layout="model-a"] .vertical-hero.model-a-page-header .vertical-hero-stats > article span {
+    font-size: 10px;
+    line-height: 1.25;
+    letter-spacing: .02em;
+  }
+
+  :root[data-ui-layout="model-a"] :is(
+    .module-app-actions,
+    .agenda-app-actions,
+    .pipeline-kpis,
+    .executive-top-actions,
+    .header-actions,
+    .metadata-header-actions,
+    .realty-hero-actions
+  ) {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  /* La barra superior global ya aporta notificaciones y perfil. Ocultar la
+     repetición en cabeceras deja espacio al título y evita cápsulas truncadas. */
+  :root[data-ui-layout="model-a"] :is(
+    .module-app-actions,
+    .agenda-app-actions,
+    .pipeline-kpis,
+    .executive-top-actions,
+    .header-actions,
+    .metadata-header-actions,
+    .realty-hero-actions,
+    .broker-os-header-actions,
+    .broker-commercial-header-actions,
+    .broker-tracker-header-actions,
+    .broker-monthly-header-actions
+  ) > .account-pill-control {
+    display: none;
+  }
+
+  /* En vistas de Broker el encabezado pasa a columna en teléfono. La regla
+     histórica de escritorio reservaba 420px para el primer bloque y, al
+     cambiar el eje, ese valor se convertía en altura vacía. */
+  :root[data-ui-layout="model-a"] .model-a-page-header > :first-child {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  /* El Inicio del CRM tiene búsqueda, respaldo y perfil en su encabezado.
+     La versión histórica de modo oscuro mantenía la grilla de escritorio y
+     deformaba el buscador en teléfono. Se conserva cada acción, pero se
+     ordena como una cabecera operacional de una sola columna. */
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    align-items: start !important;
+    gap: 12px !important;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search {
+    display: flex !important;
+    align-items: center;
+    width: 100%;
+    max-width: none;
+    min-height: 54px;
+    gap: 8px;
+    padding: 5px 6px 5px 13px;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search-icon {
+    position: static;
+    flex: 0 0 19px;
+    transform: none;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 42px;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search button {
+    position: static;
+    width: auto;
+    min-width: 78px;
+    height: 42px;
+    padding: 0 13px;
+    border: 0;
+    border-radius: 10px;
+    color: #ffffff !important;
+    background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-2)) !important;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search button::before,
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-search button::after {
+    display: none;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-ops {
+    width: fit-content;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :root[data-ui-layout="model-a"] .crm-main-header.model-a-page-header .crm-main-profile {
+    display: none;
+  }
 
   :root[data-ui-layout="model-a"] :is(
     .executive-kpi-grid.model-a-executive-kpis,
@@ -21969,7 +22270,19 @@ body {
 }
 
 :root[data-ui-layout="model-a"] main.model-a-page-canvas {
-  display: grid;
+  /* El flujo ejecutivo es secuencial: contexto, indicadores y trabajo.
+     Grid comprimía las filas implícitas de encabezados con contenido variable
+     y podía superponer la primera tarjeta sobre el título. */
+  display: flex !important;
+  flex-direction: column;
+}
+
+/* La capa histórica de la paleta clara utiliza un selector más específico
+   para convertir el lienzo en grid. Modelo A conserva un único flujo
+   vertical; esta variante gana la cascada cuando dicha paleta está activa. */
+:root[data-ui-layout="model-a"][data-design-system] main.model-a-page-canvas {
+  display: flex !important;
+  flex-direction: column;
 }
 
 /* Finanzas e Inbox necesitan conservar su anchura completa porque contienen
@@ -22393,6 +22706,56 @@ body {
   background: #0b0a18 !important;
 }
 
+/* Inventario de Broker: los filtros son controles operativos, no etiquetas.
+   En oscuro deben conservar la misma superficie nocturna que el resto de la
+   cartera y no volver a la cápsula blanca heredada. */
+:root[data-ui-layout="model-a"][data-theme="dark"] .realty-workspace .realty-filter-chips button,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .realty-workspace .realty-filter-chips button {
+  border-color: rgba(184, 157, 255, .34) !important;
+  color: var(--model-a-ink) !important;
+  background: #17132c !important;
+}
+
+:root[data-ui-layout="model-a"][data-theme="dark"] .realty-workspace .realty-filter-chips button:hover,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .realty-workspace .realty-filter-chips button:hover {
+  border-color: var(--theme-primary-2) !important;
+  background: #211941 !important;
+}
+
+:root[data-ui-layout="model-a"][data-theme="dark"] .realty-workspace .realty-filter-chips button.active,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .realty-workspace .realty-filter-chips button.active {
+  color: #fff !important;
+  background: linear-gradient(135deg, #7a35ff, #387cff) !important;
+}
+
+:root[data-ui-layout="model-a"][data-theme="dark"] .realty-workspace .realty-inline-action,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .realty-workspace .realty-inline-action {
+  border-color: rgba(184, 157, 255, .34) !important;
+  color: #ece7ff !important;
+  background: #17132c !important;
+}
+
+:root[data-ui-layout="model-a"][data-theme="dark"] .realty-workspace .realty-inline-action:hover,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .realty-workspace .realty-inline-action:hover {
+  border-color: var(--theme-primary-2) !important;
+  background: #211941 !important;
+}
+
+/* La ficha de propietarios usa CSS Modules; el identificador incorpora un
+   hash de compilación. Este selector estable cubre la cápsula de alcance y
+   evita que quede blanco con texto claro cuando el sistema está en oscuro. */
+:root[data-ui-layout="model-a"][data-theme="dark"] .realty-workspace [class*="broker-owners-workspace-module__"][class*="__scope"],
+:root[data-ui-layout="model-a"][data-design-system="dark"] .realty-workspace [class*="broker-owners-workspace-module__"][class*="__scope"] {
+  border: 1px solid rgba(119, 231, 224, .28) !important;
+  color: #d8f4f0 !important;
+  background: #16363d !important;
+}
+
+:root[data-ui-layout="model-a"][data-theme="dark"] .realty-workspace [class*="broker-owners-workspace-module__"][class*="__scope"] small,
+:root[data-ui-layout="model-a"][data-design-system="dark"] .realty-workspace [class*="broker-owners-workspace-module__"][class*="__scope"] small {
+  color: #bde5df !important;
+}
+
 @media (max-width: 980px) {
   :root[data-ui-layout="model-a"] :is(
     main.model-a-page-canvas,
@@ -22523,6 +22886,120 @@ body {
   .broker-governance-activity header p,
   .broker-governance-activity article :is(span, p, small)
 ) { color: var(--model-a-muted) !important; }
+
+/* Cierre de contraste nocturno: algunas vistas antiguas de verticales y
+   Finanzas aún aplicaban superficies claras y títulos oscuros después de que
+   Modelo A ya había activado el modo oscuro. Esta capa cubre las tarjetas de
+   contenido, no los botones ni estados, para mantener sus señales de acción. */
+:root[data-ui-layout="model-a"][data-design-system="dark"] .model-a-page-canvas :is(
+  .finance-card,
+  .finance-kpis > article,
+  .vertical-card,
+  .vertical-list,
+  .service-record-card,
+  .realty-buyer-item,
+  .realty-match-panel,
+  .realty-property-match
+) {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink) !important;
+  background: linear-gradient(145deg, #19152f, #111a2e) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .model-a-page-canvas :is(
+  .finance-card,
+  .finance-kpis > article,
+  .vertical-card,
+  .vertical-list,
+  .service-record-card,
+  .realty-buyer-item,
+  .realty-match-panel,
+  .realty-property-match
+) :is(h1, h2, h3, h4, strong, b) {
+  color: var(--model-a-ink) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .model-a-page-canvas :is(
+  .finance-card,
+  .finance-kpis > article,
+  .vertical-card,
+  .vertical-list,
+  .service-record-card,
+  .realty-buyer-item,
+  .realty-match-panel,
+  .realty-property-match
+) :is(p, small, label) {
+  color: var(--model-a-muted) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-cycle {
+  border-color: var(--model-a-line) !important;
+  color: var(--model-a-ink) !important;
+  background: linear-gradient(118deg, #181333, #10274a) !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-cycle :is(h2, strong, b) {
+  color: var(--model-a-ink) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-cycle :is(p, small, span) {
+  color: var(--model-a-muted) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-cycle-steps button {
+  border-color: rgba(184, 157, 255, .27) !important;
+  color: var(--model-a-ink) !important;
+  background: rgba(20, 19, 47, .86) !important;
+}
+
+/* Finanzas conserva el mismo contraste nocturno que el resto de Modelo A.
+   Estas reglas van después de la paleta clara Lumen, que declara controles
+   propios con fondo blanco para esta vertical. */
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-search,
+:root[data-ui-layout="model-a"][data-theme="dark"] .finance-product-workspace .finance-search {
+  border-color: var(--model-a-line-strong) !important;
+  color: var(--model-a-ink) !important;
+  background: #17132c !important;
+  box-shadow: none !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-search-label,
+:root[data-ui-layout="model-a"][data-theme="dark"] .finance-product-workspace .finance-search-label {
+  border-color: var(--model-a-line) !important;
+  color: #cbbcff !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-search input,
+:root[data-ui-layout="model-a"][data-theme="dark"] .finance-product-workspace .finance-search input {
+  color: var(--model-a-ink) !important;
+  background: transparent !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-search input::placeholder,
+:root[data-ui-layout="model-a"][data-theme="dark"] .finance-product-workspace .finance-search input::placeholder {
+  color: #aaa4c3 !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-search-icon,
+:root[data-ui-layout="model-a"][data-theme="dark"] .finance-product-workspace .finance-search-icon {
+  stroke: #cbbcff !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-overview-export,
+:root[data-ui-layout="model-a"][data-theme="dark"] .finance-product-workspace .finance-overview-export {
+  border-color: rgba(89, 226, 212, .42) !important;
+  color: #eafffc !important;
+  background: linear-gradient(135deg, #087d85, #125c8e) !important;
+  box-shadow: 0 8px 18px rgba(8, 169, 155, .17) !important;
+}
+
+:root[data-ui-layout="model-a"][data-design-system="dark"] .finance-product-workspace .finance-overview-export:hover:not(:disabled),
+:root[data-ui-layout="model-a"][data-theme="dark"] .finance-product-workspace .finance-overview-export:hover:not(:disabled) {
+  border-color: #8ff4dd !important;
+  background: linear-gradient(135deg, #0a9490, #176ea4) !important;
+}
 
 /* Este bloque va después del encabezado de escritorio para no volver a
    comprimir el contenido en dos columnas cuando se navega desde un teléfono. */

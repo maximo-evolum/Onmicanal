@@ -6,10 +6,10 @@ const path = require("node:path");
 
 const source = (relativePath) => fs.readFileSync(path.resolve(__dirname, "..", relativePath), "utf8");
 
-test("la guía rápida comienza minimizada en teléfonos y recuerda la elección de la persona", () => {
+test("la guía rápida comienza minimizada y recuerda la elección de la persona", () => {
   const help = source("components/contextual-module-help.tsx");
   assert.match(help, /useState\(false\)/);
-  assert.match(help, /matchMedia\("\(max-width: 760px\)"\)/);
+  assert.match(help, /setIsOpen\(false\)/);
   assert.match(help, /savedState === "expanded"/);
   assert.match(help, /sessionStorage\.setItem\(`evolum-module-help:\$\{pathname\}`, "expanded"\)/);
 });
