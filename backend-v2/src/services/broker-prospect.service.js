@@ -65,12 +65,12 @@ export function mandateTerms(data, input) {
   return { publicationPrice: price, commissionPct: rate, exclusivityDays: days, signedAt: signedAt.toISOString(), evidenceReference: str(input.evidenceReference).slice(0, 1000), currency: data.currency };
 }
 
-export function prospectPresentation(record, now = new Date()) {
+export function prospectPresentation(record, now = new Date(), priceGapThreshold = 10) {
   const d = record.data;
   const days = Math.max(0, Math.floor((now - new Date(d.stageEnteredAt || record.createdAt)) / 86400000));
   const gap = d.valuation?.amount > 0 && d.ownerExpectedPrice > 0 ? (d.ownerExpectedPrice - d.valuation.amount) / d.valuation.amount * 100 : null;
   const next = { PROSPECCION: "Contactar al propietario y calificar su necesidad", CONTACTO: "Coordinar visita y completar datos del inmueble", TASACION: "Revisar comparables y alinear expectativa de precio", NEGOCIACION: "Acordar condiciones y registrar el mandato firmado" };
-  return { ...record, daysInStage: days, priceGapPct: gap, priceGapWarning: gap !== null && Math.abs(gap) > 10, priority: !d.outcome && (days >= 7 || d.stage === "NEGOCIACION") ? "ALTA" : "NORMAL", nextAction: d.outcome ? "Proceso finalizado" : next[d.stage] };
+  return { ...record, daysInStage: days, priceGapPct: gap, priceGapWarning: gap !== null && Math.abs(gap) > priceGapThreshold, priority: !d.outcome && (days >= 7 || d.stage === "NEGOCIACION") ? "ALTA" : "NORMAL", nextAction: d.outcome ? "Proceso finalizado" : next[d.stage] };
 }
 
 // Actualización condicional: serializa la conversión y evita pérdida de notas.

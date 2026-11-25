@@ -1,11 +1,19 @@
 /** Archivo: Expone las rutas HTTP del dominio notifications y delega su lógica a servicios protegidos. */
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
+import { readBrokerControl } from "../services/broker-tenant-controls.service.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { createTenantNotification, notificationScopeFor, notificationVisibleForIndustry } from "../lib/notifications.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 
 export const notificationsRouter = Router();
+
+async function brokerNoticeFilter(req) {
+  if (req.tenant?.industry !== "REAL_ESTATE") return () => true;
+  const [company,person] = await Promise.all([readBrokerControl(prisma,req.tenantId),readBrokerControl(prisma,req.tenantId,"notices:"+req.user.id)]);
+  return record => notificationScopeFor(record) !== "REAL_ESTATE" || String(record.data?.severity || "info").toLowerCase() !== "info"
+    || (company.value.showInfoNotices && person.value.showInfoNotices);
+}
 
 function serializeNotification(record) {
   return {
@@ -41,7 +49,8 @@ notificationsRouter.get("/notifications", async (req, res) => {
       take: Math.min(Math.max(limit * 5, 60), 300)
     });
 
-    const notifications = records
+    const allows = await brokerNoticeFilter(req);
+    const notifications = records.filter(allows)
       .filter((record) => notificationVisibleForIndustry(record, req.tenant?.industry))
       .slice(0, limit)
       .map(serializeNotification);
@@ -141,7 +150,7 @@ notificationsRouter.patch("/notifications/:id/read", async (req, res) => {
       where: { id: req.params.id, tenantId: req.tenantId, recordType: "notification" }
     });
 
-    if (!current || !notificationVisibleForIndustry(current, req.tenant?.industry)) {
+    if (!current || !notificationVisibleForIndustry(current, req.tenant?.industry) || !(await brokerNoticeFilter(req))(current)) {
       return res.status(404).json({ error: "Notificacion no encontrada" });
     }
 
@@ -171,7 +180,8 @@ notificationsRouter.patch("/notifications/read-all", async (req, res) => {
       where: { tenantId: req.tenantId, recordType: "notification", status: "UNREAD" },
       select: { id: true, title: true, data: true }
     });
-    const visibleIds = unread
+    const allows = await brokerNoticeFilter(req);
+    const visibleIds = unread.filter(allows)
       .filter((record) => notificationVisibleForIndustry(record, req.tenant?.industry))
       .map((record) => record.id);
     const result = visibleIds.length

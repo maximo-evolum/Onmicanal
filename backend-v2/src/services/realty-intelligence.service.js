@@ -1,4 +1,5 @@
 /** Archivo: Implementa reglas de negocio y procesos del dominio realty intelligence. */
+import { readBrokerControl, canUseAgent } from "./broker-tenant-controls.service.js";
 import { prisma } from "../lib/db.js";
 import { brokerRecordWhere, canBrokerAction } from "./broker-access.service.js";
 
@@ -115,7 +116,7 @@ function propertyMatchPayload(property) {
   };
 }
 
-export function scoreRealtyLeadMatch(lead, property) {
+export function scoreRealtyLeadMatch(lead, property, matchScore = 65) {
   const fields = leadFields(lead);
   const interest = leadText(lead);
   const price = propertyPrice(property);
@@ -164,7 +165,7 @@ export function scoreRealtyLeadMatch(lead, property) {
     compatibility: {
       operationCompatible,
       propertyAvailable: available,
-      status: !available ? "NOT_AVAILABLE" : operationCompatible === false ? "OPERATION_INCOMPATIBLE" : score >= 65 ? "RECOMMENDED" : "REVIEW",
+      status: !available ? "NOT_AVAILABLE" : operationCompatible === false ? "OPERATION_INCOMPATIBLE" : score >= matchScore ? "RECOMMENDED" : "REVIEW",
       canRequestVisit: available && operationCompatible !== false
     }
   };
@@ -188,7 +189,7 @@ function propertyDraft(property) {
 }
 
 /** Alertas derivadas: se recalculan desde la cartera y no generan registros falsos. */
-export function buildBrokerInventoryAlerts({ properties = [], mandates = [], now = new Date() } = {}) {
+export function buildBrokerInventoryAlerts({ properties = [], mandates = [], now = new Date(), draftDays = 7, incompleteDays = 0 } = {}) {
   const alerts = [];
   const mandateByProperty = new Map();
   for (const mandate of mandates) {
@@ -199,7 +200,7 @@ export function buildBrokerInventoryAlerts({ properties = [], mandates = [], now
     mandateByProperty.set(propertyId, current);
   }
   const staleBefore = new Date(now);
-  staleBefore.setDate(staleBefore.getDate() - 7);
+  staleBefore.setDate(staleBefore.getDate() - draftDays);
   for (const property of properties) {
     const data = dataOf(property);
     const assigned = text(data.assignedBrokerId || property.assignedToId);
@@ -211,9 +212,9 @@ export function buildBrokerInventoryAlerts({ properties = [], mandates = [], now
     });
     if (propertyDraft(property) && new Date(property.updatedAt) < staleBefore) alerts.push({
       id: `draft-${property.id}`, code: "DRAFT_STALE", priority: "MEDIUM", propertyId: property.id, title: property.title,
-      message: "Borrador o captación sin actualización durante más de 7 días.", action: "Revisar captación"
+      message: `Borrador o captación sin actualización durante más de ${draftDays} días.`, action: "Revisar captación"
     });
-    if (complete < 100) alerts.push({
+    if (complete < 100 && (!incompleteDays || now - new Date(property.updatedAt) >= incompleteDays * 86400000)) alerts.push({
       id: `incomplete-${property.id}`, code: "INCOMPLETE_PROFILE", priority: complete < 50 ? "HIGH" : "MEDIUM", propertyId: property.id, title: property.title,
       message: `Ficha incompleta (${complete}%). Completa precio, comuna, medios, superficie, responsable y propietario cuando corresponda.`, action: "Completar ficha"
     });
@@ -230,7 +231,7 @@ export function buildBrokerInventoryAlerts({ properties = [], mandates = [], now
   return alerts.sort((left, right) => (priorityOrder[left.priority] ?? 9) - (priorityOrder[right.priority] ?? 9) || left.title.localeCompare(right.title, "es-CL"));
 }
 
-export async function getRealtyIntelligence({ tenantId, access, sampleLimit = 12, db = prisma }) {
+export async function getRealtyIntelligence({ tenantId, access, sampleLimit = 12, db = prisma, controls = {} }) {
   const scoped = extra => brokerRecordWhere({ tenantId, brokerAccess: access, method: "POST" }, extra);
   const [properties, visits, owners, brokers, leads, campaigns, mandates] = await Promise.all([
     db.industryRecord.findMany({ where: scoped({ recordType: "property", status: { not: "ARCHIVED" } }), include: { assignedTo: { select: { id: true, name: true } } }, orderBy: { updatedAt: "desc" }, take: 2000 }),
@@ -249,7 +250,7 @@ export async function getRealtyIntelligence({ tenantId, access, sampleLimit = 12
   const photosMissing = properties.filter((property) => !text(dataOf(property).photoUrl) && !(Array.isArray(dataOf(property).gallery) && dataOf(property).gallery.length));
   const stale = properties.filter((property) => Date.now() - new Date(property.updatedAt).getTime() > 14 * 24 * 60 * 60 * 1000);
   const unassigned = properties.filter((property) => !text(dataOf(property).assignedBrokerId || property.assignedToId));
-  const inventoryAlerts = buildBrokerInventoryAlerts({ properties, mandates });
+  const inventoryAlerts = buildBrokerInventoryAlerts({ properties, mandates, draftDays: controls.draftDays, incompleteDays: controls.incompleteDays });
   const brokerPerformance = brokers.map((broker) => {
     const portfolio = properties.filter((property) => text(dataOf(property).assignedBrokerId || property.assignedToId) === broker.id);
     const value = portfolio.reduce((total, property) => total + propertyPrice(property), 0);
@@ -281,7 +282,7 @@ export async function getRealtyIntelligence({ tenantId, access, sampleLimit = 12
   };
 }
 
-export async function getRealtyLeadMatches({ tenantId, access, leadId, limit = 8, db = prisma }) {
+export async function getRealtyLeadMatches({ tenantId, access, leadId, limit = 8, db = prisma, matchScore = 65 }) {
   const [lead, properties] = await Promise.all([
     db.lead.findFirst({ where: realtyLeadScope(tenantId, access, { id: leadId }) }),
     db.industryRecord.findMany({ where: brokerRecordWhere({ tenantId, brokerAccess: access, method: "POST" }, { recordType: "property", status: { not: "ARCHIVED" } }), select: { id: true, title: true, status: true, data: true, assignedToId: true, updatedAt: true }, take: 1000 })
@@ -289,11 +290,11 @@ export async function getRealtyLeadMatches({ tenantId, access, leadId, limit = 8
   if (!lead) return null;
   return {
     lead: { id: lead.id, name: lead.name, status: lead.status, budget: lead.budget, commune: lead.commune, propertyType: lead.propertyType, interest: lead.interest, closeProbability: lead.closeProbability },
-    matches: properties.filter(propertyIsAvailable).map((property) => ({ property: propertyMatchPayload(property), ...scoreRealtyLeadMatch(lead, property) })).filter((match) => match.score >= 30 || match.compatibility.operationCompatible === false).sort((a, b) => Number(b.compatibility.operationCompatible !== false) - Number(a.compatibility.operationCompatible !== false) || b.score - a.score || a.property.price - b.property.price).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20)))
+    matches: properties.filter(propertyIsAvailable).map((property) => ({ property: propertyMatchPayload(property), ...scoreRealtyLeadMatch(lead, property, matchScore) })).filter((match) => match.score >= Math.min(30,matchScore) || match.compatibility.operationCompatible === false).sort((a, b) => Number(b.compatibility.operationCompatible !== false) - Number(a.compatibility.operationCompatible !== false) || b.score - a.score || a.property.price - b.property.price).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20)))
   };
 }
 
-export async function getRealtyPropertyMatches({ tenantId, access, propertyId, limit = 8, db = prisma }) {
+export async function getRealtyPropertyMatches({ tenantId, access, propertyId, limit = 8, db = prisma, matchScore = 65 }) {
   const [property, leads] = await Promise.all([
     db.industryRecord.findFirst({ where: brokerRecordWhere({ tenantId, brokerAccess: access, method: "POST" }, { id: propertyId, recordType: "property", status: { not: "ARCHIVED" } }) }),
     db.lead.findMany({ where: realtyLeadScope(tenantId, access, { status: { notIn: ["WON", "LOST"] } }), orderBy: [{ closeProbability: "desc" }, { updatedAt: "desc" }], take: 1000 })
@@ -301,7 +302,7 @@ export async function getRealtyPropertyMatches({ tenantId, access, propertyId, l
   if (!property) return null;
   return {
     property: propertyMatchPayload(property),
-    matches: leads.map((lead) => ({ buyer: { id: lead.id, name: lead.name || lead.phone || "Comprador sin nombre", phone: lead.phone, budget: lead.budget, commune: lead.commune, propertyType: lead.propertyType, interest: lead.interest, closeProbability: lead.closeProbability, conversationId: lead.conversationId }, ...scoreRealtyLeadMatch(lead, property) })).filter((match) => match.score >= 30 || match.compatibility.operationCompatible === false).sort((a, b) => Number(b.compatibility.operationCompatible !== false) - Number(a.compatibility.operationCompatible !== false) || b.score - a.score || Number(b.buyer.closeProbability || 0) - Number(a.buyer.closeProbability || 0)).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20)))
+    matches: leads.map((lead) => ({ buyer: { id: lead.id, name: lead.name || lead.phone || "Comprador sin nombre", phone: lead.phone, budget: lead.budget, commune: lead.commune, propertyType: lead.propertyType, interest: lead.interest, closeProbability: lead.closeProbability, conversationId: lead.conversationId }, ...scoreRealtyLeadMatch(lead, property, matchScore) })).filter((match) => match.score >= Math.min(30,matchScore) || match.compatibility.operationCompatible === false).sort((a, b) => Number(b.compatibility.operationCompatible !== false) - Number(a.compatibility.operationCompatible !== false) || b.score - a.score || Number(b.buyer.closeProbability || 0) - Number(a.buyer.closeProbability || 0)).slice(0, Math.max(1, Math.min(Number(limit) || 8, 20)))
   };
 }
 
@@ -310,7 +311,11 @@ export async function buildRealtyBuyerReply({ tenantId, conversationId, detected
   const lead = await prisma.lead.findUnique({ where: { conversationId } });
   if (!lead || lead.tenantId !== tenantId || !lead.budget) return null;
   // Automatización interna: tenant verificado por la conversación, sin cruzar empresas.
-  const result = await getRealtyLeadMatches({ tenantId, access: { scopeUserIds: null, scopeTenantIds: [tenantId] }, leadId: lead.id, limit: 3 });
+  const control = await readBrokerControl(prisma, tenantId, "agent:commercial");
+  if (!canUseAgent(control,"commercial","SUGGEST",null,"commercial")) return null;
+  const {value:policy} = await readBrokerControl(prisma,tenantId);
+  const result = await getRealtyLeadMatches({ tenantId, matchScore:policy.matchScore, access: { scopeUserIds: null, scopeTenantIds: [tenantId] }, leadId: lead.id, limit: 3 });
+  if (result) result.matches = result.matches.filter(m=>m.compatibility.status === "RECOMMENDED");
   if (!result?.matches.length) return "Gracias, ya registré tu presupuesto. Por ahora no veo una propiedad disponible que calce bien; si me indicas la comuna y el tipo de propiedad que buscas, puedo afinar la búsqueda.";
   const suggestions = result.matches.map((match, index) => {
     const property = match.property;

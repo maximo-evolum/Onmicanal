@@ -146,6 +146,8 @@ function isFinanceDocumentRecord(recordType) {
 }
 
 async function assertRecordModule(req, recordType, data) {
+  // Solo las rutas de gobierno validan la versión, registran el motivo y autorizan este tipo interno.
+  if (recordType === "broker_tenant_control") return false;
   const financial = isFinanceRecordType(recordType);
   const module = financial ? financeRecordModule(recordType, data) : RECORD_MODULES[recordType];
   if (financial && !module) return false;
@@ -290,7 +292,7 @@ industryRecordsRouter.get("/industry-records", async (req, res) => {
 
     const records = await prisma.industryRecord.findMany({
       where: tenantRecordWhere(req, {
-        ...(recordType ? { recordType } : {}),
+        recordType: recordType || { not: "broker_tenant_control" },
         ...(req.query.status ? { status: String(req.query.status) } : {})
       }),
       include: { assignedTo: { select: { id: true, name: true, email: true, role: true } } },

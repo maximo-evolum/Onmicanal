@@ -26,6 +26,15 @@ test("El índice deriva documentos sin duplicar registros ni alterar sus estados
   assert.equal(index.items.filter((item) => item.sourceRecordId === "mandate-1").length, 1);
 });
 
+test("El plazo para revisar evidencia no oculta documentos ni cambia sus estados", () => {
+  for (const [incompleteDays,expected] of [[8,true],[9,true],[10,false]]) {
+    const {items}=buildBrokerDocumentIndex({properties,records,now,incompleteDays});
+    assert.equal(items.length,4);
+    assert.equal(items.find(i=>i.sourceRecordId==="legal-1").needsEvidenceReview,expected);
+    assert.equal(items.find(i=>i.sourceRecordId==="mandate-1").needsEvidenceReview,false);
+  }
+});
+
 test("El índice filtra por propiedad, persona, tipo, estado y vencimiento", () => {
   const unfiltered = buildBrokerDocumentIndex({ properties, records, now, filters: { type: "ALL", status: "ALL", expiry: "ALL" } });
   assert.equal(unfiltered.summary.visible, 4);

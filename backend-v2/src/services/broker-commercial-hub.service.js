@@ -95,7 +95,7 @@ export function createBrokerAgendaData(input = {}, actor = {}) {
   };
 }
 
-export function applyBrokerAgendaAction(record, input = {}, actor = {}) {
+export function applyBrokerAgendaAction(record, input = {}, actor = {}, policy = {reminderLimit:3,onReminderLimit:"ESCALATE"}) {
   const action = text(input.action).toUpperCase();
   if (!BROKER_AGENDA_ACTIONS.includes(action)) throw Object.assign(new Error("Acción de agenda Broker no válida."), { status: 422 });
   const prior = object(record?.data);
@@ -115,8 +115,18 @@ export function applyBrokerAgendaAction(record, input = {}, actor = {}) {
     notice = "Confirmación registrada internamente. No se envió ningún mensaje externo.";
   }
   if (action === "PREPARE_REMINDER") {
-    nextAgenda.reminder = { preparedAt: now, preparedBy: text(actor.id), note };
-    notice = "Recordatorio preparado para revisión interna. No se envió ninguna comunicación.";
+    const attempts = agenda.reminder?.attempts ?? (agenda.reminder?.preparedAt ? 1 : 0);
+    if (attempts >= policy.reminderLimit) {
+      if (policy.onReminderLimit !== "ESCALATE" || agenda.escalation?.status === "PENDING_REVIEW") {
+        throw Object.assign(new Error("Se alcanzó el límite de recordatorios. Revisa la actividad antes de continuar."),{status:409});
+      }
+      status = "PENDING_REVIEW";
+      nextAgenda.escalation = { escalatedAt:now, escalatedBy:text(actor.id), note:"Límite de recordatorios internos alcanzado.", status };
+      notice = "Actividad escalada a revisión. No se preparó ni envió otro recordatorio.";
+    } else {
+      nextAgenda.reminder = { preparedAt: now, preparedBy: text(actor.id), note, attempts:attempts+1 };
+      notice = "Recordatorio preparado para revisión interna. No se envió ninguna comunicación.";
+    }
   }
   if (action === "ESCALATE") {
     if (!note) throw Object.assign(new Error("Explica el motivo antes de escalar la actividad."), { status: 422 });
@@ -148,6 +158,7 @@ export function applyBrokerAgendaAction(record, input = {}, actor = {}) {
     nextAgenda.rescheduledAt = now;
     nextAgenda.rescheduledBy = text(actor.id);
     nextAgenda.reminder = null;
+    nextAgenda.escalation = null;
     notice = "Actividad reprogramada. Requiere una nueva confirmación interna.";
   }
 

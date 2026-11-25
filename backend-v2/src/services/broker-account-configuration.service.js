@@ -27,7 +27,7 @@ export function brokerModuleLabel(module) {
  */
 export function buildBrokerTeamWorkload({ users = [], records = [], profilesByUser = new Map(), canOperate = () => false } = {}) {
   const activeUsers = users.filter((user) => user.isActive);
-  const brokerRecords = records.filter((record) => ["property", "broker_operation", "visit"].includes(String(record.recordType)) || String(record.recordType).startsWith("broker_") || String(record.recordType).endsWith("_case") || String(record.recordType).includes("maintenance") || String(record.recordType).includes("rental"));
+  const brokerRecords = records.filter((record) => record.recordType !== "broker_tenant_control").filter((record) => ["property", "broker_operation", "visit"].includes(String(record.recordType)) || String(record.recordType).startsWith("broker_") || String(record.recordType).endsWith("_case") || String(record.recordType).includes("maintenance") || String(record.recordType).includes("rental"));
   const assignmentCounts = new Map(activeUsers.map((user) => [String(user.id), { properties: 0, operations: 0, visits: 0, pending: 0 }]));
   const unassigned = { properties: 0, operations: 0, visits: 0, pending: 0 };
   const unassignedProperties = [];

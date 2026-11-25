@@ -6,7 +6,7 @@ export const BROKER_BUSINESS_ROLES = Object.freeze([
   "CEO", "GERENTE_COMERCIAL", "COORDINADOR_COMERCIAL", "CORREDOR", "CAPTADOR", "MARKETING", "TASADOR", "JURIDICO", "ADMINISTRACION", "FINANZAS", "POSTVENTA", "LECTURA"
 ]);
 
-const ALL_AREAS = ["overview", "operations", "commercial", "rentals", "maintenance", "projects", "post_sale", "documents", "financing", "commissions", "administration", "ai", "configuration", "access"];
+export const BROKER_ACCESS_AREAS = Object.freeze(["overview", "operations", "commercial", "rentals", "maintenance", "projects", "post_sale", "documents", "financing", "commissions", "administration", "ai", "configuration", "access"]);
 
 // Los workspaces son una capa de organización de Broker OS. Un perfil
 // personalizado nunca agrega acciones: solo reduce los permisos que ya posee
@@ -35,7 +35,7 @@ const PROFILE_POLICIES = Object.freeze({
   ADMINISTRACION: { label: "Administración", defaultScope: "COMPANY", actions: { overview: ["VIEW"], rentals: ["VIEW", "CREATE", "EDIT", "EXPORT"], maintenance: ["VIEW", "CREATE", "EDIT"], post_sale: ["VIEW", "CREATE", "EDIT"], administration: ["VIEW", "CREATE", "EDIT"], documents: ["VIEW", "CREATE", "EDIT"] } },
   FINANZAS: { label: "Finanzas", defaultScope: "COMPANY", actions: { overview: ["VIEW", "EXPORT"], financing: ["VIEW", "CREATE", "EDIT", "APPROVE", "REJECT", "EXPORT"], commissions: ["VIEW", "CREATE", "EDIT", "APPROVE", "EXPORT"], administration: ["VIEW", "CREATE", "EDIT", "APPROVE", "EXPORT"], documents: ["VIEW", "EXPORT"] } },
   POSTVENTA: { label: "Postventa", defaultScope: "ASSIGNED", actions: { overview: ["VIEW"], post_sale: ["VIEW", "CREATE", "EDIT"], maintenance: ["VIEW", "CREATE", "EDIT"], documents: ["VIEW", "CREATE", "EDIT"] } },
-  LECTURA: { label: "Solo lectura", defaultScope: "ASSIGNED", actions: Object.fromEntries(ALL_AREAS.filter(area => !["configuration", "access"].includes(area)).map((area) => [area, ["VIEW"]])) },
+  LECTURA: { label: "Solo lectura", defaultScope: "ASSIGNED", actions: Object.fromEntries(BROKER_ACCESS_AREAS.filter(area => !["configuration", "access"].includes(area)).map((area) => [area, ["VIEW"]])) },
 });
 
 function text(value, fallback = "") { const result = String(value ?? "").trim(); return result || fallback; }
@@ -59,12 +59,41 @@ function customProfileWorkspaces(profile) {
   return unique(values.map((item) => upper(item)).filter((key) => Object.hasOwn(BROKER_WORKSPACE_CATALOG, key)));
 }
 
+function customProfileAreas(workspaceKeys = []) {
+  return unique(workspaceKeys.flatMap((key) => BROKER_WORKSPACE_CATALOG[key]?.areas || []));
+}
+
+// La matriz personalizada es siempre restrictiva: solo conserva acciones que
+// ya existen en el perfil base y dentro de los workspaces seleccionados. Un
+// valor enviado por el navegador nunca puede elevar privilegios.
+function customProfileActionOverrides(profile, baseRole, workspaceKeys) {
+  const base = PROFILE_POLICIES[baseRole] || PROFILE_POLICIES.LECTURA;
+  const raw = profile?.actionOverrides && typeof profile.actionOverrides === "object" && !Array.isArray(profile.actionOverrides)
+    ? profile.actionOverrides
+    : null;
+  const actions = {};
+  for (const area of customProfileAreas(workspaceKeys)) {
+    const baseActions = systemActionsForArea(base, area);
+    if (!baseActions.length) continue;
+    const requested = raw && Array.isArray(raw[area])
+      ? new Set(raw[area].map((item) => upper(item)).filter((action) => BROKER_ACCESS_ACTIONS.includes(action)))
+      : null;
+    const allowed = requested ? baseActions.filter((action) => requested.has(action)) : [...baseActions];
+    // Una acción operativa sin consulta dejaría una ruta directa disponible
+    // pero ocultaría la vista que explica su contexto. Si se conserva alguna
+    // acción de un área, VIEW se conserva también cuando el rol base la tiene.
+    if (allowed.length && baseActions.includes("VIEW") && !allowed.includes("VIEW")) allowed.unshift("VIEW");
+    // Se conserva el arreglo vacío en perfiles nuevos para distinguir una
+    // denegación explícita de un perfil histórico que aún no tenía matriz.
+    actions[area] = allowed;
+  }
+  return actions;
+}
+
 function effectiveCustomPolicy(profile) {
   const baseRole = BROKER_BUSINESS_ROLES.includes(upper(profile?.baseRole)) ? upper(profile.baseRole) : "LECTURA";
-  const base = PROFILE_POLICIES[baseRole] || PROFILE_POLICIES.LECTURA;
   const workspaceKeys = customProfileWorkspaces(profile);
-  const areas = unique(workspaceKeys.flatMap((key) => BROKER_WORKSPACE_CATALOG[key].areas));
-  const actions = Object.fromEntries(areas.map((area) => [area, systemActionsForArea(base, area)]).filter(([, allowed]) => allowed.length));
+  const actions = Object.fromEntries(Object.entries(customProfileActionOverrides(profile, baseRole, workspaceKeys)).filter(([, allowed]) => allowed.length));
   return {
     label: `Perfil personalizado · ${text(profile?.name, "Sin nombre")}`,
     defaultScope: profile?.accessScope || "ASSIGNED",
@@ -78,7 +107,7 @@ function effectiveCustomPolicy(profile) {
 export function brokerSystemProfileCatalog() {
   return BROKER_BUSINESS_ROLES.map((key) => {
     const policy = PROFILE_POLICIES[key];
-    const actions = Object.fromEntries(ALL_AREAS.map((area) => [area, systemActionsForArea(policy, area)]).filter(([, allowed]) => allowed.length));
+    const actions = Object.fromEntries(BROKER_ACCESS_AREAS.map((area) => [area, systemActionsForArea(policy, area)]).filter(([, allowed]) => allowed.length));
     return { key, label: policy.label, defaultScope: policy.defaultScope, actions, kind: "SYSTEM" };
   });
 }
@@ -94,7 +123,9 @@ export function normalizeBrokerCustomProfile(input = {}) {
   if (!BROKER_BUSINESS_ROLES.includes(baseRole)) return { ok: false, error: "Selecciona un perfil de sistema válido como base." };
   if (!BROKER_ACCESS_SCOPES.includes(accessScope) || accessScope === "HOLDING") return { ok: false, error: "Un perfil personalizado debe usar un alcance entre asignado y empresa; el alcance holding se administra por separado." };
   if (!workspaceKeys.length) return { ok: false, error: "Selecciona al menos un workspace para restringir el perfil." };
-  const data = { name, description, baseRole, accessScope, workspaceKeys, agentKeys, version: 1 };
+  const actionOverrides = customProfileActionOverrides(input, baseRole, workspaceKeys);
+  if (!Object.values(actionOverrides).some((actions) => actions.length)) return { ok: false, error: "Selecciona al menos una acción permitida para el perfil personalizado." };
+  const data = { name, description, baseRole, accessScope, workspaceKeys, agentKeys, actionOverrides, version: 2 };
   return { ok: true, data, effective: effectiveCustomPolicy(data) };
 }
 

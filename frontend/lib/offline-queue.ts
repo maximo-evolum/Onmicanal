@@ -50,6 +50,7 @@ export function canQueueOfflineMutation(path: string, init?: RequestInit) {
   return ["POST", "PUT", "PATCH", "DELETE"].includes(method)
     && !path.startsWith("/auth/")
     && !isNuboxSyncRequest(path)
+    && !/^\/broker\/(?:configuration\/controls|ai-governance\/agents\/|preferences\/notices)/.test(path)
     // Las propuestas y aprobaciones financieras necesitan evidencia y sesión vigentes.
     // Nunca las repite más tarde desde la cola genérica sin conexión.
     && !/^\/finance\/differences(?:\/|\?|$)/.test(path)

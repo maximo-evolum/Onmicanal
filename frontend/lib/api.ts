@@ -1832,7 +1832,23 @@ export type BrokerExecutiveDashboard = {
   recommendations: BrokerRecommendation[];
 };
 
-export type BrokerExecutiveDashboardResponse = { dashboard: BrokerExecutiveDashboard; assumptions: BrokerForecastAssumptions };
+export type BrokerExecutiveDashboardResponse = { dashboard: BrokerExecutiveDashboard; assumptions: BrokerForecastAssumptions; canViewReport?:boolean };
+
+export type BrokerReportFilters = Record<"from"|"to"|"broker"|"office"|"type"|"state",string>;
+export type BrokerExecutiveReport = {
+  generatedAt:string; filters:BrokerReportFilters; scope:string; notice:string; fingerprint:string; canExport:boolean;
+  options:{brokers:Array<{id:string;name:string}>;offices:string[]};
+  summary:{total:number;counts:Record<"OPEN"|"CLOSED"|"LOST"|"REVIEW",number>;incomplete:number;openAmounts:Array<{currency:string;basis:string;amount:number}>};
+  rows:Array<{id:string;title:string;company:string;opened:string;updated:string;type:string;state:string;stage:string;broker:string;office:string;
+    amount:number|null;currency:string|null;amountSource:string;warnings:string[]}>;
+};
+export const getBrokerExecutiveReport=(filters:BrokerReportFilters)=>request<BrokerExecutiveReport>("/broker/executive-report?"+new URLSearchParams(filters));
+export async function exportBrokerExecutiveReport(report:BrokerExecutiveReport,format:"csv"|"pdf"){
+  const params=new URLSearchParams({...report.filters,format,snapshot:report.fingerprint});
+  const response=await fetch(API_BASE_URL+"/broker/executive-report?"+params,{headers:buildHeaders(),credentials:"include",cache:"no-store"});
+  if(!response.ok)throw new Error((await response.json().catch(()=>null))?.error||"No se pudo descargar el reporte.");
+  return response.blob();
+}
 
 export function getBrokerExecutiveDashboard(): Promise<BrokerExecutiveDashboardResponse> {
   return request<BrokerExecutiveDashboardResponse>("/broker/executive-dashboard");
@@ -2004,13 +2020,26 @@ export type BrokerAiGovernanceRule = {
   updatedAt?: string | null;
 };
 
+export type BrokerTenantControl<T> = {value:T;revision:number;previous:T|null;reason:string|null;updatedAt:string|null};
+export type BrokerAgentControl = {enabled:boolean;approverOnly?:boolean;actions:string[];areas:string[]};
+export type BrokerOperationControls = {
+  priceGapPct:number; draftDays:number; incompleteDays:number; matchScore:number; reminderLimit:number;
+  onReminderLimit:"ESCALATE"|"BLOCK"; trackerNotices:boolean; blockDuplicateContacts:boolean; blockDuplicateCampaigns:boolean; showInfoNotices:boolean;
+};
+type BrokerControlInput<T> = {value?:T;revert?:boolean;reason:string;revision:number};
+export const fetchBrokerControls = () => request<BrokerTenantControl<BrokerOperationControls>>("/broker/configuration/controls");
+export const saveBrokerControls = (input:BrokerControlInput<BrokerOperationControls>) => request<BrokerTenantControl<BrokerOperationControls>>("/broker/configuration/controls",{method:"PUT",body:JSON.stringify(input)});
+export const saveBrokerAgentControl = (key:string,input:BrokerControlInput<BrokerAgentControl>) => request<BrokerTenantControl<BrokerAgentControl>>("/broker/ai-governance/agents/"+encodeURIComponent(key),{method:"PUT",body:JSON.stringify(input)});
+export const getBrokerNoticePreference = () => request<BrokerTenantControl<{showInfoNotices:boolean}>>("/broker/preferences/notices");
+export const setBrokerNoticePreference = (input:BrokerControlInput<{showInfoNotices:boolean}>) => request<BrokerTenantControl<{showInfoNotices:boolean}>>("/broker/preferences/notices",{method:"PUT",body:JSON.stringify(input)});
 export type BrokerAiGovernanceSnapshot = {
+  canManageAgents?:boolean;
   version: string;
   generatedAt: string;
   scope: { level: string; description: string };
   policy: { notice: string; externalContact: "BLOCKED"; stateChanges: false; simulationMode: "NO_SEND" };
   summary: { officialRules: number; customRules: number; activeRules: number; matchingRules: number; pendingEvaluations: number; triggeredAlerts: number };
-  agents: Array<{ key: string; name: string; status: BrokerAgent["status"]; statusLabel: string; statusDetail: string; description: string; limitation: string; externalContact: "BLOCKED"; autonomousActions: false }>;
+  agents: Array<{ key: string; name: string; status: BrokerAgent["status"]; statusLabel: string; statusDetail: string; description: string; limitation: string; externalContact: "BLOCKED"; autonomousActions: false; control?:BrokerTenantControl<BrokerAgentControl>; supportedActions?:string[];supportedAreas?:string[]; permittedActions?:string[] }>;
   conditions: Array<{ key: string; label: string; action: string }>;
   rules: BrokerAiGovernanceRule[];
   simulation: { mode: "NO_SEND"; generatedAt: string; notice: string; executions: Array<{ ruleId: string; ruleKey: string; title: string; matched: number; evidence: BrokerAiGovernanceRule["evidence"]; wouldPrepareInternalAlert: boolean; externalContact: false; stateChanges: false; notice: string }> };
@@ -2125,6 +2154,7 @@ export type BrokerPropertyExpedient = {
 /** Índice de solo lectura: cada fila apunta al registro que conserva el estado real. */
 export type BrokerDocumentIndexFilters = { propertyId?: string; person?: string; type?: string; status?: string; expiry?: string };
 export type BrokerDocumentIndexItem = {
+  needsEvidenceReview?:boolean;
   id: string;
   sourceRecordId: string;
   title: string;
@@ -2225,6 +2255,29 @@ export type BrokerCustomAccessProfile = {
   updatedAt: string | null;
 };
 
+export type BrokerBulkReassignmentRecordType = "property" | "broker_operation";
+
+export type BrokerBulkReassignmentCandidate = {
+  id: string;
+  title: string;
+  status: string;
+  assignedTo: { id: string; name: string } | null;
+  updatedAt: string;
+};
+
+export type BrokerBulkReassignmentPreview = {
+  recordType: BrokerBulkReassignmentRecordType;
+  label: string;
+  resource: string;
+  reason: string;
+  assignee: { id: string; name: string; score: number };
+  requestedCount: number;
+  changeCount: number;
+  unchangedCount: number;
+  items: Array<{ id: string; title: string; status: string; previousAssignee: { id: string; name: string } | null; previousAssigneeId: string | null; updatedAt: string; unchanged: boolean }>;
+  snapshot: Array<{ id: string; updatedAt: string }>;
+};
+
 export type BrokerAccessProfiles = {
   workspaces: Array<{ key: string; label: string; areas: string[] }>;
   systemProfiles: Array<{ key: string; label: string; defaultScope: string; actions: Record<string, string[]>; kind: "SYSTEM" }>;
@@ -2260,11 +2313,11 @@ export function getBrokerAccessProfiles(): Promise<BrokerAccessProfiles> {
   return request<BrokerAccessProfiles>("/broker/access/profiles");
 }
 
-export function createBrokerAccessProfile(input: { name: string; description?: string; baseRole: string; accessScope: string; workspaceKeys: string[]; agentKeys?: string[] }): Promise<{ profile: BrokerCustomAccessProfile }> {
+export function createBrokerAccessProfile(input: { name: string; description?: string; baseRole: string; accessScope: string; workspaceKeys: string[]; agentKeys?: string[]; actionOverrides?: Record<string, string[]> }): Promise<{ profile: BrokerCustomAccessProfile }> {
   return request("/broker/access/profiles", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function updateBrokerCustomAccessProfile(id: string, input: { name?: string; description?: string; baseRole?: string; accessScope?: string; workspaceKeys?: string[]; agentKeys?: string[] }): Promise<{ profile: BrokerCustomAccessProfile }> {
+export function updateBrokerCustomAccessProfile(id: string, input: { name?: string; description?: string; baseRole?: string; accessScope?: string; workspaceKeys?: string[]; agentKeys?: string[]; actionOverrides?: Record<string, string[]>; confirmAssignedUsers?: boolean }): Promise<{ profile: BrokerCustomAccessProfile }> {
   return request(`/broker/access/profiles/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
@@ -2278,6 +2331,18 @@ export function updateBrokerTeamMemberStatus(userId: string, input: { isActive: 
 
 export function assignBrokerPropertyBalanced(propertyId: string): Promise<{ property: { id: string; title: string; assignedToId: string }; assignee: { id: string; name: string; score: number }; notice: string }> {
   return request("/broker/access/assignments/balanced", { method: "POST", body: JSON.stringify({ propertyId }) });
+}
+
+export function getBrokerBulkReassignmentCandidates(recordType: BrokerBulkReassignmentRecordType): Promise<{ recordType: BrokerBulkReassignmentRecordType; label: string; records: BrokerBulkReassignmentCandidate[] }> {
+  return request(`/broker/access/reassignments/candidates?recordType=${encodeURIComponent(recordType)}`);
+}
+
+export function previewBrokerBulkReassignment(input: { recordType: BrokerBulkReassignmentRecordType; recordIds: string[]; assignedToId: string; reason: string }): Promise<BrokerBulkReassignmentPreview> {
+  return request("/broker/access/reassignments/preview", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function commitBrokerBulkReassignment(input: { recordType: BrokerBulkReassignmentRecordType; recordIds: string[]; assignedToId: string; reason: string; snapshot: Array<{ id: string; updatedAt: string }> }): Promise<{ recordType: BrokerBulkReassignmentRecordType; reassigned: number; assignee: { id: string; name: string }; records: Array<{ id: string; title: string; previousAssigneeId: string | null }>; notice: string }> {
+  return request("/broker/access/reassignments/commit", { method: "POST", body: JSON.stringify(input) });
 }
 
 export type BrokerHoldingConfig = {

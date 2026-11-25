@@ -1,0 +1,28 @@
+/* Formularios de gobierno: distribución adaptable que hereda la paleta activa de Broker. */
+.policy fieldset, .agent fieldset {
+  box-sizing: border-box;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 1rem;
+  display: grid;
+  align-items: start;
+  gap: .8rem;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: .75rem;
+}
+.policy fieldset { grid-template-columns: repeat(auto-fit,minmax(min(100%,15rem),1fr)); }
+.policy legend, .agent legend { max-width: 100%; padding: 0 .35rem; overflow-wrap: anywhere; }
+.policy label, .agent label { display: grid; gap: .35rem; font-size: .875rem; }
+.policy label:has([type=checkbox]), .agent label:has([type=checkbox]) {
+  display:flex; align-items:center; gap:.5rem;
+}
+.policy label input[type=checkbox], .agent label input[type=checkbox] {
+  flex:0 0 1rem; width:1rem; height:1rem; min-width:0; min-height:0; margin:0; padding:0;
+}
+.policy input:not([type=checkbox]), .policy select, .agent input:not([type=checkbox]) {
+  box-sizing:border-box; min-width:0; max-width:100%; width:100%; font:inherit;
+  padding:.55rem; color:inherit; background:transparent; border:1px solid currentColor; border-radius:.45rem;
+}
+.policy button, .agent button { align-self:end; justify-self:start; }
+.agent summary { cursor:pointer; font-weight:650; }
+.agent form { margin-top:.7rem; }

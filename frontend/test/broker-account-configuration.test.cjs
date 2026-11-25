@@ -24,9 +24,9 @@ test("Cuenta y equipo solo está disponible para quien configura accesos", () =>
   assert.equal(canBrokerTab(broker, "account"), false);
 });
 
-test("La interfaz usa rutas auditables para perfiles, carga y baja segura", () => {
-  for (const token of ["/broker/account", "/broker/access/workload", "/broker/access/profiles", "/broker/access/users/${encodeURIComponent(userId)}/status", "/broker/access/assignments/balanced"]) assert.match(api, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  for (const token of ["crear una configuración restrictiva", "Desactivar cuenta", "Asignar con carga balanceada", "Deshabilitar no borra", "externalReadiness"]) assert.match(panel, new RegExp(token, "i"));
+test("La interfaz usa rutas auditables para perfiles, carga, baja y reasignación masiva", () => {
+  for (const token of ["/broker/account", "/broker/access/workload", "/broker/access/profiles", "/broker/access/users/${encodeURIComponent(userId)}/status", "/broker/access/assignments/balanced", "/broker/access/reassignments/candidates", "/broker/access/reassignments/preview", "/broker/access/reassignments/commit"]) assert.match(api, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const token of ["crear una configuración restrictiva", "Permisos por área y acción", "Confirmo que revisé el cambio de permisos", "Desactivar cuenta", "Asignar con carga balanceada", "Reasignación masiva", "Generar vista previa", "Confirmar reasignación auditada", "Deshabilitar no borra", "externalReadiness"]) assert.match(panel, new RegExp(token, "i"));
   assert.match(workspace, /BrokerAccountConfigurationPanel/);
   assert.match(sidebar, /\["Cuenta y equipo", "\/realty\?view=broker_os&tab=account"/);
 });
@@ -40,4 +40,6 @@ test("Cuenta y equipo comunica carga, error recuperable y foco visible", () => {
   assert.match(styles, /@media \(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.broker-team-config-grid form,.broker-team-member-heading > div \{ min-width:0; \}/);
   assert.match(styles, /\.broker-team-member-heading span \{ overflow-wrap:anywhere; \}/);
+  assert.match(styles, /\.broker-permission-matrix/);
+  assert.match(styles, /\.broker-bulk-reassignment/);
 });

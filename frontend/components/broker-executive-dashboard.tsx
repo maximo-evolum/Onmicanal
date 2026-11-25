@@ -3,6 +3,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
+import BrokerExecutiveReportPanel from "./broker-executive-report";
 import { getBrokerExecutiveDashboard, saveBrokerForecastAssumptions, type BrokerExecutiveDashboardResponse } from "@/lib/api";
 
 const currency = new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
@@ -54,6 +55,7 @@ export function BrokerExecutiveDashboardPanel({ canConfigure }: { canConfigure: 
       <article><span>Tiempo de cierre</span><b>{dashboard.kpis.averageCloseTimeDays === null ? "Sin cierres" : `${dashboard.kpis.averageCloseTimeDays} días`}</b><small>{dashboard.kpis.closedOperations} operación(es) terminal(es) en el alcance</small></article>
     </section>
 
+    {data.canViewReport && <BrokerExecutiveReportPanel />}
     <section className="broker-executive-grid">
       <article className="broker-executive-card broker-executive-forecast">
         <header><div><span>Forecast explicable</span><h3>Proyección por operación</h3></div><small>{dashboard.forecast.lines.length} negocio(s) activo(s)</small></header>

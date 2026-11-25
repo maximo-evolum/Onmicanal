@@ -10,6 +10,7 @@ import { BrokerExecutiveDashboardPanel } from "./broker-executive-dashboard";
 import { BrokerOperationTrackerPanel } from "./broker-operation-tracker";
 import { BrokerAiOpsPanel } from "./broker-ai-ops";
 import { BrokerAiGovernancePanel } from "./broker-ai-governance";
+import { BrokerNoticePreference, BrokerPolicyEditor } from "./broker-tenant-controls";
 import { BrokerCaseManagementPanel } from "./broker-case-management";
 import { BrokerAccountConfigurationPanel } from "./broker-account-configuration";
 import { useSearchParams } from "next/navigation";
@@ -443,7 +444,7 @@ export function BrokerOperationsPageContent() {
   // la autorización concreta sigue validándose por cada acción y en el backend.
   const canWriteTab = isReadOnlyTab ? false : tab === "commercial_hub"
     ? canBrokerCommercialHub(access, "CREATE") || canBrokerCommercialHub(access, "EDIT")
-    : canBroker(access, brokerTabArea(tab), writeAction);
+    : canBroker(access, brokerTabArea(tab), writeAction) || (tab === "ai_governance" && canBroker(access,"configuration","CONFIGURE"));
 
   const load = useCallback(async () => {
     const nextAccess = await getBrokerAccess();
@@ -1415,7 +1416,9 @@ export function BrokerOperationsPageContent() {
 
     {tab === "ai_ops" ? <BrokerAiOpsPanel /> : null}
 
-    {tab === "ai_governance" ? <BrokerAiGovernancePanel canConfigure={canBroker(access, "ai", "APPROVE")} /> : null}
+    {tab === "ai_governance" ? <BrokerAiGovernancePanel canConfigure={canBroker(access, "ai", "APPROVE")} onAgentsChanged={load} /> : null}
+    {tab === "configuration" ? <BrokerPolicyEditor canEdit={canBroker(access,"configuration","CONFIGURE") && (access?.technicalRole === "SUPER_ADMIN" || (["OWNER","ADMIN"].includes(access?.technicalRole || "") && ["COMPANY","HOLDING"].includes(access?.accessScope || "")))}/> : null}
+    {tab === "guides" ? <BrokerNoticePreference/> : null}
 
     {tab === "case_management" ? <BrokerCaseManagementPanel access={access} /> : null}
 

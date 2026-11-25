@@ -1,4 +1,5 @@
 /** Archivo: Expone las rutas HTTP del dominio realty intelligence y delega su lógica a servicios protegidos. */
+import { readBrokerControl } from "../services/broker-tenant-controls.service.js";
 import { Router } from "express";
 import { loadBrokerAccessContext, requireBrokerAction } from "../services/broker-access.service.js";
 import { randomUUID } from "node:crypto";
@@ -25,11 +26,12 @@ async function resolveMatchContext(req, { leadId, propertyId }) {
     error.status = 404;
     throw error;
   }
-  return { lead, property, match: scoreRealtyLeadMatch(lead, property) };
+  return { lead, property, match: scoreRealtyLeadMatch(lead, property,req.brokerControls.matchScore) };
 }
 realtyIntelligenceRouter.use(async (req, res, next) => {
   if (!/^\/realty\//i.test(req.path)) return next();
   try {
+    req.brokerControls = (await readBrokerControl(prisma,req.tenantId)).value;
     req.brokerAccess = await loadBrokerAccessContext({ prisma, tenantId: req.tenantId, user: req.user });
     return requireBrokerAction("commercial", ["GET", "HEAD"].includes(req.method) ? "VIEW" : "CREATE")(req, res, next);
   } catch (error) { next(error); }
@@ -37,7 +39,7 @@ realtyIntelligenceRouter.use(async (req, res, next) => {
 
 realtyIntelligenceRouter.get("/realty/intelligence", async (req, res) => {
   try {
-    return res.json(await getRealtyIntelligence({ tenantId: req.tenantId, access: req.brokerAccess, sampleLimit: req.query.limit }));
+    return res.json(await getRealtyIntelligence({ tenantId: req.tenantId, access: req.brokerAccess, controls:req.brokerControls, sampleLimit: req.query.limit }));
   } catch (error) {
     console.error("Realty intelligence error:", error);
     return res.status(500).json({ error: "No se pudo generar la inteligencia inmobiliaria" });
@@ -46,7 +48,7 @@ realtyIntelligenceRouter.get("/realty/intelligence", async (req, res) => {
 
 realtyIntelligenceRouter.get("/realty/leads/:leadId/matches", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
-    const result = await getRealtyLeadMatches({ tenantId: req.tenantId, access: req.brokerAccess, leadId: req.params.leadId, limit: req.query.limit });
+    const result = await getRealtyLeadMatches({ tenantId: req.tenantId, access: req.brokerAccess, leadId: req.params.leadId, matchScore:req.brokerControls.matchScore, limit: req.query.limit });
     if (!result) return res.status(404).json({ error: "Lead no encontrado" });
     return res.json(result);
   } catch (error) {
@@ -116,7 +118,7 @@ realtyIntelligenceRouter.post("/realty/matches/actions", requireRole(ROLE_GROUPS
 
 realtyIntelligenceRouter.get("/realty/properties/:propertyId/buyers", requireRole(ROLE_GROUPS.STAFF), async (req, res) => {
   try {
-    const result = await getRealtyPropertyMatches({ tenantId: req.tenantId, access: req.brokerAccess, propertyId: req.params.propertyId, limit: req.query.limit });
+    const result = await getRealtyPropertyMatches({ tenantId: req.tenantId, access: req.brokerAccess, propertyId: req.params.propertyId, matchScore:req.brokerControls.matchScore, limit: req.query.limit });
     if (!result) return res.status(404).json({ error: "Propiedad no encontrada" });
     return res.json(result);
   } catch (error) {

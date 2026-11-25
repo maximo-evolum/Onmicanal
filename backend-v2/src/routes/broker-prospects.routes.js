@@ -24,9 +24,13 @@ function captureDocumentsInput(input) {
   return documents;
 }
 
-export function createBrokerProspectsRouter({ prisma, assertAssignedUser, convert }) {
+export function createBrokerProspectsRouter({ prisma, assertAssignedUser, convert, readControls }) {
   const router = Router();
   const type = "broker_capture_prospect";
+  router.use(async (req,res,next) => {
+    try { req.priceGapThreshold = readControls ? (await readControls(req.tenantId)).value.priceGapPct : 10; next(); }
+    catch(e) { next(e); }
+  });
   const scoped = (req, extra = {}) => brokerRecordWhere(req, { ...extra, recordType: type });
   const audited = (db, req, id, action, metadata = {}) => db.tenantAuditLog.create({ data: { tenantId: req.tenantId, actorUserId: req.user.id, action, entity: type, entityId: id, metadata } });
   const handle = fn => async (req, res) => { try { await fn(req, res); } catch (e) { if (e.status) return res.status(e.status).json({ error: e.message }); console.error("[BROKER_PROSPECT]", e.code || e.name); res.status(500).json({ error: "No se pudo guardar la captación. Recarga y vuelve a intentar." }); } };
@@ -34,7 +38,7 @@ export function createBrokerProspectsRouter({ prisma, assertAssignedUser, conver
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const where = scoped(req);
     const [rows, total] = await Promise.all([prisma.industryRecord.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page-1)*100, take: 100 }), prisma.industryRecord.count({ where })]);
-    res.json({ items: rows.map(r => prospectPresentation(r)), total, page, pageSize: 100 });
+    res.json({ items: rows.map(r => prospectPresentation(r,undefined,req.priceGapThreshold)), total, page, pageSize: 100 });
   }));
   router.post("/", requireBrokerAction("commercial", "CREATE"), handle(async (req, res) => {
     const data = prospectInput(req.body);
@@ -50,7 +54,7 @@ export function createBrokerProspectsRouter({ prisma, assertAssignedUser, conver
       await audited(db, req, id, "PROSPECTO_CREADO");
       return created;
     });
-    res.status(201).json(prospectPresentation(saved));
+    res.status(201).json(prospectPresentation(saved,undefined,req.priceGapThreshold));
   }));
   router.get("/:id/owner", requireBrokerAction("commercial", "VIEW"), handle(async (req, res) => {
     const prospect = await prisma.industryRecord.findFirst({ where: scoped(req, { id: req.params.id }) });
@@ -63,7 +67,7 @@ export function createBrokerProspectsRouter({ prisma, assertAssignedUser, conver
   router.get("/:id", requireBrokerAction("commercial", "VIEW"), handle(async (req, res) => {
     const row = await prisma.industryRecord.findFirst({ where: scoped(req, { id: req.params.id }) });
     if (!row) return res.status(404).json({ error: "Captación no encontrada en tu alcance." });
-    res.json(prospectPresentation(row));
+    res.json(prospectPresentation(row,undefined,req.priceGapThreshold));
   }));
   router.post("/:id/conversion-preview", requireBrokerAction("commercial", "EDIT"), requireBrokerAction("operations", "CREATE"), handle(async (req, res) => {
     const row = await prisma.industryRecord.findFirst({ where: scoped(req, { id: req.params.id }) });
@@ -189,7 +193,7 @@ export function createBrokerProspectsRouter({ prisma, assertAssignedUser, conver
       await audited(db, { ...req, tenantId: row.tenantId }, row.id, events[action], details);
       return updated;
     });
-    res.json(prospectPresentation(saved));
+    res.json(prospectPresentation(saved,undefined,req.priceGapThreshold));
   }));
   return router;
 }

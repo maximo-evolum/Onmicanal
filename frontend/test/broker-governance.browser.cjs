@@ -87,8 +87,20 @@ function overview() {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => { document.documentElement.dataset.theme = "purple"; document.documentElement.dataset.designSystem = "dark"; });
     await page.getByRole("heading", { name: "Alertas, trazabilidad y control administrativo", exact: true }).scrollIntoViewIfNeeded();
-    const headerLayout = await page.locator(".broker-os-header").evaluate((element) => getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/).length);
-    assert.equal(headerLayout, 1, "El encabezado Broker debe apilarse en una columna en teléfono.");
+    // El encabezado móvil usa flex en columna. Algunos navegadores conservan
+    // el valor histórico de `grid-template-columns` aun cuando `display` ya
+    // no es grid, por lo que validamos el resultado visible: el segundo bloque
+    // debe comenzar debajo del primero y no a su costado.
+    const headerLayout = await page.locator(".broker-os-header").evaluate((element) => {
+      const children = Array.from(element.children)
+        .map((child) => child.getBoundingClientRect())
+        .filter((rect) => rect.width > 0 && rect.height > 0);
+      return {
+        display: getComputedStyle(element).display,
+        stacked: children.length < 2 || children[1].top >= children[0].bottom - 1,
+      };
+    });
+    assert.equal(headerLayout.stacked, true, "El encabezado Broker debe apilarse en una columna en teléfono.");
     const accessVisual = await page.locator(".broker-access-summary").evaluate((element) => {
       const styles = getComputedStyle(element);
       return { backgroundImage: styles.backgroundImage, color: styles.color };

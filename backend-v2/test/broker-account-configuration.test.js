@@ -28,6 +28,43 @@ test("Un perfil personalizado solo conserva las áreas seleccionadas", () => {
   assert.deepEqual(profileRecordData("u-1", { customProfileId: "perfil-1" }, { role: "AGENT" }, normalized.data).customProfileId, "perfil-1");
 });
 
+test("La matriz personalizada puede restringir acciones pero nunca elevar el perfil base", () => {
+  const normalized = normalizeBrokerCustomProfile({
+    name: "Corredor de solo lectura comercial",
+    baseRole: "CORREDOR",
+    accessScope: "ASSIGNED",
+    workspaceKeys: ["CARTERA"],
+    actionOverrides: {
+      commercial: ["VIEW", "DELETE"],
+      operations: ["VIEW"],
+      documents: ["EDIT"]
+    }
+  });
+  assert.equal(normalized.ok, true);
+  const access = normalizeBrokerAccessProfile({ customProfileId: "perfil-restringido" }, { role: "AGENT" }, normalized.data);
+  assert.equal(canBrokerAction(access, "commercial", "VIEW"), true);
+  assert.equal(canBrokerAction(access, "commercial", "EDIT"), false);
+  assert.equal(canBrokerAction(access, "commercial", "DELETE"), false);
+  assert.equal(canBrokerAction(access, "operations", "VIEW"), true);
+  assert.equal(canBrokerAction(access, "operations", "EDIT"), false);
+  assert.equal(canBrokerAction(access, "documents", "EDIT"), false);
+});
+
+test("Una denegación explícita de la matriz no revive permisos al recargar el perfil", () => {
+  const normalized = normalizeBrokerCustomProfile({
+    name: "Coordinación sin cartera comercial",
+    baseRole: "COORDINADOR_COMERCIAL",
+    accessScope: "TEAM",
+    workspaceKeys: ["CARTERA"],
+    actionOverrides: { overview: ["VIEW"], operations: ["VIEW", "EDIT"], commercial: [] }
+  });
+  assert.equal(normalized.ok, true);
+  assert.deepEqual(normalized.data.actionOverrides.commercial, []);
+  const access = normalizeBrokerAccessProfile({ customProfileId: "perfil-sin-comercial" }, { role: "AGENT" }, normalized.data);
+  assert.equal(canBrokerAction(access, "commercial", "VIEW"), false);
+  assert.equal(canBrokerAction(access, "operations", "EDIT"), true);
+});
+
 test("La carga muestra pendientes y propone solo una persona activa autorizada", () => {
   const coordinator = normalizeBrokerAccessProfile({ businessRole: "COORDINADOR_COMERCIAL", accessScope: "TEAM", teamKey: "norte" }, { role: "AGENT" });
   const reader = normalizeBrokerAccessProfile({ businessRole: "LECTURA", accessScope: "ASSIGNED" }, { role: "VIEWER" });

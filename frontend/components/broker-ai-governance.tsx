@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { BrokerAgentEditor } from "./broker-tenant-controls";
 import { FormEvent, useEffect, useState } from "react";
 import {
   createBrokerAiGovernanceRule,
@@ -21,7 +22,7 @@ function formatDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? "Sin fecha registrada" : date.toLocaleString("es-CL");
 }
 
-export function BrokerAiGovernancePanel({ canConfigure }: { canConfigure: boolean }) {
+export function BrokerAiGovernancePanel({ canConfigure,onAgentsChanged }: { canConfigure: boolean;onAgentsChanged?:()=>Promise<void> }) {
   const [data, setData] = useState<BrokerAiGovernanceSnapshot | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -103,6 +104,7 @@ export function BrokerAiGovernancePanel({ canConfigure }: { canConfigure: boolea
       <header><div><span>Estado técnico</span><h3>Los trece agentes sin promesas falsas</h3></div><small>Todos tienen contacto externo bloqueado y no ejecutan acciones autónomas.</small></header>
       <div className="broker-ai-agent-grid">{data.agents.map((agent) => <article key={agent.key} className={`broker-ai-agent ${statusClass(agent.status)}`}>
         <span>{agent.statusLabel}</span><h4>{agent.name}</h4><p>{agent.description}</p><small><b>Límite:</b> {agent.limitation}</small>
+        <BrokerAgentEditor agent={agent} canManage={!!data.canManageAgents} onChange={async()=>{await load();await onAgentsChanged?.();setNotice("Control del agente actualizado.")}}/>
       </article>)}</div>
     </section>
 

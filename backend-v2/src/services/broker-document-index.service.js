@@ -175,9 +175,12 @@ function matches(item, filters) {
   return true;
 }
 
-export function buildBrokerDocumentIndex({ properties = [], records = [], filters = {}, now = new Date() } = {}) {
+export function buildBrokerDocumentIndex({ properties = [], records = [], filters = {}, now = new Date(), incompleteDays = 0 } = {}) {
   const propertiesById = new Map(properties.map((property) => [property.id, property]));
-  const allItems = records.flatMap((record) => documentItems(record, propertiesById, now));
+  const allItems = records.flatMap((record) => documentItems(record, propertiesById, now)).map(item=>({
+    ...item, needsEvidenceReview:item.evidence.status === "MISSING" && (incompleteDays === 0 ||
+      (item.updatedAt != null && now.getTime()-Date.parse(item.updatedAt) >= incompleteDays*86400000))
+  }));
   const items = allItems.filter((item) => matches(item, filters)).sort((a, b) => {
     const aRank = a.expiry.state === "OVERDUE" ? 0 : a.expiry.state === "EXPIRING_60" ? 1 : a.evidence.status === "MISSING" ? 2 : 3;
     const bRank = b.expiry.state === "OVERDUE" ? 0 : b.expiry.state === "EXPIRING_60" ? 1 : b.evidence.status === "MISSING" ? 2 : 3;
