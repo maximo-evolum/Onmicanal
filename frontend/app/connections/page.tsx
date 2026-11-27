@@ -350,8 +350,9 @@ export default function ConnectionsPage() {
         });
       }
       await testConnectionProvider(provider.key);
-      setConnectionActivity({ key: provider.key, stage: "Conexión validada", progress: 100 });
-      setNotice({ type: "success", text: "Conexion validada" });
+      const message=provider.brokerHealth&&!provider.oauthProvider?"Configuración revisada localmente; el proveedor no fue contactado.":"Conexión validada";
+      setConnectionActivity({ key: provider.key, stage: message, progress: 100 });
+      setNotice({ type: "success", text: message });
     } catch (error) {
       setNotice({ type: "error", text: error instanceof Error ? error.message : "La prueba de conexion fallo" });
     } finally {
@@ -597,7 +598,7 @@ export default function ConnectionsPage() {
                               <small>{provider.description}</small>
                               <span className={`connection-status status-${provider.status.toLowerCase()}`}>
                                 <i />
-                                {statusLabels[provider.status]}
+                                {provider.brokerHealth?.stateLabel || statusLabels[provider.status]}
                               </span>
                               <span className="connection-progress"><i style={{ width: `${activity?.progress ?? providerProgress(provider)}%` }} /></span>
                               {activity ? <span className="connection-card-activity"><i />{activity.stage}</span> : null}
@@ -618,13 +619,13 @@ export default function ConnectionsPage() {
                         <div>
                           <span className="eyebrow">{selected.group}</span>
                           <h2>{selected.label}</h2>
-                          <p>{statusHelp[selected.status]}</p>
+                          <p>{selected.brokerHealth?"Estado según la evidencia guardada para esta empresa.":statusHelp[selected.status]}</p>
                         </div>
                       </div>
 
                       <div className={`connection-status-banner status-${selected.status.toLowerCase()}`}>
-                        <span>{statusLabels[selected.status]}</span>
-                        {selected.missing.length ? <small>Faltan datos de configuración</small> : <small>Configuracion completa</small>}
+                        <span>{selected.brokerHealth?.stateLabel || statusLabels[selected.status]}</span>
+                        {selected.brokerHealth?<small>{selected.brokerHealth.lastCheckedAt?"Última comprobación: "+new Date(selected.brokerHealth.lastCheckedAt).toLocaleString("es-CL",{timeZone:"America/Santiago"})+" (Chile)":"Sin comprobaciones registradas"}</small>:selected.missing.length ? <small>Faltan datos de configuración</small> : <small>Configuración completa</small>}
                       </div>
 
                       {notice ? (
@@ -753,7 +754,7 @@ export default function ConnectionsPage() {
 
                           <div className="connection-actions">
                             <button type="button" onClick={() => runTest(selected)} disabled={credentialRotationActive || Boolean(connectionActivity)}>Probar conexión</button>
-                            {selected.status === "CONNECTED" ? <button className="danger" type="button" onClick={() => disconnect(selected)} disabled={Boolean(connectionActivity)}>Desvincular cuenta</button> : null}
+                            {selected.config?.isActive ? <button className="danger" type="button" onClick={() => disconnect(selected)} disabled={Boolean(connectionActivity)}>Desvincular cuenta</button> : null}
                           </div>
                         </>
                       ) : (

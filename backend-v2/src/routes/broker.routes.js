@@ -4,7 +4,7 @@ import { PLAN_DEFINITIONS, normalizePlanCode } from "../lib/modules.js";
 import { createBrokerProspectsRouter } from "./broker-prospects.routes.js";
 import { convertBrokerProspect } from "../services/broker-prospect-conversion.service.js";
 import { prisma } from "../lib/db.js";
-import { hasSecret } from "../lib/credential-crypto.js";
+import { brokerSourceByKey, readBrokerIntegrationHealth } from "../services/broker-integration-health.service.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
 import { recordAuditLog } from "../lib/audit.js";
 import {
@@ -1081,10 +1081,6 @@ async function publicationProviderRecord(tenantId, channel) {
   });
 }
 
-function connectionMetadata(config) {
-  return config?.metadata && typeof config.metadata === "object" && !Array.isArray(config.metadata) ? config.metadata : {};
-}
-
 // Resume solo información segura de la conexión: nunca devuelve token, ID de
 // cuenta externo ni configuración OAuth. El publicador la usa para saber si
 // un portal está listo para una prueba manual controlada.
@@ -1104,49 +1100,9 @@ async function publicationConnectionSummary(tenantId, channel) {
       message: "Este portal aún no cuenta con un conector autorizado en Broker OS.",
     };
   }
-  const config = await prisma.tenantChannelConfig.findUnique({
-    where: { tenantId_channel: { tenantId, channel: providerKey } },
-    select: { isActive: true, accessToken: true, externalAccountId: true, metadata: true, updatedAt: true },
-  });
-  if (!config) return {
-    state: "NOT_CONFIGURED",
-    label: "Mercado Libre Inmuebles",
-    lastTestedAt: null,
-    message: "Aún no se ha iniciado la conexión OAuth de Mercado Libre.",
-  };
-  const metadata = connectionMetadata(config);
-  const lastTestStatus = text(metadata.lastTestStatus).toUpperCase();
-  const lastTestedAt = text(metadata.lastTestedAt) || config.updatedAt?.toISOString?.() || null;
-  if (!config.isActive) return {
-    state: "DISCONNECTED",
-    label: "Mercado Libre Inmuebles",
-    lastTestedAt,
-    message: "La conexión está desactivada en Centro de Conexiones.",
-  };
-  if (!hasSecret(config.accessToken) || !text(config.externalAccountId)) return {
-    state: "INCOMPLETE",
-    label: "Mercado Libre Inmuebles",
-    lastTestedAt,
-    message: "La autorización OAuth no se completó o ya no contiene una cuenta externa válida.",
-  };
-  if (lastTestStatus === "OK") return {
-    state: "CONNECTED",
-    label: "Mercado Libre Inmuebles",
-    lastTestedAt,
-    message: "La última verificación técnica fue satisfactoria.",
-  };
-  if (lastTestStatus === "ERROR") return {
-    state: "ERROR",
-    label: "Mercado Libre Inmuebles",
-    lastTestedAt,
-    message: "La última verificación técnica falló. Revísala desde Centro de Conexiones.",
-  };
-  return {
-    state: "PENDING_VERIFICATION",
-    label: "Mercado Libre Inmuebles",
-    lastTestedAt,
-    message: "La autorización existe, pero aún requiere una verificación satisfactoria.",
-  };
+  const {items:[item]}=await readBrokerIntegrationHealth(prisma,tenantId,{sources:[brokerSourceByKey.get(providerKey)],includePortals:false});
+  return {state:item.state==="VERIFIED"?"CONNECTED":item.state,label:item.label,lastTestedAt:item.lastCheckedAt,
+    message:item.stateLabel+". Esta lectura no autoriza el envío de publicaciones."};
 }
 
 // brokerRecordWhere restringe lectura por responsable, pero las mutaciones
@@ -2328,6 +2284,13 @@ brokerRouter.get("/broker/account", requireBrokerAction("access", "CONFIGURE"), 
       externalReadiness: BROKER_EXTERNAL_READINESS
     }));
   } catch (error) { next(error); }
+});
+
+brokerRouter.get("/broker/integrations/health",requireBrokerAction("access","CONFIGURE"),async(req,res,next)=>{
+  try{
+    if(req.tenant?.industry!=="REAL_ESTATE")return res.status(403).json({error:"Esta consulta pertenece a Broker OS."});
+    res.set("Cache-Control","private, no-store").json(await readBrokerIntegrationHealth(prisma,req.tenantId));
+  }catch(error){next(error);}
 });
 
 brokerRouter.get("/broker/access/workload", requireBrokerAction("access", "CONFIGURE"), async (req, res, next) => {

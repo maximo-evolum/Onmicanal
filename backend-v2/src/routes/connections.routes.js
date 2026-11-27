@@ -5,6 +5,7 @@ import { prisma } from "../lib/db.js";
 import { env } from "../lib/env.js";
 import { normalizeMetadata } from "../lib/metadata.js";
 import { editableConnectionMetadata } from "../services/finance-connection-health.service.js";
+import { brokerAccountDiscovered, brokerSafeTestError, brokerSourceByKey, brokerTestEvidence, readBrokerIntegrationHealth } from "../services/broker-integration-health.service.js";
 import { MODULES } from "../lib/modules.js";
 import { recordAuditLog } from "../lib/audit.js";
 import { requireRole, ROLE_GROUPS } from "../middleware/tenant-access.js";
@@ -318,7 +319,7 @@ const PROVIDERS = [
 const PROVIDER_BY_KEY = new Map(PROVIDERS.map((provider) => [provider.key, provider]));
 
 function providerConfigChannels(provider) {
-  return [...new Set([provider.key, provider.storageChannel, ...(provider.legacyChannels || [])].filter(Boolean))];
+  return [...new Set([provider.key, provider.storageChannel, ...(provider.legacyChannels || []), ...(brokerSourceByKey.get(provider.key)?.channels || [])].filter(Boolean))];
 }
 
 function providerDisplayChannels(provider) {
@@ -898,7 +899,7 @@ async function providerRequest(url, accessToken) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data?.error?.message || data?.message || data?.error_description || "El proveedor rechazo la conexion");
+    throw new Error(`HTTP ${response.status}: ${data?.error?.message || data?.message || data?.error_description || "El proveedor rechazó la conexión"}`);
   }
   return data;
 }
@@ -1107,7 +1108,7 @@ async function refreshOAuthAccessToken(provider, config) {
   }
 
   return prisma.tenantChannelConfig.update({
-    where: { id: config.id },
+    where: { id: config.id, updatedAt: config.updatedAt, isActive:true },
     data: {
       accessToken: encryptSecret(token.access_token),
       verifyToken: encryptSecret(token.refresh_token) || config.verifyToken,
@@ -1121,9 +1122,12 @@ async function refreshOAuthAccessToken(provider, config) {
   });
 }
 
-async function testOAuthConnection(provider, config) {
+async function testOAuthConnection(provider, config, onRefreshed) {
   assertExternalOperationAllowed("La prueba OAuth");
   const refreshed = await refreshOAuthAccessToken(provider, config);
+  // Si la consulta remota falla después de renovar, el error corresponde a
+  // la revisión renovada; nunca sobrescribir una edición posterior.
+  onRefreshed?.(refreshed);
   const accessToken = decryptSecret(refreshed.accessToken);
   if (!accessToken) throw new Error("No hay access token OAuth para validar");
 
@@ -1156,6 +1160,7 @@ async function testOAuthConnection(provider, config) {
   }
 
   const discovery = await discoverOAuthAccount(provider, accessToken);
+  if(!brokerAccountDiscovered(provider.key,discovery))throw new Error("El proveedor no confirmó la cuenta de este canal.");
   return { config: refreshed, discovery };
 }
 
@@ -1182,7 +1187,7 @@ async function verifyStoredConnection(provider, config) {
   let testError = null;
   try {
     if (provider.oauthProvider) {
-      const result = await testOAuthConnection(provider, config);
+      const result = await testOAuthConnection(provider, config, current=>{testedConfig=current;});
       testedConfig = result.config;
       discovery = result.discovery;
     } else if (provider.key === "finance_nubox") {
@@ -1191,7 +1196,7 @@ async function verifyStoredConnection(provider, config) {
       discovery = result.discovery;
     }
   } catch (error) {
-    testError = error instanceof Error ? error.message : "No se pudo verificar la conexión";
+    testError = brokerSafeTestError(provider,error instanceof Error ? error.message : "No se pudo verificar la conexión");
   }
 
   const ok = !testError;
@@ -1201,11 +1206,12 @@ async function verifyStoredConnection(provider, config) {
     lastTestStatus: ok ? "OK" : "ERROR",
     lastTestMessage: ok ? verificationSuccessMessage(provider) : testError,
     lastConnectionCheckSource: "scheduled",
+    ...brokerTestEvidence(provider,{at:checkedAt,ok,remote:true,error:testError}),
     ...(ok ? { connectedAt: previousMetadata.connectedAt || checkedAt, connectionReadyNotifiedAt: checkedAt } : {}),
     oauthDiscovery: discovery?.discovery ? compactDiscovery(discovery.discovery) : configMetadata(testedConfig).oauthDiscovery
   }, {});
   const updated = await prisma.tenantChannelConfig.update({
-    where: { id: testedConfig.id },
+    where: { id: testedConfig.id, updatedAt:testedConfig.updatedAt, isActive:true },
     data: {
       label: discovery?.label || testedConfig.label,
       phoneNumberId: discovery?.phoneNumberId || testedConfig.phoneNumberId,
@@ -1263,7 +1269,8 @@ export async function verifyPendingConnections({ limit = 100 } = {}) {
     // Priorizamos pendientes y errores. Las conexiones sanas se mantienen por
     // sus rutinas de renovación/sincronización y no consumen cuota innecesaria.
     if (lastStatus === "OK") continue;
-    results.push(await verifyStoredConnection(provider, config));
+    try {results.push(await verifyStoredConnection(provider, config));}
+    catch(e){if(e.code!=="P2025")throw e;results.push({status:"SKIPPED",reason:"configuration_changed",provider:provider.key});}
   }
   return {
     scanned: configs.length,
@@ -1318,6 +1325,8 @@ async function reconcileMetaAssets(tenantId) {
       oauthReconciledAt: new Date().toISOString(),
       oauthReconciledFrom: source.channel,
       lastTestStatus: "OK",
+      lastTestKind: "ASSET_DISCOVERY",
+      lastTestedAt: new Date().toISOString(),
       lastTestMessage: "Activo Meta detectado y reconciliado",
       oauthDiscovery: compactDiscovery({ account: values.account || null, availableAccounts: available })
     }, {});
@@ -1377,9 +1386,10 @@ function oauthCallbackHandler(expectedProvider) {
       let discovery = {};
       try {
         discovery = await discoverOAuthAccount(provider, token.access_token);
+        if(!brokerAccountDiscovered(provider.key,discovery))throw new Error("El proveedor no confirmó la cuenta de este canal.");
       } catch (discoveryError) {
         discovery = {
-          discoveryError: discoveryError instanceof Error ? discoveryError.message : "No se pudo descubrir la cuenta autorizada"
+          discoveryError: brokerSafeTestError(provider,discoveryError instanceof Error ? discoveryError.message : "No se pudo descubrir la cuenta autorizada")
         };
       }
       const oauthVerifiedAt = new Date().toISOString();
@@ -1397,6 +1407,7 @@ function oauthCallbackHandler(expectedProvider) {
         oauthConnectedAt: oauthVerifiedAt,
         connectionConfigChangedAt: oauthVerifiedAt,
         lastTestedAt: oauthVerifiedAt,
+        ...brokerTestEvidence(provider,{at:oauthVerifiedAt,ok:!discovery.discoveryError,remote:true,error:discovery.discoveryError}),
         oauthInitiatedByUserId: state.initiatedByUserId || null,
         lastTestStatus: discovery.discoveryError ? "ERROR" : "OK",
         lastTestMessage: discovery.discoveryError ? "OAuth conectado; falta revisar la cuenta autorizada" : "OAuth conectado y cuenta detectada",
@@ -1447,7 +1458,16 @@ connectionsRouter.get("/connections", async (req, res, next) => {
     const configs = await prisma.tenantChannelConfig.findMany({
       where: { tenantId: req.tenantId }
     });
-    const providers = PROVIDERS.map((provider) => publicProvider(provider, resolveProviderConfig(provider, configs)));
+    const isBroker=req.tenant?.industry==="REAL_ESTATE";
+    const health=isBroker?await readBrokerIntegrationHealth(prisma,req.tenantId,{includePortals:false}):null;
+    const providers = PROVIDERS.map((provider) => {
+      const item=health?.items.find(i=>i.key===provider.key);
+      if(!item)return publicProvider(provider,resolveProviderConfig(provider,configs));
+      const own=configs.filter(c=>providerConfigChannels(provider).includes(c.channel));
+      const result=publicProvider(provider,resolveProviderConfig(provider,own));
+      const status=item.state==="VERIFIED"?"CONNECTED":["NOT_CONFIGURED","DISCONNECTED"].includes(item.state)?"DISCONNECTED":["EXPIRED","ERROR"].includes(item.state)?"ERROR":"PENDING";
+      return {...result,status,brokerHealth:item};
+    });
     const connected = providers.filter((provider) => provider.status === "CONNECTED").length;
     const pending = providers.filter((provider) => provider.status === "PENDING").length;
     const errors = providers.filter((provider) => provider.status === "ERROR").length;
@@ -1480,9 +1500,7 @@ connectionsRouter.get("/connections", async (req, res, next) => {
       groups: groupProviders(providers)
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No se pudo sincronizar Nubox.";
-    if (/faltan|configurad|periodo|per[ií]odo|url https/i.test(message)) return res.status(400).json({ error: message });
-    res.status(502).json({ error: message });
+    next(error);
   }
 });
 
@@ -1538,7 +1556,7 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
     // anterior. Queda pendiente hasta que la prueba manual o el verificador
     // programado confirme que el proveedor realmente la acepta.
     const supportsRemoteVerification = Boolean(provider.oauthProvider || provider.key === "finance_nubox" || requiresExternalAuthorization(provider));
-    const verificationInputChanged = ["accessToken", "verifyToken", "isActive", ...(provider.requiredFields || [])]
+    const verificationInputChanged = ["accessToken", "verifyToken", "isActive","externalAccountId","businessAccountId","phoneNumberId", ...(provider.requiredFields || [])]
       .some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field)
         || Object.prototype.hasOwnProperty.call(incomingMetadata, field));
     const metadata = normalizeMetadata({
@@ -1547,10 +1565,10 @@ connectionsRouter.put("/connections/:key", requireRole(ROLE_GROUPS.MANAGERS), as
       providerType: provider.type,
       providerGroup: provider.groupKey,
       updatedFrom: "connection_center",
-      ...(supportsRemoteVerification && verificationInputChanged
+      ...((supportsRemoteVerification || brokerSourceByKey.has(key)) && verificationInputChanged
         ? {
           connectionConfigChangedAt: new Date().toISOString(),
-          oauthExpiresAt: null,
+          ...(req.body?.accessToken?{oauthExpiresAt:null}:{}),
           lastTestStatus: "PENDING",
           lastTestMessage: requiresExternalAuthorization(provider)
             ? pendingExternalAuthorizationMessage(provider)
@@ -1608,11 +1626,11 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
     let discovery = null;
     if (!missing.length && provider.oauthProvider) {
       try {
-        const result = await testOAuthConnection(provider, config);
+        const result = await testOAuthConnection(provider, config, current=>{testedConfig=current;});
         testedConfig = result.config;
         discovery = result.discovery;
       } catch (error) {
-        testError = error instanceof Error ? error.message : "La prueba OAuth fallo";
+        testError = brokerSafeTestError(provider,error instanceof Error ? error.message : "La prueba OAuth fallo");
       }
     } else if (!missing.length && provider.key === "finance_nubox") {
       try {
@@ -1625,9 +1643,11 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
     }
     const verification = connectionVerificationResult(provider, { missing, testError });
     const { ok, pending } = verification;
+    const testedAt=new Date().toISOString();
     const metadata = normalizeMetadata({
       ...configMetadata(testedConfig),
-      lastTestedAt: new Date().toISOString(),
+      lastTestedAt: testedAt,
+      ...brokerTestEvidence(provider,{at:testedAt,ok,remote:!missing.length&&Boolean(provider.oauthProvider),error:testError||(missing.length?"Faltan campos":"")}),
       lastTestStatus: verification.status,
       lastTestMessage: pending
         ? verification.message
@@ -1642,7 +1662,7 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
     }, {});
 
     const updated = await prisma.tenantChannelConfig.update({
-      where: { id: testedConfig.id },
+      where: { id: testedConfig.id, updatedAt:testedConfig.updatedAt, isActive:true },
       data: {
         label: discovery?.label || testedConfig.label,
         phoneNumberId: discovery?.phoneNumberId || testedConfig.phoneNumberId,
@@ -1654,6 +1674,7 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
 
     await recordAuditLog(req, "CONNECTION_TESTED", "tenant_channel_config", config.id, {
       provider: key,
+      checkedAt:testedAt,
       ok,
       pending,
       missing
@@ -1666,6 +1687,7 @@ connectionsRouter.post("/connections/:key/test", requireRole(ROLE_GROUPS.MANAGER
       provider: publicProvider(provider, updated)
     });
   } catch (error) {
+    if(error.code==="P2025")return res.status(409).json({error:"La conexión cambió durante la prueba. Actualiza antes de volver a comprobarla."});
     next(error);
   }
 });

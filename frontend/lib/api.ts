@@ -2292,6 +2292,17 @@ export type BrokerTeamWorkload = {
   unassignedProperties?: Array<{ id: string; title: string }>;
 };
 
+export type BrokerIntegrationHealthItem = {
+  key:string; label:string; group:string; registered:boolean; state:string; stateLabel:string;
+  lastCheckedAt:string|null; lastSuccessAt:string|null; lastErrorAt:string|null; lastError:string|null; expiresAt:string|null;
+};
+export type BrokerIntegrationHealth = {
+  tenantId:string; asOf:string; freshnessHours:number; items:BrokerIntegrationHealthItem[]; externalActionsEnabled:false;
+  portals:Array<{key:string;label:string;providerStatus:string;technicalConnectionKey:string|null;externalPublishingEnabled:false}>;
+};
+export function getBrokerIntegrationHealth(){
+  return request<BrokerIntegrationHealth>("/broker/integrations/health");
+}
 export type BrokerAccountSnapshot = {
   version: string;
   account: { id: string | null; name: string; slug: string | null; plan: { code: string; name: string; description: string }; limits: { users: number | null; messagesMonthly: number | null }; team: { active: number; inactive: number; remaining: number | null } };
@@ -3982,6 +3993,7 @@ export type ConnectionPublicConfig = {
 };
 
 export type ConnectionProvider = {
+  brokerHealth?: BrokerIntegrationHealthItem;
   key: string;
   label: string;
   group: string;

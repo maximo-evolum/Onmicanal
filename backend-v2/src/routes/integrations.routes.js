@@ -86,7 +86,7 @@ integrationsRouter.put("/integrations/:channel", requireRole(ROLE_GROUPS.MANAGER
       accessToken: req.body?.accessToken === undefined ? previous?.accessToken || null : encryptSecret(req.body.accessToken),
       verifyToken: req.body?.verifyToken === undefined ? previous?.verifyToken || null : encryptSecret(req.body.verifyToken),
       metadata: normalizeMetadata({ ...(previous?.metadata || {}), ...editableConnectionMetadata(req.body?.metadata),
-        connectionConfigChangedAt: new Date().toISOString(), oauthExpiresAt: null, lastTestStatus: "PENDING", lastTestedAt: null }, {}),
+        connectionConfigChangedAt: new Date().toISOString(), ...(req.body?.accessToken!==undefined?{oauthExpiresAt:null}:{}), lastTestStatus: "PENDING", lastTestedAt: null }, {}),
       isActive: req.body?.isActive === undefined ? previous?.isActive ?? true : Boolean(req.body.isActive)
     };
 

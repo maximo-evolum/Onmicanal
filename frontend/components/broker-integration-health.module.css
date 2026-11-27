@@ -1,0 +1,14 @@
+/* Tarjetas de evidencia legibles en los temas claro y oscuro de Broker OS. */
+.panel { min-width:0; }
+.panel > p { margin:0; }
+.panel header { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr)); gap:.8rem; }
+.grid article { border:1px solid color-mix(in srgb,currentColor 22%,transparent); border-radius:.8rem; padding:1rem; min-width:0; }
+.grid h4 { margin:.2rem 0 .4rem; font-size:1.05rem; }
+.grid dl { margin:.75rem 0 0; }
+.grid dl div { padding:.35rem 0; border-top:1px solid color-mix(in srgb,currentColor 14%,transparent); }
+.grid dt,.grid small { font-size:.85rem; }
+.grid dd { margin:.1rem 0 0; overflow-wrap:anywhere; }
+.panel details { margin:.8rem 0; }
+.panel summary { cursor:pointer; font-weight:600; }
+.panel li { margin:.4rem 0; }
